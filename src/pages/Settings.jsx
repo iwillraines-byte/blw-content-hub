@@ -1,89 +1,90 @@
 import { TEAMS, API_CONFIG } from '../data';
-import { Card, Label } from '../components';
+import { Card, PageHeader, SectionHeading } from '../components';
+import { colors, fonts, radius } from '../theme';
 
 export default function Settings() {
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-      <div>
-        <div style={{ fontSize:26, fontWeight:900, color:"#BF8C30" }}>Settings</div>
-        <div style={{ fontSize:13, color:"#555" }}>Team colors, integrations, and configuration</div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <PageHeader title="SETTINGS" subtitle="Team colors, integrations, and configuration" />
 
       <Card>
-        <Label>API Status</Label>
+        <SectionHeading>API STATUS</SectionHeading>
         <div style={{
-          display:"flex", alignItems:"center", gap:10, padding:12,
-          background: API_CONFIG.isLive ? "rgba(74,222,128,.08)" : "rgba(244,162,97,.08)",
-          border: API_CONFIG.isLive ? "1px solid rgba(74,222,128,.2)" : "1px solid rgba(244,162,97,.2)",
-          borderRadius:8
+          display: 'flex', alignItems: 'center', gap: 10, padding: 14,
+          background: API_CONFIG.isLive ? colors.successBg : colors.warningBg,
+          border: `1px solid ${API_CONFIG.isLive ? colors.successBorder : colors.warningBorder}`,
+          borderRadius: radius.base,
         }}>
-          <div style={{ width:12, height:12, borderRadius:"50%", background: API_CONFIG.isLive ? "#4ADE80" : "#F4A261" }}/>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13, fontWeight:700, color: API_CONFIG.isLive ? "#4ADE80" : "#F4A261" }}>
-              {API_CONFIG.isLive ? "Live API Active" : "Using Cached Data"}
+          <div style={{ width: 12, height: 12, borderRadius: '50%', background: API_CONFIG.isLive ? colors.success : colors.warning }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: API_CONFIG.isLive ? '#15803D' : '#92400E' }}>
+              {API_CONFIG.isLive ? 'Live API Active' : 'Using Cached Data'}
             </div>
-            <div style={{ fontSize:11, color:"#666", marginTop:2 }}>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
               {API_CONFIG.isLive
                 ? `Connected to ${API_CONFIG.baseUrl}`
-                : "To enable live data, add VITE_PWB_API_KEY to your Vercel environment variables"
-              }
+                : 'Add VITE_PWB_API_KEY to Vercel environment variables for live data'}
             </div>
           </div>
         </div>
       </Card>
 
       <Card>
-        <Label>Team Colors (from official logos)</Label>
+        <SectionHeading>TEAM COLORS (FROM OFFICIAL LOGOS)</SectionHeading>
         {TEAMS.map(t => (
           <div key={t.id} style={{
-            display:"flex", alignItems:"center", gap:8, padding:"8px 10px",
-            background:"rgba(255,255,255,.02)", borderRadius:7, marginBottom:4
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+            background: colors.bg, borderRadius: radius.base, marginBottom: 4,
+            border: `1px solid ${colors.borderLight}`,
           }}>
-            <span style={{ width:28, height:28, borderRadius:6, background:t.color, border:"2px solid rgba(255,255,255,.1)" }}/>
-            <span style={{ width:28, height:28, borderRadius:6, background:t.accent, border:"2px solid rgba(255,255,255,.1)" }}/>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:700 }}>{t.name}</div>
-              {t.owner && <div style={{ fontSize:10, color:"#555" }}>Owner: {t.owner}</div>}
+            <span style={{ width: 28, height: 28, borderRadius: 6, background: t.color, border: `1px solid ${colors.border}` }} />
+            <span style={{ width: 28, height: 28, borderRadius: 6, background: t.accent, border: `1px solid ${colors.border}` }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>{t.name}</div>
+              {t.owner && <div style={{ fontSize: 10, color: colors.textMuted }}>Owner: {t.owner}</div>}
             </div>
-            <code style={{ fontSize:11, color:"#BF8C30", background:"rgba(0,0,0,.3)", padding:"3px 8px", borderRadius:4 }}>{t.color}</code>
-            <code style={{ fontSize:11, color:"#BF8C30", background:"rgba(0,0,0,.3)", padding:"3px 8px", borderRadius:4 }}>{t.accent}</code>
+            <code style={{ fontSize: 11, color: colors.text, background: colors.muted, padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>{t.color}</code>
+            <code style={{ fontSize: 11, color: colors.text, background: colors.muted, padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>{t.accent}</code>
           </div>
         ))}
       </Card>
 
       <Card>
-        <Label>Integrations</Label>
+        <SectionHeading>INTEGRATIONS</SectionHeading>
         {[
-          { name:"Dropbox", desc:"Team logos & brand assets", status:"Not connected", color:"#0061FF" },
-          { name:"Google Drive", desc:"Player photos & videos", status:"Not connected", color:"#34A853" },
-          { name:"prowiffleball.com API", desc:"Player & team stats", status: API_CONFIG.isLive ? "Connected" : "Not configured", color:"#2A9D8F" },
-          { name:"Instagram API", desc:"Auto-publish content", status:"Not connected", color:"#E1306C" },
-          { name:"Slack", desc:"Team notifications", status:"Not connected", color:"#7289DA" },
+          { name: 'Dropbox', desc: 'Team logos & brand assets', status: 'Not connected', color: '#0061FF' },
+          { name: 'Google Drive', desc: 'Player photos & videos', status: 'Not connected', color: '#34A853' },
+          { name: 'prowiffleball.com API', desc: 'Player & team stats', status: API_CONFIG.isLive ? 'Connected' : 'Not configured', color: '#DD3C3C' },
+          { name: 'Metricool', desc: 'Social media scheduling & analytics', status: 'Not connected', color: '#6366F1' },
+          { name: 'Slack', desc: 'Team notifications', status: 'Not connected', color: '#E01E5A' },
         ].map((x, i) => (
           <div key={i} style={{
-            display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
-            background:"rgba(255,255,255,.02)", borderRadius:7, marginBottom:4
+            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+            background: colors.bg, borderRadius: radius.base, marginBottom: 4,
+            border: `1px solid ${colors.borderLight}`,
           }}>
-            <div style={{ width:10, height:10, borderRadius:"50%", background: x.status === "Connected" ? "#2A9D8F" : "#555" }}/>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:700 }}>{x.name}</div>
-              <div style={{ fontSize:10, color:"#555" }}>{x.desc}</div>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: x.status === 'Connected' ? colors.success : colors.border }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>{x.name}</div>
+              <div style={{ fontSize: 11, color: colors.textMuted }}>{x.desc}</div>
             </div>
-            <span style={{ fontSize:10, color: x.status === "Connected" ? "#2A9D8F" : "#666", fontWeight:600 }}>{x.status}</span>
+            <span style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 600, color: x.status === 'Connected' ? '#15803D' : colors.textMuted }}>{x.status}</span>
             <button style={{
-              background: `${x.color}15`, border:`1px solid ${x.color}33`, color:x.color,
-              borderRadius:5, padding:"5px 12px", fontSize:10, fontWeight:700, cursor:"pointer"
-            }}>{x.status === "Connected" ? "Manage" : "Connect"}</button>
+              background: `${x.color}10`, border: `1px solid ${x.color}30`, color: x.color,
+              borderRadius: radius.base, padding: '6px 14px', fontFamily: fonts.body,
+              fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            }}>{x.status === 'Connected' ? 'Manage' : 'Connect'}</button>
           </div>
         ))}
       </Card>
 
       <Card>
-        <Label>About This App</Label>
-        <div style={{ fontSize:12, color:"#999", lineHeight:1.6 }}>
-          <div style={{ marginBottom:6 }}><strong style={{ color:"#BF8C30" }}>BLW Content Hub</strong> — Version 1.0</div>
+        <SectionHeading>ABOUT</SectionHeading>
+        <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
+          <div style={{ marginBottom: 6 }}><strong style={{ color: colors.red }}>BLW Content Hub</strong> — Version 2.0</div>
           <div>Content management and graphic generation tool for Big League Wiffle Ball.</div>
-          <div style={{ marginTop:10 }}>Managing content for 9 of 10 BLW teams. Season launch: May 1, 2026.</div>
+          <div style={{ marginTop: 8 }}>Managing content for 9 of 10 BLW teams. Season launch: May 1, 2026.</div>
+          <div style={{ marginTop: 8 }}>Graphics are downloaded and scheduled via <strong>Metricool</strong> for social media publishing.</div>
         </div>
       </Card>
     </div>

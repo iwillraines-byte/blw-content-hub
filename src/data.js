@@ -92,3 +92,116 @@ export async function fetchPitchingLeaders() {
     return PITCHING_LEADERS;
   }
 }
+
+// ─── CONTENT SUGGESTIONS ENGINE ─────────────────────────────────���───────────
+// Analyzes current stats data and generates actionable content ideas
+export function generateContentSuggestions() {
+  const suggestions = [];
+
+  // Batting leader by AVG
+  const avgLeader = [...BATTING_LEADERS].sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg))[0];
+  if (avgLeader) {
+    suggestions.push({
+      id: 'avg-leader',
+      type: 'stat-spotlight',
+      headline: `${avgLeader.name} leads the league with ${avgLeader.avg} AVG`,
+      description: `Create a stat card for the top batter in BLW`,
+      team: avgLeader.team,
+      templateId: 'player-stat',
+      prefill: { playerName: avgLeader.name, number: avgLeader.num, statLine: `AVG ${avgLeader.avg} | OPS+ ${avgLeader.ops_plus} | OBP ${avgLeader.obp} | SLG ${avgLeader.slg}` },
+    });
+  }
+
+  // OPS+ leader
+  const opsLeader = BATTING_LEADERS[0];
+  if (opsLeader && opsLeader !== avgLeader) {
+    suggestions.push({
+      id: 'ops-leader',
+      type: 'stat-spotlight',
+      headline: `${opsLeader.name} has a ${opsLeader.ops_plus} OPS+ — league best`,
+      description: `Spotlight the OPS+ king`,
+      team: opsLeader.team,
+      templateId: 'player-stat',
+      prefill: { playerName: opsLeader.name, number: opsLeader.num, statLine: `OPS+ ${opsLeader.ops_plus} | AVG ${opsLeader.avg} | HR ${opsLeader.hr} | OBP ${opsLeader.obp}` },
+    });
+  }
+
+  // FIP leader (pitching dominance)
+  const fipLeader = PITCHING_LEADERS[0];
+  if (fipLeader) {
+    suggestions.push({
+      id: 'fip-leader',
+      type: 'stat-spotlight',
+      headline: `${fipLeader.name} has a ${fipLeader.fip.toFixed(2)} FIP — pitching dominance`,
+      description: `The best pitcher in the league deserves a spotlight card`,
+      team: fipLeader.team,
+      templateId: 'player-stat',
+      prefill: { playerName: fipLeader.name, number: fipLeader.num, statLine: `FIP ${fipLeader.fip.toFixed(2)} | IP ${fipLeader.ip} | K/4 ${fipLeader.k4} | W-L ${fipLeader.w}-${fipLeader.l}` },
+    });
+  }
+
+  // Team with best record (streak)
+  const topTeam = TEAMS[0];
+  if (topTeam && parseFloat(topTeam.pct) > 0.800) {
+    suggestions.push({
+      id: 'top-team-streak',
+      type: 'streak',
+      headline: `${topTeam.name} are ${topTeam.record} — create a streak graphic`,
+      description: `The #1 team in BLW is dominating. Celebrate it.`,
+      team: topTeam.id,
+      templateId: 'standings',
+      prefill: {},
+    });
+  }
+
+  // Undefeated pitcher
+  const undefeated = PITCHING_LEADERS.find(p => p.l === 0 && p.w >= 5);
+  if (undefeated) {
+    suggestions.push({
+      id: 'undefeated-pitcher',
+      type: 'milestone',
+      headline: `${undefeated.name} is ${undefeated.w}-0 — undefeated spotlight`,
+      description: `Perfect record on the mound — highlight the achievement`,
+      team: undefeated.team,
+      templateId: 'player-stat',
+      prefill: { playerName: undefeated.name, number: undefeated.num, statLine: `W-L ${undefeated.w}-0 | FIP ${undefeated.fip.toFixed(2)} | IP ${undefeated.ip} | K/4 ${undefeated.k4}` },
+    });
+  }
+
+  // HR leader
+  const hrLeader = [...BATTING_LEADERS].sort((a, b) => b.hr - a.hr)[0];
+  if (hrLeader && hrLeader.hr > 0) {
+    suggestions.push({
+      id: 'hr-leader',
+      type: 'milestone',
+      headline: `${hrLeader.name} leads BLW with ${hrLeader.hr} HR`,
+      description: `Power numbers are rare in wiffle ball — make it count`,
+      team: hrLeader.team,
+      templateId: 'player-stat',
+      prefill: { playerName: hrLeader.name, number: hrLeader.num, statLine: `HR ${hrLeader.hr} | AVG ${hrLeader.avg} | OPS+ ${hrLeader.ops_plus} | SLG ${hrLeader.slg}` },
+    });
+  }
+
+  // Leaderboard graphics
+  suggestions.push({
+    id: 'batting-leaderboard',
+    type: 'leader-change',
+    headline: 'Updated Batting Leaders graphic',
+    description: 'Post the latest OPS+ leaderboard across all platforms',
+    team: 'BLW',
+    templateId: 'batting-leaders',
+    prefill: {},
+  });
+
+  suggestions.push({
+    id: 'pitching-leaderboard',
+    type: 'leader-change',
+    headline: 'Updated Pitching Leaders graphic',
+    description: 'Post the latest FIP leaderboard across all platforms',
+    team: 'BLW',
+    templateId: 'pitching-leaders',
+    prefill: {},
+  });
+
+  return suggestions;
+}

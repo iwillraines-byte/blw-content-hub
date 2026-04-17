@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { TEAMS, PLATFORMS, TEMPLATES, BATTING_LEADERS, PITCHING_LEADERS, getTeam } from '../data';
-import { Card, Label, inputStyle, selectStyle, GoldButton } from '../components';
+import { Card, Label, PageHeader, RedButton, inputStyle, selectStyle } from '../components';
+import { colors, fonts, radius } from '../theme';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -197,11 +199,21 @@ function renderStandings(ctx, w, h) {
 
 export default function Generate() {
   const canvasRef = useRef(null);
-  const [team, setTeam] = useState("LAN");
-  const [opp, setOpp] = useState("AZS");
-  const [template, setTemplate] = useState("gameday");
-  const [platform, setPlatform] = useState("feed");
+  const [searchParams] = useSearchParams();
+  const [team, setTeam] = useState(searchParams.get('team') || 'LAN');
+  const [opp, setOpp] = useState('AZS');
+  const [template, setTemplate] = useState(searchParams.get('template') || 'gameday');
+  const [platform, setPlatform] = useState('feed');
   const [fields, setFields] = useState({});
+
+  // Auto-populate from URL params (from Content Studio suggestions)
+  useEffect(() => {
+    const params = {};
+    for (const [key, value] of searchParams.entries()) {
+      if (key !== 'team' && key !== 'template') params[key] = value;
+    }
+    if (Object.keys(params).length > 0) setFields(params);
+  }, []);
 
   const teamObj = getTeam(team);
   const plat = PLATFORMS[platform];
@@ -211,15 +223,15 @@ export default function Generate() {
     const canvas = canvasRef.current;
     if (!canvas || !teamObj) return;
     canvas.width = plat.w; canvas.height = plat.h;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, plat.w, plat.h);
     switch(template) {
-      case "gameday": renderGameDay(ctx, plat.w, plat.h, teamObj, opp, fields); break;
-      case "player-stat": renderPlayerStat(ctx, plat.w, plat.h, teamObj, fields); break;
-      case "score": renderFinalScore(ctx, plat.w, plat.h, teamObj, opp, fields); break;
-      case "batting-leaders": renderLeaderboard(ctx, plat.w, plat.h, "batting"); break;
-      case "pitching-leaders": renderLeaderboard(ctx, plat.w, plat.h, "pitching"); break;
-      case "standings": renderStandings(ctx, plat.w, plat.h); break;
+      case 'gameday': renderGameDay(ctx, plat.w, plat.h, teamObj, opp, fields); break;
+      case 'player-stat': renderPlayerStat(ctx, plat.w, plat.h, teamObj, fields); break;
+      case 'score': renderFinalScore(ctx, plat.w, plat.h, teamObj, opp, fields); break;
+      case 'batting-leaders': renderLeaderboard(ctx, plat.w, plat.h, 'batting'); break;
+      case 'pitching-leaders': renderLeaderboard(ctx, plat.w, plat.h, 'pitching'); break;
+      case 'standings': renderStandings(ctx, plat.w, plat.h); break;
     }
   }, [team, opp, template, platform, fields, teamObj, plat]);
 
@@ -228,9 +240,9 @@ export default function Generate() {
   const download = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     link.download = `BLW_${team}_${template}_${platform}.png`;
-    link.href = canvas.toDataURL("image/png");
+    link.href = canvas.toDataURL('image/png');
     link.click();
   };
 
@@ -245,30 +257,29 @@ export default function Generate() {
   };
 
   const currentTemplate = TEMPLATES.find(t => t.id === template);
-  const needsOpp = template === "gameday" || template === "score";
+  const needsOpp = template === 'gameday' || template === 'score';
+
+  const labelStyle = { fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontWeight: 600, textTransform: 'uppercase' };
 
   return (
     <div>
-      <div style={{ marginBottom:14 }}>
-        <div style={{ fontSize:26, fontWeight:900, color:"#BF8C30" }}>Content Generator</div>
-        <div style={{ fontSize:13, color:"#555" }}>Create downloadable graphics for any team</div>
-      </div>
+      <PageHeader title="GENERATE" subtitle="Create downloadable graphics for any team — download and schedule via Metricool" />
 
-      <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {/* CONTROLS */}
-        <div style={{ flex:"1 1 320px", display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Card>
             <Label>Template</Label>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
               {TEMPLATES.map(t => (
                 <button key={t.id} onClick={() => { setTemplate(t.id); setFields({}); }} style={{
-                  background: template === t.id ? "rgba(191,140,48,.12)" : "rgba(255,255,255,.02)",
-                  border: template === t.id ? "1px solid #BF8C30" : "1px solid rgba(255,255,255,.05)",
-                  color: template === t.id ? "#BF8C30" : "#777",
-                  borderRadius:8, padding:"10px 4px", cursor:"pointer",
-                  fontSize:10, fontWeight:700, textAlign:"center"
+                  background: template === t.id ? colors.redLight : colors.bg,
+                  border: template === t.id ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
+                  color: template === t.id ? colors.red : colors.textSecondary,
+                  borderRadius: radius.base, padding: '10px 4px', cursor: 'pointer',
+                  fontFamily: fonts.body, fontSize: 10, fontWeight: 700, textAlign: 'center',
                 }}>
-                  <div style={{ fontSize:18 }}>{t.icon}</div>{t.name}
+                  <div style={{ fontSize: 18 }}>{t.icon}</div>{t.name}
                 </button>
               ))}
             </div>
@@ -276,24 +287,24 @@ export default function Generate() {
 
           <Card>
             <Label>Team & Format</Label>
-            <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-              <div style={{ flex:1 }}>
-                <label style={{ fontSize:10, color:"#666", fontWeight:700, textTransform:"uppercase" }}>Team</label>
-                <select value={team} onChange={e => setTeam(e.target.value)} style={{ ...selectStyle, marginTop:3 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Team</label>
+                <select value={team} onChange={e => setTeam(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
                   {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
                 </select>
               </div>
-              <div style={{ flex:1 }}>
-                <label style={{ fontSize:10, color:"#666", fontWeight:700, textTransform:"uppercase" }}>Format</label>
-                <select value={platform} onChange={e => setPlatform(e.target.value)} style={{ ...selectStyle, marginTop:3 }}>
-                  {Object.entries(PLATFORMS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Format</label>
+                <select value={platform} onChange={e => setPlatform(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
+                  {Object.entries(PLATFORMS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>
               </div>
             </div>
             {needsOpp && (
               <div>
-                <label style={{ fontSize:10, color:"#666", fontWeight:700, textTransform:"uppercase" }}>Opponent</label>
-                <select value={opp} onChange={e => setOpp(e.target.value)} style={{ ...selectStyle, marginTop:3 }}>
+                <label style={labelStyle}>Opponent</label>
+                <select value={opp} onChange={e => setOpp(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
                   {TEAMS.filter(t => t.id !== team).map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
                 </select>
               </div>
@@ -302,37 +313,53 @@ export default function Generate() {
 
           {currentTemplate?.fields?.length > 0 && (
             <Card>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                <Label>Content</Label>
-                {template === "player-stat" && (
-                  <div style={{ display:"flex", gap:4 }}>
-                    <button onClick={autoFillBatting} style={{ background:"rgba(106,163,56,.15)", border:"1px solid rgba(106,163,56,.3)", color:"#6AA338", borderRadius:5, padding:"3px 8px", fontSize:9, fontWeight:700, cursor:"pointer" }}>Auto Batting</button>
-                    <button onClick={autoFillPitching} style={{ background:"rgba(9,114,206,.15)", border:"1px solid rgba(9,114,206,.3)", color:"#0972CE", borderRadius:5, padding:"3px 8px", fontSize:9, fontWeight:700, cursor:"pointer" }}>Auto Pitching</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <Label style={{ marginBottom: 0 }}>Content</Label>
+                {template === 'player-stat' && (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={autoFillBatting} style={{
+                      background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
+                      color: '#16A34A', borderRadius: radius.sm, padding: '3px 8px',
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    }}>Auto Batting</button>
+                    <button onClick={autoFillPitching} style={{
+                      background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)',
+                      color: '#2563EB', borderRadius: radius.sm, padding: '3px 8px',
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    }}>Auto Pitching</button>
                   </div>
                 )}
               </div>
-              {currentTemplate.fields.filter(f => f !== "opponent").map(f => (
-                <div key={f} style={{ marginBottom:6 }}>
-                  <label style={{ fontSize:9, color:"#666", fontWeight:700, textTransform:"uppercase" }}>{f.replace(/([A-Z])/g,' $1').trim()}</label>
-                  <input type="text" value={fields[f] || ""} onChange={e => setFields({...fields, [f]: e.target.value})} placeholder={`Enter ${f}...`} style={{ ...inputStyle, marginTop:2 }} />
+              {currentTemplate.fields.filter(f => f !== 'opponent').map(f => (
+                <div key={f} style={{ marginBottom: 8 }}>
+                  <label style={labelStyle}>{f.replace(/([A-Z])/g, ' $1').trim()}</label>
+                  <input type="text" value={fields[f] || ''} onChange={e => setFields({ ...fields, [f]: e.target.value })}
+                    placeholder={`Enter ${f}...`} style={{ ...inputStyle, marginTop: 3 }} />
                 </div>
               ))}
             </Card>
           )}
 
-          <GoldButton onClick={download} style={{ width:"100%", padding:"14px 24px", fontSize:14 }}>
-            Download PNG ({plat.label}) ⬇
-          </GoldButton>
+          <RedButton onClick={download} style={{ width: '100%', padding: '14px 24px', fontSize: 14 }}>
+            Download PNG ({plat.label})
+          </RedButton>
         </div>
 
         {/* PREVIEW */}
-        <div style={{ flex:"1 1 400px", display:"flex", flexDirection:"column", alignItems:"center" }}>
+        <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Label>Live Preview</Label>
-          <div style={{ background:"#1A1A22", borderRadius:12, padding:16, border:"1px solid rgba(255,255,255,.05)", display:"flex", alignItems:"center", justifyContent:"center", width:"100%" }}>
-            <canvas ref={canvasRef} style={{ width: plat.w * scale, height: plat.h * scale, borderRadius:8, boxShadow:"0 8px 32px rgba(0,0,0,.5)" }} />
+          <div style={{
+            background: '#1A1A22', borderRadius: radius.lg, padding: 16,
+            border: `1px solid ${colors.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%',
+          }}>
+            <canvas ref={canvasRef} style={{
+              width: plat.w * scale, height: plat.h * scale,
+              borderRadius: radius.base, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            }} />
           </div>
-          <div style={{ fontSize:10, color:"#555", marginTop:8 }}>
-            {plat.w}×{plat.h}px • Click download for full resolution
+          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8, fontFamily: fonts.condensed }}>
+            {plat.w}x{plat.h}px — Click download for full resolution
           </div>
         </div>
       </div>
