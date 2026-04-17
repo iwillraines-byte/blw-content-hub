@@ -1,43 +1,47 @@
-// ─── TEAM DATA — Logo-accurate hex colors ──────────────────────────────────
-export const TEAMS = [
-  { id:"LAN", slug:"la-naturals", name:"Los Angeles Naturals", city:"Los Angeles", color:"#0972CE", accent:"#C1CFD4", dark:"#054A8A", record:"17-1", rank:1, owner:"Kevin Costner", pct:".944", diff:"+49" },
-  { id:"AZS", slug:"az-saguaros", name:"Arizona Saguaros", city:"Arizona", color:"#163E35", accent:"#6AA338", dark:"#0D2820", record:"11-5", rank:2, owner:"", pct:".688", diff:"+44" },
-  { id:"LVS", slug:"lv-scorpions", name:"Las Vegas Scorpions", city:"Las Vegas", color:"#1A1A1A", accent:"#A3ABB1", dark:"#0D0D0D", record:"7-4", rank:3, owner:"Marc Lasry", pct:".636", diff:"+11" },
-  { id:"NYG", slug:"ny-greenapples", name:"New York Green Apples", city:"New York", color:"#538D41", accent:"#F5B8C5", dark:"#3A6A2D", record:"7-5", rank:4, owner:"Gary Vaynerchuk", pct:".583", diff:"-4" },
-  { id:"DAL", slug:"dal-pandas", name:"Dallas Pandas", city:"Dallas", color:"#1A1A1A", accent:"#A37812", dark:"#0D0D0D", record:"6-6", rank:5, owner:"Dude Perfect", pct:".500", diff:"0" },
-  { id:"BOS", slug:"bos-harborhawks", name:"Boston Harbor Hawks", city:"Boston", color:"#06205B", accent:"#F9F2D8", dark:"#041640", record:"5-6", rank:6, owner:"", pct:".455", diff:"-4" },
-  { id:"PHI", slug:"phi-wiffleclub", name:"Philadelphia Wiffle Club", city:"Philadelphia", color:"#0D223F", accent:"#A8B8C8", dark:"#08162A", record:"4-5", rank:7, owner:"David Adelman", pct:".444", diff:"+16" },
-  { id:"CHI", slug:"chi-bats", name:"Chicago Bats", city:"Chicago", color:"#EC1C2C", accent:"#FFFFFF", dark:"#B5151F", record:"4-6", rank:8, owner:"", pct:".400", diff:"-7" },
-  { id:"MIA", slug:"mia-mirage", name:"Miami Mirage", city:"Miami", color:"#144734", accent:"#7EC6BB", dark:"#0D3024", record:"4-6", rank:9, owner:"", pct:".400", diff:"-1" },
-  { id:"SDO", slug:"sd-orcas", name:"San Diego Orcas", city:"San Diego", color:"#0B3146", accent:"#4BCED8", dark:"#072230", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6" },
-];
+// ─── GRAND SLAM SYSTEMS API ─────────────────────────────────────────────────
+// Live data from app.grandslamsystems.com (prowiffleball.com stats platform)
 
-export const getTeam = (id) => TEAMS.find(t => t.id === id || t.slug === id);
+const GSS_BASE = 'https://app.grandslamsystems.com/api';
+const BLW_LEAGUE_ID = 3;
 
-// ─── PLAYER ROSTER (combined from batting + pitching) ───────────────────────
-export function getAllPlayers() {
-  const seen = new Set();
-  const players = [];
-  const addPlayer = (p, statType) => {
-    const key = `${p.team}_${p.num}_${p.name}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    const lastName = p.name.split(' ').pop();
-    players.push({
-      name: p.name,
-      num: p.num,
-      team: p.team,
-      lastName,
-      statType,
-    });
-  };
-  BATTING_LEADERS.forEach(p => addPlayer(p, 'batting'));
-  PITCHING_LEADERS.forEach(p => addPlayer(p, 'pitching'));
-  return players;
+// API team abbreviations → our internal codes
+const TEAM_MAP = {
+  'LA': 'LAN', 'AZ': 'AZS', 'SD': 'SDO', 'LV': 'LVS',
+  'NY': 'NYG', 'BOS': 'BOS', 'DAL': 'DAL', 'PHI': 'PHI',
+  'CHI': 'CHI', 'MIA': 'MIA',
+};
+
+// BLW team abbreviations in the API (used to filter out non-BLW teams)
+const BLW_TEAM_ABBRS = new Set(Object.keys(TEAM_MAP));
+
+function mapTeamAbbr(apiAbbr) {
+  return TEAM_MAP[apiAbbr] || apiAbbr;
 }
 
-// ─── REAL DATA FROM PROWIFFLEBALL.COM (scraped April 15, 2026) ─────────────
-export const BATTING_LEADERS = [
+// ─── TEAM DATA — Logo-accurate hex colors ──────────────────────────────────
+export const TEAMS = [
+  { id:"LAN", apiAbbr:"LA", apiTeamId:45, slug:"la-naturals", name:"Los Angeles Naturals", city:"Los Angeles", color:"#0972CE", accent:"#C1CFD4", dark:"#054A8A", record:"17-1", rank:1, owner:"Kevin Costner", pct:".944", diff:"+49" },
+  { id:"AZS", apiAbbr:"AZ", apiTeamId:42, slug:"az-saguaros", name:"Arizona Saguaros", city:"Arizona", color:"#163E35", accent:"#6AA338", dark:"#0D2820", record:"11-5", rank:2, owner:"", pct:".688", diff:"+44" },
+  { id:"LVS", apiAbbr:"LV", apiTeamId:49, slug:"lv-scorpions", name:"Las Vegas Scorpions", city:"Las Vegas", color:"#1A1A1A", accent:"#A3ABB1", dark:"#0D0D0D", record:"7-4", rank:3, owner:"Marc Lasry", pct:".636", diff:"+11" },
+  { id:"NYG", apiAbbr:"NY", apiTeamId:43, slug:"ny-greenapples", name:"New York Green Apples", city:"New York", color:"#538D41", accent:"#F5B8C5", dark:"#3A6A2D", record:"7-5", rank:4, owner:"Gary Vaynerchuk", pct:".583", diff:"-4" },
+  { id:"DAL", apiAbbr:"DAL", apiTeamId:44, slug:"dal-pandas", name:"Dallas Pandas", city:"Dallas", color:"#1A1A1A", accent:"#A37812", dark:"#0D0D0D", record:"6-6", rank:5, owner:"Dude Perfect", pct:".500", diff:"0" },
+  { id:"BOS", apiAbbr:"BOS", apiTeamId:48, slug:"bos-harborhawks", name:"Boston Harbor Hawks", city:"Boston", color:"#06205B", accent:"#F9F2D8", dark:"#041640", record:"5-6", rank:6, owner:"", pct:".455", diff:"-4" },
+  { id:"PHI", apiAbbr:"PHI", apiTeamId:47, slug:"phi-wiffleclub", name:"Philadelphia Wiffle Club", city:"Philadelphia", color:"#0D223F", accent:"#A8B8C8", dark:"#08162A", record:"4-5", rank:7, owner:"David Adelman", pct:".444", diff:"+16" },
+  { id:"CHI", apiAbbr:"CHI", apiTeamId:50, slug:"chi-bats", name:"Chicago Bats", city:"Chicago", color:"#EC1C2C", accent:"#FFFFFF", dark:"#B5151F", record:"4-6", rank:8, owner:"", pct:".400", diff:"-7" },
+  { id:"MIA", apiAbbr:"MIA", apiTeamId:51, slug:"mia-mirage", name:"Miami Mirage", city:"Miami", color:"#144734", accent:"#7EC6BB", dark:"#0D3024", record:"4-6", rank:9, owner:"", pct:".400", diff:"-1" },
+  { id:"SDO", apiAbbr:"SD", apiTeamId:46, slug:"sd-orcas", name:"San Diego Orcas", city:"San Diego", color:"#0B3146", accent:"#4BCED8", dark:"#072230", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6" },
+];
+
+export const getTeam = (id) => TEAMS.find(t => t.id === id || t.slug === id || t.apiAbbr === id);
+
+// ─── API STATUS ─────────────────────────────────────────────────────────────
+export const API_CONFIG = {
+  baseUrl: GSS_BASE,
+  isLive: true, // Now always live — fetches from grandslamsystems.com directly
+};
+
+// ─── CACHED FALLBACK DATA (from April 15, 2026 snapshot) ────────────────────
+const BATTING_FALLBACK = [
   { rank:1, name:"Torin Roth", num:"16", team:"SDO", ops_plus:247, avg:".417", obp:".521", slg:".812", hr:0 },
   { rank:2, name:"Tommy Hernandez", num:"18", team:"MIA", ops_plus:236, avg:".435", obp:".488", slg:".756", hr:0 },
   { rank:3, name:"Andrew Ledet", num:"2", team:"AZS", ops_plus:200, avg:".462", obp:".521", slg:".812", hr:7 },
@@ -50,7 +54,7 @@ export const BATTING_LEADERS = [
   { rank:10, name:"Brody Livingston", num:"19", team:"DAL", ops_plus:159, avg:".227", obp:".398", slg:".585", hr:1 },
 ];
 
-export const PITCHING_LEADERS = [
+const PITCHING_FALLBACK = [
   { rank:1, name:"Myc Witty", num:"1", team:"LAN", fip:-1.85, era:"0.00", ip:"25.0", k4:"11.68", w:4, l:0 },
   { rank:2, name:"Will Smithey", num:"5", team:"NYG", fip:-1.79, era:"0.00", ip:"19.0", k4:"10.74", w:3, l:1 },
   { rank:3, name:"Jordan Robles", num:"8", team:"LAN", fip:-1.41, era:"0.00", ip:"30.0", k4:"9.87", w:7, l:1 },
@@ -60,6 +64,187 @@ export const PITCHING_LEADERS = [
   { rank:7, name:"Steve Trzpis", num:"4", team:"LAN", fip:-0.02, era:"0.00", ip:"36.0", k4:"9.22", w:8, l:0 },
   { rank:8, name:"Preston Kolm", num:"21", team:"LVS", fip:0.26, era:"0.00", ip:"17.0", k4:"10.82", w:3, l:0 },
 ];
+
+// ─── DATA CACHE ─────────────────────────────────────────────────────────────
+// In-memory cache so we don't re-fetch on every page navigation
+let _battingCache = null;
+let _pitchingCache = null;
+let _rankingsCache = null;
+let _lastFetch = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function isCacheStale() {
+  return !_lastFetch || (Date.now() - _lastFetch > CACHE_TTL);
+}
+
+// ─── LIVE API FETCH FUNCTIONS ───────────────────────────────────────────────
+
+// Transform API batting data → our internal format
+function transformBatting(apiData) {
+  if (!apiData?.statistics) return BATTING_FALLBACK;
+
+  const blwOnly = apiData.statistics.filter(p => BLW_TEAM_ABBRS.has(p.team?.abbreviation));
+  const sorted = blwOnly.sort((a, b) => (b.opsPlus || 0) - (a.opsPlus || 0));
+
+  return sorted.map((p, i) => ({
+    rank: i + 1,
+    playerId: p.playerId,
+    name: p.playerName,
+    num: String(p.playerId), // API doesn't have jersey numbers — use playerId as placeholder
+    team: mapTeamAbbr(p.team?.abbreviation || ''),
+    teamName: p.team?.name || '',
+    teamLogo: p.team?.logo || '',
+    avatarUrl: p.avatarUrl,
+    games: p.games,
+    pa: p.plateAppearances,
+    ab: p.atBats,
+    runs: p.runs,
+    hits: p.hits,
+    singles: p.singles,
+    doubles: p.doubles,
+    triples: p.triples,
+    hr: p.homeruns || 0,
+    tb: p.totalBases,
+    rbi: p.rbi || 0,
+    bb: p.walks,
+    k: p.strikeouts,
+    avg: (p.battingAverage || 0).toFixed(3),
+    obp: (p.onBasePercentage || 0).toFixed(3),
+    slg: (p.sluggingPercentage || 0).toFixed(3),
+    ops: (p.ops || 0).toFixed(3),
+    ops_plus: p.opsPlus || 0,
+    iso: (p.iso || 0).toFixed(3),
+    babip: (p.babip || 0).toFixed(3),
+    kPct: p.strikeoutPercentage || 0,
+    bbPct: p.walkPercentage || 0,
+    risp: (p.risp || 0).toFixed(3),
+    currentRank: p.currentRank,
+    previousRank: p.previousRank,
+  }));
+}
+
+// Transform API pitching data → our internal format
+function transformPitching(apiData) {
+  if (!apiData?.statistics) return PITCHING_FALLBACK;
+
+  const blwOnly = apiData.statistics.filter(p => BLW_TEAM_ABBRS.has(p.team?.abbreviation));
+  const sorted = blwOnly.sort((a, b) => (a.fip || 999) - (b.fip || 999));
+
+  return sorted.map((p, i) => ({
+    rank: i + 1,
+    playerId: p.playerId,
+    name: p.playerName,
+    num: String(p.playerId),
+    team: mapTeamAbbr(p.team?.abbreviation || ''),
+    teamName: p.team?.name || '',
+    teamLogo: p.team?.logo || '',
+    avatarUrl: p.avatarUrl,
+    games: p.games,
+    w: p.wins || 0,
+    l: p.losses || 0,
+    saves: p.saves || 0,
+    ip: p.inningsPitched || '0',
+    hits: p.hits,
+    runs: p.runs,
+    era: p.era != null ? p.era.toFixed(2) : '0.00',
+    whip: p.whip != null ? p.whip.toFixed(2) : '0.00',
+    fip: p.fip || 0,
+    k4: p.kPer != null ? p.kPer.toFixed(2) : '0.00',
+    bb4: p.bbPer != null ? p.bbPer.toFixed(2) : '0.00',
+    hr4: p.hrPer != null ? p.hrPer.toFixed(2) : '0.00',
+    kbb: p.kbb != null ? p.kbb.toFixed(2) : '0.00',
+    babip: p.babip != null ? p.babip.toFixed(3) : '.000',
+    shutouts: p.shutouts || 0,
+    gbPct: p.gbPercentage || 0,
+    currentRank: p.currentRank,
+    previousRank: p.previousRank,
+  }));
+}
+
+// Transform rankings data
+function transformRankings(apiData) {
+  if (!Array.isArray(apiData)) return [];
+  // Filter to players in BLW (league id 3)
+  const blwPlayers = apiData.filter(p =>
+    p.leagues?.some(l => l.id === BLW_LEAGUE_ID)
+  );
+  return blwPlayers.map(p => ({
+    playerId: p.id,
+    name: `${p.firstName} ${p.lastName}`,
+    firstName: p.firstName,
+    lastName: p.lastName,
+    shortName: p.shortName,
+    currentRank: p.currentRank,
+    previousRank: p.previousRank,
+    rankChange: p.previousRank - p.currentRank,
+    totalPoints: p.totalPoints,
+    averagePoints: p.averagePoints,
+    compositePoints: p.compositePoints,
+    bats: p.bats,
+    throws: p.throws,
+  }));
+}
+
+export async function fetchBattingLeaders() {
+  if (!isCacheStale() && _battingCache) return _battingCache;
+  try {
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=false`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _battingCache = transformBatting(data);
+    _lastFetch = Date.now();
+    return _battingCache;
+  } catch (e) {
+    console.warn('Batting API failed, using fallback:', e);
+    return _battingCache || BATTING_FALLBACK;
+  }
+}
+
+export async function fetchPitchingLeaders() {
+  if (!isCacheStale() && _pitchingCache) return _pitchingCache;
+  try {
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=false`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _pitchingCache = transformPitching(data);
+    _lastFetch = Date.now();
+    return _pitchingCache;
+  } catch (e) {
+    console.warn('Pitching API failed, using fallback:', e);
+    return _pitchingCache || PITCHING_FALLBACK;
+  }
+}
+
+export async function fetchRankings() {
+  if (!isCacheStale() && _rankingsCache) return _rankingsCache;
+  try {
+    const res = await fetch(`${GSS_BASE}/rankings/0`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _rankingsCache = transformRankings(data);
+    _lastFetch = Date.now();
+    return _rankingsCache;
+  } catch (e) {
+    console.warn('Rankings API failed, using fallback:', e);
+    return _rankingsCache || [];
+  }
+}
+
+// Fetch all data in parallel
+export async function fetchAllData() {
+  const [batting, pitching, rankings] = await Promise.all([
+    fetchBattingLeaders(),
+    fetchPitchingLeaders(),
+    fetchRankings(),
+  ]);
+  return { batting, pitching, rankings };
+}
+
+// ─── LEGACY EXPORTS (for components still using static data) ────────────────
+// These are the fallback snapshots — used by canvas render functions and
+// anywhere that needs synchronous access before the API loads
+export const BATTING_LEADERS = BATTING_FALLBACK;
+export const PITCHING_LEADERS = PITCHING_FALLBACK;
 
 export const TEMPLATES = [
   { id: "gameday", name: "Game Day Graphic", icon: "🏟️", desc: "Pre-game matchup hype", fields: ["opponent","date","time","venue"] },
@@ -77,153 +262,119 @@ export const PLATFORMS = {
   "landscape": { w: 1200, h: 675, label: "1200×675 Landscape" },
 };
 
-// ─── API CONFIG ─────────────────────────────────────────────────────────────
-// When you get your prowiffleball.com API key, set it in your Vercel env vars
-// as VITE_PWB_API_KEY. The tool will automatically use live data instead of
-// the snapshot above.
-export const API_CONFIG = {
-  baseUrl: import.meta.env.VITE_PWB_API_URL || "https://prowiffleball.com/api",
-  apiKey: import.meta.env.VITE_PWB_API_KEY || null,
-  isLive: !!import.meta.env.VITE_PWB_API_KEY,
-};
-
-export async function fetchBattingLeaders() {
-  if (!API_CONFIG.isLive) return BATTING_LEADERS;
-  try {
-    const res = await fetch(`${API_CONFIG.baseUrl}/stats/batting?sort=ops_plus&desc=true`, {
-      headers: { "Authorization": `Bearer ${API_CONFIG.apiKey}` }
-    });
-    if (!res.ok) throw new Error("API request failed");
-    return await res.json();
-  } catch (e) {
-    console.warn("Falling back to cached data:", e);
-    return BATTING_LEADERS;
-  }
+// ─── PLAYER ROSTER (combined from live or fallback data) ────────────────────
+export function getAllPlayers() {
+  const seen = new Set();
+  const players = [];
+  const addPlayer = (p, statType) => {
+    const key = `${p.team}_${p.name}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const lastName = p.name.split(' ').pop();
+    players.push({ name: p.name, num: p.num, team: p.team, lastName, statType });
+  };
+  // Use cached live data if available, otherwise fallback
+  (_battingCache || BATTING_FALLBACK).forEach(p => addPlayer(p, 'batting'));
+  (_pitchingCache || PITCHING_FALLBACK).forEach(p => addPlayer(p, 'pitching'));
+  return players;
 }
 
-export async function fetchPitchingLeaders() {
-  if (!API_CONFIG.isLive) return PITCHING_LEADERS;
-  try {
-    const res = await fetch(`${API_CONFIG.baseUrl}/stats/pitching?sort=fip`, {
-      headers: { "Authorization": `Bearer ${API_CONFIG.apiKey}` }
-    });
-    if (!res.ok) throw new Error("API request failed");
-    return await res.json();
-  } catch (e) {
-    console.warn("Falling back to cached data:", e);
-    return PITCHING_LEADERS;
-  }
-}
-
-// ─── CONTENT SUGGESTIONS ENGINE ─────────────────────────────────���───────────
-// Analyzes current stats data and generates actionable content ideas
-export function generateContentSuggestions() {
+// ─── CONTENT SUGGESTIONS ENGINE ─────────────────────────────────────────────
+export function generateContentSuggestions(batting, pitching, rankings) {
+  const b = batting || _battingCache || BATTING_FALLBACK;
+  const p = pitching || _pitchingCache || PITCHING_FALLBACK;
   const suggestions = [];
 
   // Batting leader by AVG
-  const avgLeader = [...BATTING_LEADERS].sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg))[0];
+  const avgLeader = [...b].sort((a, bb) => parseFloat(bb.avg) - parseFloat(a.avg))[0];
   if (avgLeader) {
     suggestions.push({
-      id: 'avg-leader',
-      type: 'stat-spotlight',
+      id: 'avg-leader', type: 'stat-spotlight',
       headline: `${avgLeader.name} leads the league with ${avgLeader.avg} AVG`,
-      description: `Create a stat card for the top batter in BLW`,
-      team: avgLeader.team,
-      templateId: 'player-stat',
+      description: 'Create a stat card for the top batter in BLW',
+      team: avgLeader.team, templateId: 'player-stat',
       prefill: { playerName: avgLeader.name, number: avgLeader.num, statLine: `AVG ${avgLeader.avg} | OPS+ ${avgLeader.ops_plus} | OBP ${avgLeader.obp} | SLG ${avgLeader.slg}` },
     });
   }
 
   // OPS+ leader
-  const opsLeader = BATTING_LEADERS[0];
-  if (opsLeader && opsLeader !== avgLeader) {
+  const opsLeader = b[0];
+  if (opsLeader && opsLeader.name !== avgLeader?.name) {
     suggestions.push({
-      id: 'ops-leader',
-      type: 'stat-spotlight',
+      id: 'ops-leader', type: 'stat-spotlight',
       headline: `${opsLeader.name} has a ${opsLeader.ops_plus} OPS+ — league best`,
-      description: `Spotlight the OPS+ king`,
-      team: opsLeader.team,
-      templateId: 'player-stat',
+      description: 'Spotlight the OPS+ king',
+      team: opsLeader.team, templateId: 'player-stat',
       prefill: { playerName: opsLeader.name, number: opsLeader.num, statLine: `OPS+ ${opsLeader.ops_plus} | AVG ${opsLeader.avg} | HR ${opsLeader.hr} | OBP ${opsLeader.obp}` },
     });
   }
 
-  // FIP leader (pitching dominance)
-  const fipLeader = PITCHING_LEADERS[0];
+  // FIP leader
+  const fipLeader = p[0];
   if (fipLeader) {
+    const fipVal = typeof fipLeader.fip === 'number' ? fipLeader.fip.toFixed(2) : fipLeader.fip;
     suggestions.push({
-      id: 'fip-leader',
-      type: 'stat-spotlight',
-      headline: `${fipLeader.name} has a ${fipLeader.fip.toFixed(2)} FIP — pitching dominance`,
-      description: `The best pitcher in the league deserves a spotlight card`,
-      team: fipLeader.team,
-      templateId: 'player-stat',
-      prefill: { playerName: fipLeader.name, number: fipLeader.num, statLine: `FIP ${fipLeader.fip.toFixed(2)} | IP ${fipLeader.ip} | K/4 ${fipLeader.k4} | W-L ${fipLeader.w}-${fipLeader.l}` },
+      id: 'fip-leader', type: 'stat-spotlight',
+      headline: `${fipLeader.name} has a ${fipVal} FIP — pitching dominance`,
+      description: 'The best pitcher in the league deserves a spotlight card',
+      team: fipLeader.team, templateId: 'player-stat',
+      prefill: { playerName: fipLeader.name, number: fipLeader.num, statLine: `FIP ${fipVal} | IP ${fipLeader.ip} | K/4 ${fipLeader.k4} | W-L ${fipLeader.w}-${fipLeader.l}` },
     });
   }
 
-  // Team with best record (streak)
+  // Top team streak
   const topTeam = TEAMS[0];
   if (topTeam && parseFloat(topTeam.pct) > 0.800) {
     suggestions.push({
-      id: 'top-team-streak',
-      type: 'streak',
+      id: 'top-team-streak', type: 'streak',
       headline: `${topTeam.name} are ${topTeam.record} — create a streak graphic`,
-      description: `The #1 team in BLW is dominating. Celebrate it.`,
-      team: topTeam.id,
-      templateId: 'standings',
-      prefill: {},
+      description: 'The #1 team in BLW is dominating. Celebrate it.',
+      team: topTeam.id, templateId: 'standings', prefill: {},
     });
   }
 
   // Undefeated pitcher
-  const undefeated = PITCHING_LEADERS.find(p => p.l === 0 && p.w >= 5);
+  const undefeated = p.find(x => x.l === 0 && x.w >= 3);
   if (undefeated) {
+    const fipVal = typeof undefeated.fip === 'number' ? undefeated.fip.toFixed(2) : undefeated.fip;
     suggestions.push({
-      id: 'undefeated-pitcher',
-      type: 'milestone',
+      id: 'undefeated-pitcher', type: 'milestone',
       headline: `${undefeated.name} is ${undefeated.w}-0 — undefeated spotlight`,
-      description: `Perfect record on the mound — highlight the achievement`,
-      team: undefeated.team,
-      templateId: 'player-stat',
-      prefill: { playerName: undefeated.name, number: undefeated.num, statLine: `W-L ${undefeated.w}-0 | FIP ${undefeated.fip.toFixed(2)} | IP ${undefeated.ip} | K/4 ${undefeated.k4}` },
+      description: 'Perfect record on the mound — highlight the achievement',
+      team: undefeated.team, templateId: 'player-stat',
+      prefill: { playerName: undefeated.name, number: undefeated.num, statLine: `W-L ${undefeated.w}-0 | FIP ${fipVal} | IP ${undefeated.ip} | K/4 ${undefeated.k4}` },
     });
   }
 
   // HR leader
-  const hrLeader = [...BATTING_LEADERS].sort((a, b) => b.hr - a.hr)[0];
+  const hrLeader = [...b].sort((a, bb) => (bb.hr || 0) - (a.hr || 0))[0];
   if (hrLeader && hrLeader.hr > 0) {
     suggestions.push({
-      id: 'hr-leader',
-      type: 'milestone',
+      id: 'hr-leader', type: 'milestone',
       headline: `${hrLeader.name} leads BLW with ${hrLeader.hr} HR`,
-      description: `Power numbers are rare in wiffle ball — make it count`,
-      team: hrLeader.team,
-      templateId: 'player-stat',
+      description: 'Power numbers are rare in wiffle ball — make it count',
+      team: hrLeader.team, templateId: 'player-stat',
       prefill: { playerName: hrLeader.name, number: hrLeader.num, statLine: `HR ${hrLeader.hr} | AVG ${hrLeader.avg} | OPS+ ${hrLeader.ops_plus} | SLG ${hrLeader.slg}` },
     });
   }
 
-  // Leaderboard graphics
-  suggestions.push({
-    id: 'batting-leaderboard',
-    type: 'leader-change',
-    headline: 'Updated Batting Leaders graphic',
-    description: 'Post the latest OPS+ leaderboard across all platforms',
-    team: 'BLW',
-    templateId: 'batting-leaders',
-    prefill: {},
-  });
+  // Biggest rank climber (rankings)
+  if (rankings?.length) {
+    const climber = [...rankings].sort((a, bb) => bb.rankChange - a.rankChange)[0];
+    if (climber && climber.rankChange > 3) {
+      suggestions.push({
+        id: 'rank-climber', type: 'leader-change',
+        headline: `${climber.name} surged +${climber.rankChange} spots to #${climber.currentRank}`,
+        description: 'Biggest rank mover this week — highlight the climb',
+        team: 'BLW', templateId: 'player-stat',
+        prefill: { playerName: climber.name, statLine: `Rank #${climber.currentRank} | +${climber.rankChange} | ${climber.totalPoints} pts` },
+      });
+    }
+  }
 
-  suggestions.push({
-    id: 'pitching-leaderboard',
-    type: 'leader-change',
-    headline: 'Updated Pitching Leaders graphic',
-    description: 'Post the latest FIP leaderboard across all platforms',
-    team: 'BLW',
-    templateId: 'pitching-leaders',
-    prefill: {},
-  });
+  // Leaderboard graphics
+  suggestions.push({ id: 'batting-leaderboard', type: 'leader-change', headline: 'Updated Batting Leaders graphic', description: 'Post the latest OPS+ leaderboard', team: 'BLW', templateId: 'batting-leaders', prefill: {} });
+  suggestions.push({ id: 'pitching-leaderboard', type: 'leader-change', headline: 'Updated Pitching Leaders graphic', description: 'Post the latest FIP leaderboard', team: 'BLW', templateId: 'pitching-leaders', prefill: {} });
 
   return suggestions;
 }

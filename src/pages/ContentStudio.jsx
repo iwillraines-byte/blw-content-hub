@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { TEAMS, generateContentSuggestions, getTeam, API_CONFIG } from '../data';
+import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, RedButton } from '../components';
 import { colors, fonts, radius } from '../theme';
 
@@ -13,7 +13,15 @@ const typeColors = {
 };
 
 export default function ContentStudio({ teamFilter, setTeamFilter }) {
-  const suggestions = useMemo(() => generateContentSuggestions(), []);
+  const [suggestions, setSuggestions] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  useEffect(() => {
+    fetchAllData().then(({ batting, pitching, rankings }) => {
+      setSuggestions(generateContentSuggestions(batting, pitching, rankings));
+      setDataLoaded(true);
+    });
+  }, []);
 
   const buildLink = (s) => {
     const params = new URLSearchParams();
@@ -160,18 +168,14 @@ export default function ContentStudio({ teamFilter, setTeamFilter }) {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: API_CONFIG.isLive ? colors.success : colors.warning }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: API_CONFIG.isLive ? '#15803D' : '#92400E' }}>
-                  {API_CONFIG.isLive ? 'Live API' : 'Cached Data'}
+                <span style={{ fontSize: 12, fontWeight: 700, color: dataLoaded ? '#15803D' : '#92400E' }}>
+                  {dataLoaded ? 'Live — Grand Slam Systems' : 'Loading...'}
                 </span>
               </div>
-              <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>Last updated: April 15, 2026</div>
+              <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
+                app.grandslamsystems.com · Auto-refreshes every 5 min
+              </div>
             </div>
-            <button disabled style={{
-              width: '100%', padding: '8px 16px', borderRadius: radius.base,
-              background: colors.muted, border: `1px solid ${colors.border}`,
-              fontFamily: fonts.body, fontSize: 12, fontWeight: 600,
-              color: colors.textMuted, cursor: 'not-allowed',
-            }}>Import CSV/JSON (Coming Soon)</button>
           </Card>
 
           {/* Compact Standings */}

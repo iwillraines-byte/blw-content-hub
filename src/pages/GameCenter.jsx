@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchBattingLeaders, fetchPitchingLeaders, TEAMS, API_CONFIG } from '../data';
+import { fetchAllData, TEAMS, API_CONFIG } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, Label } from '../components';
 import { colors, fonts, radius } from '../theme';
 
@@ -7,11 +7,12 @@ export default function GameCenter() {
   const [tab, setTab] = useState('batting');
   const [batting, setBatting] = useState([]);
   const [pitching, setPitching] = useState([]);
+  const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchBattingLeaders(), fetchPitchingLeaders()]).then(([b, p]) => {
-      setBatting(b); setPitching(p); setLoading(false);
+    fetchAllData().then(({ batting: b, pitching: p, rankings: r }) => {
+      setBatting(b); setPitching(p); setRankings(r); setLoading(false);
     });
   }, []);
 
@@ -59,11 +60,11 @@ export default function GameCenter() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 20 }}>{API_CONFIG.isLive ? '🟢' : '🟡'}</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: API_CONFIG.isLive ? '#15803D' : '#92400E' }}>
-              {API_CONFIG.isLive ? 'Live API Connected' : 'Using Cached Data'}
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#15803D' }}>
+              Live API Connected — Grand Slam Systems
             </div>
             <div style={{ fontSize: 12, color: colors.textSecondary }}>
-              {API_CONFIG.isLive ? 'Synced from prowiffleball.com' : 'Add VITE_PWB_API_KEY in Vercel env vars for live data'}
+              {batting.length} batters · {pitching.length} pitchers · {rankings.length} ranked players
             </div>
           </div>
         </div>
@@ -73,12 +74,8 @@ export default function GameCenter() {
       <div style={{ display: 'flex', gap: 6 }}>
         <button onClick={() => setTab('batting')} style={tabStyle(tab === 'batting')}>Batting (OPS+)</button>
         <button onClick={() => setTab('pitching')} style={tabStyle(tab === 'pitching')}>Pitching (FIP)</button>
+        <button onClick={() => setTab('rankings')} style={tabStyle(tab === 'rankings')}>Player Rankings</button>
         <button onClick={() => setTab('standings')} style={tabStyle(tab === 'standings')}>Standings</button>
-        <button disabled style={{
-          ...tabStyle(false),
-          opacity: 0.4, cursor: 'not-allowed',
-          background: colors.muted,
-        }}>Live Updates (Coming Soon)</button>
       </div>
 
       {loading && <Card style={{ textAlign: 'center', color: colors.textMuted, padding: 40 }}>Loading stats...</Card>}
@@ -155,6 +152,46 @@ export default function GameCenter() {
                     <td style={tdStyle(false)}>{p.k4}</td>
                     <td style={{ ...tdStyle(false), fontWeight: 700 }}>{p.w}</td>
                     <td style={{ ...tdStyle(false), color: colors.textMuted }}>{p.l}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Rankings */}
+      {!loading && tab === 'rankings' && (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}` }}>
+            <SectionHeading style={{ margin: 0 }}>PLAYER RANKINGS — COMPOSITE POINTS</SectionHeading>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: colors.bg }}>
+                  <th style={{ ...thStyle(false), textAlign: 'center', width: 40 }}>#</th>
+                  <th style={{ ...thStyle(false), textAlign: 'left' }}>Player</th>
+                  <th style={thStyle(false)}>Move</th>
+                  <th style={thStyle(true)}>Points</th>
+                  <th style={thStyle(false)}>Avg Pts</th>
+                  <th style={thStyle(false)}>Composite</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankings.slice(0, 30).map((p, i) => (
+                  <tr key={p.playerId} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
+                    <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{p.currentRank}</td>
+                    <td style={{ ...tdStyle(false), textAlign: 'left', fontWeight: 700 }}>{p.name}</td>
+                    <td style={{
+                      ...tdStyle(false), fontWeight: 700, fontSize: 12,
+                      color: p.rankChange > 0 ? '#16A34A' : p.rankChange < 0 ? '#DC2626' : colors.textMuted,
+                    }}>
+                      {p.rankChange > 0 ? `+${p.rankChange}` : p.rankChange < 0 ? p.rankChange : '—'}
+                    </td>
+                    <td style={{ ...tdStyle(true), fontSize: 15 }}>{p.totalPoints.toLocaleString()}</td>
+                    <td style={tdStyle(false)}>{p.averagePoints.toFixed(0)}</td>
+                    <td style={tdStyle(false)}>{p.compositePoints.toFixed(0)}</td>
                   </tr>
                 ))}
               </tbody>
