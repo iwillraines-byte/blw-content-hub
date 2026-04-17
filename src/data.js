@@ -14,6 +14,28 @@ export const TEAMS = [
 
 export const getTeam = (id) => TEAMS.find(t => t.id === id || t.slug === id);
 
+// ─── PLAYER ROSTER (combined from batting + pitching) ───────────────────────
+export function getAllPlayers() {
+  const seen = new Set();
+  const players = [];
+  const addPlayer = (p, statType) => {
+    const key = `${p.team}_${p.num}_${p.name}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const lastName = p.name.split(' ').pop();
+    players.push({
+      name: p.name,
+      num: p.num,
+      team: p.team,
+      lastName,
+      statType,
+    });
+  };
+  BATTING_LEADERS.forEach(p => addPlayer(p, 'batting'));
+  PITCHING_LEADERS.forEach(p => addPlayer(p, 'pitching'));
+  return players;
+}
+
 // ─── REAL DATA FROM PROWIFFLEBALL.COM (scraped April 15, 2026) ─────────────
 export const BATTING_LEADERS = [
   { rank:1, name:"Torin Roth", num:"16", team:"SDO", ops_plus:247, avg:".417", obp:".521", slg:".812", hr:0 },
