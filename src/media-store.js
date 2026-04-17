@@ -60,6 +60,31 @@ export async function getAllMedia() {
   });
 }
 
+export async function updateMedia(id, updates) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const existing = getReq.result;
+      if (!existing) { reject(new Error('Not found')); return; }
+      const updated = { ...existing, ...updates };
+      // Re-parse naming convention from new name
+      if (updates.name) {
+        const parts = updates.name.replace(/\.[^.]+$/, '').split('_');
+        updated.team = (parts[0] || '').toUpperCase();
+        updated.num = parts[1] || '';
+        updated.player = (parts[2] || '').toUpperCase();
+        updated.assetType = (parts[3] || 'FILE').toUpperCase();
+      }
+      store.put(updated);
+      tx.oncomplete = () => resolve(updated);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function deleteMedia(id) {
   const db = await openDB();
   return new Promise((resolve, reject) => {

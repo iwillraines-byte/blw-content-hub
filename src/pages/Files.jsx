@@ -1,28 +1,103 @@
 import { useState, useCallback, useEffect } from 'react';
 import { TEAMS, getTeam } from '../data';
-import { Card, PageHeader, SectionHeading, Label, RedButton, inputStyle } from '../components';
+import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { saveMedia, getAllMedia, deleteMedia, blobToObjectURL } from '../media-store';
+import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL } from '../media-store';
 
-const MOCK_FILES = [
-  { name: 'LAN_00_TEAM_LOGO_PRIMARY.png', team: 'LAN', type: 'LOGO', source: 'dropbox', size: '2.4 MB' },
-  { name: 'LAN_01_WITTY_HEADSHOT.png', team: 'LAN', type: 'HEADSHOT', source: 'dropbox', size: '1.8 MB' },
-  { name: 'LAN_01_WITTY_HIGHLIGHT.mp4', team: 'LAN', type: 'HIGHLIGHT', source: 'gdrive', size: '45 MB' },
-  { name: 'LAN_03_JASO_HEADSHOT.png', team: 'LAN', type: 'HEADSHOT', source: 'dropbox', size: '1.6 MB' },
-  { name: 'LAN_08_ROBLES_HEADSHOT.png', team: 'LAN', type: 'HEADSHOT', source: 'dropbox', size: '1.7 MB' },
-  { name: 'AZS_00_TEAM_LOGO_PRIMARY.png', team: 'AZS', type: 'LOGO', source: 'dropbox', size: '2.1 MB' },
-  { name: 'AZS_02_LEDET_HEADSHOT.png', team: 'AZS', type: 'HEADSHOT', source: 'dropbox', size: '1.9 MB' },
-  { name: 'AZS_02_LEDET_ACTION.jpg', team: 'AZS', type: 'ACTION', source: 'gdrive', size: '3.2 MB' },
-  { name: 'DAL_26_ROSE_HEADSHOT.png', team: 'DAL', type: 'HEADSHOT', source: 'dropbox', size: '1.5 MB' },
-  { name: 'BOS_13_DALBEY_HEADSHOT.png', team: 'BOS', type: 'HEADSHOT', source: 'dropbox', size: '1.4 MB' },
-  { name: 'MIA_18_HERNANDEZ_HEADSHOT.png', team: 'MIA', type: 'HEADSHOT', source: 'dropbox', size: '1.7 MB' },
-  { name: 'SDO_16_ROTH_HEADSHOT.png', team: 'SDO', type: 'HEADSHOT', source: 'dropbox', size: '1.6 MB' },
-  { name: 'LVS_28_STAGGS_HEADSHOT.png', team: 'LVS', type: 'HEADSHOT', source: 'dropbox', size: '1.5 MB' },
-];
+const ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK', 'TEAMPHOTO', 'VENUE'];
+const typeIcons = { HEADSHOT: '👤', ACTION: '📸', ACTION2: '📸', HIGHLIGHT: '🎬', HIGHLIGHT2: '🎬', LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨', PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️', TEAMPHOTO: '👥', VENUE: '🏟️', FILE: '📄', LINK: '🔗' };
+const sourceLabels = { local: 'Local', dropbox: 'Dropbox', gdrive: 'Google Drive', link: 'Cloud Link' };
+const sourceColors = { local: colors.red, dropbox: '#0061FF', gdrive: '#34A853', link: '#8B5CF6' };
 
-const typeIcons = { HEADSHOT: '👤', ACTION: '📸', HIGHLIGHT: '🎬', LOGO: '🎨', PORTRAIT: '🖼️', FILE: '📄', LINK: '🔗' };
-const sourceLabels = { dropbox: 'Dropbox', gdrive: 'Google Drive', local: 'Local', link: 'Cloud Link' };
-const sourceColors = { dropbox: '#0061FF', gdrive: '#34A853', local: colors.red, link: '#8B5CF6' };
+// Check if file follows naming convention: at least TEAM_##_LASTNAME_TYPE
+function isProperlyNamed(name) {
+  const parts = name.replace(/\.[^.]+$/, '').split('_');
+  if (parts.length < 4) return false;
+  const teamMatch = TEAMS.some(t => t.id === parts[0].toUpperCase());
+  const numMatch = /^\d{2}$/.test(parts[1]);
+  return teamMatch && numMatch;
+}
+
+function TagRow({ file, thumbUrl, onUpdate, onDelete }) {
+  const [tagTeam, setTagTeam] = useState('');
+  const [tagNum, setTagNum] = useState('');
+  const [tagName, setTagName] = useState('');
+  const [tagType, setTagType] = useState('HEADSHOT');
+  const [saving, setSaving] = useState(false);
+
+  const ext = file.name.split('.').pop() || 'png';
+  const preview = tagTeam && tagNum && tagName
+    ? `${tagTeam}_${tagNum.padStart(2, '0')}_${tagName.toUpperCase()}_${tagType}.${ext}`
+    : null;
+
+  const apply = async () => {
+    if (!preview) return;
+    setSaving(true);
+    const updated = await onUpdate(file.id, preview);
+    setSaving(false);
+  };
+
+  const compact = { fontSize: 12, padding: '5px 8px', fontFamily: fonts.body };
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+      background: colors.white, border: `1px solid ${colors.border}`,
+      borderRadius: radius.base, marginBottom: 6,
+    }}>
+      {/* Thumbnail */}
+      <div style={{
+        width: 48, height: 48, borderRadius: radius.sm, flexShrink: 0,
+        background: thumbUrl ? `url(${thumbUrl}) center/cover` : colors.bg,
+        border: `1px solid ${colors.borderLight}`,
+      }} />
+
+      {/* Original name */}
+      <div style={{ minWidth: 120, maxWidth: 160, flexShrink: 0 }}>
+        <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginBottom: 2 }}>ORIGINAL</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+      </div>
+
+      {/* Tag inputs */}
+      <select value={tagTeam} onChange={e => setTagTeam(e.target.value)} style={{ ...selectStyle, ...compact, width: 80 }}>
+        <option value="">Team</option>
+        {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+      </select>
+
+      <input type="text" value={tagNum} onChange={e => setTagNum(e.target.value.replace(/\D/g, '').slice(0, 2))}
+        placeholder="##" maxLength={2} style={{ ...inputStyle, ...compact, width: 44, textAlign: 'center' }} />
+
+      <input type="text" value={tagName} onChange={e => setTagName(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+        placeholder="LASTNAME" style={{ ...inputStyle, ...compact, width: 100 }} />
+
+      <select value={tagType} onChange={e => setTagType(e.target.value)} style={{ ...selectStyle, ...compact, width: 110 }}>
+        {ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+      </select>
+
+      {/* Preview + Apply */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {preview && (
+          <div style={{ fontSize: 10, color: colors.success, fontFamily: fonts.condensed, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            → {preview}
+          </div>
+        )}
+      </div>
+
+      <button onClick={apply} disabled={!preview || saving} style={{
+        background: preview ? colors.red : colors.border, color: '#fff',
+        border: 'none', borderRadius: radius.sm, padding: '5px 12px',
+        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+        cursor: preview ? 'pointer' : 'default', opacity: preview ? 1 : 0.4,
+        whiteSpace: 'nowrap',
+      }}>{saving ? '...' : 'Apply'}</button>
+
+      <button onClick={() => onDelete(file.id)} style={{
+        background: 'none', border: 'none', color: colors.textMuted,
+        cursor: 'pointer', fontSize: 14, padding: '0 4px',
+      }}>✕</button>
+    </div>
+  );
+}
 
 export default function Files({ teamFilter }) {
   const [search, setSearch] = useState('');
@@ -31,8 +106,8 @@ export default function Files({ teamFilter }) {
   const [cloudLinks, setCloudLinks] = useState([]);
   const [linkInput, setLinkInput] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [showTagger, setShowTagger] = useState(true);
 
-  // Load persisted media from IndexedDB on mount
   useEffect(() => {
     getAllMedia().then(media => {
       setStoredMedia(media);
@@ -40,62 +115,56 @@ export default function Files({ teamFilter }) {
       media.forEach(m => { if (m.blob) urls[m.id] = blobToObjectURL(m.blob); });
       setThumbUrls(urls);
     });
-    return () => Object.values(thumbUrls).forEach(URL.revokeObjectURL);
   }, []);
 
-  const allFiles = [
-    ...storedMedia.map(m => ({
+  const untagged = storedMedia.filter(m => !isProperlyNamed(m.name));
+  const tagged = storedMedia.filter(m => isProperlyNamed(m.name));
+
+  const allDisplayFiles = [
+    ...tagged.map(m => ({
       id: m.id, name: m.name, team: m.team, type: m.assetType,
       source: 'local', size: m.blob ? `${(m.blob.size / 1024 / 1024).toFixed(1)} MB` : '',
       thumbUrl: thumbUrls[m.id],
     })),
     ...cloudLinks.map((l, i) => ({ id: `link-${i}`, name: l.name || l.url, team: 'BLW', type: 'LINK', source: 'link', url: l.url, size: '' })),
-    ...MOCK_FILES.map((f, i) => ({ ...f, id: `mock-${i}` })),
   ];
 
-  const filtered = allFiles.filter(f => {
+  const filtered = allDisplayFiles.filter(f => {
     if (teamFilter !== 'ALL' && f.team !== teamFilter && f.team !== 'BLW') return false;
     if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const handleDrop = useCallback(async (e) => {
-    e.preventDefault();
-    setDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    for (const file of files) {
-      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
-      const record = await saveMedia({
-        name: file.name,
-        blob: file,
-        width: 0,
-        height: 0,
-      });
-      const url = blobToObjectURL(file);
-      setStoredMedia(prev => [record, ...prev]);
-      setThumbUrls(prev => ({ ...prev, [record.id]: url }));
-    }
-  }, []);
-
-  const handleDragOver = useCallback((e) => { e.preventDefault(); setDragging(true); }, []);
-  const handleDragLeave = useCallback(() => setDragging(false), []);
-
-  const handleFileInput = useCallback(async (e) => {
-    const files = Array.from(e.target.files);
-    for (const file of files) {
+  const handleFiles = useCallback(async (fileList) => {
+    for (const file of fileList) {
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
       const record = await saveMedia({ name: file.name, blob: file, width: 0, height: 0 });
       const url = blobToObjectURL(file);
       setStoredMedia(prev => [record, ...prev]);
       setThumbUrls(prev => ({ ...prev, [record.id]: url }));
     }
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault(); setDragging(false);
+    handleFiles(Array.from(e.dataTransfer.files));
+  }, [handleFiles]);
+
+  const handleFileInput = useCallback((e) => {
+    handleFiles(Array.from(e.target.files));
     e.target.value = '';
+  }, [handleFiles]);
+
+  const handleRename = useCallback(async (id, newName) => {
+    const updated = await updateMedia(id, { name: newName });
+    setStoredMedia(prev => prev.map(m => m.id === id ? updated : m));
+    return updated;
   }, []);
 
   const handleDelete = useCallback(async (id) => {
     await deleteMedia(id);
     setStoredMedia(prev => prev.filter(m => m.id !== id));
-    if (thumbUrls[id]) { URL.revokeObjectURL(thumbUrls[id]); }
+    if (thumbUrls[id]) URL.revokeObjectURL(thumbUrls[id]);
     setThumbUrls(prev => { const n = { ...prev }; delete n[id]; return n; });
   }, [thumbUrls]);
 
@@ -110,38 +179,80 @@ export default function Files({ teamFilter }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title="FILES" subtitle="Upload, link, and manage team media assets — files persist in your browser">
-        <span style={{ fontFamily: fonts.condensed, fontSize: 12, color: colors.success, fontWeight: 600 }}>
-          {storedMedia.length} file{storedMedia.length !== 1 ? 's' : ''} stored
-        </span>
+      <PageHeader title="FILES" subtitle="Upload, tag, and manage team media assets — files persist in your browser">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontFamily: fonts.condensed, fontSize: 12, color: colors.success, fontWeight: 600 }}>
+            {storedMedia.length} stored
+          </span>
+          {untagged.length > 0 && (
+            <span style={{ fontFamily: fonts.condensed, fontSize: 12, color: colors.warning, fontWeight: 600 }}>
+              {untagged.length} untagged
+            </span>
+          )}
+        </div>
       </PageHeader>
 
       {/* Upload Zone */}
       <label style={{ cursor: 'pointer' }}>
         <input type="file" multiple accept="image/*,video/*" onChange={handleFileInput} style={{ display: 'none' }} />
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          style={{
-            border: `2px dashed ${dragging ? colors.red : colors.border}`,
-            borderRadius: radius.lg, padding: 40, textAlign: 'center',
-            background: dragging ? colors.redLight : colors.white,
-            transition: 'all 0.2s',
-          }}
-        >
-          <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.4 }}>📂</div>
-          <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 1 }}>
+        <div onDrop={handleDrop} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} style={{
+          border: `2px dashed ${dragging ? colors.red : colors.border}`,
+          borderRadius: radius.lg, padding: 32, textAlign: 'center',
+          background: dragging ? colors.redLight : colors.white, transition: 'all 0.2s',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 6, opacity: 0.4 }}>📂</div>
+          <div style={{ fontFamily: fonts.heading, fontSize: 18, color: colors.text, letterSpacing: 1 }}>
             {dragging ? 'DROP FILES HERE' : 'DRAG & DROP FILES'}
           </div>
-          <div style={{ fontSize: 13, color: colors.textSecondary, marginTop: 4 }}>
-            or click to browse · Naming convention: TEAM_##_LASTNAME_TYPE.ext
-          </div>
-          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>
-            Files are saved to your browser and persist across sessions
+          <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+            or click to browse · Upload with any filename — tag and rename below
           </div>
         </div>
       </label>
+
+      {/* UNTAGGED FILES — Bulk Tagger */}
+      {untagged.length > 0 && (
+        <Card style={{ border: `1px solid ${colors.warningBorder}`, background: colors.warningBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <SectionHeading style={{ margin: 0, color: '#92400E' }}>
+                TAG & RENAME ({untagged.length} FILE{untagged.length !== 1 ? 'S' : ''})
+              </SectionHeading>
+              <div style={{ fontSize: 11, color: '#92400E', fontFamily: fonts.condensed, marginTop: 2 }}>
+                These files need team/player/type tags to work with the content generator
+              </div>
+            </div>
+            <button onClick={() => setShowTagger(!showTagger)} style={{
+              background: 'none', border: `1px solid ${colors.warningBorder}`,
+              color: '#92400E', borderRadius: radius.sm, padding: '4px 12px',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            }}>{showTagger ? 'Hide' : 'Show'}</button>
+          </div>
+
+          {showTagger && (
+            <div style={{ background: colors.white, borderRadius: radius.base, padding: 10, border: `1px solid ${colors.border}` }}>
+              <div style={{ display: 'flex', gap: 8, padding: '4px 10px 8px', fontSize: 9, fontFamily: fonts.condensed, color: colors.textMuted, fontWeight: 600, textTransform: 'uppercase' }}>
+                <div style={{ width: 48 }} />
+                <div style={{ width: 140 }}>Original</div>
+                <div style={{ width: 80 }}>Team</div>
+                <div style={{ width: 44 }}>#</div>
+                <div style={{ width: 100 }}>Last Name</div>
+                <div style={{ width: 110 }}>Asset Type</div>
+                <div style={{ flex: 1 }}>New Name</div>
+              </div>
+              {untagged.map(file => (
+                <TagRow
+                  key={file.id}
+                  file={file}
+                  thumbUrl={thumbUrls[file.id]}
+                  onUpdate={handleRename}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Cloud Link Input */}
       <Card>
@@ -176,11 +287,11 @@ export default function Files({ teamFilter }) {
         <input type="text" placeholder="Search by filename, team, or player..." value={search}
           onChange={e => setSearch(e.target.value)} style={inputStyle} />
         <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 8, fontFamily: fonts.condensed }}>
-          {filtered.length} file{filtered.length !== 1 ? 's' : ''} found
+          {filtered.length} tagged file{filtered.length !== 1 ? 's' : ''} found
         </div>
       </Card>
 
-      {/* File Grid */}
+      {/* Tagged File Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
         {filtered.map((f) => {
           const t = getTeam(f.team);
@@ -226,9 +337,9 @@ export default function Files({ teamFilter }) {
         })}
       </div>
 
-      {filtered.length === 0 && (
+      {filtered.length === 0 && untagged.length === 0 && (
         <Card style={{ textAlign: 'center', padding: 40, color: colors.textMuted }}>
-          No files found. Upload files above or paste a cloud share link.
+          No files yet. Upload files above to get started.
         </Card>
       )}
     </div>
