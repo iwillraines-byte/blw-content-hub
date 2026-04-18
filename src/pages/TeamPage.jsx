@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TEAMS, getTeam, slugify, fetchAllData, fetchTeamRosterFromApi, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
-import { Card, PageHeader, SectionHeading } from '../components';
+import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
+import { getManualPlayersByTeam, savePlayer, deletePlayer } from '../player-store';
 
 export default function TeamPage() {
   const { slug } = useParams();
@@ -11,64 +12,142 @@ export default function TeamPage() {
 
   const [media, setMedia] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [manualPlayers, setManualPlayers] = useState([]);
   const [rosterAvatars, setRosterAvatars] = useState({}); // lastName (upper) → objectURL
   const [loaded, setLoaded] = useState(false);
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [newPlayerFirst, setNewPlayerFirst] = useState('');
+  const [newPlayerLast, setNewPlayerLast] = useState('');
+  const [newPlayerNum, setNewPlayerNum] = useState('');
+  const [newPlayerPosition, setNewPlayerPosition] = useState('');
+
+  const rebuildRoster = useCallback((apiRoster, teamMedia, manualList) => {
+    // Jersey lookup from media filenames
+    const jerseyByLastName = {};
+    for (const m of teamMedia) {
+      if (m.player && m.num && !jerseyByLastName[m.player]) {
+        jerseyByLastName[m.player] = m.num;
+      }
+    }
+    // Also seed from manual players
+    for (const p of manualList) {
+      const up = p.lastName.toUpperCase();
+      if (p.num && !jerseyByLastName[up]) jerseyByLastName[up] = p.num;
+    }
+
+    const taken = new Set(apiRoster.map(p => p.lastName.toUpperCase()));
+    const entries = [];
+
+    // API roster (with jersey from media/manual)
+    for (const p of apiRoster) {
+      entries.push({
+        ...p,
+        num: p.num || jerseyByLastName[p.lastName.toUpperCase()] || '',
+        source: 'api',
+      });
+    }
+
+    // Manual players not already in API roster
+    for (const p of manualList) {
+      const up = p.lastName.toUpperCase();
+      if (taken.has(up)) continue;
+      taken.add(up);
+      entries.push({
+        manualId: p.id,
+        playerId: null,
+        name: p.name,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        team: p.team,
+        num: p.num || '',
+        position: p.position,
+        isPitcher: /p/i.test(p.position),
+        isBatter: /b|h|c|of|if/i.test(p.position),
+        manual: true,
+        source: 'manual',
+      });
+    }
+
+    // Media-only players (not in API, not manually added)
+    for (const m of teamMedia) {
+      if (!m.player || m.player === 'TEAM' || m.player === 'LEAGUE') continue;
+      const up = m.player.toUpperCase();
+      if (taken.has(up)) continue;
+      taken.add(up);
+      const lastName = up.charAt(0) + up.slice(1).toLowerCase();
+      entries.push({
+        playerId: null, name: lastName, firstName: '', lastName,
+        team: team.id, num: m.num || '',
+        isPitcher: false, isBatter: false, mediaOnly: true, source: 'media',
+      });
+    }
+
+    return entries.sort((a, b) => a.lastName.localeCompare(b.lastName));
+  }, [team?.id]);
 
   useEffect(() => {
     let cancel = false;
     if (!team?.id) return;
-    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), findTeamMedia(team.id)])
-      .then(([, apiRoster, teamMedia]) => {
-        if (cancel) return;
-        setMedia(teamMedia);
+    Promise.all([
+      fetchAllData(),
+      fetchTeamRosterFromApi(team.id),
+      findTeamMedia(team.id),
+      getManualPlayersByTeam(team.id),
+    ]).then(([, apiRoster, teamMedia, manualList]) => {
+      if (cancel) return;
+      setMedia(teamMedia);
+      setManualPlayers(manualList);
 
-        // Build a lookup of jersey numbers from uploaded media (TEAM_##_LASTNAME_TYPE.ext)
-        const jerseyByLastName = {};
-        for (const m of teamMedia) {
-          if (m.player && m.num && !jerseyByLastName[m.player]) {
-            jerseyByLastName[m.player] = m.num;
-          }
-        }
+      const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList);
+      setRoster(fullRoster);
 
-        // Also include media-only players (with filenames like LAN_07_SMITH_*) who aren't in the API roster
-        const apiLastNames = new Set(apiRoster.map(p => p.lastName.toUpperCase()));
-        const mediaOnlyPlayers = [];
-        const mediaOnlySeen = new Set();
-        for (const m of teamMedia) {
-          if (!m.player || m.player === 'TEAM' || m.player === 'LEAGUE') continue;
-          const up = m.player.toUpperCase();
-          if (apiLastNames.has(up) || mediaOnlySeen.has(up)) continue;
-          mediaOnlySeen.add(up);
-          const lastName = up.charAt(0) + up.slice(1).toLowerCase();
-          mediaOnlyPlayers.push({
-            playerId: null, name: lastName, firstName: '', lastName,
-            team: team.id, num: m.num || '', isPitcher: false, isBatter: false, mediaOnly: true,
-          });
-        }
-
-        // Attach jersey numbers (from media) to API roster entries
-        const rosterWithJerseys = apiRoster.map(p => ({
-          ...p,
-          num: p.num || jerseyByLastName[p.lastName.toUpperCase()] || '',
-        }));
-
-        const fullRoster = [...rosterWithJerseys, ...mediaOnlyPlayers].sort((a, b) => a.lastName.localeCompare(b.lastName));
-        setRoster(fullRoster);
-
-        // Build avatar lookup per roster player
-        const urls = {};
-        for (const p of fullRoster) {
-          const headshot = teamMedia.find(m =>
-            m.player === p.lastName.toUpperCase() &&
-            (m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION')
-          );
-          if (headshot?.blob) urls[p.lastName.toUpperCase()] = blobToObjectURL(headshot.blob);
-        }
-        setRosterAvatars(urls);
-        setLoaded(true);
-      });
+      // Avatar lookup
+      const urls = {};
+      for (const p of fullRoster) {
+        const headshot = teamMedia.find(m =>
+          m.player === p.lastName.toUpperCase() &&
+          (m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION')
+        );
+        if (headshot?.blob) urls[p.lastName.toUpperCase()] = blobToObjectURL(headshot.blob);
+      }
+      setRosterAvatars(urls);
+      setLoaded(true);
+    });
     return () => { cancel = true; };
-  }, [team?.id]);
+  }, [team?.id, rebuildRoster]);
+
+  const handleAddPlayer = async () => {
+    if (!newPlayerLast.trim()) return;
+    const record = await savePlayer({
+      firstName: newPlayerFirst.trim(),
+      lastName: newPlayerLast.trim(),
+      team: team.id,
+      num: newPlayerNum.trim(),
+      position: newPlayerPosition.trim(),
+    });
+    const updated = [...manualPlayers, record];
+    setManualPlayers(updated);
+    // Rebuild roster
+    const [apiRoster, teamMedia] = await Promise.all([
+      fetchTeamRosterFromApi(team.id),
+      findTeamMedia(team.id),
+    ]);
+    setRoster(rebuildRoster(apiRoster, teamMedia, updated));
+    // Reset form
+    setNewPlayerFirst(''); setNewPlayerLast(''); setNewPlayerNum(''); setNewPlayerPosition('');
+    setShowAddPlayer(false);
+  };
+
+  const handleDeleteManualPlayer = async (manualId) => {
+    await deletePlayer(manualId);
+    const updated = manualPlayers.filter(p => p.id !== manualId);
+    setManualPlayers(updated);
+    const [apiRoster, teamMedia] = await Promise.all([
+      fetchTeamRosterFromApi(team.id),
+      findTeamMedia(team.id),
+    ]);
+    setRoster(rebuildRoster(apiRoster, teamMedia, updated));
+  };
 
   if (!team) {
     return (
@@ -177,16 +256,56 @@ export default function TeamPage() {
 
       {/* Roster */}
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
           <SectionHeading style={{ margin: 0 }}>ROSTER</SectionHeading>
-          <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted }}>
-            {roster.length} PLAYER{roster.length !== 1 ? 'S' : ''}
-          </span>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted }}>
+              {roster.length} PLAYER{roster.length !== 1 ? 'S' : ''}
+            </span>
+            <button onClick={() => setShowAddPlayer(!showAddPlayer)} style={{
+              background: showAddPlayer ? colors.bg : colors.redLight,
+              border: `1px solid ${showAddPlayer ? colors.border : colors.redBorder}`,
+              color: showAddPlayer ? colors.textSecondary : colors.red,
+              borderRadius: radius.sm, padding: '4px 10px',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            }}>{showAddPlayer ? '✕ Cancel' : '+ Add Player'}</button>
+          </div>
         </div>
+
+        {showAddPlayer && (
+          <div style={{
+            background: colors.bg, border: `1px solid ${colors.border}`,
+            borderRadius: radius.base, padding: 12, marginBottom: 12,
+          }}>
+            <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 8 }}>
+              ADD PLAYER TO {team.id}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 120px', gap: 8, marginBottom: 10 }}>
+              <input type="text" value={newPlayerFirst} onChange={e => setNewPlayerFirst(e.target.value)}
+                placeholder="First name" style={{ ...inputStyle, fontSize: 12 }} />
+              <input type="text" value={newPlayerLast} onChange={e => setNewPlayerLast(e.target.value)}
+                placeholder="Last name *" style={{ ...inputStyle, fontSize: 12 }} />
+              <input type="text" value={newPlayerNum} onChange={e => setNewPlayerNum(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                placeholder="#" maxLength={2} style={{ ...inputStyle, fontSize: 12, textAlign: 'center' }} />
+              <input type="text" value={newPlayerPosition} onChange={e => setNewPlayerPosition(e.target.value)}
+                placeholder="Position" style={{ ...inputStyle, fontSize: 12 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <RedButton onClick={handleAddPlayer} disabled={!newPlayerLast.trim()} style={{ padding: '8px 16px', fontSize: 12 }}>
+                Add Player
+              </RedButton>
+              <div style={{ flex: 1 }} />
+              <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, alignSelf: 'center' }}>
+                Adds to local roster · Position examples: P, C, IF, OF, 2-way
+              </div>
+            </div>
+          </div>
+        )}
+
         {!loaded && <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted }}>Loading roster…</div>}
         {loaded && roster.length === 0 && (
           <div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
-            No roster data yet. Upload media files or wait for stats to sync.
+            No roster data yet. Upload media files or click "+ Add Player" to start.
           </div>
         )}
         {loaded && roster.length > 0 && (
@@ -199,45 +318,58 @@ export default function TeamPage() {
                 : p.isPitcher ? 'Pitcher'
                 : p.mediaOnly ? 'Roster' : 'Roster';
               return (
-                <Link
-                  key={p.lastName}
-                  to={`/teams/${team.slug}/players/${slugify(p.lastName)}`}
-                  style={{
-                    textDecoration: 'none', color: colors.text,
-                    padding: 12, borderRadius: radius.base,
-                    background: colors.white, border: `1px solid ${colors.border}`,
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{
-                    width: 48, height: 48, borderRadius: radius.full,
-                    background: avatar ? `url(${avatar}) center/cover` : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
-                    color: team.accent, flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: fonts.heading, fontSize: 16, letterSpacing: 0.5,
-                    border: `2px solid ${team.color}`,
-                  }}>
-                    {!avatar && p.lastName.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.name}
+                <div key={p.lastName} style={{ position: 'relative' }}>
+                  <Link
+                    to={`/teams/${team.slug}/players/${slugify(p.lastName)}`}
+                    style={{
+                      textDecoration: 'none', color: colors.text,
+                      padding: 12, borderRadius: radius.base,
+                      background: colors.white, border: `1px solid ${colors.border}`,
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{
+                      width: 48, height: 48, borderRadius: radius.full,
+                      background: avatar ? `url(${avatar}) center/cover` : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
+                      color: team.accent, flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: fonts.heading, fontSize: 16, letterSpacing: 0.5,
+                      border: `2px solid ${team.color}`,
+                    }}>
+                      {!avatar && p.lastName.slice(0, 2).toUpperCase()}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                      {p.num && (
-                        <span style={{
-                          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                          padding: '1px 6px', borderRadius: 3,
-                          background: team.color, color: team.accent,
-                        }}>#{p.num}</span>
-                      )}
-                      <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted }}>
-                        {statLabel}
-                      </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.name}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        {p.num && (
+                          <span style={{
+                            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                            padding: '1px 6px', borderRadius: 3,
+                            background: team.color, color: team.accent,
+                          }}>#{p.num}</span>
+                        )}
+                        <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted }}>
+                          {statLabel}{p.manual ? ' · Manual' : ''}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+                  {p.manual && p.manualId && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteManualPlayer(p.manualId); }}
+                      title="Remove manual player"
+                      style={{
+                        position: 'absolute', top: 4, right: 4, width: 18, height: 18,
+                        borderRadius: '50%', background: 'rgba(0,0,0,0.1)', color: colors.textMuted,
+                        border: 'none', fontSize: 10, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >✕</button>
+                  )}
+                </div>
               );
             })}
           </div>

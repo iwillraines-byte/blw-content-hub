@@ -1,7 +1,7 @@
 // ─── IndexedDB Store for Overlay Template PNGs + Effect PNGs ───────────────
 
 const DB_NAME = 'blw-content-hub';
-const DB_VERSION = 2; // Bumped for effects store addition
+const DB_VERSION = 3; // Bumped for players store addition
 const STORE_NAME = 'overlays';
 const EFFECTS_STORE = 'effects';
 
@@ -18,6 +18,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(EFFECTS_STORE)) {
         db.createObjectStore(EFFECTS_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('players')) {
+        db.createObjectStore('players', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);

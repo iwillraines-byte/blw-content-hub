@@ -188,7 +188,7 @@ function transformRankings(apiData) {
 export async function fetchBattingLeaders() {
   if (!isCacheStale() && _battingCache) return _battingCache;
   try {
-    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=false`);
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     _battingCache = transformBatting(data);
@@ -203,7 +203,7 @@ export async function fetchBattingLeaders() {
 export async function fetchPitchingLeaders() {
   if (!isCacheStale() && _pitchingCache) return _pitchingCache;
   try {
-    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=false`);
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     _pitchingCache = transformPitching(data);
@@ -293,6 +293,12 @@ export async function fetchTeamRosterFromApi(teamId) {
   }
 }
 
+// Fetch rosters for all BLW teams in parallel — used by the master Players directory
+export async function fetchAllRosters() {
+  const results = await Promise.all(TEAMS.map(t => fetchTeamRosterFromApi(t.id)));
+  return results.flat();
+}
+
 // ─── LEGACY EXPORTS (for components still using static data) ────────────────
 // These are the fallback snapshots — used by canvas render functions and
 // anywhere that needs synchronous access before the API loads
@@ -343,6 +349,71 @@ export function slugify(str) {
 // Returns the full roster for a team — combines stats data with media-referenced
 // players (so a player with uploaded assets appears even if they haven't played).
 // mediaList is an optional array of stored media (from getAllMedia) to cross-reference.
+// Build a master players directory by combining API team rosters, batting/pitching
+// stats, media files, and manually-added players. Returns one entry per
+// (team, lastName).
+export async function getAllPlayersDirectory(mediaList = [], manualPlayers = []) {
+  const registry = new Map(); // `${team}_${UPPER_LASTNAME}` → entry
+  const key = (team, lastName) => `${team}_${String(lastName || '').toUpperCase()}`;
+
+  const upsert = (team, name, patch) => {
+    if (!team || !name) return;
+    const lastName = name.split(' ').pop();
+    const k = key(team, lastName);
+    const existing = registry.get(k) || {
+      name: '', firstName: '', lastName,
+      team, num: '', hasStats: false, hasMedia: false, hasManual: false, isPitcher: false, isBatter: false,
+    };
+    registry.set(k, { ...existing, name: existing.name || name, firstName: existing.firstName || name.split(' ').slice(0, -1).join(' '), ...patch });
+  };
+
+  // Batting stats (cached)
+  for (const p of (_battingCache || [])) {
+    upsert(p.team, p.name, { hasStats: true, isBatter: true });
+  }
+  // Pitching stats (cached)
+  for (const p of (_pitchingCache || [])) {
+    upsert(p.team, p.name, { hasStats: true, isPitcher: true });
+  }
+  // Team roster endpoint cache (career stats)
+  for (const [teamId, cached] of _rosterCache.entries()) {
+    for (const p of cached.roster) {
+      upsert(teamId, p.name, {
+        hasStats: true,
+        isBatter: p.isBatter || undefined,
+        isPitcher: p.isPitcher || undefined,
+      });
+    }
+  }
+  // Media files
+  for (const m of mediaList) {
+    if (!m.team || !m.player || m.player === 'TEAM' || m.player === 'LEAGUE') continue;
+    const titleLast = m.player.charAt(0) + m.player.slice(1).toLowerCase();
+    const k = key(m.team, m.player);
+    if (registry.has(k)) {
+      const e = registry.get(k);
+      registry.set(k, { ...e, hasMedia: true, num: e.num || m.num || '' });
+    } else {
+      upsert(m.team, titleLast, { hasMedia: true, num: m.num || '' });
+    }
+  }
+  // Manual players
+  for (const p of manualPlayers) {
+    const k = key(p.team, p.lastName);
+    const existing = registry.get(k);
+    if (existing) {
+      registry.set(k, { ...existing, hasManual: true, manualId: p.id, num: existing.num || p.num || '', firstName: existing.firstName || p.firstName || '' });
+    } else {
+      upsert(p.team, p.name || p.lastName, { hasManual: true, manualId: p.id, num: p.num || '' });
+    }
+  }
+
+  return Array.from(registry.values()).sort((a, b) => {
+    if (a.team !== b.team) return a.team.localeCompare(b.team);
+    return a.lastName.localeCompare(b.lastName);
+  });
+}
+
 export function getTeamRoster(teamId, mediaList = []) {
   const roster = new Map(); // key: lastName (uppercase) → player object
 
@@ -413,7 +484,7 @@ export function getTeamRoster(teamId, mediaList = []) {
 }
 
 // Fetch detailed player info for the player page
-export function getPlayerByTeamLastName(teamId, lastNameSlug) {
+export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []) {
   const LN_NORM = slugify(lastNameSlug);
   const matchName = (name) => slugify(name.split(' ').pop()) === LN_NORM;
 
@@ -425,7 +496,10 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug) {
   const rosterCached = _rosterCache.get(teamId);
   const rosterPlayer = rosterCached?.roster.find(p => matchName(p.name));
 
-  const source = batting || pitching || rosterPlayer;
+  // And manual entries
+  const manual = manualPlayers.find(p => p.team === teamId && matchName(p.name || p.lastName));
+
+  const source = batting || pitching || rosterPlayer || manual;
   if (!source && !ranking) return null;
 
   const name = source?.name || ranking?.name || '';
@@ -442,6 +516,7 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug) {
     pitching: pitching || null,
     ranking: ranking || null,
     roster: rosterPlayer || null,
+    manual: manual || null,
   };
 }
 

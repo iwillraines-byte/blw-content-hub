@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAllData, TEAMS, getTeam, slugify, API_CONFIG } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, inputStyle } from '../components';
+import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, API_CONFIG } from '../data';
+import { Card, PageHeader, SectionHeading, TeamChip, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
+import { getAllMedia } from '../media-store';
+import { getAllManualPlayers } from '../player-store';
 
 // Helper: render a sortable header
 function SortHeader({ label, sortKey, currentSort, setSort, align = 'right', highlight = false }) {
@@ -82,19 +84,39 @@ export default function GameCenter() {
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [players, setPlayers] = useState([]);
+
   const [battingSearch, setBattingSearch] = useState('');
   const [pitchingSearch, setPitchingSearch] = useState('');
   const [rankingsSearch, setRankingsSearch] = useState('');
+  const [playersSearch, setPlayersSearch] = useState('');
+  const [playersTeamFilter, setPlayersTeamFilter] = useState('ALL');
+  const [playersFilter, setPlayersFilter] = useState('all'); // all | missing-media | missing-jersey
 
   const [battingSort, setBattingSort] = useState({ key: 'ops_plus', dir: 'desc' });
   const [pitchingSort, setPitchingSort] = useState({ key: 'fip', dir: 'asc' });
   const [rankingsSort, setRankingsSort] = useState({ key: 'currentRank', dir: 'asc' });
+  const [playersSort, setPlayersSort] = useState({ key: 'team', dir: 'asc' });
 
   useEffect(() => {
     fetchAllData().then(({ batting: b, pitching: p, rankings: r }) => {
       setBatting(b); setPitching(p); setRankings(r); setLoading(false);
     });
   }, []);
+
+  // Load Players tab data only when accessed (and refresh when tab is opened)
+  useEffect(() => {
+    if (tab !== 'players') return;
+    Promise.all([
+      fetchAllData(),
+      fetchAllRosters(),
+      getAllMedia(),
+      getAllManualPlayers(),
+    ]).then(async ([, , mediaList, manualList]) => {
+      const directory = await getAllPlayersDirectory(mediaList, manualList);
+      setPlayers(directory);
+    });
+  }, [tab]);
 
   const tabStyle = (active) => ({
     background: active ? colors.redLight : colors.white,
@@ -154,6 +176,7 @@ export default function GameCenter() {
         <button onClick={() => setTab('batting')} style={tabStyle(tab === 'batting')}>Batting</button>
         <button onClick={() => setTab('pitching')} style={tabStyle(tab === 'pitching')}>Pitching</button>
         <button onClick={() => setTab('rankings')} style={tabStyle(tab === 'rankings')}>Player Rankings</button>
+        <button onClick={() => setTab('players')} style={tabStyle(tab === 'players')}>Players</button>
         <button onClick={() => setTab('standings')} style={tabStyle(tab === 'standings')}>Standings</button>
       </div>
 
@@ -303,6 +326,111 @@ export default function GameCenter() {
                 {filteredRankings.length === 0 && (
                   <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{rankingsSearch}"</td></tr>
                 )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Players — master directory */}
+      {!loading && tab === 'players' && (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div>
+              <SectionHeading style={{ margin: 0 }}>ALL PLAYERS</SectionHeading>
+              <div style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                {players.length} total · sourced from API, uploaded media, and manual entries
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={playersTeamFilter} onChange={e => setPlayersTeamFilter(e.target.value)} style={{ ...selectStyle, fontSize: 12, maxWidth: 130 }}>
+                <option value="ALL">All Teams</option>
+                {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+              </select>
+              <select value={playersFilter} onChange={e => setPlayersFilter(e.target.value)} style={{ ...selectStyle, fontSize: 12 }}>
+                <option value="all">All players</option>
+                <option value="missing-media">Missing media</option>
+                <option value="missing-jersey">Missing jersey #</option>
+                <option value="has-stats">With stats</option>
+                <option value="manual">Manual entries</option>
+              </select>
+              <input type="text" value={playersSearch} onChange={e => setPlayersSearch(e.target.value)}
+                placeholder="Search name…" style={{ ...inputStyle, maxWidth: 200 }} />
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: colors.bg }}>
+                  <SortHeader label="Player" sortKey="name" currentSort={playersSort} setSort={setPlayersSort} align="left" />
+                  <SortHeader label="Team" sortKey="team" currentSort={playersSort} setSort={setPlayersSort} align="left" />
+                  <SortHeader label="#" sortKey="num" currentSort={playersSort} setSort={setPlayersSort} align="center" />
+                  <SortHeader label="Stats" sortKey="hasStats" currentSort={playersSort} setSort={setPlayersSort} align="center" />
+                  <SortHeader label="Media" sortKey="hasMedia" currentSort={playersSort} setSort={setPlayersSort} align="center" />
+                  <SortHeader label="Source" sortKey={null} currentSort={playersSort} setSort={setPlayersSort} align="left" />
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const q = playersSearch.trim().toLowerCase();
+                  let filtered = players;
+                  if (playersTeamFilter !== 'ALL') filtered = filtered.filter(p => p.team === playersTeamFilter);
+                  if (q) filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || p.lastName.toLowerCase().includes(q));
+                  if (playersFilter === 'missing-media') filtered = filtered.filter(p => !p.hasMedia);
+                  if (playersFilter === 'missing-jersey') filtered = filtered.filter(p => !p.num);
+                  if (playersFilter === 'has-stats') filtered = filtered.filter(p => p.hasStats);
+                  if (playersFilter === 'manual') filtered = filtered.filter(p => p.hasManual);
+                  filtered = applySort(filtered, playersSort);
+                  if (filtered.length === 0) return (
+                    <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>
+                      No players match the current filters.
+                    </td></tr>
+                  );
+                  return filtered.map((p, i) => {
+                    const t = getTeam(p.team);
+                    const sources = [
+                      p.hasStats && 'stats',
+                      p.hasMedia && 'media',
+                      p.hasManual && 'manual',
+                    ].filter(Boolean);
+                    return (
+                      <tr key={`${p.team}_${p.lastName}`} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
+                        <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 700 }}>
+                          {t ? (
+                            <Link to={`/teams/${t.slug}/players/${slugify(p.lastName)}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
+                              {p.name}
+                            </Link>
+                          ) : p.name}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          {t ? (
+                            <Link to={`/teams/${t.slug}`} style={{ textDecoration: 'none' }}>
+                              <TeamChip teamId={p.team} small />
+                            </Link>
+                          ) : <TeamChip teamId={p.team} small />}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 13, fontFamily: fonts.condensed, fontWeight: 700, color: p.num ? colors.text : colors.textMuted }}>
+                          {p.num || '—'}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
+                          {p.hasStats ? (
+                            <span style={{ color: colors.success, fontWeight: 700 }}>
+                              {p.isBatter && p.isPitcher ? 'B+P' : p.isBatter ? 'B' : p.isPitcher ? 'P' : '✓'}
+                            </span>
+                          ) : <span style={{ color: colors.textMuted }}>—</span>}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
+                          {p.hasMedia
+                            ? <span style={{ color: colors.success, fontWeight: 700 }}>✓</span>
+                            : <span style={{ color: colors.textMuted }}>—</span>}
+                        </td>
+                        <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: fonts.condensed, color: colors.textMuted, letterSpacing: 0.4 }}>
+                          {sources.join(' · ').toUpperCase()}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>

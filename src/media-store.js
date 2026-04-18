@@ -2,7 +2,7 @@
 // Shared between Files page and Generate page for player-media matching
 
 const DB_NAME = 'blw-content-hub';
-const DB_VERSION = 2; // Must match overlay-store.js
+const DB_VERSION = 3; // Must match overlay-store.js
 const STORE_NAME = 'media';
 
 function openDB() {
@@ -18,6 +18,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('effects')) {
         db.createObjectStore('effects', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('players')) {
+        db.createObjectStore('players', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);

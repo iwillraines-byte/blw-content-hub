@@ -4,6 +4,7 @@ import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi 
 import { Card, SectionHeading, RedButton } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, blobToObjectURL } from '../media-store';
+import { getManualPlayersByTeam } from '../player-store';
 
 function buildStatLine(player) {
   if (player.batting) {
@@ -29,10 +30,10 @@ export default function PlayerPage() {
   useEffect(() => {
     let cancel = false;
     if (!team?.id) return;
-    // Load stats AND team roster in parallel, so media-only players resolve too
-    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id)]).then(async () => {
+    // Load stats AND team roster AND manual players in parallel
+    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getManualPlayersByTeam(team.id)]).then(async ([, , manualList]) => {
       if (cancel) return;
-      const p = getPlayerByTeamLastName(team.id, lastName);
+      const p = getPlayerByTeamLastName(team.id, lastName, manualList);
       if (p) {
         // Media match ignores jersey number — just team + lastName
         const m = await findPlayerMedia(team.id, p.lastName);
