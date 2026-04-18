@@ -107,6 +107,7 @@ export default function Files({ teamFilter }) {
   const [linkInput, setLinkInput] = useState('');
   const [dragging, setDragging] = useState(false);
   const [showTagger, setShowTagger] = useState(true);
+  const [previewFile, setPreviewFile] = useState(null); // open preview modal
 
   useEffect(() => {
     getAllMedia().then(media => {
@@ -297,7 +298,11 @@ export default function Files({ teamFilter }) {
           const t = getTeam(f.team);
           const isLocal = f.source === 'local';
           return (
-            <Card key={f.id} style={{ padding: 12, position: 'relative' }}>
+            <Card
+              key={f.id}
+              onClick={() => { if (f.thumbUrl || f.url) setPreviewFile(f); }}
+              style={{ padding: 12, position: 'relative', cursor: (f.thumbUrl || f.url) ? 'pointer' : 'default' }}
+            >
               <div style={{
                 width: '100%', height: 100, borderRadius: radius.base, marginBottom: 8,
                 background: f.thumbUrl ? `url(${f.thumbUrl}) center/cover` : t ? `linear-gradient(135deg, ${t.color}22, ${t.color}08)` : colors.bg,
@@ -320,13 +325,13 @@ export default function Files({ teamFilter }) {
                 {f.size && <span style={{ fontSize: 10, color: colors.textMuted }}>{f.size}</span>}
               </div>
               {f.url && (
-                <a href={f.url} target="_blank" rel="noopener noreferrer" style={{
+                <a href={f.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
                   display: 'block', marginTop: 8, fontSize: 11, fontWeight: 700, color: colors.red,
                   textDecoration: 'none', textAlign: 'center', padding: '4px 0', borderTop: `1px solid ${colors.divider}`,
                 }}>Open in Cloud ↗</a>
               )}
               {isLocal && (
-                <button onClick={() => handleDelete(f.id)} style={{
+                <button onClick={e => { e.stopPropagation(); handleDelete(f.id); }} style={{
                   position: 'absolute', top: 4, left: 4, width: 20, height: 20, borderRadius: radius.full,
                   background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', cursor: 'pointer',
                   fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -341,6 +346,94 @@ export default function Files({ teamFilter }) {
         <Card style={{ textAlign: 'center', padding: 40, color: colors.textMuted }}>
           No files yet. Upload files above to get started.
         </Card>
+      )}
+
+      {/* Preview Modal */}
+      {previewFile && (
+        <div
+          onClick={() => setPreviewFile(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: colors.white, borderRadius: radius.lg, padding: 20,
+              maxWidth: 900, maxHeight: '90vh', width: '100%',
+              display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {previewFile.name}
+                </div>
+                <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
+                  {(() => {
+                    const t = getTeam(previewFile.team);
+                    return [
+                      t ? t.name : previewFile.team,
+                      previewFile.type,
+                      previewFile.size,
+                      sourceLabels[previewFile.source],
+                    ].filter(Boolean).join(' · ');
+                  })()}
+                </div>
+              </div>
+              {previewFile.thumbUrl && (
+                <a
+                  href={previewFile.thumbUrl}
+                  download={previewFile.name}
+                  style={{
+                    background: colors.red, color: '#fff', padding: '10px 16px',
+                    borderRadius: radius.base, fontFamily: fonts.body,
+                    fontSize: 13, fontWeight: 700, textDecoration: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  ⬇ Download
+                </a>
+              )}
+              {previewFile.url && !previewFile.thumbUrl && (
+                <a
+                  href={previewFile.url} target="_blank" rel="noopener noreferrer"
+                  style={{
+                    background: colors.red, color: '#fff', padding: '10px 16px',
+                    borderRadius: radius.base, fontFamily: fonts.body,
+                    fontSize: 13, fontWeight: 700, textDecoration: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Open in Cloud ↗
+                </a>
+              )}
+              <button onClick={() => setPreviewFile(null)} style={{
+                background: 'none', border: `1px solid ${colors.border}`,
+                borderRadius: radius.base, width: 36, height: 36,
+                fontSize: 18, cursor: 'pointer', color: colors.textSecondary,
+              }}>✕</button>
+            </div>
+            <div style={{
+              flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#0F1624', borderRadius: radius.base, padding: 16, overflow: 'hidden',
+            }}>
+              {previewFile.thumbUrl ? (
+                previewFile.name.match(/\.(mp4|webm|mov)$/i) ? (
+                  <video src={previewFile.thumbUrl} controls style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: radius.sm }} />
+                ) : (
+                  <img src={previewFile.thumbUrl} alt={previewFile.name} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: radius.sm }} />
+                )
+              ) : (
+                <div style={{ color: 'rgba(255,255,255,0.5)', fontFamily: fonts.condensed, fontSize: 14, textAlign: 'center' }}>
+                  Preview not available for this file.
+                  {previewFile.url && <div style={{ marginTop: 8 }}>Click "Open in Cloud" to view.</div>}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

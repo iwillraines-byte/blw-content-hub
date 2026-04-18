@@ -5,7 +5,7 @@ import { Card, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inpu
 import { colors, fonts, radius } from '../theme';
 import { TEMPLATE_TYPES, FONT_MAP, getFieldConfig } from '../template-config';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage } from '../overlay-store';
-import { findPlayerMedia, blobToObjectURL } from '../media-store';
+import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
 
 function hexToRgba(hex, alpha = 1) {
@@ -328,30 +328,43 @@ export default function Generate() {
     }
   }, [selectedOverlayId, overlays]);
 
-  // Player media matching
+  // Load media for the selected context: player's media if chosen, otherwise team's
   useEffect(() => {
-    if (!selectedPlayer) { setPlayerMedia([]); setPlayerMediaUrls([]); return; }
-    const p = allPlayers.find(pl => `${pl.team}_${pl.num}_${pl.name}` === selectedPlayer);
-    if (!p) return;
-    findPlayerMedia(p.team, p.lastName, p.num).then(media => {
-      setPlayerMedia(media);
-      setPlayerMediaUrls(media.map(m => ({ id: m.id, url: blobToObjectURL(m.blob), name: m.name })));
-    });
-  }, [selectedPlayer]);
+    const loadContextMedia = async () => {
+      let mediaItems = [];
+      if (selectedPlayer) {
+        const p = allPlayers.find(pl => `${pl.team}_${pl.name}` === selectedPlayer);
+        if (p) {
+          // Match by team + lastName only — jersey numbers are optional
+          mediaItems = await findPlayerMedia(p.team, p.lastName);
+        }
+      } else if (customTeam) {
+        // No player selected — show all team media
+        mediaItems = await findTeamMedia(customTeam);
+      }
+      setPlayerMedia(mediaItems);
+      setPlayerMediaUrls(mediaItems.map(m => ({
+        id: m.id, url: blobToObjectURL(m.blob), name: m.name, assetType: m.assetType, player: m.player,
+      })));
+    };
+    loadContextMedia();
+  }, [selectedPlayer, customTeam]);
 
-  // Auto-fill stats when player selected
+  // Auto-fill stats when player selected (jersey sourced from media if available)
   useEffect(() => {
     if (!selectedPlayer) return;
-    const p = allPlayers.find(pl => `${pl.team}_${pl.num}_${pl.name}` === selectedPlayer);
+    const p = allPlayers.find(pl => `${pl.team}_${pl.name}` === selectedPlayer);
     if (!p) return;
     const batter = BATTING_LEADERS.find(b => b.name === p.name && b.team === p.team);
     const pitcher = PITCHING_LEADERS.find(b => b.name === p.name && b.team === p.team);
     const teamObj = getTeam(p.team);
-    const newFields = { playerName: p.name, number: p.num, teamName: teamObj?.name || p.team };
+    // Look up jersey from loaded media
+    const mediaJersey = playerMedia.find(m => m.num)?.num || p.num || '';
+    const newFields = { playerName: p.name, number: mediaJersey, teamName: teamObj?.name || p.team };
     if (batter) newFields.statLine = `OPS+ ${batter.ops_plus} | AVG ${batter.avg} | HR ${batter.hr} | OBP ${batter.obp}`;
     else if (pitcher) newFields.statLine = `FIP ${pitcher.fip.toFixed(2)} | IP ${pitcher.ip} | W ${pitcher.w} | K/4 ${pitcher.k4}`;
     setCustomFields(prev => ({ ...prev, ...newFields }));
-  }, [selectedPlayer]);
+  }, [selectedPlayer, playerMedia]);
 
   const teamObj = getTeam(team);
   const plat = PLATFORMS[platform];
@@ -595,38 +608,97 @@ export default function Generate() {
               {customTypeObj?.playerCentric && (
                 <Card>
                   <Label>Select Player</Label>
-                  <select value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)} style={{ ...selectStyle, marginBottom: 8 }}>
+                  <select value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)} style={{ ...selectStyle }}>
                     <option value="">Choose a player...</option>
                     {filteredPlayers.map(p => (
-                      <option key={`${p.team}_${p.num}_${p.name}`} value={`${p.team}_${p.num}_${p.name}`}>
-                        {p.name} (#{p.num}) — {p.team}
+                      <option key={`${p.team}_${p.name}`} value={`${p.team}_${p.name}`}>
+                        {p.name} — {p.team}
                       </option>
                     ))}
                   </select>
-                  {/* Player media suggestions */}
-                  {playerMediaUrls.length > 0 && (
-                    <div>
-                      <label style={{ ...labelStyle, marginTop: 8, display: 'block' }}>Matched Media — click to use as background</label>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                        {playerMediaUrls.map(m => (
-                          <div key={m.id} onClick={() => selectPlayerMediaAsBg(m.url)} style={{
-                            width: 70, height: 70, borderRadius: radius.base, cursor: 'pointer',
-                            background: `url(${m.url}) center/cover`,
-                            border: bgUrl === m.url ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
-                          }} title={m.name} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {selectedPlayer && playerMediaUrls.length === 0 && (
-                    <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
-                      No media found — upload photos on the Files page using naming convention
-                    </div>
-                  )}
                 </Card>
               )}
 
-              {/* Overlay Picker */}
+              {/* Select Media — was Background Photo */}
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Label style={{ marginBottom: 0 }}>Select Media</Label>
+                  <label style={{
+                    background: colors.redLight, border: `1px solid ${colors.redBorder}`,
+                    color: colors.red, borderRadius: radius.sm, padding: '3px 10px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                  }}>
+                    <input type="file" accept="image/*,video/*" onChange={handleBgFileInput} style={{ display: 'none' }} />
+                    + Upload New
+                  </label>
+                </div>
+
+                {/* Current selection preview */}
+                {bgUrl && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{
+                      width: '100%', height: 120, borderRadius: radius.base,
+                      background: `url(${bgUrl}) center/cover`,
+                      border: `1px solid ${colors.border}`,
+                    }} />
+                    <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
+                      background: 'none', border: 'none', color: colors.red, fontSize: 11,
+                      fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer', marginTop: 4,
+                    }}>✕ Clear selection</button>
+                  </div>
+                )}
+
+                {/* Media grid — contextual: player's media if selected, else team's */}
+                {playerMediaUrls.length > 0 ? (
+                  <>
+                    <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6 }}>
+                      {selectedPlayer ? `PLAYER MEDIA · ${playerMediaUrls.length}` : `TEAM MEDIA · ${playerMediaUrls.length}`}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                      {playerMediaUrls.map(m => (
+                        <div
+                          key={m.id}
+                          onClick={() => selectPlayerMediaAsBg(m.url)}
+                          title={m.name}
+                          style={{
+                            width: '100%', aspectRatio: '1 / 1', borderRadius: radius.base, cursor: 'pointer',
+                            background: `url(${m.url}) center/cover`,
+                            border: bgUrl === m.url ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
+                            position: 'relative',
+                          }}
+                        >
+                          <div style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                            padding: '2px 4px',
+                            borderRadius: `0 0 ${radius.base}px ${radius.base}px`,
+                            fontSize: 8, color: '#fff', fontFamily: fonts.condensed, fontWeight: 700,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {m.assetType || ''}{m.player ? ` · ${m.player}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div onDrop={handleBgDrop} onDragOver={e => e.preventDefault()} style={{
+                    border: `2px dashed ${colors.border}`, borderRadius: radius.base,
+                    padding: 24, textAlign: 'center', background: colors.bg,
+                  }}>
+                    <div style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.condensed }}>
+                      {selectedPlayer
+                        ? 'No media for this player yet'
+                        : customTeam ? 'No media uploaded for this team yet' : 'Select a team or player'}
+                    </div>
+                    <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4, fontFamily: fonts.condensed }}>
+                      Upload files in the Files page or drop one here
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              {/* Overlay Picker — moved below Select Media */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Label style={{ marginBottom: 0 }}>Overlay Template</Label>
@@ -662,35 +734,6 @@ export default function Generate() {
                       </div>
                     ))}
                   </div>
-                )}
-              </Card>
-
-              {/* Background Photo */}
-              <Card>
-                <Label>Background Photo</Label>
-                <label style={{ cursor: 'pointer' }}>
-                  <input type="file" accept="image/*" onChange={handleBgFileInput} style={{ display: 'none' }} />
-                  <div onDrop={handleBgDrop} onDragOver={e => e.preventDefault()} style={{
-                    border: `2px dashed ${colors.border}`, borderRadius: radius.base,
-                    padding: bgUrl ? 0 : 24, textAlign: 'center', overflow: 'hidden',
-                    background: bgUrl ? 'transparent' : colors.bg, height: bgUrl ? 120 : 'auto',
-                  }}>
-                    {bgUrl ? (
-                      <div style={{ width: '100%', height: '100%', background: `url(${bgUrl}) center/cover`, borderRadius: radius.base }} />
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed }}>
-                          Drag & drop a photo or click to browse
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </label>
-                {bgUrl && (
-                  <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
-                    background: 'none', border: 'none', color: colors.red, fontSize: 11,
-                    fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer', marginTop: 4,
-                  }}>Remove background</button>
                 )}
               </Card>
 

@@ -90,7 +90,7 @@ function transformBatting(apiData) {
     rank: i + 1,
     playerId: p.playerId,
     name: p.playerName,
-    num: String(p.playerId), // API doesn't have jersey numbers — use playerId as placeholder
+    num: '', // Jersey numbers sourced from uploaded media filenames, not API
     team: mapTeamAbbr(p.team?.abbreviation || ''),
     teamName: p.team?.name || '',
     teamLogo: p.team?.logo || '',
@@ -134,7 +134,7 @@ function transformPitching(apiData) {
     rank: i + 1,
     playerId: p.playerId,
     name: p.playerName,
-    num: String(p.playerId),
+    num: '', // Jersey numbers sourced from uploaded media filenames, not API
     team: mapTeamAbbr(p.team?.abbreviation || ''),
     teamName: p.team?.name || '',
     teamLogo: p.team?.logo || '',
@@ -238,6 +238,59 @@ export async function fetchAllData() {
     fetchRankings(),
   ]);
   return { batting, pitching, rankings };
+}
+
+// ─── TEAM ROSTER API ────────────────────────────────────────────────────────
+// Fetches the official team roster from /api/teams/:apiTeamId/roster
+// This is the authoritative source for who's on each team — not just players
+// with current BLW stats. Players don't have jersey numbers in this data.
+
+const _rosterCache = new Map(); // teamId → { roster, fetchedAt }
+
+export async function fetchTeamRosterFromApi(teamId) {
+  const team = TEAMS.find(t => t.id === teamId);
+  if (!team?.apiTeamId) return [];
+  const cached = _rosterCache.get(teamId);
+  if (cached && (Date.now() - cached.fetchedAt) < CACHE_TTL) return cached.roster;
+  try {
+    const res = await fetch(`${GSS_BASE}/teams/${team.apiTeamId}/roster`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const roster = (Array.isArray(data) ? data : []).map(p => ({
+      playerId: p.playerId,
+      name: p.playerName,
+      shortName: p.shortName,
+      firstName: (p.playerName || '').split(' ').slice(0, -1).join(' '),
+      lastName: (p.playerName || '').split(' ').pop(),
+      avatarUrl: p.avatarUrl,
+      team: teamId,
+      currentRank: p.currentRank,
+      previousRank: p.previousRank,
+      careerGames: p.careerGames,
+      // Batting summary
+      atBats: p.atBats,
+      hits: p.hits,
+      hr: p.homeruns || 0,
+      rbi: p.rbi || 0,
+      avg: p.battingAverage != null ? p.battingAverage.toFixed(3) : '.000',
+      ops: p.ops != null ? p.ops.toFixed(3) : '.000',
+      // Pitching summary
+      ip: p.inningsPitched || '0',
+      w: p.wins || 0,
+      l: p.losses || 0,
+      k: p.strikeouts || 0,
+      era: p.era != null ? Number(p.era).toFixed(2) : '0.00',
+      whip: p.whip != null ? Number(p.whip).toFixed(2) : '0.00',
+      // Heuristic stat type
+      isPitcher: (p.inningsPitched && parseFloat(p.inningsPitched) > 0),
+      isBatter: (p.atBats || 0) > 0,
+    }));
+    _rosterCache.set(teamId, { roster, fetchedAt: Date.now() });
+    return roster;
+  } catch (e) {
+    console.warn(`Roster API failed for ${teamId}:`, e);
+    return cached?.roster || [];
+  }
 }
 
 // ─── LEGACY EXPORTS (for components still using static data) ────────────────
@@ -368,7 +421,11 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug) {
   const pitching = (_pitchingCache || PITCHING_FALLBACK).find(p => p.team === teamId && matchName(p.name));
   const ranking = (_rankingsCache || []).find(r => matchName(r.name));
 
-  const source = batting || pitching;
+  // Also check fetched roster (players without current stats)
+  const rosterCached = _rosterCache.get(teamId);
+  const rosterPlayer = rosterCached?.roster.find(p => matchName(p.name));
+
+  const source = batting || pitching || rosterPlayer;
   if (!source && !ranking) return null;
 
   const name = source?.name || ranking?.name || '';
@@ -384,6 +441,7 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug) {
     batting: batting || null,
     pitching: pitching || null,
     ranking: ranking || null,
+    roster: rosterPlayer || null,
   };
 }
 

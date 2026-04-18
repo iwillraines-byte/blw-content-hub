@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { TEAMS, getTeam, getTeamRoster, slugify, fetchAllData, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
+import { Link, useParams } from 'react-router-dom';
+import { TEAMS, getTeam, slugify, fetchAllData, fetchTeamRosterFromApi, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
 import { Card, PageHeader, SectionHeading } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { findTeamMedia, findPlayerMedia, blobToObjectURL, getAllMedia } from '../media-store';
+import { findTeamMedia, blobToObjectURL } from '../media-store';
 
 export default function TeamPage() {
   const { slug } = useParams();
-  const navigate = useNavigate();
   const team = getTeam(slug);
 
   const [media, setMedia] = useState([]);
@@ -17,24 +16,57 @@ export default function TeamPage() {
 
   useEffect(() => {
     let cancel = false;
-    Promise.all([fetchAllData(), findTeamMedia(team?.id || ''), getAllMedia()]).then(([, teamMedia, allMedia]) => {
-      if (cancel) return;
-      setMedia(teamMedia);
-      const roster = getTeamRoster(team.id, allMedia);
-      setRoster(roster);
+    if (!team?.id) return;
+    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), findTeamMedia(team.id)])
+      .then(([, apiRoster, teamMedia]) => {
+        if (cancel) return;
+        setMedia(teamMedia);
 
-      // Build avatar lookup per roster player
-      const urls = {};
-      for (const p of roster) {
-        const headshot = teamMedia.find(m =>
-          m.player === p.lastName.toUpperCase() &&
-          (m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION')
-        );
-        if (headshot?.blob) urls[p.lastName.toUpperCase()] = blobToObjectURL(headshot.blob);
-      }
-      setRosterAvatars(urls);
-      setLoaded(true);
-    });
+        // Build a lookup of jersey numbers from uploaded media (TEAM_##_LASTNAME_TYPE.ext)
+        const jerseyByLastName = {};
+        for (const m of teamMedia) {
+          if (m.player && m.num && !jerseyByLastName[m.player]) {
+            jerseyByLastName[m.player] = m.num;
+          }
+        }
+
+        // Also include media-only players (with filenames like LAN_07_SMITH_*) who aren't in the API roster
+        const apiLastNames = new Set(apiRoster.map(p => p.lastName.toUpperCase()));
+        const mediaOnlyPlayers = [];
+        const mediaOnlySeen = new Set();
+        for (const m of teamMedia) {
+          if (!m.player || m.player === 'TEAM' || m.player === 'LEAGUE') continue;
+          const up = m.player.toUpperCase();
+          if (apiLastNames.has(up) || mediaOnlySeen.has(up)) continue;
+          mediaOnlySeen.add(up);
+          const lastName = up.charAt(0) + up.slice(1).toLowerCase();
+          mediaOnlyPlayers.push({
+            playerId: null, name: lastName, firstName: '', lastName,
+            team: team.id, num: m.num || '', isPitcher: false, isBatter: false, mediaOnly: true,
+          });
+        }
+
+        // Attach jersey numbers (from media) to API roster entries
+        const rosterWithJerseys = apiRoster.map(p => ({
+          ...p,
+          num: p.num || jerseyByLastName[p.lastName.toUpperCase()] || '',
+        }));
+
+        const fullRoster = [...rosterWithJerseys, ...mediaOnlyPlayers].sort((a, b) => a.lastName.localeCompare(b.lastName));
+        setRoster(fullRoster);
+
+        // Build avatar lookup per roster player
+        const urls = {};
+        for (const p of fullRoster) {
+          const headshot = teamMedia.find(m =>
+            m.player === p.lastName.toUpperCase() &&
+            (m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION')
+          );
+          if (headshot?.blob) urls[p.lastName.toUpperCase()] = blobToObjectURL(headshot.blob);
+        }
+        setRosterAvatars(urls);
+        setLoaded(true);
+      });
     return () => { cancel = true; };
   }, [team?.id]);
 
@@ -161,11 +193,11 @@ export default function TeamPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
             {roster.map(p => {
               const avatar = rosterAvatars[p.lastName.toUpperCase()];
-              const statLabel = p.stats.includes('batting') && p.stats.includes('pitching')
+              const statLabel = p.isBatter && p.isPitcher
                 ? 'Two-way'
-                : p.stats.includes('batting') ? 'Batter'
-                : p.stats.includes('pitching') ? 'Pitcher'
-                : p.hasMedia ? 'Roster' : '';
+                : p.isBatter ? 'Batter'
+                : p.isPitcher ? 'Pitcher'
+                : p.mediaOnly ? 'Roster' : 'Roster';
               return (
                 <Link
                   key={p.lastName}

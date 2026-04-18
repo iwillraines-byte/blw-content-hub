@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getTeam, getPlayerByTeamLastName, fetchAllData } from '../data';
+import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
 import { Card, SectionHeading, RedButton } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, blobToObjectURL } from '../media-store';
@@ -28,15 +28,21 @@ export default function PlayerPage() {
 
   useEffect(() => {
     let cancel = false;
-    // Make sure live data is loaded first, then look up player
-    fetchAllData().then(() => {
+    if (!team?.id) return;
+    // Load stats AND team roster in parallel, so media-only players resolve too
+    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id)]).then(async () => {
       if (cancel) return;
-      const p = getPlayerByTeamLastName(team?.id, lastName);
-      setPlayer(p);
+      const p = getPlayerByTeamLastName(team.id, lastName);
       if (p) {
-        findPlayerMedia(team.id, p.lastName, p.num).then(m => {
-          if (!cancel) setMedia(m);
-        });
+        // Media match ignores jersey number — just team + lastName
+        const m = await findPlayerMedia(team.id, p.lastName);
+        if (cancel) return;
+        // Source jersey from first uploaded media file if available
+        const mediaJersey = m.find(x => x.num)?.num || '';
+        setPlayer({ ...p, num: p.num || mediaJersey });
+        setMedia(m);
+      } else {
+        setPlayer(null);
       }
       setLoaded(true);
     });
