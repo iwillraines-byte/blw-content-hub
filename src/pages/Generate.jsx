@@ -4,8 +4,9 @@ import { TEAMS, PLATFORMS, TEMPLATES, BATTING_LEADERS, PITCHING_LEADERS, getTeam
 import { Card, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TEMPLATE_TYPES, FONT_MAP, getFieldConfig } from '../template-config';
-import { getOverlays, saveOverlay, deleteOverlay, blobToImage as overlayBlobToImage } from '../overlay-store';
+import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage } from '../overlay-store';
 import { findPlayerMedia, blobToObjectURL } from '../media-store';
+import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -200,8 +201,8 @@ function renderStandings(ctx, w, h) {
   ctx.fillText("BIG LEAGUE WIFFLE BALL  •  prowiffleball.com", w/2, h - 20);
 }
 
-// ─── 3-Layer Custom Compositor ──────────────────────────────────────────────
-function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig) {
+// ─── 4-Layer Custom Compositor ──────────────────────────────────────────────
+function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], teamColor) {
   ctx.clearRect(0, 0, w, h);
 
   // Layer 1: Background photo (cover crop)
@@ -231,7 +232,20 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig)
     ctx.drawImage(overlayImg, 0, 0, w, h);
   }
 
-  // Layer 3: Dynamic text fields
+  // Layer 3: Effects (built-in + uploaded)
+  activeEffects.forEach(effect => {
+    if (effect.opacity <= 0) return;
+    if (effect.type === 'builtin' && effect.builtin) {
+      effect.builtin.render(ctx, w, h, effect.opacity, teamColor);
+    } else if (effect.type === 'upload' && effect.image) {
+      ctx.save();
+      ctx.globalAlpha = effect.opacity;
+      ctx.drawImage(effect.image, 0, 0, w, h);
+      ctx.restore();
+    }
+  });
+
+  // Layer 4: Dynamic text fields
   if (fieldConfig) {
     fieldConfig.forEach(f => {
       const value = fields[f.key];
@@ -282,6 +296,13 @@ export default function Generate() {
   const [uploadTeam, setUploadTeam] = useState('');
   const [uploadPlatform, setUploadPlatform] = useState('feed');
 
+  // Effects state
+  const [activeEffects, setActiveEffects] = useState([]); // [{ id, type: 'builtin'|'upload', opacity, builtin?, image? }]
+  const [uploadedEffects, setUploadedEffects] = useState([]); // from IndexedDB
+  const [showEffectUpload, setShowEffectUpload] = useState(false);
+  const [effectFile, setEffectFile] = useState(null);
+  const [effectName, setEffectName] = useState('');
+
   const allPlayers = getAllPlayers();
   const filteredPlayers = customTeam === 'ALL' ? allPlayers : allPlayers.filter(p => p.team === customTeam);
 
@@ -296,6 +317,7 @@ export default function Generate() {
 
   // Load overlays from IndexedDB
   useEffect(() => { getOverlays().then(setOverlays); }, []);
+  useEffect(() => { getEffects().then(setUploadedEffects); }, []);
 
   // Load selected overlay image
   useEffect(() => {
@@ -311,7 +333,7 @@ export default function Generate() {
     if (!selectedPlayer) { setPlayerMedia([]); setPlayerMediaUrls([]); return; }
     const p = allPlayers.find(pl => `${pl.team}_${pl.num}_${pl.name}` === selectedPlayer);
     if (!p) return;
-    findPlayerMedia(p.team, p.num, p.lastName).then(media => {
+    findPlayerMedia(p.team, p.lastName, p.num).then(media => {
       setPlayerMedia(media);
       setPlayerMediaUrls(media.map(m => ({ id: m.id, url: blobToObjectURL(m.blob), name: m.name })));
     });
@@ -361,9 +383,10 @@ export default function Generate() {
       canvas.width = customPlat.w; canvas.height = customPlat.h;
       const ctx = canvas.getContext('2d');
       const fieldConfig = getFieldConfig(customType, customPlatform);
-      renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig);
+      const customTeamObj = getTeam(customTeam);
+      renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj?.color);
     }
-  }, [mode, team, opp, template, platform, fields, teamObj, plat, customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat]);
+  }, [mode, team, opp, template, platform, fields, teamObj, plat, customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects]);
 
   useEffect(() => { render(); }, [render]);
 
@@ -446,6 +469,58 @@ export default function Generate() {
     setOverlays(prev => prev.filter(o => o.id !== id));
     if (selectedOverlayId === id) { setSelectedOverlayId(null); setOverlayImg(null); }
   };
+
+  // ── Effects management ──
+  const toggleBuiltInEffect = (effectId) => {
+    const existing = activeEffects.find(e => e.type === 'builtin' && e.id === effectId);
+    if (existing) {
+      setActiveEffects(prev => prev.filter(e => !(e.type === 'builtin' && e.id === effectId)));
+    } else {
+      const builtin = getBuiltInEffect(effectId);
+      setActiveEffects(prev => [...prev, { id: effectId, type: 'builtin', opacity: 0.5, builtin }]);
+    }
+  };
+
+  const toggleUploadedEffect = async (effect) => {
+    const existing = activeEffects.find(e => e.type === 'upload' && e.id === effect.id);
+    if (existing) {
+      setActiveEffects(prev => prev.filter(e => !(e.type === 'upload' && e.id === effect.id)));
+    } else {
+      const image = await overlayBlobToImage(effect.imageBlob);
+      setActiveEffects(prev => [...prev, { id: effect.id, type: 'upload', opacity: 0.5, image, name: effect.name }]);
+    }
+  };
+
+  const setEffectOpacity = (matchKey, opacity) => {
+    setActiveEffects(prev => prev.map(e =>
+      (e.type === matchKey.type && e.id === matchKey.id) ? { ...e, opacity } : e
+    ));
+  };
+
+  const handleEffectFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEffectFile(file);
+    if (!effectName) setEffectName(file.name.replace(/\.[^.]+$/, ''));
+  };
+
+  const submitEffect = async () => {
+    if (!effectFile) return;
+    const record = await saveEffect({ name: effectName || effectFile.name, imageBlob: effectFile, width: 0, height: 0 });
+    setUploadedEffects(prev => [...prev, record]);
+    setShowEffectUpload(false);
+    setEffectFile(null);
+    setEffectName('');
+  };
+
+  const handleDeleteEffect = async (id) => {
+    await deleteEffect(id);
+    setUploadedEffects(prev => prev.filter(e => e.id !== id));
+    setActiveEffects(prev => prev.filter(e => !(e.type === 'upload' && e.id === id)));
+  };
+
+  const isEffectActive = (type, id) => !!activeEffects.find(e => e.type === type && e.id === id);
+  const getEffectOpacity = (type, id) => activeEffects.find(e => e.type === type && e.id === id)?.opacity ?? 0.5;
 
   const currentTemplate = TEMPLATES.find(t => t.id === template);
   const needsOpp = template === 'gameday' || template === 'score';
@@ -619,6 +694,100 @@ export default function Generate() {
                 )}
               </Card>
 
+              {/* Effects Layer */}
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Label style={{ marginBottom: 0 }}>Effects</Label>
+                  <button onClick={() => setShowEffectUpload(true)} style={{
+                    background: colors.redLight, border: `1px solid ${colors.redBorder}`,
+                    color: colors.red, borderRadius: radius.sm, padding: '3px 10px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                  }}>+ Upload Effect</button>
+                </div>
+
+                {/* Built-in effect thumbnails */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {BUILT_IN_EFFECTS.map(fx => {
+                    const active = isEffectActive('builtin', fx.id);
+                    return (
+                      <button key={fx.id} onClick={() => toggleBuiltInEffect(fx.id)} style={{
+                        background: active ? colors.redLight : colors.bg,
+                        border: active ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
+                        borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
+                        fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
+                        color: active ? colors.red : colors.textSecondary,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        minWidth: 62,
+                      }}>
+                        <span style={{ fontSize: 14 }}>{fx.icon}</span>
+                        <span style={{ marginTop: 2 }}>{fx.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Uploaded effect thumbnails */}
+                {uploadedEffects.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {uploadedEffects.map(fx => {
+                      const active = isEffectActive('upload', fx.id);
+                      return (
+                        <div key={fx.id} style={{ position: 'relative' }}>
+                          <button onClick={() => toggleUploadedEffect(fx)} style={{
+                            background: active ? colors.redLight : colors.bg,
+                            border: active ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
+                            borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
+                            fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
+                            color: active ? colors.red : colors.textSecondary,
+                            minWidth: 62, maxWidth: 100,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            ◊ {fx.name}
+                          </button>
+                          <button onClick={() => handleDeleteEffect(fx.id)} style={{
+                            position: 'absolute', top: -4, right: -4, width: 14, height: 14,
+                            borderRadius: '50%', background: '#EF4444', color: '#fff',
+                            border: 'none', fontSize: 8, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>✕</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Opacity sliders for active effects */}
+                {activeEffects.length > 0 && (
+                  <div style={{ marginTop: 6, paddingTop: 10, borderTop: `1px solid ${colors.divider}` }}>
+                    {activeEffects.map(fx => {
+                      const label = fx.type === 'builtin' ? fx.builtin?.label : fx.name;
+                      return (
+                        <div key={`${fx.type}-${fx.id}`} style={{ marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                            <span style={{ ...labelStyle, textTransform: 'none', fontWeight: 700 }}>{label}</span>
+                            <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.red, fontWeight: 700 }}>
+                              {Math.round(fx.opacity * 100)}%
+                            </span>
+                          </div>
+                          <input
+                            type="range" min={0} max={1} step={0.01}
+                            value={fx.opacity}
+                            onChange={e => setEffectOpacity({ type: fx.type, id: fx.id }, parseFloat(e.target.value))}
+                            style={{ width: '100%', accentColor: colors.red }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {activeEffects.length === 0 && (
+                  <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontStyle: 'italic' }}>
+                    Click effects above to stack them. Use sliders to control intensity.
+                  </div>
+                )}
+              </Card>
+
               {/* Dynamic Fields */}
               <Card>
                 <Label>Dynamic Content</Label>
@@ -780,6 +949,46 @@ export default function Generate() {
             <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
               <RedButton onClick={submitOverlay} disabled={!uploadFile} style={{ flex: 1 }}>Save Overlay</RedButton>
               <OutlineButton onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadPreview(null); }}>Cancel</OutlineButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPLOAD EFFECT MODAL */}
+      {showEffectUpload && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: colors.white, borderRadius: radius.lg, padding: 24, maxWidth: 420, width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <SectionHeading style={{ margin: 0 }}>UPLOAD EFFECT</SectionHeading>
+              <button onClick={() => { setShowEffectUpload(false); setEffectFile(null); setEffectName(''); }} style={{
+                background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: colors.textMuted,
+              }}>✕</button>
+            </div>
+
+            <label style={{ cursor: 'pointer', display: 'block', marginBottom: 16 }}>
+              <input type="file" accept="image/png" onChange={handleEffectFile} style={{ display: 'none' }} />
+              <div style={{
+                border: `2px dashed ${colors.border}`, borderRadius: radius.base,
+                padding: 24, textAlign: 'center', background: colors.bg,
+              }}>
+                <div style={{ fontSize: 12, color: colors.textMuted }}>
+                  {effectFile ? effectFile.name : 'Click to select a PNG with transparency'}
+                </div>
+                <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4, fontFamily: fonts.condensed }}>
+                  (Grain textures, light leaks, gradient overlays, etc.)
+                </div>
+              </div>
+            </label>
+
+            <div>
+              <label style={labelStyle}>Effect Name</label>
+              <input type="text" value={effectName} onChange={e => setEffectName(e.target.value)}
+                placeholder="e.g. Warm Grain" style={{ ...inputStyle, marginTop: 3 }} />
+            </div>
+
+            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+              <RedButton onClick={submitEffect} disabled={!effectFile} style={{ flex: 1 }}>Save Effect</RedButton>
+              <OutlineButton onClick={() => { setShowEffectUpload(false); setEffectFile(null); setEffectName(''); }}>Cancel</OutlineButton>
             </div>
           </div>
         </div>

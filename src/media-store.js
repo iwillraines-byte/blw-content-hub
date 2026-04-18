@@ -2,7 +2,7 @@
 // Shared between Files page and Generate page for player-media matching
 
 const DB_NAME = 'blw-content-hub';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Must match overlay-store.js
 const STORE_NAME = 'media';
 
 function openDB() {
@@ -15,6 +15,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('effects')) {
+        db.createObjectStore('effects', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -96,12 +99,39 @@ export async function deleteMedia(id) {
 }
 
 // ─── Player-Media Matching ──────────────────────────────────────────────────
-// Searches uploaded media for files matching a player's naming convention prefix
+// Primary match is TEAM + LASTNAME. Jersey number is optional and secondary,
+// since numbers are being added manually over time.
 
-export async function findPlayerMedia(team, jerseyNum, lastName) {
+export async function findPlayerMedia(team, lastName, jerseyNum = null) {
   const all = await getAllMedia();
-  const prefix = `${team}_${String(jerseyNum).padStart(2, '0')}_${lastName.toUpperCase()}`;
-  return all.filter(f => f.name.toUpperCase().startsWith(prefix));
+  const T = team.toUpperCase();
+  const LN = lastName.toUpperCase();
+
+  // Match TEAM_anything_LASTNAME_anything
+  let matches = all.filter(f => {
+    const name = f.name.toUpperCase();
+    const parts = name.replace(/\.[^.]+$/, '').split('_');
+    if (parts[0] !== T) return false;
+    // Last name can be in position 2 (TEAM_##_LASTNAME) or position 1 (TEAM_LASTNAME if no jersey)
+    return parts.includes(LN) || f.player === LN;
+  });
+
+  // Optional jersey filter
+  if (jerseyNum != null && jerseyNum !== '') {
+    const padded = String(jerseyNum).padStart(2, '0');
+    matches = matches.filter(f => f.num === padded || f.num === String(jerseyNum));
+  }
+
+  return matches;
+}
+
+// All media for a team (any player), sorted by most recent first
+export async function findTeamMedia(team) {
+  const all = await getAllMedia();
+  const T = team.toUpperCase();
+  return all
+    .filter(f => f.team === T)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 export function blobToObjectURL(blob) {

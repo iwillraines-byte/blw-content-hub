@@ -279,6 +279,114 @@ export function getAllPlayers() {
   return players;
 }
 
+// URL-safe slug for player last names
+export function slugify(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// Returns the full roster for a team — combines stats data with media-referenced
+// players (so a player with uploaded assets appears even if they haven't played).
+// mediaList is an optional array of stored media (from getAllMedia) to cross-reference.
+export function getTeamRoster(teamId, mediaList = []) {
+  const roster = new Map(); // key: lastName (uppercase) → player object
+
+  const addStatPlayer = (p, statType) => {
+    const lastName = p.name.split(' ').pop();
+    const key = lastName.toUpperCase();
+    const existing = roster.get(key);
+    if (existing) {
+      existing.stats.push(statType);
+      if (!existing.num && p.num) existing.num = p.num;
+    } else {
+      roster.set(key, {
+        name: p.name,
+        firstName: p.name.split(' ').slice(0, -1).join(' '),
+        lastName,
+        team: teamId,
+        num: p.num || '',
+        stats: [statType],
+        hasStats: true,
+        hasMedia: false,
+      });
+    }
+  };
+
+  // Players with stats
+  (_battingCache || BATTING_FALLBACK)
+    .filter(p => p.team === teamId)
+    .forEach(p => addStatPlayer(p, 'batting'));
+  (_pitchingCache || PITCHING_FALLBACK)
+    .filter(p => p.team === teamId)
+    .forEach(p => addStatPlayer(p, 'pitching'));
+
+  // Add players referenced only by media
+  mediaList
+    .filter(m => m.team === teamId && m.player && m.player !== 'TEAM' && m.player !== 'LEAGUE')
+    .forEach(m => {
+      const key = m.player.toUpperCase();
+      const existing = roster.get(key);
+      if (existing) {
+        existing.hasMedia = true;
+        if (!existing.num && m.num) existing.num = m.num;
+      } else {
+        // Title case last name for display
+        const lastName = m.player.charAt(0) + m.player.slice(1).toLowerCase();
+        roster.set(key, {
+          name: lastName,
+          firstName: '',
+          lastName,
+          team: teamId,
+          num: m.num || '',
+          stats: [],
+          hasStats: false,
+          hasMedia: true,
+        });
+      }
+    });
+
+  // Mark hasMedia on stat players based on media matches
+  mediaList
+    .filter(m => m.team === teamId && m.player)
+    .forEach(m => {
+      const key = m.player.toUpperCase();
+      const existing = roster.get(key);
+      if (existing) existing.hasMedia = true;
+    });
+
+  return Array.from(roster.values()).sort((a, b) => a.lastName.localeCompare(b.lastName));
+}
+
+// Fetch detailed player info for the player page
+export function getPlayerByTeamLastName(teamId, lastNameSlug) {
+  const LN_NORM = slugify(lastNameSlug);
+  const matchName = (name) => slugify(name.split(' ').pop()) === LN_NORM;
+
+  const batting = (_battingCache || BATTING_FALLBACK).find(p => p.team === teamId && matchName(p.name));
+  const pitching = (_pitchingCache || PITCHING_FALLBACK).find(p => p.team === teamId && matchName(p.name));
+  const ranking = (_rankingsCache || []).find(r => matchName(r.name));
+
+  const source = batting || pitching;
+  if (!source && !ranking) return null;
+
+  const name = source?.name || ranking?.name || '';
+  const lastName = name.split(' ').pop();
+  const firstName = name.split(' ').slice(0, -1).join(' ');
+
+  return {
+    name,
+    firstName,
+    lastName,
+    team: teamId,
+    num: source?.num || '',
+    batting: batting || null,
+    pitching: pitching || null,
+    ranking: ranking || null,
+  };
+}
+
 // ─── CONTENT SUGGESTIONS ENGINE ─────────────────────────────────────────────
 export function generateContentSuggestions(batting, pitching, rankings) {
   const b = batting || _battingCache || BATTING_FALLBACK;

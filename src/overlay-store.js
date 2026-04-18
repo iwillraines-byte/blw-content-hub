@@ -1,8 +1,9 @@
-// ─── IndexedDB Store for Overlay Template PNGs ─────────────────────────────
+// ─── IndexedDB Store for Overlay Template PNGs + Effect PNGs ───────────────
 
 const DB_NAME = 'blw-content-hub';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bumped for effects store addition
 const STORE_NAME = 'overlays';
+const EFFECTS_STORE = 'effects';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -15,11 +16,16 @@ function openDB() {
       if (!db.objectStoreNames.contains('media')) {
         db.createObjectStore('media', { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains(EFFECTS_STORE)) {
+        db.createObjectStore(EFFECTS_STORE, { keyPath: 'id' });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
+
+// ─── Overlays ───────────────────────────────────────────────────────────────
 
 export async function saveOverlay({ name, type, team, platform, imageBlob, width, height }) {
   const db = await openDB();
@@ -58,6 +64,40 @@ export async function deleteOverlay(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ─── Effects (custom uploaded effect PNGs) ──────────────────────────────────
+
+export async function saveEffect({ name, imageBlob, width, height }) {
+  const db = await openDB();
+  const id = crypto.randomUUID();
+  const record = { id, name, imageBlob, width, height, createdAt: Date.now() };
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EFFECTS_STORE, 'readwrite');
+    tx.objectStore(EFFECTS_STORE).put(record);
+    tx.oncomplete = () => resolve(record);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getEffects() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EFFECTS_STORE, 'readonly');
+    const req = tx.objectStore(EFFECTS_STORE).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function deleteEffect(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(EFFECTS_STORE, 'readwrite');
+    tx.objectStore(EFFECTS_STORE).delete(id);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

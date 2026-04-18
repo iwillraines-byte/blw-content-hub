@@ -8,6 +8,8 @@ import Requests from './pages/Requests';
 import GameCenter from './pages/GameCenter';
 import Files from './pages/Files';
 import Settings from './pages/Settings';
+import TeamPage from './pages/TeamPage';
+import PlayerPage from './pages/PlayerPage';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -37,6 +39,64 @@ function useIsMobile() {
     return () => window.removeEventListener('resize', handler);
   }, []);
   return isMobile;
+}
+
+function TeamsDropdown({ location }) {
+  const onTeamRoute = location.pathname.startsWith('/teams');
+  const [expanded, setExpanded] = useState(onTeamRoute);
+
+  // Auto-expand when on a team route
+  useEffect(() => {
+    if (onTeamRoute) setExpanded(true);
+  }, [onTeamRoute]);
+
+  return (
+    <>
+      <button onClick={() => setExpanded(!expanded)} style={{
+        textDecoration: 'none', display: 'flex', alignItems: 'center',
+        gap: 10, padding: '10px 12px', borderRadius: radius.base,
+        background: onTeamRoute ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
+        borderLeft: onTeamRoute ? `3px solid ${colors.red}` : '3px solid transparent',
+        color: onTeamRoute ? '#fff' : colors.textOnDarkMuted,
+        fontFamily: fonts.body, fontSize: 13,
+        fontWeight: onTeamRoute ? 700 : 500,
+        border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
+        transition: 'all 0.15s',
+      }}>
+        <span style={{ fontSize: 16, width: 20, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>⚑</span>
+        <span style={{ flex: 1 }}>Teams</span>
+        <span style={{ fontSize: 10, opacity: 0.5, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
+      </button>
+
+      {expanded && (
+        <div style={{ paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 1, marginBottom: 4 }}>
+          {TEAMS.map(t => {
+            const teamActive = location.pathname === `/teams/${t.slug}` || location.pathname.startsWith(`/teams/${t.slug}/`);
+            return (
+              <Link key={t.id} to={`/teams/${t.slug}`} style={{
+                textDecoration: 'none', display: 'flex', alignItems: 'center',
+                gap: 8, padding: '7px 10px', borderRadius: radius.sm,
+                background: teamActive ? 'rgba(221, 60, 60, 0.1)' : 'transparent',
+                color: teamActive ? '#fff' : 'rgba(255,255,255,0.5)',
+                fontFamily: fonts.body, fontSize: 12,
+                fontWeight: teamActive ? 700 : 500,
+                transition: 'all 0.15s',
+              }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: 3,
+                  background: t.color, color: t.accent,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: fonts.condensed, fontSize: 8, fontWeight: 700,
+                  flexShrink: 0,
+                }}>{t.id}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
 }
 
 function Sidebar({ isMobile, open, onClose }) {
@@ -94,7 +154,7 @@ function Sidebar({ isMobile, open, onClose }) {
         </Link>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {navItems.map(n => {
             const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/studio');
             return (
@@ -112,6 +172,9 @@ function Sidebar({ isMobile, open, onClose }) {
               </Link>
             );
           })}
+
+          {/* Teams Dropdown */}
+          <TeamsDropdown location={location} />
         </nav>
 
         {/* Footer */}
@@ -127,9 +190,24 @@ function Sidebar({ isMobile, open, onClose }) {
   );
 }
 
+function getPageTitle(pathname) {
+  if (pageTitles[pathname]) return pageTitles[pathname];
+  // Dynamic title for team/player routes
+  const teamMatch = pathname.match(/^\/teams\/([^/]+)(\/players\/([^/]+))?/);
+  if (teamMatch) {
+    const team = TEAMS.find(t => t.slug === teamMatch[1]);
+    if (teamMatch[3]) {
+      const last = teamMatch[3].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      return `${last} · ${team?.id || teamMatch[1].toUpperCase()}`;
+    }
+    return team?.name || 'Team';
+  }
+  return 'BLW Content Hub';
+}
+
 function TopBar({ teamFilter, setTeamFilter, isMobile, onMenuToggle }) {
   const location = useLocation();
-  const title = pageTitles[location.pathname] || 'BLW Content Hub';
+  const title = getPageTitle(location.pathname);
 
   return (
     <header style={{
@@ -252,6 +330,8 @@ export default function App() {
             <Route path="/game-center" element={<GameCenter />} />
             <Route path="/files" element={<Files teamFilter={teamFilter} />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/teams/:slug" element={<TeamPage />} />
+            <Route path="/teams/:slug/players/:lastName" element={<PlayerPage />} />
             <Route path="/dashboard" element={<Navigate to="/studio" replace />} />
             <Route path="/stats" element={<Navigate to="/game-center" replace />} />
             <Route path="/assets" element={<Navigate to="/files" replace />} />
