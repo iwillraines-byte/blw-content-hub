@@ -1,7 +1,9 @@
 // ─── GRAND SLAM SYSTEMS API ─────────────────────────────────────────────────
 // Live data from app.grandslamsystems.com (prowiffleball.com stats platform)
 
-const GSS_BASE = 'https://app.grandslamsystems.com/api';
+// Routes through our Vercel serverless proxy (api/gss/[...path].js) to bypass
+// the upstream CORS whitelist. In dev, Vite proxies /api/gss to the real API.
+const GSS_BASE = '/api/gss';
 const BLW_LEAGUE_ID = 3;
 
 // API team abbreviations → our internal codes
