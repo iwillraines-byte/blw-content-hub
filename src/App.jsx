@@ -83,7 +83,7 @@ function TeamsDropdown({ location }) {
                 fontWeight: teamActive ? 700 : 500,
                 transition: 'all 0.15s',
               }}>
-                <TeamLogo teamId={t.id} size={20} rounded="square" background="rgba(255,255,255,0.08)" />
+                <TeamLogo teamId={t.id} size={22} rounded="square" />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
               </Link>
             );

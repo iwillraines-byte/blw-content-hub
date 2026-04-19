@@ -82,12 +82,32 @@ export default function TeamPage() {
       });
     }
 
-    return entries.sort((a, b) => a.lastName.localeCompare(b.lastName));
+    // Defensive dedup by lastName — in case API returns duplicates or sources overlap
+    // with mismatched casing. Keep first occurrence (API > manual > media order above).
+    const seen = new Set();
+    const deduped = entries.filter(p => {
+      const key = p.lastName.toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    // Also filter out any entry whose team doesn't match this page's team (guard
+    // against cross-team bleed from stale caches or mistagged media)
+    const onlyThisTeam = deduped.filter(p => !p.team || p.team === team.id);
+    return onlyThisTeam.sort((a, b) => a.lastName.localeCompare(b.lastName));
   }, [team?.id]);
 
   useEffect(() => {
     let cancel = false;
     if (!team?.id) return;
+
+    // Clear previous team's data immediately so the user never sees the wrong roster
+    setRoster([]);
+    setMedia([]);
+    setManualPlayers([]);
+    setRosterAvatars({});
+    setLoaded(false);
+
     Promise.all([
       fetchAllData(),
       fetchTeamRosterFromApi(team.id),
@@ -183,9 +203,7 @@ export default function TeamPage() {
         <TeamLogo
           teamId={team.id}
           size={96}
-          rounded="rounded"
-          background="rgba(255,255,255,0.1)"
-          style={{ padding: 8, boxSizing: 'border-box' }}
+          rounded="square"
         />
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 1.5, opacity: 0.7 }}>
@@ -311,15 +329,18 @@ export default function TeamPage() {
         )}
         {loaded && roster.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
-            {roster.map(p => {
+            {roster.map((p, idx) => {
               const avatar = rosterAvatars[p.lastName.toUpperCase()];
               const statLabel = p.isBatter && p.isPitcher
                 ? 'Two-way'
                 : p.isBatter ? 'Batter'
                 : p.isPitcher ? 'Pitcher'
                 : p.mediaOnly ? 'Roster' : 'Roster';
+              // Composite key — lastName can collide (Logan Rose / Carson Rose),
+              // so include player identifier + index for absolute uniqueness.
+              const rowKey = `${p.playerId || p.manualId || p.source || 'row'}-${p.lastName}-${idx}`;
               return (
-                <div key={p.lastName} style={{ position: 'relative' }}>
+                <div key={rowKey} style={{ position: 'relative' }}>
                   <Link
                     to={`/teams/${team.slug}/players/${slugify(p.lastName)}`}
                     style={{
