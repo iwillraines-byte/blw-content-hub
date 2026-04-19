@@ -28,7 +28,7 @@ function openDB() {
   });
 }
 
-export async function saveMedia({ name, blob, width, height }) {
+export async function saveMedia({ name, blob, width, height, driveFileId, source }) {
   const db = await openDB();
   const id = crypto.randomUUID();
 
@@ -46,6 +46,9 @@ export async function saveMedia({ name, blob, width, height }) {
     player: player.toUpperCase(),
     assetType: assetType.toUpperCase(),
     createdAt: Date.now(),
+    // Optional provenance — set when imported from Google Drive
+    driveFileId: driveFileId || null,
+    source: source || 'local',
   };
 
   return new Promise((resolve, reject) => {

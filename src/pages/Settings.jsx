@@ -1,8 +1,36 @@
+import { useState, useEffect } from 'react';
 import { TEAMS, API_CONFIG } from '../data';
-import { Card, PageHeader, SectionHeading } from '../components';
+import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
+import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
 
 export default function Settings() {
+  const [driveKey, setDriveKey] = useState('');
+  const [driveKeyDraft, setDriveKeyDraft] = useState('');
+  const [driveKeyMasked, setDriveKeyMasked] = useState(true);
+  const [showInstructions, setShowInstructions] = useState(false);
+
+  useEffect(() => {
+    const k = getApiKey();
+    setDriveKey(k);
+    setDriveKeyDraft(k);
+  }, []);
+
+  const saveDriveKey = () => {
+    setApiKey(driveKeyDraft);
+    setDriveKey(driveKeyDraft);
+  };
+
+  const removeDriveKey = () => {
+    clearApiKey();
+    setDriveKey('');
+    setDriveKeyDraft('');
+  };
+
+  const maskedKey = driveKey
+    ? `${driveKey.slice(0, 6)}${'•'.repeat(Math.max(0, driveKey.length - 10))}${driveKey.slice(-4)}`
+    : '';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="SETTINGS" subtitle="Team colors, integrations, and configuration" />
@@ -29,6 +57,86 @@ export default function Settings() {
         </div>
       </Card>
 
+      {/* Google Drive Connection */}
+      <Card>
+        <SectionHeading>GOOGLE DRIVE</SectionHeading>
+        <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12, lineHeight: 1.6 }}>
+          Connect Google Drive to browse and import assets from publicly-shared folders.
+          Your API key is stored locally in your browser — it never leaves this device.
+        </div>
+
+        <Label>Drive API Key</Label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input
+            type={driveKeyMasked && driveKey === driveKeyDraft ? 'password' : 'text'}
+            value={driveKeyDraft}
+            onChange={e => setDriveKeyDraft(e.target.value)}
+            placeholder="AIzaSy..."
+            style={{ ...inputStyle, flex: 1, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <RedButton onClick={saveDriveKey} disabled={!driveKeyDraft.trim() || driveKeyDraft === driveKey}>
+            {driveKey ? 'Update' : 'Save'}
+          </RedButton>
+          {driveKey && (
+            <OutlineButton onClick={removeDriveKey}>Remove</OutlineButton>
+          )}
+        </div>
+
+        {driveKey && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+            background: colors.successBg, border: `1px solid ${colors.successBorder}`,
+            borderRadius: radius.base, fontSize: 12, marginBottom: 8,
+          }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.success }} />
+            <span style={{ flex: 1, color: '#15803D', fontWeight: 700 }}>Key saved</span>
+            <code style={{ fontSize: 11, color: '#15803D', fontFamily: 'ui-monospace, Menlo, monospace' }}>{maskedKey}</code>
+            <button onClick={() => setDriveKeyMasked(!driveKeyMasked)} style={{
+              background: 'none', border: `1px solid ${colors.successBorder}`, color: '#15803D',
+              padding: '2px 8px', borderRadius: 4, fontSize: 10, cursor: 'pointer', fontWeight: 700,
+            }}>{driveKeyMasked ? 'Show' : 'Hide'}</button>
+          </div>
+        )}
+
+        <button onClick={() => setShowInstructions(!showInstructions)} style={{
+          background: 'none', border: 'none', color: colors.red,
+          fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0,
+          fontFamily: fonts.body, textDecoration: 'underline',
+        }}>
+          {showInstructions ? 'Hide setup instructions' : 'How do I get a Drive API key?'}
+        </button>
+
+        {showInstructions && (
+          <div style={{
+            marginTop: 12, padding: 14, background: colors.bg, borderRadius: radius.base,
+            border: `1px solid ${colors.borderLight}`, fontSize: 13, lineHeight: 1.7, color: colors.text,
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>One-time Google Cloud setup (about 5 minutes)</div>
+            <ol style={{ paddingLeft: 18, margin: 0 }}>
+              <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: colors.red, fontWeight: 700 }}>console.cloud.google.com</a> and sign in.</li>
+              <li>Create a new project (top-left dropdown → "New Project"). Name it anything — "BLW Content Hub" works.</li>
+              <li>In the search bar, type <strong>"Google Drive API"</strong> → click it → click <strong>Enable</strong>.</li>
+              <li>Left sidebar → <strong>APIs &amp; Services → Credentials</strong>.</li>
+              <li>Click <strong>+ Create Credentials → API key</strong>. Copy the key shown.</li>
+              <li><strong>Restrict the key</strong> (recommended):
+                <ul style={{ paddingLeft: 18, marginTop: 4 }}>
+                  <li>Click the new key → <strong>Application restrictions → HTTP referrers</strong>.</li>
+                  <li>Add: <code style={{ background: colors.muted, padding: '1px 5px', borderRadius: 3 }}>https://your-vercel-domain.vercel.app/*</code></li>
+                  <li>Add: <code style={{ background: colors.muted, padding: '1px 5px', borderRadius: 3 }}>http://localhost:5173/*</code></li>
+                  <li>Under <strong>API restrictions → Restrict key</strong>, select only <strong>Google Drive API</strong>.</li>
+                </ul>
+              </li>
+              <li>Paste the key into the field above and click Save.</li>
+            </ol>
+            <div style={{ marginTop: 10, padding: 10, background: colors.warningBg, border: `1px solid ${colors.warningBorder}`, borderRadius: 6, color: '#92400E', fontSize: 12 }}>
+              <strong>Note:</strong> This key only works on folders you share as "Anyone with the link can view". Private folders require OAuth (not supported yet).
+            </div>
+          </div>
+        )}
+      </Card>
+
       <Card>
         <SectionHeading>TEAM COLORS (FROM OFFICIAL LOGOS)</SectionHeading>
         {TEAMS.map(t => (
@@ -50,10 +158,8 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <SectionHeading>INTEGRATIONS</SectionHeading>
+        <SectionHeading>OTHER INTEGRATIONS</SectionHeading>
         {[
-          { name: 'Dropbox', desc: 'Team logos & brand assets', status: 'Not connected', color: '#0061FF' },
-          { name: 'Google Drive', desc: 'Player photos & videos', status: 'Not connected', color: '#34A853' },
           { name: 'prowiffleball.com API', desc: 'Player & team stats', status: API_CONFIG.isLive ? 'Connected' : 'Not configured', color: '#DD3C3C' },
           { name: 'Metricool', desc: 'Social media scheduling & analytics', status: 'Not connected', color: '#6366F1' },
           { name: 'Slack', desc: 'Team notifications', status: 'Not connected', color: '#E01E5A' },
@@ -69,11 +175,6 @@ export default function Settings() {
               <div style={{ fontSize: 11, color: colors.textMuted }}>{x.desc}</div>
             </div>
             <span style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 600, color: x.status === 'Connected' ? '#15803D' : colors.textMuted }}>{x.status}</span>
-            <button style={{
-              background: `${x.color}10`, border: `1px solid ${x.color}30`, color: x.color,
-              borderRadius: radius.base, padding: '6px 14px', fontFamily: fonts.body,
-              fontSize: 11, fontWeight: 700, cursor: 'pointer',
-            }}>{x.status === 'Connected' ? 'Manage' : 'Connect'}</button>
           </div>
         ))}
       </Card>

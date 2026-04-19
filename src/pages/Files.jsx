@@ -1,13 +1,18 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { TEAMS, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL } from '../media-store';
+import {
+  getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder,
+  extractFolderId, listFolderFiles, downloadFileAsBlob,
+} from '../drive-api';
 
 const ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK', 'TEAMPHOTO', 'VENUE'];
 const typeIcons = { HEADSHOT: '👤', ACTION: '📸', ACTION2: '📸', HIGHLIGHT: '🎬', HIGHLIGHT2: '🎬', LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨', PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️', TEAMPHOTO: '👥', VENUE: '🏟️', FILE: '📄', LINK: '🔗' };
-const sourceLabels = { local: 'Local', dropbox: 'Dropbox', gdrive: 'Google Drive', link: 'Cloud Link' };
-const sourceColors = { local: colors.red, dropbox: '#0061FF', gdrive: '#34A853', link: '#8B5CF6' };
+const sourceLabels = { local: 'Local', gdrive: 'Google Drive' };
+const sourceColors = { local: colors.red, gdrive: '#34A853' };
 
 // Check if file follows naming convention: at least TEAM_##_LASTNAME_TYPE
 function isProperlyNamed(name) {
@@ -99,15 +104,282 @@ function TagRow({ file, thumbUrl, onUpdate, onDelete }) {
   );
 }
 
+// ─── Drive Folder Browser ───────────────────────────────────────────────────
+// Shows files inside one publicly-shared Drive folder as an expandable panel,
+// lets user selectively or bulk-import them into the local media store.
+function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRename }) {
+  const [expanded, setExpanded] = useState(true);
+  const [files, setFiles] = useState(null); // null = not loaded, [] = empty folder
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [importingIds, setImportingIds] = useState(new Set());
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(folder.name);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await listFolderFiles(folder.folderId);
+      setFiles(list);
+    } catch (err) {
+      setError(err.message || String(err));
+      setFiles(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [folder.folderId]);
+
+  useEffect(() => {
+    if (expanded && files === null) load();
+  }, [expanded, files, load]);
+
+  const notImported = (files || []).filter(f => !importedFileIds.has(f.id));
+  const imported = (files || []).filter(f => importedFileIds.has(f.id));
+
+  const toggleSelect = (fileId) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  };
+
+  const selectAllNew = () => {
+    setSelected(new Set(notImported.map(f => f.id)));
+  };
+  const clearSelection = () => setSelected(new Set());
+
+  const importOne = async (file) => {
+    setImportingIds(prev => new Set(prev).add(file.id));
+    try {
+      await onImport(file);
+    } finally {
+      setImportingIds(prev => { const n = new Set(prev); n.delete(file.id); return n; });
+    }
+  };
+
+  const importSelected = async () => {
+    const targets = (files || []).filter(f => selected.has(f.id));
+    for (const file of targets) {
+      if (importedFileIds.has(file.id)) continue;
+      setImportingIds(prev => new Set(prev).add(file.id));
+      try { await onImport(file); }
+      catch (err) { console.error(`Failed to import ${file.name}:`, err); }
+      finally {
+        setImportingIds(prev => { const n = new Set(prev); n.delete(file.id); return n; });
+      }
+    }
+    setSelected(new Set());
+  };
+
+  const importAllNew = async () => {
+    for (const file of notImported) {
+      setImportingIds(prev => new Set(prev).add(file.id));
+      try { await onImport(file); }
+      catch (err) { console.error(`Failed to import ${file.name}:`, err); }
+      finally {
+        setImportingIds(prev => { const n = new Set(prev); n.delete(file.id); return n; });
+      }
+    }
+  };
+
+  const saveRename = () => {
+    if (newName.trim() && newName !== folder.name) {
+      onRename(folder.folderId, newName.trim());
+    }
+    setRenaming(false);
+  };
+
+  return (
+    <div style={{
+      border: `1px solid ${colors.border}`, borderRadius: radius.base,
+      background: colors.white, marginBottom: 10,
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+        borderBottom: expanded ? `1px solid ${colors.borderLight}` : 'none',
+        cursor: 'pointer', background: colors.bg,
+        borderTopLeftRadius: radius.base, borderTopRightRadius: radius.base,
+        borderBottomLeftRadius: expanded ? 0 : radius.base,
+        borderBottomRightRadius: expanded ? 0 : radius.base,
+      }} onClick={() => setExpanded(!expanded)}>
+        <span style={{ fontSize: 14, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', color: colors.textSecondary, width: 10 }}>▶</span>
+        <span style={{ fontSize: 16 }}>📁</span>
+        {renaming ? (
+          <input
+            type="text" value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') { setNewName(folder.name); setRenaming(false); } }}
+            onBlur={saveRename} autoFocus
+            style={{ ...inputStyle, fontSize: 13, fontWeight: 700, padding: '3px 8px', flex: 1, maxWidth: 280 }}
+          />
+        ) : (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              onDoubleClick={e => { e.stopPropagation(); setRenaming(true); }}
+              title="Double-click to rename"
+            >
+              {folder.name}
+            </div>
+            <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed }}>
+              {files === null ? (loading ? 'Loading…' : 'Click to load') : `${files.length} file${files.length === 1 ? '' : 's'}`}
+              {imported.length > 0 && ` · ${imported.length} imported`}
+            </div>
+          </div>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); load(); }} disabled={loading} style={{
+          background: 'none', border: `1px solid ${colors.border}`, borderRadius: radius.sm,
+          padding: '4px 10px', fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700,
+          cursor: loading ? 'default' : 'pointer', color: colors.textSecondary,
+        }}>{loading ? '…' : 'Refresh'}</button>
+        <a href={folder.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
+          fontSize: 10, color: colors.textMuted, textDecoration: 'none', fontFamily: fonts.condensed, fontWeight: 700,
+        }}>Open in Drive ↗</a>
+        <button onClick={(e) => { e.stopPropagation(); if (confirm(`Remove folder "${folder.name}" from this list? Already-imported files stay in your library.`)) onRemove(folder.folderId); }} style={{
+          background: 'none', border: 'none', color: colors.textMuted,
+          cursor: 'pointer', fontSize: 14, padding: '0 4px',
+        }}>✕</button>
+      </div>
+
+      {/* Body */}
+      {expanded && (
+        <div style={{ padding: 12 }}>
+          {loading && <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>Loading folder…</div>}
+
+          {error && (
+            <div style={{ padding: 12, background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: radius.base, color: '#991B1B', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && files !== null && files.length === 0 && (
+            <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
+              No images or videos in this folder.
+            </div>
+          )}
+
+          {!loading && !error && files && files.length > 0 && (
+            <>
+              {/* Bulk action bar */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                background: colors.bg, borderRadius: radius.sm, marginBottom: 10, flexWrap: 'wrap',
+              }}>
+                <button onClick={selectAllNew} disabled={notImported.length === 0} style={{
+                  background: 'none', border: `1px solid ${colors.border}`, borderRadius: 4,
+                  padding: '3px 10px', fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
+                  cursor: notImported.length ? 'pointer' : 'default',
+                  color: notImported.length ? colors.text : colors.textMuted,
+                }}>Select all new</button>
+                {selected.size > 0 && (
+                  <button onClick={clearSelection} style={{
+                    background: 'none', border: `1px solid ${colors.border}`, borderRadius: 4,
+                    padding: '3px 10px', fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
+                    cursor: 'pointer', color: colors.textSecondary,
+                  }}>Clear ({selected.size})</button>
+                )}
+                <div style={{ flex: 1 }} />
+                {selected.size > 0 && (
+                  <RedButton onClick={importSelected} style={{ padding: '4px 14px', fontSize: 12 }}>
+                    Import selected ({selected.size})
+                  </RedButton>
+                )}
+                {notImported.length > 0 && selected.size === 0 && (
+                  <RedButton onClick={importAllNew} style={{ padding: '4px 14px', fontSize: 12 }}>
+                    Import all new ({notImported.length})
+                  </RedButton>
+                )}
+              </div>
+
+              {/* File grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+                {files.map(f => {
+                  const isImported = importedFileIds.has(f.id);
+                  const isImporting = importingIds.has(f.id);
+                  const isSelected = selected.has(f.id);
+                  const isVideo = (f.mimeType || '').startsWith('video/');
+                  return (
+                    <div key={f.id} style={{
+                      border: `2px solid ${isSelected ? colors.red : isImported ? colors.success : colors.borderLight}`,
+                      borderRadius: radius.base, padding: 8, background: colors.white,
+                      opacity: isImporting ? 0.5 : 1,
+                      display: 'flex', flexDirection: 'column', gap: 6,
+                    }}>
+                      <div
+                        onClick={() => !isImported && toggleSelect(f.id)}
+                        style={{
+                          width: '100%', height: 110, borderRadius: radius.sm,
+                          background: f.thumbnailLink
+                            ? `url(${f.thumbnailLink}) center/cover`
+                            : colors.bg,
+                          position: 'relative', cursor: isImported ? 'default' : 'pointer',
+                          border: `1px solid ${colors.borderLight}`,
+                        }}
+                      >
+                        {!f.thumbnailLink && (
+                          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
+                            {isVideo ? '🎬' : '🖼️'}
+                          </div>
+                        )}
+                        {isVideo && f.thumbnailLink && (
+                          <div style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '1px 5px', borderRadius: 3, fontSize: 9, fontFamily: fonts.condensed, fontWeight: 700 }}>▶ VIDEO</div>
+                        )}
+                        {isImported && (
+                          <div style={{
+                            position: 'absolute', top: 4, right: 4, background: colors.success, color: '#fff',
+                            padding: '2px 6px', borderRadius: 3, fontSize: 9, fontFamily: fonts.condensed, fontWeight: 700,
+                          }}>✓ IMPORTED</div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.name}>
+                        {f.name}
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {!isImported ? (
+                          <button onClick={() => importOne(f)} disabled={isImporting} style={{
+                            flex: 1, background: colors.red, color: '#fff', border: 'none',
+                            borderRadius: 4, padding: '4px 8px', fontSize: 11, fontWeight: 700,
+                            cursor: isImporting ? 'default' : 'pointer',
+                            fontFamily: fonts.body,
+                          }}>{isImporting ? 'Importing…' : 'Import'}</button>
+                        ) : (
+                          <div style={{ flex: 1, fontSize: 10, color: colors.success, fontFamily: fonts.condensed, fontWeight: 700, textAlign: 'center', padding: '4px' }}>In library</div>
+                        )}
+                        <a href={f.webViewLink} target="_blank" rel="noopener noreferrer" style={{
+                          padding: '4px 6px', fontSize: 11, color: colors.textSecondary,
+                          border: `1px solid ${colors.border}`, borderRadius: 4, textDecoration: 'none',
+                        }} title="Open in Drive">↗</a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Files({ teamFilter }) {
   const [search, setSearch] = useState('');
   const [storedMedia, setStoredMedia] = useState([]);
   const [thumbUrls, setThumbUrls] = useState({});
-  const [cloudLinks, setCloudLinks] = useState([]);
-  const [linkInput, setLinkInput] = useState('');
   const [dragging, setDragging] = useState(false);
   const [showTagger, setShowTagger] = useState(true);
   const [previewFile, setPreviewFile] = useState(null); // open preview modal
+
+  // Drive folder state
+  const [driveApiKey, setDriveApiKey] = useState(getApiKey());
+  const [driveFolders, setDriveFolders] = useState(getSavedFolders());
+  const [folderUrlInput, setFolderUrlInput] = useState('');
+  const [folderAddError, setFolderAddError] = useState('');
 
   useEffect(() => {
     getAllMedia().then(media => {
@@ -121,14 +393,19 @@ export default function Files({ teamFilter }) {
   const untagged = storedMedia.filter(m => !isProperlyNamed(m.name));
   const tagged = storedMedia.filter(m => isProperlyNamed(m.name));
 
-  const allDisplayFiles = [
-    ...tagged.map(m => ({
-      id: m.id, name: m.name, team: m.team, type: m.assetType,
-      source: 'local', size: m.blob ? `${(m.blob.size / 1024 / 1024).toFixed(1)} MB` : '',
-      thumbUrl: thumbUrls[m.id],
-    })),
-    ...cloudLinks.map((l, i) => ({ id: `link-${i}`, name: l.name || l.url, team: 'BLW', type: 'LINK', source: 'link', url: l.url, size: '' })),
-  ];
+  // Set of Drive file IDs already imported — so we can show "already in library" badges
+  const importedFileIds = useMemo(() => {
+    const s = new Set();
+    storedMedia.forEach(m => { if (m.driveFileId) s.add(m.driveFileId); });
+    return s;
+  }, [storedMedia]);
+
+  const allDisplayFiles = tagged.map(m => ({
+    id: m.id, name: m.name, team: m.team, type: m.assetType,
+    source: m.source || 'local',
+    size: m.blob ? `${(m.blob.size / 1024 / 1024).toFixed(1)} MB` : '',
+    thumbUrl: thumbUrls[m.id],
+  }));
 
   const filtered = allDisplayFiles.filter(f => {
     if (teamFilter !== 'ALL' && f.team !== teamFilter && f.team !== 'BLW') return false;
@@ -169,14 +446,52 @@ export default function Files({ teamFilter }) {
     setThumbUrls(prev => { const n = { ...prev }; delete n[id]; return n; });
   }, [thumbUrls]);
 
-  const addCloudLink = () => {
-    if (!linkInput.trim()) return;
-    const isDropbox = linkInput.includes('dropbox.com');
-    const isGDrive = linkInput.includes('drive.google.com');
-    const name = isDropbox ? 'Dropbox Shared File' : isGDrive ? 'Google Drive File' : 'Cloud File';
-    setCloudLinks(prev => [{ name, url: linkInput.trim(), source: isDropbox ? 'dropbox' : isGDrive ? 'gdrive' : 'link' }, ...prev]);
-    setLinkInput('');
+  // ─── Google Drive handlers ────────────────────────────────────────────────
+  const addDriveFolder = () => {
+    setFolderAddError('');
+    const folderId = extractFolderId(folderUrlInput);
+    if (!folderId) {
+      setFolderAddError('Could not find a folder ID in that URL. Paste the full "drive.google.com/drive/folders/..." share link.');
+      return;
+    }
+    if (driveFolders.find(f => f.folderId === folderId)) {
+      setFolderAddError('That folder is already added.');
+      return;
+    }
+    const updated = saveFolder({
+      folderId,
+      url: folderUrlInput.trim(),
+      name: `Drive Folder (${folderId.slice(0, 6)}…)`,
+    });
+    setDriveFolders(updated);
+    setFolderUrlInput('');
   };
+
+  const handleDriveRemove = (folderId) => {
+    setDriveFolders(removeFolder(folderId));
+  };
+
+  const handleDriveRename = (folderId, newName) => {
+    setDriveFolders(renameFolder(folderId, newName));
+  };
+
+  // Import a single Drive file into the local media store
+  const importDriveFile = useCallback(async (file) => {
+    const blob = await downloadFileAsBlob(file.id);
+    // Preserve filename so the existing naming-convention parser still works
+    const record = await saveMedia({
+      name: file.name,
+      blob,
+      width: file.imageMediaMetadata?.width || 0,
+      height: file.imageMediaMetadata?.height || 0,
+      driveFileId: file.id,
+      source: 'gdrive',
+    });
+    const url = blobToObjectURL(blob);
+    setStoredMedia(prev => [record, ...prev]);
+    setThumbUrls(prev => ({ ...prev, [record.id]: url }));
+    return record;
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -255,31 +570,72 @@ export default function Files({ teamFilter }) {
         </Card>
       )}
 
-      {/* Cloud Link Input */}
+      {/* Google Drive Folder Browser */}
       <Card>
-        <Label>Paste Cloud Share Link</Label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input type="text" value={linkInput} onChange={e => setLinkInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addCloudLink()}
-            placeholder="Paste a Dropbox or Google Drive share link..." style={{ ...inputStyle, flex: 1 }} />
-          <RedButton onClick={addCloudLink} disabled={!linkInput.trim()} style={{ whiteSpace: 'nowrap' }}>Add Link</RedButton>
-        </div>
-        {cloudLinks.length > 0 && (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {cloudLinks.map((l, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                background: colors.bg, borderRadius: radius.base, border: `1px solid ${colors.border}`,
-              }}>
-                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                  background: `${sourceColors[l.source]}15`, color: sourceColors[l.source], fontFamily: fonts.condensed }}>
-                  {l.source === 'dropbox' ? 'DROPBOX' : l.source === 'gdrive' ? 'GDRIVE' : 'LINK'}
-                </span>
-                <span style={{ flex: 1, fontSize: 12, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url}</span>
-                <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontWeight: 700, color: colors.red, textDecoration: 'none' }}>Open ↗</a>
-              </div>
-            ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <SectionHeading style={{ margin: 0 }}>GOOGLE DRIVE FOLDERS</SectionHeading>
+            <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
+              Browse and import from publicly-shared Drive folders. Files you import become part of your local library.
+            </div>
           </div>
+          {driveFolders.length > 0 && (
+            <span style={{ fontFamily: fonts.condensed, fontSize: 12, color: colors.textSecondary, fontWeight: 600 }}>
+              {driveFolders.length} folder{driveFolders.length === 1 ? '' : 's'} connected
+            </span>
+          )}
+        </div>
+
+        {!driveApiKey ? (
+          <div style={{
+            padding: 14, background: colors.warningBg, border: `1px solid ${colors.warningBorder}`,
+            borderRadius: radius.base, fontSize: 13, color: '#92400E',
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Drive API key required</div>
+            <div style={{ fontSize: 12, lineHeight: 1.6 }}>
+              Add a Google Drive API key in <Link to="/settings" style={{ color: colors.red, fontWeight: 700 }}>Settings</Link> to
+              browse and import from Drive folders. One-time setup, about 5 minutes.
+            </div>
+          </div>
+        ) : (
+          <>
+            <Label>Add a Drive Folder</Label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+              <input
+                type="text" value={folderUrlInput}
+                onChange={e => { setFolderUrlInput(e.target.value); setFolderAddError(''); }}
+                onKeyDown={e => e.key === 'Enter' && addDriveFolder()}
+                placeholder="https://drive.google.com/drive/folders/..."
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <RedButton onClick={addDriveFolder} disabled={!folderUrlInput.trim()} style={{ whiteSpace: 'nowrap' }}>
+                Add Folder
+              </RedButton>
+            </div>
+            {folderAddError && (
+              <div style={{ fontSize: 11, color: '#B91C1C', marginTop: 4, marginBottom: 8 }}>{folderAddError}</div>
+            )}
+            <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 12 }}>
+              Folder must be shared as <strong>"Anyone with the link can view"</strong> in Drive.
+            </div>
+
+            {driveFolders.length === 0 && (
+              <div style={{ padding: 24, textAlign: 'center', color: colors.textMuted, fontSize: 13, background: colors.bg, borderRadius: radius.base }}>
+                No Drive folders connected yet. Paste a folder share link above to get started.
+              </div>
+            )}
+
+            {driveFolders.map(folder => (
+              <DriveFolderPanel
+                key={folder.folderId}
+                folder={folder}
+                importedFileIds={importedFileIds}
+                onImport={importDriveFile}
+                onRemove={handleDriveRemove}
+                onRename={handleDriveRename}
+              />
+            ))}
+          </>
         )}
       </Card>
 
