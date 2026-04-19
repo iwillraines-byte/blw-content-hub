@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
-import { Card, SectionHeading, RedButton } from '../components';
+import { Card, SectionHeading, RedButton, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam } from '../player-store';
@@ -107,8 +107,13 @@ export default function PlayerPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontFamily: fonts.condensed }}>
-        <Link to={`/teams/${team.slug}`} style={{ color: colors.red, textDecoration: 'none', fontWeight: 700 }}>
-          ← {team.name.toUpperCase()}
+        <Link to={`/teams/${team.slug}`} style={{
+          color: colors.red, textDecoration: 'none', fontWeight: 700,
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}>
+          <span>←</span>
+          <TeamLogo teamId={team.id} size={20} rounded="square" />
+          {team.name.toUpperCase()}
         </Link>
       </div>
 

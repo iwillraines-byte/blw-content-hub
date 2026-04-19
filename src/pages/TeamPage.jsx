@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TEAMS, getTeam, slugify, fetchAllData, fetchTeamRosterFromApi, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
-import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle } from '../components';
+import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, savePlayer, deletePlayer } from '../player-store';
@@ -180,12 +180,13 @@ export default function TeamPage() {
         padding: 24,
         display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap',
       }}>
-        <div style={{
-          width: 80, height: 80, borderRadius: radius.lg,
-          background: team.accent, color: team.color,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: fonts.heading, fontSize: 36, letterSpacing: 1.5, flexShrink: 0,
-        }}>{team.id}</div>
+        <TeamLogo
+          teamId={team.id}
+          size={96}
+          rounded="rounded"
+          background="rgba(255,255,255,0.1)"
+          style={{ padding: 8, boxSizing: 'border-box' }}
+        />
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 1.5, opacity: 0.7 }}>
             RANK #{team.rank} · {team.city.toUpperCase()}

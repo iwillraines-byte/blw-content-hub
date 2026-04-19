@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, API_CONFIG } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, inputStyle, selectStyle } from '../components';
+import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
 import { getAllManualPlayers } from '../player-store';
@@ -72,7 +72,7 @@ function TeamLink({ teamId }) {
   if (!t) return <TeamChip teamId={teamId} small />;
   return (
     <Link to={`/teams/${t.slug}`} style={{ textDecoration: 'none' }}>
-      <TeamChip teamId={teamId} small />
+      <TeamChip teamId={teamId} small withLogo />
     </Link>
   );
 }
@@ -405,9 +405,9 @@ export default function GameCenter() {
                         <td style={{ padding: '10px 12px' }}>
                           {t ? (
                             <Link to={`/teams/${t.slug}`} style={{ textDecoration: 'none' }}>
-                              <TeamChip teamId={p.team} small />
+                              <TeamChip teamId={p.team} small withLogo />
                             </Link>
-                          ) : <TeamChip teamId={p.team} small />}
+                          ) : <TeamChip teamId={p.team} small withLogo />}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 13, fontFamily: fonts.condensed, fontWeight: 700, color: p.num ? colors.text : colors.textMuted }}>
                           {p.num || '—'}
@@ -464,12 +464,7 @@ export default function GameCenter() {
                       <td style={{ ...tdStyle(false), textAlign: 'left' }}>
                         <Link to={`/teams/${t.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{
-                              width: 28, height: 28, borderRadius: 6,
-                              background: t.color, color: t.accent,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700
-                            }}>{t.id}</span>
+                            <TeamLogo teamId={t.id} size={32} rounded="rounded" />
                             <div>
                               <div style={{ fontWeight: 700, fontSize: 13 }}>{t.name}</div>
                               {t.owner && <div style={{ fontSize: 10, color: colors.textMuted }}>{t.owner}</div>}

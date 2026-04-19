@@ -116,7 +116,7 @@ export default function Requests({ teamFilter }) {
           <Card key={r.id}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <PriorityDot p={r.priority} />
-              <TeamChip teamId={r.team} small />
+              <TeamChip teamId={r.team} small withLogo />
               <span style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{tp?.icon} {tp?.name || r.template}</span>
               <div style={{ flex: 1 }} />
               <StatusBadge status={r.status} />

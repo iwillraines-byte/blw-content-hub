@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { TEAMS, getTeam } from './data';
 import { colors, fonts, radius, shadows } from './theme';
 
@@ -69,13 +70,69 @@ export const Label = ({ children, style }) => (
 
 // ─── Data Display ───────────────────────────────────────────────────────────
 
-export const TeamChip = ({ teamId, small }) => {
+// TeamLogo — renders a team's logo image with graceful fallback to a colored ID chip
+// if the file is missing (or hasn't been dropped into /public/team-logos yet).
+// Props:
+//   teamId: team code (e.g. "LAN") or slug (e.g. "la-naturals")
+//   size: pixel size of the square container (default 40)
+//   rounded: "square" | "rounded" | "circle" (default "rounded")
+//   background: optional background behind the logo (useful on dark team cards)
+export const TeamLogo = ({ teamId, size = 40, rounded = 'rounded', background, style }) => {
+  const t = getTeam(teamId);
+  const [errored, setErrored] = useState(false);
+  if (!t) return null;
+
+  const br = rounded === 'circle' ? radius.full : rounded === 'square' ? 0 : radius.base;
+  const baseStyle = {
+    width: size,
+    height: size,
+    borderRadius: br,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden',
+    background: background || 'transparent',
+    ...style,
+  };
+
+  if (!t.logo || errored) {
+    // Fallback: colored ID chip
+    return (
+      <div style={{
+        ...baseStyle,
+        background: t.color,
+        color: t.accent,
+        fontFamily: fonts.heading,
+        fontSize: Math.max(10, Math.round(size * 0.38)),
+        letterSpacing: 1,
+      }}>{t.id}</div>
+    );
+  }
+
+  return (
+    <div style={baseStyle}>
+      <img
+        src={t.logo}
+        alt={`${t.name} logo`}
+        onError={() => setErrored(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+      />
+    </div>
+  );
+};
+
+// TeamChip — colored pill showing a team's ID abbreviation.
+// Pass `withLogo` to prepend a tiny logo image (falls back gracefully if logo missing).
+export const TeamChip = ({ teamId, small, withLogo }) => {
   const t = getTeam(teamId);
   if (!t) return null;
+  const logoSize = small ? 11 : 14;
   return (
     <span style={{
       display: 'inline-flex',
       alignItems: 'center',
+      gap: withLogo ? (small ? 4 : 5) : 0,
       background: t.color,
       color: t.accent,
       padding: small ? '2px 7px' : '3px 10px',
@@ -84,7 +141,12 @@ export const TeamChip = ({ teamId, small }) => {
       fontFamily: fonts.condensed,
       fontWeight: 700,
       letterSpacing: 0.6
-    }}>{t.id}</span>
+    }}>
+      {withLogo && t.logo && (
+        <TeamLogo teamId={t.id} size={logoSize} rounded="square" background="rgba(255,255,255,0.15)" />
+      )}
+      {t.id}
+    </span>
   );
 };
 

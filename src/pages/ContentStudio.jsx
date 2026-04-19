@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, RedButton } from '../components';
+import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, RedButton } from '../components';
 import { colors, fonts, radius } from '../theme';
 
 const typeColors = {
@@ -93,7 +93,7 @@ export default function ContentStudio({ teamFilter, setTeamFilter }) {
                         <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 2 }}>{s.headline}</div>
                         <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.description}</div>
                       </div>
-                      {team && <TeamChip teamId={s.team} small />}
+                      {team && <TeamChip teamId={s.team} small withLogo />}
                       <span style={{
                         fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
                         color: colors.red, whiteSpace: 'nowrap',
@@ -192,11 +192,13 @@ export default function ContentStudio({ teamFilter, setTeamFilter }) {
                 marginBottom: 2, transition: 'all 0.15s',
               }}>
                 <span style={{
-                  width: 22, height: 22, borderRadius: 4,
-                  background: t.color, color: t.accent,
+                  width: 18, height: 18, borderRadius: radius.full,
+                  background: colors.bg, border: `1px solid ${colors.borderLight}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                  fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textSecondary,
+                  flexShrink: 0,
                 }}>{t.rank}</span>
+                <TeamLogo teamId={t.id} size={22} rounded="square" />
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text }}>{t.name}</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, fontVariantNumeric: 'tabular-nums', fontFamily: fonts.condensed }}>{t.record}</span>
               </div>

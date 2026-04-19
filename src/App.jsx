@@ -10,6 +10,7 @@ import Files from './pages/Files';
 import Settings from './pages/Settings';
 import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
+import { TeamLogo } from './components';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -82,13 +83,7 @@ function TeamsDropdown({ location }) {
                 fontWeight: teamActive ? 700 : 500,
                 transition: 'all 0.15s',
               }}>
-                <span style={{
-                  width: 18, height: 18, borderRadius: 3,
-                  background: t.color, color: t.accent,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: fonts.condensed, fontSize: 8, fontWeight: 700,
-                  flexShrink: 0,
-                }}>{t.id}</span>
+                <TeamLogo teamId={t.id} size={20} rounded="square" background="rgba(255,255,255,0.08)" />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
               </Link>
             );

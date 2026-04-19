@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { TEAMS, getTeam } from '../data';
-import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
+import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL } from '../media-store';
 
@@ -319,7 +319,7 @@ export default function Files({ teamFilter }) {
               <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{f.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {t && <span style={{ background: t.color, color: t.accent, padding: '1px 6px', borderRadius: 4, fontSize: 9, fontFamily: fonts.condensed, fontWeight: 700 }}>{t.id}</span>}
+                  {t && <TeamChip teamId={t.id} small withLogo />}
                   <span style={{ color: colors.textMuted, fontSize: 9, fontFamily: fonts.condensed, fontWeight: 600 }}>{f.type}</span>
                 </div>
                 {f.size && <span style={{ fontSize: 10, color: colors.textMuted }}>{f.size}</span>}
