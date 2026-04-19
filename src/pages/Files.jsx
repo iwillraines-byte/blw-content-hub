@@ -8,6 +8,9 @@ import {
   getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder,
   extractFolderId, listFolderFiles, downloadFileAsBlob,
 } from '../drive-api';
+import { heuristicallyTag } from '../tag-heuristics';
+import { autoTagBlob } from '../auto-tag-api';
+import { getAllPlayersDirectory } from '../data';
 
 const ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK', 'TEAMPHOTO', 'VENUE'];
 const typeIcons = { HEADSHOT: '👤', ACTION: '📸', ACTION2: '📸', HIGHLIGHT: '🎬', HIGHLIGHT2: '🎬', LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨', PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️', TEAMPHOTO: '👥', VENUE: '🏟️', FILE: '📄', LINK: '🔗' };
@@ -23,31 +26,83 @@ function isProperlyNamed(name) {
   return teamMatch && numMatch;
 }
 
-function TagRow({ file, thumbUrl, onUpdate, onDelete }) {
+// TagRow — single untagged file row with:
+//   - Layer 1 heuristic auto-fill on mount (filename + folder matching, free/instant)
+//   - Layer 2 AI auto-tag button (vision AI via /api/auto-tag, costs pennies)
+//   - Manual dropdown overrides so user can correct AI guesses before Apply
+// The parent may also push an AI result via `tagHint` prop (used for bulk runs).
+function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy }) {
   const [tagTeam, setTagTeam] = useState('');
   const [tagNum, setTagNum] = useState('');
   const [tagName, setTagName] = useState('');
   const [tagType, setTagType] = useState('HEADSHOT');
   const [saving, setSaving] = useState(false);
+  const [hintSource, setHintSource] = useState(''); // "heuristic" | "ai" | "" (none)
+  const [confidence, setConfidence] = useState('');
+  const [reasoning, setReasoning] = useState('');
+
+  // Layer 1 — run once on mount to pre-fill fields from filename heuristics
+  useEffect(() => {
+    if (!roster || roster.length === 0) return;
+    if (hintSource === 'ai') return; // AI already provided tags; don't overwrite
+    const guess = heuristicallyTag({ filename: file.name, roster });
+    if (guess.confidence === 'none') return;
+    if (guess.team && !tagTeam) setTagTeam(guess.team);
+    if (guess.num && !tagNum) setTagNum(guess.num);
+    if (guess.lastName && !tagName) setTagName(guess.lastName);
+    if (guess.assetType) setTagType(guess.assetType);
+    if (!hintSource) {
+      setHintSource('heuristic');
+      setConfidence(guess.confidence);
+      setReasoning(guess.reasons.join(' · '));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roster?.length]);
+
+  // When the parent provides an AI hint (from bulk run or parent-initiated call),
+  // sync the inputs to it. Always overrides whatever heuristic found.
+  useEffect(() => {
+    if (!tagHint) return;
+    if (tagHint.error) {
+      setHintSource('ai');
+      setConfidence('error');
+      setReasoning(tagHint.error);
+      return;
+    }
+    if (tagHint.team) setTagTeam(tagHint.team);
+    if (tagHint.num) setTagNum(tagHint.num);
+    if (tagHint.lastName) setTagName(tagHint.lastName);
+    if (tagHint.assetType) setTagType(tagHint.assetType);
+    setHintSource('ai');
+    setConfidence(tagHint.confidence || 'low');
+    setReasoning(tagHint.reasoning || '');
+  }, [tagHint]);
+
+  const runAiTag = () => {
+    if (onRequestAiTag) onRequestAiTag(file.id);
+  };
 
   const ext = file.name.split('.').pop() || 'png';
-  const preview = tagTeam && tagNum && tagName
-    ? `${tagTeam}_${tagNum.padStart(2, '0')}_${tagName.toUpperCase()}_${tagType}.${ext}`
+  const preview = tagTeam && tagName
+    ? `${tagTeam}_${(tagNum || '00').padStart(2, '0')}_${tagName.toUpperCase()}_${tagType}.${ext}`
     : null;
 
   const apply = async () => {
     if (!preview) return;
     setSaving(true);
-    const updated = await onUpdate(file.id, preview);
+    await onUpdate(file.id, preview);
     setSaving(false);
   };
 
   const compact = { fontSize: 12, padding: '5px 8px', fontFamily: fonts.body };
+  const confidenceBg = confidence === 'high' ? colors.successBg : confidence === 'medium' ? '#FEF3C7' : confidence === 'error' ? '#FEE2E2' : '#FEE2E2';
+  const confidenceColor = confidence === 'high' ? '#15803D' : confidence === 'medium' ? '#92400E' : '#991B1B';
+  const aiError = confidence === 'error' ? reasoning : '';
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-      background: colors.white, border: `1px solid ${colors.border}`,
+      background: colors.white, border: `1px solid ${hintSource ? confidenceColor + '40' : colors.border}`,
       borderRadius: radius.base, marginBottom: 6,
     }}>
       {/* Thumbnail */}
@@ -57,36 +112,63 @@ function TagRow({ file, thumbUrl, onUpdate, onDelete }) {
         border: `1px solid ${colors.borderLight}`,
       }} />
 
-      {/* Original name */}
-      <div style={{ minWidth: 120, maxWidth: 160, flexShrink: 0 }}>
-        <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginBottom: 2 }}>ORIGINAL</div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+      {/* Original name + hint badge */}
+      <div style={{ minWidth: 120, maxWidth: 180, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+          <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed }}>ORIGINAL</div>
+          {hintSource && (
+            <span
+              title={reasoning}
+              style={{
+                background: confidenceBg, color: confidenceColor,
+                padding: '1px 5px', borderRadius: 3, fontSize: 9,
+                fontFamily: fonts.condensed, fontWeight: 700, letterSpacing: 0.3,
+              }}
+            >
+              {hintSource === 'ai' ? '✨ AI' : 'AUTO'} · {confidence.toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</div>
       </div>
 
       {/* Tag inputs */}
-      <select value={tagTeam} onChange={e => setTagTeam(e.target.value)} style={{ ...selectStyle, ...compact, width: 80 }}>
+      <select value={tagTeam} onChange={e => { setTagTeam(e.target.value); setHintSource(''); }} style={{ ...selectStyle, ...compact, width: 80 }}>
         <option value="">Team</option>
         {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
       </select>
 
-      <input type="text" value={tagNum} onChange={e => setTagNum(e.target.value.replace(/\D/g, '').slice(0, 2))}
+      <input type="text" value={tagNum} onChange={e => { setTagNum(e.target.value.replace(/\D/g, '').slice(0, 2)); setHintSource(''); }}
         placeholder="##" maxLength={2} style={{ ...inputStyle, ...compact, width: 44, textAlign: 'center' }} />
 
-      <input type="text" value={tagName} onChange={e => setTagName(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+      <input type="text" value={tagName} onChange={e => { setTagName(e.target.value.toUpperCase().replace(/[^A-Z]/g, '')); setHintSource(''); }}
         placeholder="LASTNAME" style={{ ...inputStyle, ...compact, width: 100 }} />
 
       <select value={tagType} onChange={e => setTagType(e.target.value)} style={{ ...selectStyle, ...compact, width: 110 }}>
         {ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
       </select>
 
-      {/* Preview + Apply */}
+      {/* Preview / error */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {preview && (
+        {aiError ? (
+          <div style={{ fontSize: 10, color: '#991B1B', fontFamily: fonts.condensed, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={aiError}>
+            AI: {aiError}
+          </div>
+        ) : preview ? (
           <div style={{ fontSize: 10, color: colors.success, fontFamily: fonts.condensed, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             → {preview}
           </div>
-        )}
+        ) : null}
       </div>
+
+      {/* AI auto-tag button */}
+      <button onClick={runAiTag} disabled={aiBusy || !blobRef} title="Auto-tag with AI vision" style={{
+        background: aiBusy ? colors.border : '#EEF2FF', color: '#6366F1',
+        border: `1px solid ${aiBusy ? colors.border : '#C7D2FE'}`, borderRadius: radius.sm,
+        padding: '5px 10px', fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+        cursor: aiBusy || !blobRef ? 'default' : 'pointer', whiteSpace: 'nowrap',
+        opacity: blobRef ? 1 : 0.5,
+      }}>{aiBusy ? '...' : '✨'}</button>
 
       <button onClick={apply} disabled={!preview || saving} style={{
         background: preview ? colors.red : colors.border, color: '#fff',
@@ -381,6 +463,19 @@ export default function Files({ teamFilter }) {
   const [folderUrlInput, setFolderUrlInput] = useState('');
   const [folderAddError, setFolderAddError] = useState('');
 
+  // Roster for Layer 1 heuristic matching
+  const [roster, setRoster] = useState([]);
+
+  // Bulk AI auto-tag progress
+  const [bulkAiProgress, setBulkAiProgress] = useState(null); // { done, total, failed }
+
+  useEffect(() => {
+    // Preload the full player directory once for heuristic matching
+    getAllPlayersDirectory().then(list => {
+      setRoster(list.map(p => ({ team: p.team, lastName: p.lastName, num: p.num || '' })));
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     getAllMedia().then(media => {
       setStoredMedia(media);
@@ -445,6 +540,44 @@ export default function Files({ teamFilter }) {
     if (thumbUrls[id]) URL.revokeObjectURL(thumbUrls[id]);
     setThumbUrls(prev => { const n = { ...prev }; delete n[id]; return n; });
   }, [thumbUrls]);
+
+  // ─── AI auto-tag — single file + bulk ─────────────────────────────────────
+  // The parent owns the AI calls so we can reliably know when each finishes
+  // and pace the bulk run. Results flow into TagRows via the `tagHints` map.
+  const [tagHints, setTagHints] = useState({}); // fileId → AI result or { error }
+  const [aiBusyIds, setAiBusyIds] = useState(new Set());
+
+  const runAiForFile = useCallback(async (fileId) => {
+    const record = storedMedia.find(m => m.id === fileId);
+    if (!record?.blob) return { error: 'No blob available' };
+    setAiBusyIds(prev => new Set(prev).add(fileId));
+    try {
+      const result = await autoTagBlob(record.blob);
+      setTagHints(prev => ({ ...prev, [fileId]: result }));
+      return result;
+    } catch (err) {
+      const errObj = { error: err.message || String(err) };
+      setTagHints(prev => ({ ...prev, [fileId]: errObj }));
+      return errObj;
+    } finally {
+      setAiBusyIds(prev => { const n = new Set(prev); n.delete(fileId); return n; });
+    }
+  }, [storedMedia]);
+
+  const runBulkAiTag = useCallback(async () => {
+    const targets = storedMedia.filter(m => !isProperlyNamed(m.name) && m.blob);
+    if (targets.length === 0) return;
+    setBulkAiProgress({ done: 0, total: targets.length, failed: 0 });
+    let done = 0, failed = 0;
+    for (const t of targets) {
+      const result = await runAiForFile(t.id);
+      done++;
+      if (result?.error) failed++;
+      setBulkAiProgress({ done, total: targets.length, failed });
+    }
+    // Keep the progress visible briefly, then clear
+    setTimeout(() => setBulkAiProgress(null), 4000);
+  }, [storedMedia, runAiForFile]);
 
   // ─── Google Drive handlers ────────────────────────────────────────────────
   const addDriveFolder = () => {
@@ -529,42 +662,74 @@ export default function Files({ teamFilter }) {
       {/* UNTAGGED FILES — Bulk Tagger */}
       {untagged.length > 0 && (
         <Card style={{ border: `1px solid ${colors.warningBorder}`, background: colors.warningBg }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
             <div>
               <SectionHeading style={{ margin: 0, color: '#92400E' }}>
                 TAG & RENAME ({untagged.length} FILE{untagged.length !== 1 ? 'S' : ''})
               </SectionHeading>
               <div style={{ fontSize: 11, color: '#92400E', fontFamily: fonts.condensed, marginTop: 2 }}>
-                These files need team/player/type tags to work with the content generator
+                Filename heuristics auto-fill rows on load · click ✨ to AI-tag one · or use "AI-tag all" below
               </div>
             </div>
-            <button onClick={() => setShowTagger(!showTagger)} style={{
-              background: 'none', border: `1px solid ${colors.warningBorder}`,
-              color: '#92400E', borderRadius: radius.sm, padding: '4px 12px',
-              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-            }}>{showTagger ? 'Hide' : 'Show'}</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {bulkAiProgress && (
+                <span style={{ fontSize: 11, fontFamily: fonts.condensed, color: '#92400E', fontWeight: 700 }}>
+                  {bulkAiProgress.done}/{bulkAiProgress.total}
+                  {bulkAiProgress.failed > 0 && ` · ${bulkAiProgress.failed} failed`}
+                </span>
+              )}
+              <button
+                onClick={runBulkAiTag}
+                disabled={!!bulkAiProgress}
+                title="Run Claude vision AI on every untagged file"
+                style={{
+                  background: bulkAiProgress ? colors.border : '#EEF2FF',
+                  color: bulkAiProgress ? colors.textMuted : '#4F46E5',
+                  border: `1px solid ${bulkAiProgress ? colors.border : '#C7D2FE'}`,
+                  borderRadius: radius.sm, padding: '4px 12px',
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  cursor: bulkAiProgress ? 'default' : 'pointer',
+                }}
+              >
+                {bulkAiProgress ? `AI-tagging…` : `✨ AI-tag all (${untagged.length})`}
+              </button>
+              <button onClick={() => setShowTagger(!showTagger)} style={{
+                background: 'none', border: `1px solid ${colors.warningBorder}`,
+                color: '#92400E', borderRadius: radius.sm, padding: '4px 12px',
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              }}>{showTagger ? 'Hide' : 'Show'}</button>
+            </div>
           </div>
 
           {showTagger && (
             <div style={{ background: colors.white, borderRadius: radius.base, padding: 10, border: `1px solid ${colors.border}` }}>
               <div style={{ display: 'flex', gap: 8, padding: '4px 10px 8px', fontSize: 9, fontFamily: fonts.condensed, color: colors.textMuted, fontWeight: 600, textTransform: 'uppercase' }}>
                 <div style={{ width: 48 }} />
-                <div style={{ width: 140 }}>Original</div>
+                <div style={{ width: 160 }}>Original</div>
                 <div style={{ width: 80 }}>Team</div>
                 <div style={{ width: 44 }}>#</div>
                 <div style={{ width: 100 }}>Last Name</div>
                 <div style={{ width: 110 }}>Asset Type</div>
                 <div style={{ flex: 1 }}>New Name</div>
               </div>
-              {untagged.map(file => (
-                <TagRow
-                  key={file.id}
-                  file={file}
-                  thumbUrl={thumbUrls[file.id]}
-                  onUpdate={handleRename}
-                  onDelete={handleDelete}
-                />
-              ))}
+              {untagged.map(file => {
+                // Look up the raw blob from storedMedia so TagRow can send to /api/auto-tag
+                const raw = storedMedia.find(m => m.id === file.id);
+                return (
+                  <TagRow
+                    key={file.id}
+                    file={file}
+                    thumbUrl={thumbUrls[file.id]}
+                    blobRef={raw?.blob}
+                    roster={roster}
+                    tagHint={tagHints[file.id]}
+                    aiBusy={aiBusyIds.has(file.id)}
+                    onUpdate={handleRename}
+                    onDelete={handleDelete}
+                    onRequestAiTag={runAiForFile}
+                  />
+                );
+              })}
             </div>
           )}
         </Card>
