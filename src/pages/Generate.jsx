@@ -32,11 +32,32 @@ function drawDiagonalStripes(ctx, w, h, color, spacing=30, thickness=8) {
   ctx.restore();
 }
 
-// ─── 4-Layer Custom Compositor ──────────────────────────────────────────────
-function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], teamColor) {
-  ctx.clearRect(0, 0, w, h);
+// Placeholder text shown in the preview when a field is empty.
+// Picked so character width roughly matches expected filled value.
+const FIELD_PLACEHOLDERS = {
+  playerName:  'PLAYER NAME',
+  number:      '00',
+  teamName:    'TEAM NAME',
+  statLine:    'OPS+ 000 · AVG .XXX · HR 0',
+  homeTeam:    'HOME',
+  awayTeam:    'AWAY',
+  homeRecord:  '0-0',
+  awayRecord:  '0-0',
+  homeScore:   '0',
+  awayScore:   '0',
+  result:      'FINAL',
+  mvp:         'MVP NAME',
+  date:        'SAT · APR 00',
+  time:        '0:00 PM',
+  venue:       'VENUE',
+};
 
-  // Layer 1: Background photo (cover crop)
+// ─── 4-Layer Custom Compositor ──────────────────────────────────────────────
+function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team) {
+  ctx.clearRect(0, 0, w, h);
+  const teamColor = team?.color;
+
+  // Layer 1: Background photo (cover crop), or team-colored gradient fallback
   if (bgImg) {
     const imgRatio = bgImg.width / bgImg.height;
     const canvasRatio = w / h;
@@ -49,13 +70,17 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
       sy = (bgImg.height - sh) / 2;
     }
     ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, w, h);
+  } else if (team) {
+    // Team-colored gradient empty state (replaces dark gray "Upload a photo" placeholder)
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, team.dark || team.color);
+    grad.addColorStop(1, team.color);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
   } else {
+    // Final fallback — no team data, solid dark
     ctx.fillStyle = '#1A1A22';
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.font = `24px ${FONT_MAP.heading}`;
-    ctx.textAlign = 'center';
-    ctx.fillText('Upload a background photo', w / 2, h / 2);
   }
 
   // Layer 2: Overlay template PNG
@@ -76,19 +101,30 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
     }
   });
 
-  // Layer 4: Dynamic text fields
+  // Layer 4: Dynamic text fields. Empty fields render as low-opacity placeholders
+  // so the template's zone layout is visible before the user fills inputs.
   if (fieldConfig) {
     fieldConfig.forEach(f => {
       const value = fields[f.key];
-      if (!value) return;
+      const hasValue = value && String(value).trim().length > 0;
+      const text = hasValue
+        ? String(value).toUpperCase()
+        : (FIELD_PLACEHOLDERS[f.key] || String(f.label || f.key).toUpperCase());
+
+      ctx.save();
       ctx.fillStyle = f.color || '#FFFFFF';
       ctx.font = `${f.fontSize}px ${FONT_MAP[f.font] || FONT_MAP.body}`;
       ctx.textAlign = f.align || 'center';
-      if (f.maxWidth) {
-        ctx.fillText(value.toUpperCase(), f.x, f.y, f.maxWidth);
-      } else {
-        ctx.fillText(value.toUpperCase(), f.x, f.y);
+      // Placeholders render faded + with tracking so they read as "about to be filled"
+      if (!hasValue) {
+        ctx.globalAlpha = 0.32;
       }
+      if (f.maxWidth) {
+        ctx.fillText(text, f.x, f.y, f.maxWidth);
+      } else {
+        ctx.fillText(text, f.x, f.y);
+      }
+      ctx.restore();
     });
   }
 }
@@ -211,7 +247,7 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = getFieldConfig(customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj?.color);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj);
   }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects]);
 
   useEffect(() => { render(); }, [render]);
@@ -350,27 +386,10 @@ export default function Generate() {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {/* CONTROLS */}
         <div style={{ flex: '1 1 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Custom templates — the only mode */}
+          {/* Custom templates — the only mode.
+              Form flow: Team (sets colors) → Template → Player/Data → Media → Overlay → Effects */}
           <>
-              {/* Template Type */}
-              <Card>
-                <Label>Template Type</Label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
-                  {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
-                    <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
-                      background: customType === key ? colors.redLight : colors.bg,
-                      border: customType === key ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
-                      color: customType === key ? colors.red : colors.textSecondary,
-                      borderRadius: radius.base, padding: '8px 4px', cursor: 'pointer',
-                      fontFamily: fonts.body, fontSize: 9, fontWeight: 700, textAlign: 'center',
-                    }}>
-                      <div style={{ fontSize: 16 }}>{t.icon}</div>{t.name}
-                    </button>
-                  ))}
-                </div>
-              </Card>
-
-              {/* Team & Format */}
+              {/* 1. Team & Format — first, so brand colors drive the preview immediately */}
               <Card>
                 <Label>Team & Format</Label>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -389,7 +408,25 @@ export default function Generate() {
                 </div>
               </Card>
 
-              {/* Player Selector (for player-centric templates) */}
+              {/* 2. Template Type */}
+              <Card>
+                <Label>Template Type</Label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
+                  {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
+                    <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
+                      background: customType === key ? colors.redLight : colors.bg,
+                      border: customType === key ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
+                      color: customType === key ? colors.red : colors.textSecondary,
+                      borderRadius: radius.base, padding: '8px 4px', cursor: 'pointer',
+                      fontFamily: fonts.body, fontSize: 9, fontWeight: 700, textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: 16 }}>{t.icon}</div>{t.name}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+
+              {/* 3a. Player Selector (for player-centric templates) */}
               {customTypeObj?.playerCentric && (
                 <Card>
                   <Label>Select Player</Label>
@@ -404,7 +441,19 @@ export default function Generate() {
                 </Card>
               )}
 
-              {/* Select Media — was Background Photo */}
+              {/* 3b. Dynamic Content — text fields that overlay the composition */}
+              <Card>
+                <Label>Content</Label>
+                {customFieldConfig.map(f => (
+                  <div key={f.key} style={{ marginBottom: 8 }}>
+                    <label style={labelStyle}>{f.label}</label>
+                    <input type="text" value={customFields[f.key] || ''} onChange={e => setCustomFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      placeholder={`Enter ${f.label.toLowerCase()}...`} style={{ ...inputStyle, marginTop: 3 }} />
+                  </div>
+                ))}
+              </Card>
+
+              {/* 4. Select Media — was Background Photo */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Label style={{ marginBottom: 0 }}>Select Media</Label>
@@ -616,17 +665,6 @@ export default function Generate() {
                 )}
               </Card>
 
-              {/* Dynamic Fields */}
-              <Card>
-                <Label>Dynamic Content</Label>
-                {customFieldConfig.map(f => (
-                  <div key={f.key} style={{ marginBottom: 8 }}>
-                    <label style={labelStyle}>{f.label}</label>
-                    <input type="text" value={customFields[f.key] || ''} onChange={e => setCustomFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                      placeholder={`Enter ${f.label.toLowerCase()}...`} style={{ ...inputStyle, marginTop: 3 }} />
-                  </div>
-                ))}
-              </Card>
           </>
 
           <RedButton onClick={download} style={{ width: '100%', padding: '14px 24px', fontSize: 14 }}>
