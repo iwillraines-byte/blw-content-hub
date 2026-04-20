@@ -1,25 +1,29 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, RedButton } from '../components';
+import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
-
-const typeColors = {
-  'stat-spotlight': { border: '#3B82F6', bg: 'rgba(59,130,246,0.06)' },
-  'streak': { border: '#22C55E', bg: 'rgba(34,197,94,0.06)' },
-  'milestone': { border: '#F59E0B', bg: 'rgba(245,158,11,0.06)' },
-  'leader-change': { border: '#8B5CF6', bg: 'rgba(139,92,246,0.06)' },
-  'matchup': { border: colors.red, bg: colors.redLight },
-};
+import { getRequests, countByStatus, oldestPendingDays } from '../requests-store';
+import { getAllMedia } from '../media-store';
+import { isAlreadyTagged } from '../tag-heuristics';
 
 export default function ContentStudio() {
+  const navigate = useNavigate();
   const [suggestions, setSuggestions] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [mediaStats, setMediaStats] = useState({ total: 0, untagged: 0 });
 
   useEffect(() => {
     fetchAllData().then(({ batting, pitching, rankings }) => {
       setSuggestions(generateContentSuggestions(batting, pitching, rankings));
       setDataLoaded(true);
+    });
+    setRequests(getRequests());
+    getAllMedia().then(all => {
+      const total = all.length;
+      const untagged = all.filter(m => !isAlreadyTagged(m.name)).length;
+      setMediaStats({ total, untagged });
     });
   }, []);
 
@@ -33,33 +37,52 @@ export default function ContentStudio() {
     return `/generate?${params.toString()}`;
   };
 
+  // ─── Live-state card data ─────────────────────────────────────────────────
+  const pendingCount     = countByStatus(requests, 'pending');
+  const inProgressCount  = countByStatus(requests, 'in-progress');
+  const completedCount   = countByStatus(requests, 'completed');
+  const oldestDays       = oldestPendingDays(requests);
+  const topSuggestion    = suggestions[0];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="Dashboard" subtitle="Your content command center — generate, manage, and track across all BLW teams" />
 
-      {/* Quick Actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <Link to="/generate" style={{ textDecoration: 'none' }}>
-          <Card style={{ padding: 16, cursor: 'pointer', borderLeft: `3px solid ${colors.red}` }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>✦</div>
-            <div style={{ fontFamily: fonts.heading, fontSize: 18, color: colors.text, letterSpacing: 1 }}>GENERATE</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Create graphics & content</div>
-          </Card>
-        </Link>
-        <Link to="/requests" style={{ textDecoration: 'none' }}>
-          <Card style={{ padding: 16, cursor: 'pointer', borderLeft: `3px solid ${colors.info}` }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>☰</div>
-            <div style={{ fontFamily: fonts.heading, fontSize: 18, color: colors.text, letterSpacing: 1 }}>NEW REQUEST</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Submit content request</div>
-          </Card>
-        </Link>
-        <Link to="/files" style={{ textDecoration: 'none' }}>
-          <Card style={{ padding: 16, cursor: 'pointer', borderLeft: `3px solid ${colors.warning}` }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>◫</div>
-            <div style={{ fontFamily: fonts.heading, fontSize: 18, color: colors.text, letterSpacing: 1 }}>FILES</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Upload & manage assets</div>
-          </Card>
-        </Link>
+      {/* Live-state cards — each reflects current state, not just a nav shortcut */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <LiveCard
+          icon="✦"
+          label="Generate"
+          primary={dataLoaded ? `${suggestions.length} idea${suggestions.length === 1 ? '' : 's'} ready` : 'Loading ideas…'}
+          secondary={topSuggestion ? `Top: ${truncate(topSuggestion.headline, 40)}` : 'No suggestions yet'}
+          to={topSuggestion ? buildLink(topSuggestion) : '/generate'}
+          cta={topSuggestion ? 'Create top idea →' : 'Open Generate →'}
+        />
+        <LiveCard
+          icon="☰"
+          label="Requests"
+          primary={pendingCount === 0
+            ? 'No open requests'
+            : `${pendingCount} pending`}
+          secondary={pendingCount === 0
+            ? 'Click to file a new one'
+            : oldestDays != null && oldestDays > 0
+              ? `Oldest: ${oldestDays} day${oldestDays === 1 ? '' : 's'} ago`
+              : 'Created today'}
+          to={pendingCount > 0 ? '/requests?status=pending' : '/requests'}
+          cta={pendingCount > 0 ? 'Review pending →' : '+ New Request'}
+        />
+        <LiveCard
+          icon="◫"
+          label="Files"
+          primary={`${mediaStats.total} file${mediaStats.total === 1 ? '' : 's'} in library`}
+          secondary={mediaStats.untagged === 0
+            ? 'All files tagged ✓'
+            : `${mediaStats.untagged} need${mediaStats.untagged === 1 ? 's' : ''} tagging`}
+          to="/files"
+          cta={mediaStats.untagged > 0 ? 'Tag untagged →' : 'Open Files →'}
+          warn={mediaStats.untagged > 0}
+        />
       </div>
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
@@ -72,14 +95,15 @@ export default function ContentStudio() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {suggestions.map(s => {
-                const tc = typeColors[s.type] || typeColors['stat-spotlight'];
                 const team = s.team !== 'BLW' ? getTeam(s.team) : null;
+                const accent = team ? team.color : colors.border;
+                const bgTint = team ? `${team.color}0C` : colors.bg;
                 return (
                   <Link key={s.id} to={buildLink(s)} style={{ textDecoration: 'none' }}>
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '12px 14px', borderRadius: radius.base,
-                      background: tc.bg, borderLeft: `3px solid ${tc.border}`,
+                      background: bgTint, borderLeft: `3px solid ${accent}`,
                       transition: 'box-shadow 0.15s', cursor: 'pointer',
                     }}>
                       <div style={{ flex: 1 }}>
@@ -95,53 +119,40 @@ export default function ContentStudio() {
                   </Link>
                 );
               })}
+              {dataLoaded && suggestions.length === 0 && (
+                <div style={{ fontSize: 13, color: colors.textMuted, padding: 20, textAlign: 'center' }}>
+                  No content ideas yet — stats will populate this list.
+                </div>
+              )}
             </div>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card>
-            <SectionHeading>RECENT ACTIVITY</SectionHeading>
-            {[
-              { icon: '✦', text: 'Generated LAN Game Day graphic', time: '2 hours ago', color: colors.red },
-              { icon: '✓', text: 'Completed request #3 — AZS highlight video', time: '4 hours ago', color: colors.success },
-              { icon: '☰', text: 'New request from David Adelman (PHI owner)', time: '6 hours ago', color: colors.info },
-              { icon: '📊', text: 'Stats updated from prowiffleball.com', time: '1 day ago', color: '#8B5CF6' },
-              { icon: '✦', text: 'Generated LAN 17-1 celebration post', time: '2 days ago', color: colors.red },
-            ].map((a, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
-                borderBottom: i < 4 ? `1px solid ${colors.divider}` : 'none',
-              }}>
-                <span style={{
-                  width: 28, height: 28, borderRadius: radius.sm,
-                  background: `${a.color}12`, color: a.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12,
-                }}>{a.icon}</span>
-                <span style={{ flex: 1, fontSize: 13, color: colors.text }}>{a.text}</span>
-                <span style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, whiteSpace: 'nowrap' }}>{a.time}</span>
-              </div>
-            ))}
           </Card>
         </div>
 
-        {/* RIGHT — Standings + Status */}
+        {/* RIGHT — Queue + Standings */}
         <div style={{ flex: '0 1 340px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Request Summary */}
+          {/* Request Queue */}
           <Card>
             <SectionHeading>REQUEST QUEUE</SectionHeading>
             <div style={{ display: 'flex', gap: 8 }}>
               {[
-                { label: 'Pending', count: 3, color: '#F59E0B', to: '/requests' },
-                { label: 'In Progress', count: 1, color: '#3B82F6', to: '/requests' },
-                { label: 'Completed', count: 1, color: '#22C55E', to: '/requests' },
+                { label: 'Pending', count: pendingCount, color: '#F59E0B', status: 'pending' },
+                { label: 'In Progress', count: inProgressCount, color: '#3B82F6', status: 'in-progress' },
+                { label: 'Completed', count: completedCount, color: '#22C55E', status: 'completed' },
               ].map((s, i) => (
-                <Link key={i} to={s.to} style={{ textDecoration: 'none', flex: 1 }}>
+                <Link
+                  key={i}
+                  to={`/requests?status=${s.status}`}
+                  style={{ textDecoration: 'none', flex: 1 }}
+                >
                   <div style={{
                     textAlign: 'center', padding: '10px 8px',
                     borderRadius: radius.base, background: `${s.color}08`,
                     border: `1px solid ${s.color}20`, cursor: 'pointer',
-                  }}>
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = `${s.color}14`}
+                  onMouseLeave={e => e.currentTarget.style.background = `${s.color}08`}
+                  >
                     <div style={{ fontSize: 22, fontFamily: fonts.heading, color: s.color }}>{s.count}</div>
                     <div style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 600, color: colors.textMuted }}>{s.label}</div>
                   </div>
@@ -171,38 +182,100 @@ export default function ContentStudio() {
             </div>
           </Card>
 
-          {/* Compact Standings */}
+          {/* Compact Standings — row clicks go to team page; hover reveals "Create graphic" action */}
           <Card>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <SectionHeading style={{ margin: 0 }}>STANDINGS</SectionHeading>
               <Link to="/game-center" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>View Full →</Link>
             </div>
             {TEAMS.map(t => (
-              <Link key={t.id} to={`/teams/${t.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-                  borderRadius: radius.sm, cursor: 'pointer',
-                  marginBottom: 2, transition: 'background 0.15s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = colors.bg}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <span style={{
-                    width: 18, height: 18, borderRadius: radius.full,
-                    background: colors.bg, border: `1px solid ${colors.borderLight}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textSecondary,
-                    flexShrink: 0,
-                  }}>{t.rank}</span>
-                  <TeamLogo teamId={t.id} size={22} rounded="square" />
-                  <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text }}>{t.name}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, fontVariantNumeric: 'tabular-nums', fontFamily: fonts.condensed }}>{t.record}</span>
-                </div>
-              </Link>
+              <StandingsRow key={t.id} team={t} navigate={navigate} />
             ))}
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function truncate(str, n) {
+  if (!str) return '';
+  return str.length <= n ? str : str.slice(0, n - 1) + '…';
+}
+
+// Single live-state card at the top of the dashboard
+function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
+  return (
+    <Link to={to} style={{ textDecoration: 'none' }}>
+      <Card style={{
+        padding: 16, cursor: 'pointer',
+        borderLeft: `3px solid ${warn ? colors.warning : colors.red}`,
+        display: 'flex', flexDirection: 'column', gap: 4,
+        height: '100%', boxSizing: 'border-box',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+          <span style={{ fontSize: 18 }}>{icon}</span>
+          <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</span>
+        </div>
+        <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 0.5, lineHeight: 1.1 }}>
+          {primary}
+        </div>
+        <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>{secondary}</div>
+        <div style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.red }}>
+          {cta}
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+// Standings row — primary click goes to team page; hover reveals a secondary
+// "Create graphic →" action that deep-links to Generate with the standings
+// template pre-selected.
+function StandingsRow({ team, navigate }) {
+  const [hovering, setHovering] = useState(false);
+  const goTeam = () => navigate(`/teams/${team.slug}`);
+  const goGen  = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    navigate(`/generate?template=standings&team=${team.id}`);
+  };
+  return (
+    <div
+      onClick={goTeam}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+        borderRadius: radius.sm, cursor: 'pointer',
+        marginBottom: 2, transition: 'background 0.15s',
+        background: hovering ? colors.bg : 'transparent',
+      }}
+    >
+      <span style={{
+        width: 18, height: 18, borderRadius: radius.full,
+        background: colors.bg, border: `1px solid ${colors.borderLight}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textSecondary,
+        flexShrink: 0,
+      }}>{team.rank}</span>
+      <TeamLogo teamId={team.id} size={22} rounded="square" />
+      <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</span>
+      {hovering ? (
+        <button
+          onClick={goGen}
+          style={{
+            background: colors.red, color: '#fff', border: 'none',
+            borderRadius: radius.sm, padding: '3px 8px',
+            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+            cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+          title="Generate a standings graphic featuring this team"
+        >Create →</button>
+      ) : (
+        <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, fontVariantNumeric: 'tabular-nums', fontFamily: fonts.condensed }}>{team.record}</span>
+      )}
     </div>
   );
 }

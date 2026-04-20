@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { TEAMS, TEMPLATES, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, StatusBadge, PriorityDot, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
+import { getRequests, saveRequests, getComments, saveComments } from '../requests-store';
 
-// Requests and comments start empty — real requests are created via the UI.
-const INITIAL_REQUESTS = [];
-const INITIAL_COMMENTS = [];
+const STATUS_LABELS = {
+  pending: 'Pending',
+  'in-progress': 'In Progress',
+  approved: 'Approved',
+  revision: 'Revision',
+  completed: 'Completed',
+};
 
 const roleColors = {
   admin: { bg: '#DBEAFE', text: '#1E40AF' },
@@ -15,8 +21,13 @@ const roleColors = {
 };
 
 export default function Requests() {
-  const [requests, setRequests] = useState(INITIAL_REQUESTS);
-  const [comments, setComments] = useState(INITIAL_COMMENTS);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFilter = searchParams.get('status') || 'ALL';
+
+  // Requests + comments persisted in localStorage so they survive refreshes
+  // and drive the dashboard "N pending" card.
+  const [requests, setRequestsState] = useState(() => getRequests());
+  const [comments, setCommentsState] = useState(() => getComments());
   const [showNew, setShowNew] = useState(false);
   const [expandedComments, setExpandedComments] = useState({});
   const [commentInputs, setCommentInputs] = useState({});
@@ -25,7 +36,24 @@ export default function Requests() {
   const [newPriority, setNewPriority] = useState('medium');
   const [newNote, setNewNote] = useState('');
 
-  const filtered = requests;
+  // Persist on every change
+  useEffect(() => { saveRequests(requests); }, [requests]);
+  useEffect(() => { saveComments(comments); }, [comments]);
+
+  const setRequests = (updater) => setRequestsState(prev => typeof updater === 'function' ? updater(prev) : updater);
+  const setComments = (updater) => setCommentsState(prev => typeof updater === 'function' ? updater(prev) : updater);
+
+  const filtered = statusFilter === 'ALL'
+    ? requests
+    : requests.filter(r => r.status === statusFilter);
+
+  const setStatusFilter = (status) => {
+    const next = new URLSearchParams(searchParams);
+    if (!status || status === 'ALL') next.delete('status');
+    else next.set('status', status);
+    setSearchParams(next, { replace: true });
+  };
+
   const updateStatus = (id, status) => setRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r));
   const toggleComments = (id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -33,16 +61,21 @@ export default function Requests() {
     const text = commentInputs[requestId]?.trim();
     if (!text) return;
     setComments(prev => [...prev, {
-      id: prev.length + 1, requestId, author: 'You', role: 'admin', text, time: 'Just now',
+      id: crypto.randomUUID(), requestId, author: 'You', role: 'admin', text,
+      time: new Date().toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
     }]);
     setCommentInputs(prev => ({ ...prev, [requestId]: '' }));
   };
 
   const submit = () => {
     if (!newTeam || !newTemplate) return;
+    const now = new Date();
     setRequests(rs => [{
-      id: rs.length + 1, team: newTeam, template: newTemplate,
-      status: 'pending', requester: 'You (Admin)', date: 'Apr 17',
+      id: crypto.randomUUID(),
+      team: newTeam, template: newTemplate,
+      status: 'pending', requester: 'You (Admin)',
+      date: now.toLocaleString(undefined, { month: 'short', day: 'numeric' }),
+      createdAt: now.getTime(),
       priority: newPriority, note: newNote,
     }, ...rs]);
     setShowNew(false); setNewTeam(''); setNewTemplate(''); setNewNote('');
@@ -60,6 +93,35 @@ export default function Requests() {
           {showNew ? 'Cancel' : '+ New Request'}
         </OutlineButton>
       </PageHeader>
+
+      {/* Status filter chips — reflect / drive the ?status= URL param */}
+      {requests.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[
+            { key: 'ALL', label: `All (${requests.length})` },
+            ...['pending', 'in-progress', 'revision', 'approved', 'completed'].map(s => ({
+              key: s,
+              label: `${STATUS_LABELS[s]} (${requests.filter(r => r.status === s).length})`,
+            })),
+          ].map(chip => {
+            const active = statusFilter === chip.key;
+            return (
+              <button
+                key={chip.key}
+                onClick={() => setStatusFilter(chip.key)}
+                style={{
+                  background: active ? colors.red : colors.white,
+                  color: active ? '#fff' : colors.textSecondary,
+                  border: `1px solid ${active ? colors.red : colors.border}`,
+                  borderRadius: radius.full, padding: '4px 12px',
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >{chip.label}</button>
+            );
+          })}
+        </div>
+      )}
 
       {showNew && (
         <Card style={{ border: `1px solid ${colors.redBorder}` }}>
@@ -96,11 +158,17 @@ export default function Requests() {
       {filtered.length === 0 && !showNew && (
         <Card style={{ padding: 36, textAlign: 'center' }}>
           <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.3 }}>☰</div>
-          <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 1, marginBottom: 4 }}>NO OPEN REQUESTS</div>
-          <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14 }}>
-            When athletes, owners, or team managers ask for content, their requests land here.
+          <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 1, marginBottom: 4 }}>
+            {statusFilter === 'ALL' ? 'NO OPEN REQUESTS' : `NO ${(STATUS_LABELS[statusFilter] || statusFilter).toUpperCase()} REQUESTS`}
           </div>
-          <OutlineButton onClick={() => setShowNew(true)}>+ New Request</OutlineButton>
+          <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14 }}>
+            {statusFilter === 'ALL'
+              ? 'When athletes, owners, or team managers ask for content, their requests land here.'
+              : `Nothing matching that status right now.`}
+          </div>
+          {statusFilter === 'ALL'
+            ? <OutlineButton onClick={() => setShowNew(true)}>+ New Request</OutlineButton>
+            : <OutlineButton onClick={() => setStatusFilter('ALL')}>Clear filter</OutlineButton>}
         </Card>
       )}
 

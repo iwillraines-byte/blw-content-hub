@@ -266,7 +266,11 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
 export default function Generate() {
   const canvasRef = useRef(null);
   const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState('custom'); // 'classic' or 'custom'
+  // If the user arrived via a dashboard Content-Idea deep link (which carries
+  // template/team/player prefill params), start in Classic mode so those
+  // prefilled fields are visible. Otherwise default to Custom mode.
+  const arrivedFromSuggestion = !!(searchParams.get('template') && searchParams.get('team'));
+  const [mode, setMode] = useState(arrivedFromSuggestion ? 'classic' : 'custom');
 
   // ── Classic mode state ──
   const [team, setTeam] = useState(searchParams.get('team') || 'LAN');
