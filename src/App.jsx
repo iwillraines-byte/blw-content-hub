@@ -18,7 +18,7 @@ const navItems = [
   { path: "/studio", label: "Content Studio", icon: "⚡" },
   { path: "/generate", label: "Generate", icon: "✦" },
   { path: "/requests", label: "Requests", icon: "☰" },
-  { path: "/game-center", label: "Game Center", icon: "▣" },
+  { path: "/game-center", label: "ProWiffle Stats", icon: "▣" },
   { path: "/files", label: "Files", icon: "◫" },
   { path: "/settings", label: "Settings", icon: "⚙" },
 ];
@@ -27,7 +27,7 @@ const pageTitles = {
   '/studio': 'Content Studio',
   '/generate': 'Generate',
   '/requests': 'Requests',
-  '/game-center': 'Game Center',
+  '/game-center': 'ProWiffle Stats',
   '/files': 'Files',
   '/settings': 'Settings',
 };
@@ -55,35 +55,35 @@ function TeamsDropdown({ location }) {
     <>
       <button onClick={() => setExpanded(!expanded)} style={{
         textDecoration: 'none', display: 'flex', alignItems: 'center',
-        gap: 10, padding: '10px 12px', borderRadius: radius.base,
+        gap: 12, padding: '12px 14px', borderRadius: radius.base,
         background: onTeamRoute ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
         borderLeft: onTeamRoute ? `3px solid ${colors.red}` : '3px solid transparent',
         color: onTeamRoute ? '#fff' : colors.textOnDarkMuted,
-        fontFamily: fonts.body, fontSize: 13,
+        fontFamily: fonts.body, fontSize: 16,
         fontWeight: onTeamRoute ? 700 : 500,
         border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
         transition: 'all 0.15s',
       }}>
-        <span style={{ fontSize: 16, width: 20, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>⚑</span>
+        <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>⚑</span>
         <span style={{ flex: 1 }}>Teams</span>
-        <span style={{ fontSize: 10, opacity: 0.5, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
+        <span style={{ fontSize: 11, opacity: 0.5, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
       </button>
 
       {expanded && (
-        <div style={{ paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 1, marginBottom: 4 }}>
+        <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 4 }}>
           {TEAMS.map(t => {
             const teamActive = location.pathname === `/teams/${t.slug}` || location.pathname.startsWith(`/teams/${t.slug}/`);
             return (
               <Link key={t.id} to={`/teams/${t.slug}`} style={{
                 textDecoration: 'none', display: 'flex', alignItems: 'center',
-                gap: 8, padding: '7px 10px', borderRadius: radius.sm,
+                gap: 10, padding: '8px 12px', borderRadius: radius.sm,
                 background: teamActive ? 'rgba(221, 60, 60, 0.1)' : 'transparent',
                 color: teamActive ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontFamily: fonts.body, fontSize: 12,
+                fontFamily: fonts.body, fontSize: 14,
                 fontWeight: teamActive ? 700 : 500,
                 transition: 'all 0.15s',
               }}>
-                <TeamLogo teamId={t.id} size={22} rounded="square" />
+                <TeamLogo teamId={t.id} size={24} rounded="square" />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
               </Link>
             );
@@ -144,7 +144,7 @@ function Sidebar({ isMobile, open, onClose }) {
             <div style={{
               fontFamily: fonts.condensed, fontSize: 9,
               color: colors.textOnDarkMuted, letterSpacing: 0.8, marginTop: 2,
-            }}>BIG LEAGUE WIFFLE BALL</div>
+            }}>CREATED BY SAVANT MEDIA</div>
           </div>
         </Link>
 
@@ -155,14 +155,14 @@ function Sidebar({ isMobile, open, onClose }) {
             return (
               <Link key={n.path} to={n.path} style={{
                 textDecoration: 'none', display: 'flex', alignItems: 'center',
-                gap: 10, padding: '10px 12px', borderRadius: radius.base,
+                gap: 12, padding: '12px 14px', borderRadius: radius.base,
                 background: active ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
                 borderLeft: active ? `3px solid ${colors.red}` : '3px solid transparent',
                 color: active ? '#fff' : colors.textOnDarkMuted,
-                fontFamily: fonts.body, fontSize: 13,
+                fontFamily: fonts.body, fontSize: 16,
                 fontWeight: active ? 700 : 500, transition: 'all 0.15s',
               }}>
-                <span style={{ fontSize: 16, width: 20, textAlign: 'center', opacity: active ? 1 : 0.6 }}>{n.icon}</span>
+                <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: active ? 1 : 0.6 }}>{n.icon}</span>
                 {n.label}
               </Link>
             );

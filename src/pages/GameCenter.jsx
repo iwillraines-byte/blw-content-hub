@@ -95,12 +95,23 @@ export default function GameCenter() {
 
   const [battingSort, setBattingSort] = useState({ key: 'ops_plus', dir: 'desc' });
   const [pitchingSort, setPitchingSort] = useState({ key: 'fip', dir: 'asc' });
-  const [rankingsSort, setRankingsSort] = useState({ key: 'currentRank', dir: 'asc' });
+  const [rankingsSort, setRankingsSort] = useState({ key: 'compositePoints', dir: 'desc' });
   const [playersSort, setPlayersSort] = useState({ key: 'team', dir: 'asc' });
 
   useEffect(() => {
-    fetchAllData().then(({ batting: b, pitching: p, rankings: r }) => {
-      setBatting(b); setPitching(p); setRankings(r); setLoading(false);
+    Promise.all([fetchAllData(), fetchAllRosters()]).then(([{ batting: b, pitching: p, rankings: r }, allRosters]) => {
+      // Build playerId → team lookup from rosters so rankings can display team logos
+      const idToTeam = new Map();
+      const nameToTeam = new Map();
+      for (const rp of allRosters) {
+        if (rp.playerId) idToTeam.set(rp.playerId, rp.team);
+        if (rp.name) nameToTeam.set(rp.name.toLowerCase(), rp.team);
+      }
+      const rWithTeam = r.map(p => ({
+        ...p,
+        team: idToTeam.get(p.playerId) || nameToTeam.get((p.name || '').toLowerCase()) || null,
+      }));
+      setBatting(b); setPitching(p); setRankings(rWithTeam); setLoading(false);
     });
   }, []);
 
@@ -152,7 +163,7 @@ export default function GameCenter() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title="GAME CENTER" subtitle="Stats, rankings, and standings from Grand Slam Systems" />
+      <PageHeader title="PROWIFFLE STATS" subtitle="Stats, rankings, and standings from Grand Slam Systems" />
 
       {/* API Status */}
       <Card style={{
@@ -308,10 +319,23 @@ export default function GameCenter() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRankings.slice(0, 50).map((p, i) => (
+                {filteredRankings.slice(0, 50).map((p, i) => {
+                  const team = p.team ? getTeam(p.team) : null;
+                  return (
                   <tr key={p.playerId} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
                     <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{p.currentRank}</td>
-                    <td style={{ ...tdStyle(false), textAlign: 'left', fontWeight: 700 }}>{p.name}</td>
+                    <td style={{ ...tdStyle(false), textAlign: 'left', fontWeight: 700 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {team ? <TeamLogo teamId={team.id} size={22} rounded="square" /> : <span style={{ width: 22, display: 'inline-block' }} />}
+                        {team ? (
+                          <Link to={`/teams/${team.slug}/players/${slugify((p.name || '').split(' ').pop())}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
+                            {p.name}
+                          </Link>
+                        ) : (
+                          <span>{p.name}</span>
+                        )}
+                      </div>
+                    </td>
                     <td style={{
                       ...tdStyle(false), fontWeight: 700, fontSize: 12,
                       color: p.rankChange > 0 ? '#16A34A' : p.rankChange < 0 ? '#DC2626' : colors.textMuted,
@@ -322,7 +346,8 @@ export default function GameCenter() {
                     <td style={tdStyle(false)}>{p.averagePoints.toFixed(0)}</td>
                     <td style={tdStyle(false)}>{p.compositePoints.toFixed(0)}</td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filteredRankings.length === 0 && (
                   <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{rankingsSearch}"</td></tr>
                 )}
@@ -453,11 +478,17 @@ export default function GameCenter() {
                   <SortHeader label="L" sortKey={null} currentSort={{}} setSort={() => {}} />
                   <SortHeader label="PCT" sortKey={null} currentSort={{}} setSort={() => {}} highlight />
                   <SortHeader label="DIFF" sortKey={null} currentSort={{}} setSort={() => {}} />
+                  <SortHeader label="AVG COMP" sortKey={null} currentSort={{}} setSort={() => {}} />
                 </tr>
               </thead>
               <tbody>
                 {TEAMS.map((t, i) => {
                   const [w, l] = t.record.split('-');
+                  // Average composite = mean compositePoints across ranked players on this team
+                  const teamRanked = rankings.filter(p => p.team === t.id && typeof p.compositePoints === 'number');
+                  const avgComp = teamRanked.length > 0
+                    ? teamRanked.reduce((sum, p) => sum + p.compositePoints, 0) / teamRanked.length
+                    : null;
                   return (
                     <tr key={t.id} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
                       <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{t.rank}</td>
@@ -465,10 +496,7 @@ export default function GameCenter() {
                         <Link to={`/teams/${t.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <TeamLogo teamId={t.id} size={32} rounded="rounded" />
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{t.name}</div>
-                              {t.owner && <div style={{ fontSize: 10, color: colors.textMuted }}>{t.owner}</div>}
-                            </div>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>{t.name}</div>
                           </div>
                         </Link>
                       </td>
@@ -479,6 +507,9 @@ export default function GameCenter() {
                         ...tdStyle(false), fontWeight: 700,
                         color: t.diff.startsWith('+') && t.diff !== '0' ? '#16A34A' : t.diff === '0' ? colors.textMuted : '#DC2626',
                       }}>{t.diff}</td>
+                      <td style={{ ...tdStyle(false), fontWeight: 700, color: colors.textSecondary }}>
+                        {avgComp != null ? avgComp.toFixed(0) : <span style={{ color: colors.textMuted }}>—</span>}
+                      </td>
                     </tr>
                   );
                 })}

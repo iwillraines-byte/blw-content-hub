@@ -3,23 +3,9 @@ import { TEAMS, TEMPLATES, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, StatusBadge, PriorityDot, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 
-const INITIAL_REQUESTS = [
-  { id: 1, team: 'DAL', template: 'gameday', status: 'pending', requester: 'Jake M. (Athlete)', date: 'Apr 14', priority: 'high', note: 'Need this for the Lone Star Showdown at RoughRiders park' },
-  { id: 2, team: 'MIA', template: 'player-stat', status: 'in-progress', requester: 'Sarah K. (Team Mgr)', date: 'Apr 13', priority: 'medium', note: 'Tommy Hernandez batting .435 — needs a stat spotlight' },
-  { id: 3, team: 'AZS', template: 'highlight-video', status: 'approved', requester: 'Mike R. (Admin)', date: 'Apr 12', priority: 'low', note: 'Top 5 plays from Scottsdale tournament' },
-  { id: 4, team: 'NYG', template: 'ranking-change', status: 'pending', requester: 'Alex T. (Athlete)', date: 'Apr 14', priority: 'high', note: 'Climbed to 4th — Gary Vee wants this posted ASAP' },
-  { id: 5, team: 'CHI', template: 'score', status: 'revision', requester: 'Auto (Admin)', date: 'Apr 13', priority: 'medium', note: 'Score graphic had wrong final — needs correction' },
-  { id: 6, team: 'LAN', template: 'hype', status: 'completed', requester: 'Logan R. (Admin)', date: 'Apr 11', priority: 'low', note: '17-1 celebration post — Costner retweeted' },
-  { id: 7, team: 'PHI', template: 'pitching-leaders', status: 'pending', requester: 'David Adelman (Owner)', date: 'Apr 14', priority: 'high', note: 'Josh Wheeler leading — need graphic' },
-];
-
-const INITIAL_COMMENTS = [
-  { id: 1, requestId: 1, author: 'Jake M.', role: 'athlete', text: 'Can we make it 1080x1350 for IG feed?', time: 'Apr 14, 2:30 PM' },
-  { id: 2, requestId: 1, author: 'Will R.', role: 'admin', text: 'Got it — will generate portrait format.', time: 'Apr 14, 3:15 PM' },
-  { id: 3, requestId: 2, author: 'Sarah K.', role: 'team', text: 'His OPS+ is 236 — make sure that\'s front and center.', time: 'Apr 13, 11:00 AM' },
-  { id: 4, requestId: 4, author: 'Alex T.', role: 'athlete', text: 'GaryVee wants it on his story too — need 1080x1920 version', time: 'Apr 14, 4:00 PM' },
-  { id: 5, requestId: 5, author: 'Will R.', role: 'admin', text: 'Fixed — final was 3-2 not 3-1. Regenerating now.', time: 'Apr 13, 5:45 PM' },
-];
+// Requests and comments start empty — real requests are created via the UI.
+const INITIAL_REQUESTS = [];
+const INITIAL_COMMENTS = [];
 
 const roleColors = {
   admin: { bg: '#DBEAFE', text: '#1E40AF' },
@@ -104,6 +90,19 @@ export default function Requests({ teamFilter }) {
           </div>
           <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Notes..." style={{ ...inputStyle, minHeight: 60, resize: 'vertical', marginBottom: 12 }} />
           <RedButton onClick={submit} disabled={!newTeam || !newTemplate}>Submit Request</RedButton>
+        </Card>
+      )}
+
+      {filtered.length === 0 && !showNew && (
+        <Card style={{ padding: 36, textAlign: 'center' }}>
+          <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.3 }}>☰</div>
+          <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 1, marginBottom: 4 }}>NO OPEN REQUESTS</div>
+          <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14 }}>
+            {teamFilter === 'ALL'
+              ? 'When athletes, owners, or team managers ask for content, their requests land here.'
+              : `No active requests for this team.`}
+          </div>
+          <OutlineButton onClick={() => setShowNew(true)}>+ New Request</OutlineButton>
         </Card>
       )}
 
