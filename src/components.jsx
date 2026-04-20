@@ -162,9 +162,9 @@ export const StatusBadge = ({ status }) => {
   return (
     <span style={{
       background: s.bg, color: s.c,
-      padding: '3px 10px', borderRadius: radius.full,
-      fontSize: 10, fontFamily: fonts.condensed,
-      fontWeight: 700, letterSpacing: 0.3,
+      padding: '5px 14px', borderRadius: radius.full,
+      fontSize: 12, fontFamily: fonts.condensed,
+      fontWeight: 700, letterSpacing: 0.5,
       textTransform: 'uppercase', whiteSpace: 'nowrap'
     }}>{s.l}</span>
   );
@@ -172,7 +172,7 @@ export const StatusBadge = ({ status }) => {
 
 export const PriorityDot = ({ p }) => (
   <span style={{
-    display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+    display: 'inline-block', width: 12, height: 12, borderRadius: '50%',
     background: { high: '#EF4444', medium: '#F59E0B', low: '#22C55E' }[p] || '#9CA3AF',
     marginRight: 4
   }} />

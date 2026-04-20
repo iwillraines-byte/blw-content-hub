@@ -83,7 +83,7 @@ export default function Requests() {
 
   const btnStyle = (bg) => ({
     background: bg, color: '#fff', border: 'none', borderRadius: radius.sm,
-    padding: '5px 12px', fontFamily: fonts.body, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+    padding: '7px 16px', fontFamily: fonts.body, fontSize: 13, fontWeight: 700, cursor: 'pointer',
   });
 
   return (
@@ -113,8 +113,8 @@ export default function Requests() {
                   background: active ? colors.red : colors.white,
                   color: active ? '#fff' : colors.textSecondary,
                   border: `1px solid ${active ? colors.red : colors.border}`,
-                  borderRadius: radius.full, padding: '4px 12px',
-                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  borderRadius: radius.full, padding: '7px 16px',
+                  fontFamily: fonts.condensed, fontSize: 13, fontWeight: 700,
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}
               >{chip.label}</button>
@@ -179,23 +179,23 @@ export default function Requests() {
 
         return (
           <Card key={r.id}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <PriorityDot p={r.priority} />
-              <TeamChip teamId={r.team} small withLogo />
-              <span style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{tp?.icon} {tp?.name || r.template}</span>
+              <TeamChip teamId={r.team} withLogo />
+              <span style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>{tp?.icon} {tp?.name || r.template}</span>
               <div style={{ flex: 1 }} />
               <StatusBadge status={r.status} />
             </div>
 
-            <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 8, paddingLeft: 16 }}>{r.note}</div>
+            <div style={{ fontSize: 14, color: colors.textSecondary, marginBottom: 10, paddingLeft: 20, lineHeight: 1.5 }}>{r.note}</div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 16 }}>
-              <span style={{ fontSize: 11, color: colors.textMuted }}>{r.requester} · {r.date}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 20, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: colors.textMuted }}>{r.requester} · {r.date}</span>
               <div style={{ flex: 1 }} />
 
               <button onClick={() => toggleComments(r.id)} style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
-                fontSize: 11, fontWeight: 600, color: colors.textSecondary,
+                fontSize: 12, fontWeight: 600, color: colors.textSecondary,
                 fontFamily: fonts.body, padding: '4px 8px',
               }}>
                 {reqComments.length} comment{reqComments.length !== 1 ? 's' : ''}
@@ -227,16 +227,16 @@ export default function Requests() {
                   const rc = roleColors[c.role] || roleColors.admin;
                   return (
                     <div key={c.id} style={{ marginBottom: 10, paddingLeft: 12, borderLeft: `2px solid ${rc.bg}` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: colors.text }}>{c.author}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{c.author}</span>
                         <span style={{
-                          fontSize: 9, fontFamily: fonts.condensed, fontWeight: 600,
-                          padding: '1px 6px', borderRadius: radius.sm,
-                          background: rc.bg, color: rc.text, textTransform: 'uppercase',
+                          fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
+                          padding: '3px 10px', borderRadius: radius.sm,
+                          background: rc.bg, color: rc.text, textTransform: 'uppercase', letterSpacing: 0.4,
                         }}>{c.role}</span>
-                        <span style={{ fontSize: 10, color: colors.textMuted }}>{c.time}</span>
+                        <span style={{ fontSize: 11, color: colors.textMuted }}>{c.time}</span>
                       </div>
-                      <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.5 }}>{c.text}</div>
+                      <div style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 1.5 }}>{c.text}</div>
                     </div>
                   );
                 })}
