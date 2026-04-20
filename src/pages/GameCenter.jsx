@@ -197,7 +197,7 @@ export default function GameCenter() {
       {!loading && tab === 'batting' && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <SectionHeading style={{ margin: 0 }}>BATTING LEADERS</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>Batting leaders</SectionHeading>
             <input
               type="text"
               value={battingSearch}
@@ -246,7 +246,7 @@ export default function GameCenter() {
       {!loading && tab === 'pitching' && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <SectionHeading style={{ margin: 0 }}>PITCHING LEADERS</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>Pitching leaders</SectionHeading>
             <input
               type="text"
               value={pitchingSearch}
@@ -297,7 +297,7 @@ export default function GameCenter() {
       {!loading && tab === 'rankings' && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <SectionHeading style={{ margin: 0 }}>PLAYER RANKINGS</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>Player rankings</SectionHeading>
             <input
               type="text"
               value={rankingsSearch}
@@ -362,7 +362,7 @@ export default function GameCenter() {
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <div>
-              <SectionHeading style={{ margin: 0 }}>ALL PLAYERS</SectionHeading>
+              <SectionHeading style={{ margin: 0 }}>All players</SectionHeading>
               <div style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
                 {players.length} total · sourced from API, uploaded media, and manual entries
               </div>
@@ -466,7 +466,7 @@ export default function GameCenter() {
       {!loading && tab === 'standings' && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}` }}>
-            <SectionHeading style={{ margin: 0 }}>2025-26 BLW STANDINGS</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>2025-26 BLW standings</SectionHeading>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>

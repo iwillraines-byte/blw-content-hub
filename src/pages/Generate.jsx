@@ -377,7 +377,7 @@ export default function Generate() {
   const customFieldConfig = getFieldConfig(customType, customPlatform);
   const filteredOverlays = overlays.filter(o => o.type === customType && (!o.team || o.team === customTeam));
 
-  const labelStyle = { fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontWeight: 600, textTransform: 'uppercase' };
+  const labelStyle = { fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 };
 
   return (
     <div>
@@ -698,7 +698,7 @@ export default function Generate() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: colors.white, borderRadius: radius.lg, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <SectionHeading style={{ margin: 0 }}>UPLOAD OVERLAY</SectionHeading>
+              <SectionHeading style={{ margin: 0 }}>Upload overlay</SectionHeading>
               <button onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadPreview(null); }} style={{
                 background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: colors.textMuted,
               }}>✕</button>
@@ -761,7 +761,7 @@ export default function Generate() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: colors.white, borderRadius: radius.lg, padding: 24, maxWidth: 420, width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <SectionHeading style={{ margin: 0 }}>UPLOAD EFFECT</SectionHeading>
+              <SectionHeading style={{ margin: 0 }}>Upload effect</SectionHeading>
               <button onClick={() => { setShowEffectUpload(false); setEffectFile(null); setEffectName(''); }} style={{
                 background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: colors.textMuted,
               }}>✕</button>

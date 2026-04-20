@@ -89,7 +89,7 @@ export default function ContentStudio() {
         {/* LEFT — Content Suggestions */}
         <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card>
-            <SectionHeading>CONTENT IDEAS</SectionHeading>
+            <SectionHeading>Content ideas</SectionHeading>
             <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 14px', fontFamily: fonts.condensed }}>
               Auto-generated from prowiffleball.com stats — click to create
             </p>
@@ -132,7 +132,7 @@ export default function ContentStudio() {
         <div style={{ flex: '0 1 340px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Request Queue */}
           <Card>
-            <SectionHeading>REQUEST QUEUE</SectionHeading>
+            <SectionHeading>Request queue</SectionHeading>
             <div style={{ display: 'flex', gap: 8 }}>
               {[
                 { label: 'Pending', count: pendingCount, color: '#F59E0B', status: 'pending' },
@@ -163,7 +163,7 @@ export default function ContentStudio() {
 
           {/* Data Status */}
           <Card>
-            <SectionHeading>DATA STATUS</SectionHeading>
+            <SectionHeading>Data status</SectionHeading>
             <div style={{
               padding: 12, borderRadius: radius.base,
               background: API_CONFIG.isLive ? colors.successBg : colors.warningBg,
@@ -185,7 +185,7 @@ export default function ContentStudio() {
           {/* Compact Standings — row clicks go to team page; hover reveals "Create graphic" action */}
           <Card>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <SectionHeading style={{ margin: 0 }}>STANDINGS</SectionHeading>
+              <SectionHeading style={{ margin: 0 }}>Standings</SectionHeading>
               <Link to="/game-center" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>View Full →</Link>
             </div>
             {TEAMS.map(t => (
@@ -210,20 +210,20 @@ function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
   return (
     <Link to={to} style={{ textDecoration: 'none' }}>
       <Card style={{
-        padding: 16, cursor: 'pointer',
+        padding: 20, cursor: 'pointer',
         borderLeft: `3px solid ${warn ? colors.warning : colors.red}`,
         display: 'flex', flexDirection: 'column', gap: 4,
         height: '100%', boxSizing: 'border-box',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
           <span style={{ fontSize: 18 }}>{icon}</span>
-          <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</span>
+          <span style={{ fontFamily: fonts.body, fontSize: 13, fontWeight: 600, color: colors.textSecondary }}>{label}</span>
         </div>
-        <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 0.5, lineHeight: 1.1 }}>
+        <div style={{ fontFamily: fonts.body, fontSize: 18, fontWeight: 700, color: colors.text, lineHeight: 1.2 }}>
           {primary}
         </div>
-        <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>{secondary}</div>
-        <div style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.red }}>
+        <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 6 }}>{secondary}</div>
+        <div style={{ fontFamily: fonts.body, fontSize: 12, fontWeight: 700, color: colors.red }}>
           {cta}
         </div>
       </Card>

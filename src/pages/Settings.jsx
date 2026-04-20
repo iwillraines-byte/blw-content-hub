@@ -36,7 +36,7 @@ export default function Settings() {
       <PageHeader title="SETTINGS" subtitle="Team colors, integrations, and configuration" />
 
       <Card>
-        <SectionHeading>API STATUS</SectionHeading>
+        <SectionHeading>API status</SectionHeading>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, padding: 14,
           background: API_CONFIG.isLive ? colors.successBg : colors.warningBg,
@@ -59,7 +59,7 @@ export default function Settings() {
 
       {/* Google Drive Connection */}
       <Card>
-        <SectionHeading>GOOGLE DRIVE</SectionHeading>
+        <SectionHeading>Google Drive</SectionHeading>
         <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12, lineHeight: 1.6 }}>
           Connect Google Drive to browse and import assets from publicly-shared folders.
           Your API key is stored locally in your browser — it never leaves this device.
@@ -138,7 +138,7 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <SectionHeading>TEAM COLORS (FROM OFFICIAL LOGOS)</SectionHeading>
+        <SectionHeading>Team colors</SectionHeading>
         {TEAMS.map(t => (
           <div key={t.id} style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
@@ -158,7 +158,7 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <SectionHeading>OTHER INTEGRATIONS</SectionHeading>
+        <SectionHeading>Other integrations</SectionHeading>
         {[
           { name: 'prowiffleball.com API', desc: 'Player & team stats', status: API_CONFIG.isLive ? 'Connected' : 'Not configured', color: '#DD3C3C' },
           { name: 'Metricool', desc: 'Social media scheduling & analytics', status: 'Not connected', color: '#6366F1' },
@@ -180,7 +180,7 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <SectionHeading>ABOUT</SectionHeading>
+        <SectionHeading>About</SectionHeading>
         <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
           <div style={{ marginBottom: 6 }}><strong style={{ color: colors.red }}>BLW Content Hub</strong> — Version 2.0</div>
           <div>Content management and graphic generation tool for Big League Wiffle Ball.</div>

@@ -7,10 +7,10 @@ import { colors, fonts, radius, shadows } from './theme';
 export const Card = ({ children, style, onClick, ...p }) => (
   <div onClick={onClick} style={{
     background: colors.white,
-    border: `1px solid ${colors.border}`,
-    borderRadius: radius.base,
-    padding: 18,
-    boxShadow: shadows.sm,
+    border: `1px solid ${colors.borderLight}`,
+    borderRadius: radius.lg,
+    padding: 22,
+    boxShadow: '0 1px 3px rgba(17, 24, 39, 0.04), 0 1px 2px rgba(17, 24, 39, 0.03)',
     cursor: onClick ? 'pointer' : 'default',
     transition: 'box-shadow 0.15s, border-color 0.15s',
     ...style
@@ -43,27 +43,29 @@ export const PageHeader = ({ title, subtitle, children }) => (
   </div>
 );
 
+// SectionHeading — sentence-case semibold sans-serif. Display font / ALL CAPS
+// is reserved for page H1s (PageHeader) only.
 export const SectionHeading = ({ children, style }) => (
   <h2 style={{
-    fontFamily: fonts.heading,
-    fontSize: 22,
-    fontWeight: 400,
+    fontFamily: fonts.body,
+    fontSize: 17,
+    fontWeight: 600,
     color: colors.text,
     margin: '0 0 12px',
-    letterSpacing: 1,
+    letterSpacing: 0,
     ...style
   }}>{children}</h2>
 );
 
+// Label — form-field label. Semibold secondary text, sentence-case.
 export const Label = ({ children, style }) => (
   <div style={{
-    fontFamily: fonts.condensed,
+    fontFamily: fonts.body,
     fontSize: 12,
     fontWeight: 600,
     color: colors.textSecondary,
-    marginBottom: 10,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    marginBottom: 8,
+    letterSpacing: 0,
     ...style
   }}>{children}</div>
 );

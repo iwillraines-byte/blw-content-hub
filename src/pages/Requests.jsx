@@ -125,24 +125,24 @@ export default function Requests() {
 
       {showNew && (
         <Card style={{ border: `1px solid ${colors.redBorder}` }}>
-          <SectionHeading>NEW REQUEST</SectionHeading>
+          <SectionHeading>New request</SectionHeading>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
             <div>
-              <label style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontWeight: 600, textTransform: 'uppercase' }}>Team</label>
+              <label style={{ fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 }}>Team</label>
               <select value={newTeam} onChange={e => setNewTeam(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
                 <option value="">Select...</option>
                 {TEAMS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontWeight: 600, textTransform: 'uppercase' }}>Type</label>
+              <label style={{ fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 }}>Type</label>
               <select value={newTemplate} onChange={e => setNewTemplate(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
                 <option value="">Select...</option>
                 {TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontWeight: 600, textTransform: 'uppercase' }}>Priority</label>
+              <label style={{ fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 }}>Priority</label>
               <select value={newPriority} onChange={e => setNewPriority(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
@@ -158,8 +158,8 @@ export default function Requests() {
       {filtered.length === 0 && !showNew && (
         <Card style={{ padding: 36, textAlign: 'center' }}>
           <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.3 }}>☰</div>
-          <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 1, marginBottom: 4 }}>
-            {statusFilter === 'ALL' ? 'NO OPEN REQUESTS' : `NO ${(STATUS_LABELS[statusFilter] || statusFilter).toUpperCase()} REQUESTS`}
+          <div style={{ fontFamily: fonts.body, fontSize: 18, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+            {statusFilter === 'ALL' ? 'No open requests' : `No ${(STATUS_LABELS[statusFilter] || statusFilter).toLowerCase()} requests`}
           </div>
           <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14 }}>
             {statusFilter === 'ALL'

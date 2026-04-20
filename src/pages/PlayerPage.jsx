@@ -159,7 +159,7 @@ export default function PlayerPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
         {player.batting && (
           <Card>
-            <SectionHeading>BATTING</SectionHeading>
+            <SectionHeading>Batting</SectionHeading>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
               {[
                 { label: 'OPS+', value: player.batting.ops_plus, hi: true },
@@ -187,7 +187,7 @@ export default function PlayerPage() {
         )}
         {player.pitching && (
           <Card>
-            <SectionHeading>PITCHING</SectionHeading>
+            <SectionHeading>Pitching</SectionHeading>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
               {[
                 { label: 'FIP', value: typeof player.pitching.fip === 'number' ? player.pitching.fip.toFixed(2) : player.pitching.fip, hi: true },
@@ -215,7 +215,7 @@ export default function PlayerPage() {
         )}
         {player.ranking && (
           <Card>
-            <SectionHeading>RANKING</SectionHeading>
+            <SectionHeading>Ranking</SectionHeading>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div style={{ padding: '10px 8px', textAlign: 'center', background: colors.bg, borderRadius: radius.sm }}>
                 <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 1 }}>CURRENT</div>
@@ -244,7 +244,7 @@ export default function PlayerPage() {
       {/* Media Gallery */}
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <SectionHeading style={{ margin: 0 }}>MEDIA</SectionHeading>
+          <SectionHeading style={{ margin: 0 }}>Media</SectionHeading>
           <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted }}>
             {media.length} ASSET{media.length !== 1 ? 'S' : ''}
           </span>

@@ -649,8 +649,8 @@ export default function Files() {
           background: dragging ? colors.redLight : colors.white, transition: 'all 0.2s',
         }}>
           <div style={{ fontSize: 32, marginBottom: 6, opacity: 0.4 }}>📂</div>
-          <div style={{ fontFamily: fonts.heading, fontSize: 18, color: colors.text, letterSpacing: 1 }}>
-            {dragging ? 'DROP FILES HERE' : 'DRAG & DROP FILES'}
+          <div style={{ fontFamily: fonts.body, fontSize: 16, fontWeight: 700, color: colors.text }}>
+            {dragging ? 'Drop files here' : 'Drag & drop files'}
           </div>
           <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
             or click to browse · Upload with any filename — tag and rename below
@@ -664,7 +664,7 @@ export default function Files() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
             <div>
               <SectionHeading style={{ margin: 0, color: '#92400E' }}>
-                TAG & RENAME ({untagged.length} FILE{untagged.length !== 1 ? 'S' : ''})
+                Tag & rename ({untagged.length} file{untagged.length !== 1 ? 's' : ''})
               </SectionHeading>
               <div style={{ fontSize: 11, color: '#92400E', fontFamily: fonts.condensed, marginTop: 2 }}>
                 Filename heuristics auto-fill rows on load · click ✨ to AI-tag one · or use "AI-tag all" below
@@ -738,7 +738,7 @@ export default function Files() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
           <div>
-            <SectionHeading style={{ margin: 0 }}>GOOGLE DRIVE FOLDERS</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>Google Drive folders</SectionHeading>
             <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
               Browse and import from publicly-shared Drive folders. Files you import become part of your local library.
             </div>

@@ -276,7 +276,7 @@ export default function TeamPage() {
       {/* Roster */}
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
-          <SectionHeading style={{ margin: 0 }}>ROSTER</SectionHeading>
+          <SectionHeading style={{ margin: 0 }}>Roster</SectionHeading>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted }}>
               {roster.length} PLAYER{roster.length !== 1 ? 'S' : ''}
@@ -401,7 +401,7 @@ export default function TeamPage() {
       {/* Recently Uploaded Media */}
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <SectionHeading style={{ margin: 0 }}>RECENT MEDIA</SectionHeading>
+          <SectionHeading style={{ margin: 0 }}>Recent media</SectionHeading>
           <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>
             Go to Files →
           </Link>
