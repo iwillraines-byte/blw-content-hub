@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { TEAMS, API_CONFIG } from './data';
 import { colors, fonts, radius, sidebar as sidebarConfig } from './theme';
 import ContentStudio from './pages/ContentStudio';
@@ -15,7 +15,7 @@ import { TeamLogo } from './components';
 const MOBILE_BREAKPOINT = 768;
 
 const navItems = [
-  { path: "/studio", label: "Content Studio", icon: "⚡" },
+  { path: "/dashboard", label: "Dashboard", icon: "⚡" },
   { path: "/generate", label: "Generate", icon: "✦" },
   { path: "/requests", label: "Requests", icon: "☰" },
   { path: "/game-center", label: "ProWiffle Stats", icon: "▣" },
@@ -24,13 +24,22 @@ const navItems = [
 ];
 
 const pageTitles = {
-  '/studio': 'Content Studio',
+  '/dashboard': 'Dashboard',
   '/generate': 'Generate',
   '/requests': 'Requests',
   '/game-center': 'ProWiffle Stats',
   '/files': 'Files',
   '/settings': 'Settings',
 };
+
+// Top-bar team selector navigates — pick a team → go to that team's page,
+// "All Teams" → go to Dashboard. The current value is derived from the URL.
+function useCurrentTeamFromUrl() {
+  const location = useLocation();
+  const m = location.pathname.match(/^\/teams\/([^/]+)/);
+  if (!m) return null;
+  return TEAMS.find(t => t.slug === m[1]) || null;
+}
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < MOBILE_BREAKPOINT);
@@ -127,31 +136,25 @@ function Sidebar({ isMobile, open, onClose }) {
         zIndex: isMobile ? 100 : 50,
         boxShadow: isMobile ? '4px 0 24px rgba(0,0,0,0.3)' : 'none',
       }}>
-        {/* Logo */}
-        <Link to="/studio" style={{ textDecoration: 'none', padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Logo — compact single line */}
+        <Link to="/dashboard" style={{ textDecoration: 'none', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 36, height: 36, borderRadius: radius.base,
+            width: 32, height: 32, borderRadius: radius.base,
             background: colors.red,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, fontFamily: fonts.heading, color: '#fff',
+            fontSize: 16, fontFamily: fonts.heading, color: '#fff',
             letterSpacing: 1
           }}>B</div>
-          <div>
-            <div style={{
-              fontFamily: fonts.heading, fontSize: 20, color: '#fff',
-              letterSpacing: 2, lineHeight: 1,
-            }}>BLW CONTENT HUB</div>
-            <div style={{
-              fontFamily: fonts.condensed, fontSize: 9,
-              color: colors.textOnDarkMuted, letterSpacing: 0.8, marginTop: 2,
-            }}>CREATED BY SAVANT MEDIA</div>
-          </div>
+          <div style={{
+            fontFamily: fonts.heading, fontSize: 18, color: '#fff',
+            letterSpacing: 1.5, lineHeight: 1,
+          }}>BLW Content Hub</div>
         </Link>
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {navItems.map(n => {
-            const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/studio');
+            const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/dashboard');
             return (
               <Link key={n.path} to={n.path} style={{
                 textDecoration: 'none', display: 'flex', alignItems: 'center',
@@ -176,9 +179,10 @@ function Sidebar({ isMobile, open, onClose }) {
         <div style={{
           padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,0.06)',
           fontFamily: fonts.condensed, fontSize: 10,
-          color: 'rgba(255,255,255,0.25)', textAlign: 'center',
+          color: 'rgba(255,255,255,0.25)', textAlign: 'center', lineHeight: 1.5,
         }}>
-          BLW Content Hub v2.0 · prowiffleball.com
+          <div>Created by Savant Media</div>
+          <div style={{ opacity: 0.7 }}>v2.0 · prowiffleball.com</div>
         </div>
       </aside>
     </>
@@ -200,18 +204,33 @@ function getPageTitle(pathname) {
   return 'BLW Content Hub';
 }
 
-function TopBar({ teamFilter, setTeamFilter, isMobile, onMenuToggle }) {
+function TopBar({ isMobile, onMenuToggle }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const currentTeam = useCurrentTeamFromUrl();
   const title = getPageTitle(location.pathname);
+
+  // Selecting a team navigates to that team's page.
+  // "ALL" navigates to Dashboard — the app-wide landing view.
+  const handleTeamSelect = (value) => {
+    if (value === 'ALL') {
+      navigate('/dashboard');
+    } else {
+      const team = TEAMS.find(t => t.id === value);
+      if (team) navigate(`/teams/${team.slug}`);
+    }
+  };
 
   return (
     <header style={{
       background: colors.white,
       borderBottom: `1px solid ${colors.border}`,
+      borderLeft: currentTeam ? `4px solid ${currentTeam.color}` : '4px solid transparent',
       padding: isMobile ? '10px 14px' : '12px 24px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       position: 'sticky', top: 0, zIndex: 40,
       gap: 10,
+      transition: 'border-left-color 0.2s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Hamburger menu on mobile */}
@@ -251,19 +270,23 @@ function TopBar({ teamFilter, setTeamFilter, isMobile, onMenuToggle }) {
           )}
         </div>
 
-        {/* Team filter */}
+        {/* Team navigator — picking a team takes you to that team's page */}
         <select
-          value={teamFilter}
-          onChange={e => setTeamFilter(e.target.value)}
+          value={currentTeam?.id || 'ALL'}
+          onChange={e => handleTeamSelect(e.target.value)}
+          title="Jump to a team page"
           style={{
-            background: colors.white, color: colors.text,
-            border: `1px solid ${colors.border}`, borderRadius: radius.base,
+            background: currentTeam ? `${currentTeam.color}12` : colors.white,
+            color: currentTeam ? currentTeam.color : colors.text,
+            border: `1px solid ${currentTeam ? currentTeam.color + '40' : colors.border}`,
+            borderRadius: radius.base,
             padding: '6px 10px', fontFamily: fonts.body,
-            fontSize: 12, fontWeight: 600, cursor: 'pointer', outline: 'none',
-            maxWidth: isMobile ? 110 : 'none',
+            fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none',
+            maxWidth: isMobile ? 130 : 'none',
+            transition: 'all 0.15s',
           }}
         >
-          <option value="ALL">{isMobile ? 'All (10)' : 'All Teams (10)'}</option>
+          <option value="ALL">{isMobile ? 'Jump to…' : 'Jump to team…'}</option>
           {TEAMS.map(t => <option key={t.id} value={t.id}>{isMobile ? t.id : `${t.id} — ${t.name}`}</option>)}
         </select>
 
@@ -291,7 +314,6 @@ function TopBar({ teamFilter, setTeamFilter, isMobile, onMenuToggle }) {
 }
 
 export default function App() {
-  const [teamFilter, setTeamFilter] = useState('ALL');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
 
@@ -304,8 +326,6 @@ export default function App() {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar
-          teamFilter={teamFilter}
-          setTeamFilter={setTeamFilter}
           isMobile={isMobile}
           onMenuToggle={() => setSidebarOpen(prev => !prev)}
         />
@@ -318,16 +338,17 @@ export default function App() {
           boxSizing: 'border-box',
         }}>
           <Routes>
-            <Route path="/" element={<Navigate to="/studio" replace />} />
-            <Route path="/studio" element={<ContentStudio teamFilter={teamFilter} setTeamFilter={setTeamFilter} />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<ContentStudio />} />
             <Route path="/generate" element={<Generate />} />
-            <Route path="/requests" element={<Requests teamFilter={teamFilter} />} />
+            <Route path="/requests" element={<Requests />} />
             <Route path="/game-center" element={<GameCenter />} />
-            <Route path="/files" element={<Files teamFilter={teamFilter} />} />
+            <Route path="/files" element={<Files />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/teams/:slug" element={<TeamPage />} />
             <Route path="/teams/:slug/players/:lastName" element={<PlayerPage />} />
-            <Route path="/dashboard" element={<Navigate to="/studio" replace />} />
+            {/* Backward-compatible redirects */}
+            <Route path="/studio" element={<Navigate to="/dashboard" replace />} />
             <Route path="/stats" element={<Navigate to="/game-center" replace />} />
             <Route path="/assets" element={<Navigate to="/files" replace />} />
           </Routes>

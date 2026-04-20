@@ -14,7 +14,7 @@ const roleColors = {
   owner: { bg: '#EDE9FE', text: '#5B21B6' },
 };
 
-export default function Requests({ teamFilter }) {
+export default function Requests() {
   const [requests, setRequests] = useState(INITIAL_REQUESTS);
   const [comments, setComments] = useState(INITIAL_COMMENTS);
   const [showNew, setShowNew] = useState(false);
@@ -25,7 +25,7 @@ export default function Requests({ teamFilter }) {
   const [newPriority, setNewPriority] = useState('medium');
   const [newNote, setNewNote] = useState('');
 
-  const filtered = requests.filter(r => teamFilter === 'ALL' || r.team === teamFilter);
+  const filtered = requests;
   const updateStatus = (id, status) => setRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r));
   const toggleComments = (id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -98,9 +98,7 @@ export default function Requests({ teamFilter }) {
           <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.3 }}>☰</div>
           <div style={{ fontFamily: fonts.heading, fontSize: 20, color: colors.text, letterSpacing: 1, marginBottom: 4 }}>NO OPEN REQUESTS</div>
           <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14 }}>
-            {teamFilter === 'ALL'
-              ? 'When athletes, owners, or team managers ask for content, their requests land here.'
-              : `No active requests for this team.`}
+            When athletes, owners, or team managers ask for content, their requests land here.
           </div>
           <OutlineButton onClick={() => setShowNew(true)}>+ New Request</OutlineButton>
         </Card>

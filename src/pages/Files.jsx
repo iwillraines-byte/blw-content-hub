@@ -449,7 +449,7 @@ function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRenam
   );
 }
 
-export default function Files({ teamFilter }) {
+export default function Files() {
   const [search, setSearch] = useState('');
   const [storedMedia, setStoredMedia] = useState([]);
   const [thumbUrls, setThumbUrls] = useState({});
@@ -503,7 +503,6 @@ export default function Files({ teamFilter }) {
   }));
 
   const filtered = allDisplayFiles.filter(f => {
-    if (teamFilter !== 'ALL' && f.team !== teamFilter && f.team !== 'BLW') return false;
     if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });

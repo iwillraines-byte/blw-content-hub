@@ -12,7 +12,7 @@ const typeColors = {
   'matchup': { border: colors.red, bg: colors.redLight },
 };
 
-export default function ContentStudio({ teamFilter, setTeamFilter }) {
+export default function ContentStudio() {
   const [suggestions, setSuggestions] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -35,7 +35,7 @@ export default function ContentStudio({ teamFilter, setTeamFilter }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title="CONTENT STUDIO" subtitle="Your content command center — generate, manage, and track across all BLW teams" />
+      <PageHeader title="Dashboard" subtitle="Your content command center — generate, manage, and track across all BLW teams" />
 
       {/* Quick Actions */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
@@ -51,13 +51,6 @@ export default function ContentStudio({ teamFilter, setTeamFilter }) {
             <div style={{ fontSize: 24, marginBottom: 6 }}>☰</div>
             <div style={{ fontFamily: fonts.heading, fontSize: 18, color: colors.text, letterSpacing: 1 }}>NEW REQUEST</div>
             <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Submit content request</div>
-          </Card>
-        </Link>
-        <Link to="/game-center" style={{ textDecoration: 'none' }}>
-          <Card style={{ padding: 16, cursor: 'pointer', borderLeft: `3px solid ${colors.success}` }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>▣</div>
-            <div style={{ fontFamily: fonts.heading, fontSize: 18, color: colors.text, letterSpacing: 1 }}>GAME CENTER</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>Stats & live updates</div>
           </Card>
         </Link>
         <Link to="/files" style={{ textDecoration: 'none' }}>
@@ -185,23 +178,27 @@ export default function ContentStudio({ teamFilter, setTeamFilter }) {
               <Link to="/game-center" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>View Full →</Link>
             </div>
             {TEAMS.map(t => (
-              <div key={t.id} onClick={() => setTeamFilter(t.id)} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-                borderRadius: radius.sm, cursor: 'pointer',
-                background: teamFilter === t.id ? colors.redLight : 'transparent',
-                marginBottom: 2, transition: 'all 0.15s',
-              }}>
-                <span style={{
-                  width: 18, height: 18, borderRadius: radius.full,
-                  background: colors.bg, border: `1px solid ${colors.borderLight}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textSecondary,
-                  flexShrink: 0,
-                }}>{t.rank}</span>
-                <TeamLogo teamId={t.id} size={22} rounded="square" />
-                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text }}>{t.name}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, fontVariantNumeric: 'tabular-nums', fontFamily: fonts.condensed }}>{t.record}</span>
-              </div>
+              <Link key={t.id} to={`/teams/${t.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+                  borderRadius: radius.sm, cursor: 'pointer',
+                  marginBottom: 2, transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = colors.bg}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{
+                    width: 18, height: 18, borderRadius: radius.full,
+                    background: colors.bg, border: `1px solid ${colors.borderLight}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textSecondary,
+                    flexShrink: 0,
+                  }}>{t.rank}</span>
+                  <TeamLogo teamId={t.id} size={22} rounded="square" />
+                  <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text }}>{t.name}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, fontVariantNumeric: 'tabular-nums', fontFamily: fonts.condensed }}>{t.record}</span>
+                </div>
+              </Link>
             ))}
           </Card>
         </div>
