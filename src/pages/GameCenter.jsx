@@ -138,6 +138,75 @@ function bgForCell(percentiles, colKey, row) {
   return percentileColor(pct);
 }
 
+// Compact color key explaining the percentile coloring on stats tables.
+// Samples the same percentileColor() used by cell backgrounds so the legend
+// never drifts from the actual rendered colors.
+function PercentileLegend() {
+  const swatch = (pct, bordered = false) => (
+    <span
+      key={pct}
+      style={{
+        display: 'inline-block', width: 16, height: 14,
+        background: percentileColor(pct) || colors.bg,
+        border: bordered ? `1px solid ${colors.borderLight}` : 'none',
+      }}
+    />
+  );
+  const label = (text) => (
+    <span style={{
+      fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700,
+      color: colors.textMuted, letterSpacing: 0.4,
+    }}>{text}</span>
+  );
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 14px', background: colors.bg,
+      border: `1px solid ${colors.borderLight}`,
+      borderRadius: radius.sm,
+      flexWrap: 'wrap',
+    }}>
+      <span style={{
+        fontFamily: fonts.body, fontSize: 11, fontWeight: 600, color: colors.textSecondary,
+      }}>Percentile key:</span>
+
+      {/* Bottom end — blue, deepest at 1 */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+        {label('← Worst')}
+        <span style={{ display: 'inline-flex', marginLeft: 6, marginRight: 2 }}>
+          {swatch(0)}
+          {swatch(10)}
+          {swatch(20)}
+        </span>
+        {label('1st – 20th')}
+      </span>
+
+      {/* Middle — untinted */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {swatch(50, true)}
+        {label('21st – 79th · no tint')}
+      </span>
+
+      {/* Top end — red, deepest at 100 */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+        {label('80th – 100th')}
+        <span style={{ display: 'inline-flex', marginLeft: 2, marginRight: 6 }}>
+          {swatch(80)}
+          {swatch(90)}
+          {swatch(100)}
+        </span>
+        {label('Best →')}
+      </span>
+
+      <span style={{
+        fontFamily: fonts.body, fontSize: 11, color: colors.textMuted, fontStyle: 'italic',
+      }}>
+        Lower-is-better stats (ERA, WHIP, K for hitters, etc.) are inverted so best still reads red.
+      </span>
+    </div>
+  );
+}
+
 // Small colored badge for rank movement (+3 ▲ green, -2 ▼ red, — gray)
 function MoveBadge({ change }) {
   if (!change || change === 0) {
@@ -335,6 +404,9 @@ export default function GameCenter() {
               style={{ ...inputStyle, maxWidth: 260 }}
             />
           </div>
+          <div style={{ padding: '12px 18px', borderBottom: `1px solid ${colors.borderLight}` }}>
+            <PercentileLegend />
+          </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -405,6 +477,9 @@ export default function GameCenter() {
               placeholder="Search player or team…"
               style={{ ...inputStyle, maxWidth: 260 }}
             />
+          </div>
+          <div style={{ padding: '12px 18px', borderBottom: `1px solid ${colors.borderLight}` }}>
+            <PercentileLegend />
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
