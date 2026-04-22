@@ -19,34 +19,133 @@ function buildStatLine(player) {
   return '';
 }
 
+// ─── Tier badge ─────────────────────────────────────────────────────────────
+// Maps a player's currentRank into a tier with distinctive styling. Placeholder
+// visuals for now — drop real PNG/SVG designs in per tier when ready.
+function getTierInfo(rank) {
+  if (!rank || rank <= 0) return null;
+  if (rank <= 3)   return { tier: 'elite',    label: `#${rank}`,            subLabel: 'ELITE',       bg: 'linear-gradient(135deg, #F5C300, #D69A00)', fg: '#2A1A00', border: '#F5C300' };
+  if (rank <= 10)  return { tier: 'top-10',   label: `TOP 10`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #E5E7EB, #9CA3AF)', fg: '#1F2937', border: '#D1D5DB' };
+  if (rank <= 25)  return { tier: 'top-25',   label: `TOP 25`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #D97706, #92400E)', fg: '#FFF7ED', border: '#D97706' };
+  if (rank <= 50)  return { tier: 'top-50',   label: `TOP 50`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #2563EB, #1E40AF)', fg: '#EFF6FF', border: '#2563EB' };
+  if (rank <= 100) return { tier: 'top-100',  label: `TOP 100`,             subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #16A34A, #15803D)', fg: '#F0FDF4', border: '#16A34A' };
+  return               { tier: 'ranked',    label: `RANKED`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #6B7280, #4B5563)', fg: '#F9FAFB', border: '#6B7280' };
+}
+
+function TierBadge({ rank }) {
+  const info = getTierInfo(rank);
+  if (!info) return null;
+  return (
+    <div style={{
+      display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      minWidth: 92, padding: '10px 14px',
+      background: info.bg, color: info.fg,
+      border: `2px solid ${info.border}`,
+      borderRadius: radius.base,
+      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+      fontFamily: fonts.heading, letterSpacing: 1,
+    }} title={`Tier: ${info.tier} · BLW Rank #${rank}`}>
+      <div style={{ fontSize: 20, lineHeight: 1 }}>{info.label}</div>
+      <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginTop: 4, opacity: 0.85 }}>
+        {info.subLabel}
+      </div>
+    </div>
+  );
+}
+
+// ─── League rank helpers ────────────────────────────────────────────────────
+// Compute a player's 1-indexed rank for a given numeric stat across the list.
+// `direction`: "desc" means higher is better (rank 1 = highest), "asc" = lower better.
+function rankOf(list, playerName, statKey, direction = 'desc', toNumber = parseFloat) {
+  if (!Array.isArray(list) || list.length === 0 || !playerName) return null;
+  const cleaned = list
+    .map(p => ({ name: p.name, v: toNumber(p[statKey]) }))
+    .filter(x => x.name && !isNaN(x.v));
+  cleaned.sort((a, b) => direction === 'asc' ? a.v - b.v : b.v - a.v);
+  const idx = cleaned.findIndex(x => x.name === playerName);
+  return idx === -1 ? null : idx + 1;
+}
+
+// Colored pill showing a rank across BLW for a given stat.
+function RankChip({ rank, total }) {
+  if (!rank) {
+    return <span style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, fontWeight: 600 }}>—</span>;
+  }
+  // Use a muted team-neutral style; tier colors only on the big tier badge
+  const palette = rank <= 3
+    ? { bg: '#FEF3C7', fg: '#92400E' }        // gold-ish for top 3
+    : rank <= 10
+      ? { bg: 'rgba(37,99,235,0.1)', fg: '#1E40AF' }
+      : rank <= 25
+        ? { bg: 'rgba(22,163,74,0.1)', fg: '#15803D' }
+        : { bg: colors.bg, fg: colors.textSecondary };
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      background: palette.bg, color: palette.fg,
+      padding: '2px 8px', borderRadius: 999,
+      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+    }}>
+      #{rank}{total ? ` / ${total}` : ''} BLW
+    </span>
+  );
+}
+
+// Single stat tile: value on top, label + league rank chip below
+function StatTile({ label, value, rank, total, highlight }) {
+  return (
+    <div style={{
+      padding: '12px 10px',
+      background: colors.bg,
+      borderRadius: radius.sm,
+      border: highlight ? `1px solid ${colors.redBorder}` : `1px solid ${colors.borderLight}`,
+      display: 'flex', flexDirection: 'column', gap: 4,
+    }}>
+      <div style={{
+        fontFamily: fonts.heading, fontSize: 26, letterSpacing: 0.5,
+        color: highlight ? colors.red : colors.text, lineHeight: 1,
+      }}>{value ?? '—'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8 }}>{label}</span>
+        <RankChip rank={rank} total={total} />
+      </div>
+    </div>
+  );
+}
+
 export default function PlayerPage() {
   const { slug, lastName } = useParams();
   const team = getTeam(slug);
 
   const [player, setPlayer] = useState(null);
   const [media, setMedia] = useState([]);
+  const [battingLeaders, setBattingLeaders] = useState([]);
+  const [pitchingLeaders, setPitchingLeaders] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancel = false;
     if (!team?.id) return;
     // Load stats AND team roster AND manual players in parallel
-    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getManualPlayersByTeam(team.id)]).then(async ([, , manualList]) => {
-      if (cancel) return;
-      const p = getPlayerByTeamLastName(team.id, lastName, manualList);
-      if (p) {
-        // Media match ignores jersey number — just team + lastName
-        const m = await findPlayerMedia(team.id, p.lastName);
+    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getManualPlayersByTeam(team.id)])
+      .then(async ([allData, , manualList]) => {
         if (cancel) return;
-        // Source jersey from first uploaded media file if available
-        const mediaJersey = m.find(x => x.num)?.num || '';
-        setPlayer({ ...p, num: p.num || mediaJersey });
-        setMedia(m);
-      } else {
-        setPlayer(null);
-      }
-      setLoaded(true);
-    });
+        setBattingLeaders(allData.batting || []);
+        setPitchingLeaders(allData.pitching || []);
+        const p = getPlayerByTeamLastName(team.id, lastName, manualList);
+        if (p) {
+          // Media match ignores jersey number — just team + lastName
+          const m = await findPlayerMedia(team.id, p.lastName);
+          if (cancel) return;
+          // Source jersey from first uploaded media file if available
+          const mediaJersey = m.find(x => x.num)?.num || '';
+          setPlayer({ ...p, num: p.num || mediaJersey });
+          setMedia(m);
+        } else {
+          setPlayer(null);
+        }
+        setLoaded(true);
+      });
     return () => { cancel = true; };
   }, [team?.id, lastName]);
 
@@ -103,6 +202,28 @@ export default function PlayerPage() {
   const headshot = media.find(m => m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT');
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
 
+  // ─── Per-stat league-rank lookups ────────────────────────────────────────
+  // Rank this player against all BLW batters/pitchers for each displayed stat
+  const bTotal = battingLeaders.length;
+  const pTotal = pitchingLeaders.length;
+  const pn = player.name;
+  const battingRanks = player.batting ? {
+    avg:      rankOf(battingLeaders, pn, 'avg',      'desc', parseFloat),
+    hits:     rankOf(battingLeaders, pn, 'hits',     'desc', Number),
+    hr:       rankOf(battingLeaders, pn, 'hr',       'desc', Number),
+    rbi:      rankOf(battingLeaders, pn, 'rbi',      'desc', Number),
+    obp:      rankOf(battingLeaders, pn, 'obp',      'desc', parseFloat),
+    ops_plus: rankOf(battingLeaders, pn, 'ops_plus', 'desc', Number),
+  } : null;
+  const pitchingRanks = player.pitching ? {
+    era:  rankOf(pitchingLeaders, pn, 'era',  'asc',  parseFloat),
+    whip: rankOf(pitchingLeaders, pn, 'whip', 'asc',  parseFloat),
+    k4:   rankOf(pitchingLeaders, pn, 'k4',   'desc', parseFloat),
+    bb4:  rankOf(pitchingLeaders, pn, 'bb4',  'asc',  parseFloat),
+  } : null;
+
+  const playerRank = player.ranking?.currentRank || null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Breadcrumb */}
@@ -142,9 +263,11 @@ export default function PlayerPage() {
           </div>
           <div style={{ fontFamily: fonts.body, fontSize: 13, opacity: 0.8 }}>
             {player.batting && 'Batter'} {player.batting && player.pitching && '·'} {player.pitching && 'Pitcher'}
-            {player.ranking && <span> · Rank #{player.ranking.currentRank}</span>}
           </div>
         </div>
+        {/* Tier badge — prominent rank display in the header. Placeholder
+            visual; swap in design PNG/SVG when ready. */}
+        {playerRank && <TierBadge rank={playerRank} />}
         <Link to={`/generate?${generateParams.toString()}`} style={{ textDecoration: 'none' }}>
           <RedButton style={{
             background: team.accent, color: team.color,
@@ -155,87 +278,39 @@ export default function PlayerPage() {
         </Link>
       </div>
 
-      {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+      {/* Stats Cards — curated set with per-stat league rank */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
         {player.batting && (
           <Card>
-            <SectionHeading>Batting</SectionHeading>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-              {[
-                { label: 'OPS+', value: player.batting.ops_plus, hi: true },
-                { label: 'AVG', value: player.batting.avg },
-                { label: 'OBP', value: player.batting.obp },
-                { label: 'SLG', value: player.batting.slg },
-                { label: 'HR', value: player.batting.hr },
-                { label: 'RBI', value: player.batting.rbi || '-' },
-                { label: 'BB%', value: player.batting.bbPct ? player.batting.bbPct.toFixed(1) : '-' },
-                { label: 'K%', value: player.batting.kPct ? player.batting.kPct.toFixed(1) : '-' },
-              ].map(s => (
-                <div key={s.label} style={{
-                  padding: '10px 8px', textAlign: 'center',
-                  background: colors.bg, borderRadius: radius.sm,
-                }}>
-                  <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 1 }}>{s.label}</div>
-                  <div style={{
-                    fontFamily: fonts.heading, fontSize: 22, letterSpacing: 0.5,
-                    color: s.hi ? colors.red : colors.text,
-                  }}>{s.value}</div>
-                </div>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+              <SectionHeading style={{ margin: 0 }}>Batting</SectionHeading>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
+                Rank across {bTotal} BLW batters
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              <StatTile label="AVG"  value={player.batting.avg}       rank={battingRanks?.avg}      total={bTotal} />
+              <StatTile label="H"    value={player.batting.hits}      rank={battingRanks?.hits}     total={bTotal} />
+              <StatTile label="HR"   value={player.batting.hr}        rank={battingRanks?.hr}       total={bTotal} />
+              <StatTile label="RBI"  value={player.batting.rbi}       rank={battingRanks?.rbi}      total={bTotal} />
+              <StatTile label="OBP"  value={player.batting.obp}       rank={battingRanks?.obp}      total={bTotal} />
+              <StatTile label="OPS+" value={player.batting.ops_plus}  rank={battingRanks?.ops_plus} total={bTotal} highlight />
             </div>
           </Card>
         )}
         {player.pitching && (
           <Card>
-            <SectionHeading>Pitching</SectionHeading>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-              {[
-                { label: 'FIP', value: typeof player.pitching.fip === 'number' ? player.pitching.fip.toFixed(2) : player.pitching.fip, hi: true },
-                { label: 'ERA', value: player.pitching.era },
-                { label: 'WHIP', value: player.pitching.whip },
-                { label: 'IP', value: player.pitching.ip },
-                { label: 'W-L', value: `${player.pitching.w}-${player.pitching.l}` },
-                { label: 'K/4', value: player.pitching.k4 },
-                { label: 'BB/4', value: player.pitching.bb4 },
-                { label: 'SO', value: player.pitching.shutouts },
-              ].map(s => (
-                <div key={s.label} style={{
-                  padding: '10px 8px', textAlign: 'center',
-                  background: colors.bg, borderRadius: radius.sm,
-                }}>
-                  <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 1 }}>{s.label}</div>
-                  <div style={{
-                    fontFamily: fonts.heading, fontSize: 22, letterSpacing: 0.5,
-                    color: s.hi ? colors.red : colors.text,
-                  }}>{s.value}</div>
-                </div>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+              <SectionHeading style={{ margin: 0 }}>Pitching</SectionHeading>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
+                Rank across {pTotal} BLW pitchers
+              </span>
             </div>
-          </Card>
-        )}
-        {player.ranking && (
-          <Card>
-            <SectionHeading>Ranking</SectionHeading>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <div style={{ padding: '10px 8px', textAlign: 'center', background: colors.bg, borderRadius: radius.sm }}>
-                <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 1 }}>CURRENT</div>
-                <div style={{ fontFamily: fonts.heading, fontSize: 28, color: colors.red, letterSpacing: 0.5 }}>#{player.ranking.currentRank}</div>
-              </div>
-              <div style={{ padding: '10px 8px', textAlign: 'center', background: colors.bg, borderRadius: radius.sm }}>
-                <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 1 }}>MOVE</div>
-                <div style={{
-                  fontFamily: fonts.heading, fontSize: 28, letterSpacing: 0.5,
-                  color: player.ranking.rankChange > 0 ? '#16A34A' : player.ranking.rankChange < 0 ? '#DC2626' : colors.textMuted,
-                }}>
-                  {player.ranking.rankChange > 0 ? `+${player.ranking.rankChange}` : player.ranking.rankChange < 0 ? player.ranking.rankChange : '—'}
-                </div>
-              </div>
-              <div style={{ padding: '10px 8px', textAlign: 'center', background: colors.bg, borderRadius: radius.sm, gridColumn: 'span 2' }}>
-                <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 1 }}>TOTAL POINTS</div>
-                <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>
-                  {player.ranking.totalPoints.toLocaleString()}
-                </div>
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+              <StatTile label="ERA"  value={player.pitching.era}  rank={pitchingRanks?.era}  total={pTotal} />
+              <StatTile label="WHIP" value={player.pitching.whip} rank={pitchingRanks?.whip} total={pTotal} />
+              <StatTile label="K/4"  value={player.pitching.k4}   rank={pitchingRanks?.k4}   total={pTotal} highlight />
+              <StatTile label="BB/4" value={player.pitching.bb4}  rank={pitchingRanks?.bb4}  total={pTotal} />
             </div>
           </Card>
         )}

@@ -7,15 +7,18 @@ import { getAllMedia } from '../media-store';
 import { getAllManualPlayers } from '../player-store';
 
 // Helper: render a sortable header
-function SortHeader({ label, sortKey, currentSort, setSort, align = 'right', highlight = false }) {
+// SortHeader — the column whose sortKey matches the current sort becomes red.
+// No more static `highlight` prop: emphasis follows the active sort.
+function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
   const active = currentSort.key === sortKey;
   const thStyle = {
     padding: '10px 12px', textAlign: align,
-    fontFamily: fonts.condensed, fontWeight: 600, fontSize: 11,
-    color: active ? colors.red : (highlight ? colors.red : colors.textMuted),
+    fontFamily: fonts.condensed, fontWeight: 700, fontSize: 11,
+    color: active ? colors.red : colors.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.5,
     cursor: sortKey ? 'pointer' : 'default',
     userSelect: 'none',
+    whiteSpace: 'nowrap',
   };
   const arrow = active ? (currentSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
   return (
@@ -32,6 +35,42 @@ function SortHeader({ label, sortKey, currentSort, setSort, align = 'right', hig
     >
       {label}{arrow}
     </th>
+  );
+}
+
+// Compute a data-cell style that bolds + reds the cell if its column is the
+// current sort key. Drop-in replacement for callers that used tdStyle(bool).
+function cellFor(sort, key) {
+  const active = sort.key === key;
+  return {
+    padding: '10px 12px',
+    textAlign: 'right',
+    fontSize: active ? 14 : 13,
+    fontWeight: active ? 800 : 500,
+    color: active ? colors.red : colors.text,
+    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
+  };
+}
+
+// Small colored badge for rank movement (+3 ▲ green, -2 ▼ red, — gray)
+function MoveBadge({ change }) {
+  if (!change || change === 0) {
+    return <span style={{ fontSize: 12, color: colors.textMuted, fontWeight: 600 }}>—</span>;
+  }
+  const up = change > 0;
+  const bg = up ? 'rgba(34,197,94,0.12)' : 'rgba(220,38,38,0.12)';
+  const fg = up ? '#16A34A' : '#DC2626';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      background: bg, color: fg,
+      padding: '3px 8px', borderRadius: 999,
+      fontSize: 11, fontWeight: 700, fontFamily: fonts.condensed,
+      letterSpacing: 0.3,
+    }}>
+      {up ? '▲' : '▼'}{Math.abs(change)}
+    </span>
   );
 }
 
@@ -210,31 +249,53 @@ export default function GameCenter() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
-                  <SortHeader label="#" sortKey={null} currentSort={battingSort} setSort={setBattingSort} align="center" />
-                  <SortHeader label="Player" sortKey="name" currentSort={battingSort} setSort={setBattingSort} align="left" />
-                  <SortHeader label="Team" sortKey="team" currentSort={battingSort} setSort={setBattingSort} align="left" />
-                  <SortHeader label="OPS+" sortKey="ops_plus" currentSort={battingSort} setSort={setBattingSort} highlight />
-                  <SortHeader label="AVG" sortKey="avg" currentSort={battingSort} setSort={setBattingSort} />
-                  <SortHeader label="OBP" sortKey="obp" currentSort={battingSort} setSort={setBattingSort} />
-                  <SortHeader label="SLG" sortKey="slg" currentSort={battingSort} setSort={setBattingSort} />
-                  <SortHeader label="HR" sortKey="hr" currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="#"    sortKey={null}      currentSort={battingSort} setSort={setBattingSort} align="center" />
+                  <SortHeader label="Player" sortKey="name"    currentSort={battingSort} setSort={setBattingSort} align="left" />
+                  <SortHeader label="Team"   sortKey="team"    currentSort={battingSort} setSort={setBattingSort} align="left" />
+                  <SortHeader label="G"      sortKey="games"   currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="PA"     sortKey="pa"      currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="AB"     sortKey="ab"      currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="R"      sortKey="runs"    currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="H"      sortKey="hits"    currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="2B"     sortKey="doubles" currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="3B"     sortKey="triples" currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="HR"     sortKey="hr"      currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="RBI"    sortKey="rbi"     currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="BB"     sortKey="bb"      currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="K"      sortKey="k"       currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="AVG"    sortKey="avg"     currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="OBP"    sortKey="obp"     currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="SLG"    sortKey="slg"     currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="OPS"    sortKey="ops"     currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="OPS+"   sortKey="ops_plus" currentSort={battingSort} setSort={setBattingSort} />
                 </tr>
               </thead>
               <tbody>
                 {filteredBatting.map((p, i) => (
                   <tr key={p.playerId || p.rank} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
-                    <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{i + 1}</td>
-                    <td style={{ ...tdStyle(false), textAlign: 'left' }}><PlayerCell name={p.name} team={p.team} /></td>
-                    <td style={{ ...tdStyle(false), textAlign: 'left' }}><TeamLink teamId={p.team} /></td>
-                    <td style={{ ...tdStyle(true), fontSize: 15 }}>{p.ops_plus}</td>
-                    <td style={tdStyle(false)}>{p.avg}</td>
-                    <td style={tdStyle(false)}>{p.obp}</td>
-                    <td style={tdStyle(false)}>{p.slg}</td>
-                    <td style={{ ...tdStyle(false), fontWeight: 700 }}>{p.hr}</td>
+                    <td style={{ ...cellFor(battingSort, null), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{i + 1}</td>
+                    <td style={{ ...cellFor(battingSort, 'name'), textAlign: 'left' }}><PlayerCell name={p.name} team={p.team} /></td>
+                    <td style={{ ...cellFor(battingSort, 'team'), textAlign: 'left' }}><TeamLink teamId={p.team} /></td>
+                    <td style={cellFor(battingSort, 'games')}>{p.games ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'pa')}>{p.pa ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'ab')}>{p.ab ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'runs')}>{p.runs ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'hits')}>{p.hits ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'doubles')}>{p.doubles ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'triples')}>{p.triples ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'hr')}>{p.hr}</td>
+                    <td style={cellFor(battingSort, 'rbi')}>{p.rbi}</td>
+                    <td style={cellFor(battingSort, 'bb')}>{p.bb ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'k')}>{p.k ?? '—'}</td>
+                    <td style={cellFor(battingSort, 'avg')}>{p.avg}</td>
+                    <td style={cellFor(battingSort, 'obp')}>{p.obp}</td>
+                    <td style={cellFor(battingSort, 'slg')}>{p.slg}</td>
+                    <td style={cellFor(battingSort, 'ops')}>{p.ops}</td>
+                    <td style={cellFor(battingSort, 'ops_plus')}>{p.ops_plus}</td>
                   </tr>
                 ))}
                 {filteredBatting.length === 0 && (
-                  <tr><td colSpan={8} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{battingSearch}"</td></tr>
+                  <tr><td colSpan={19} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{battingSearch}"</td></tr>
                 )}
               </tbody>
             </table>
@@ -259,33 +320,51 @@ export default function GameCenter() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
-                  <SortHeader label="#" sortKey={null} currentSort={pitchingSort} setSort={setPitchingSort} align="center" />
-                  <SortHeader label="Player" sortKey="name" currentSort={pitchingSort} setSort={setPitchingSort} align="left" />
-                  <SortHeader label="Team" sortKey="team" currentSort={pitchingSort} setSort={setPitchingSort} align="left" />
-                  <SortHeader label="FIP" sortKey="fip" currentSort={pitchingSort} setSort={setPitchingSort} highlight />
-                  <SortHeader label="ERA" sortKey="era" currentSort={pitchingSort} setSort={setPitchingSort} />
-                  <SortHeader label="IP" sortKey="ip" currentSort={pitchingSort} setSort={setPitchingSort} />
-                  <SortHeader label="K/4" sortKey="k4" currentSort={pitchingSort} setSort={setPitchingSort} />
-                  <SortHeader label="W" sortKey="w" currentSort={pitchingSort} setSort={setPitchingSort} />
-                  <SortHeader label="L" sortKey="l" currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="#"      sortKey={null}     currentSort={pitchingSort} setSort={setPitchingSort} align="center" />
+                  <SortHeader label="Player" sortKey="name"     currentSort={pitchingSort} setSort={setPitchingSort} align="left" />
+                  <SortHeader label="Team"   sortKey="team"     currentSort={pitchingSort} setSort={setPitchingSort} align="left" />
+                  <SortHeader label="G"      sortKey="games"    currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="W"      sortKey="w"        currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="L"      sortKey="l"        currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="SV"     sortKey="saves"    currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="IP"     sortKey="ip"       currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="H"      sortKey="hits"     currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="R"      sortKey="runs"     currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="BB"     sortKey="bb"       currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="K"      sortKey="k"        currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="HR"     sortKey="hrAllowed" currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="ERA"    sortKey="era"      currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="WHIP"   sortKey="whip"     currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="FIP"    sortKey="fip"      currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="K/4"    sortKey="k4"       currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="BB/4"   sortKey="bb4"      currentSort={pitchingSort} setSort={setPitchingSort} />
                 </tr>
               </thead>
               <tbody>
                 {filteredPitching.map((p, i) => (
                   <tr key={p.playerId || p.rank} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
-                    <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{i + 1}</td>
-                    <td style={{ ...tdStyle(false), textAlign: 'left' }}><PlayerCell name={p.name} team={p.team} /></td>
-                    <td style={{ ...tdStyle(false), textAlign: 'left' }}><TeamLink teamId={p.team} /></td>
-                    <td style={{ ...tdStyle(true), fontSize: 15 }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
-                    <td style={tdStyle(false)}>{p.era}</td>
-                    <td style={tdStyle(false)}>{p.ip}</td>
-                    <td style={tdStyle(false)}>{p.k4}</td>
-                    <td style={{ ...tdStyle(false), fontWeight: 700 }}>{p.w}</td>
-                    <td style={{ ...tdStyle(false), color: colors.textMuted }}>{p.l}</td>
+                    <td style={{ ...cellFor(pitchingSort, null), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{i + 1}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'name'), textAlign: 'left' }}><PlayerCell name={p.name} team={p.team} /></td>
+                    <td style={{ ...cellFor(pitchingSort, 'team'), textAlign: 'left' }}><TeamLink teamId={p.team} /></td>
+                    <td style={cellFor(pitchingSort, 'games')}>{p.games ?? '—'}</td>
+                    <td style={cellFor(pitchingSort, 'w')}>{p.w}</td>
+                    <td style={cellFor(pitchingSort, 'l')}>{p.l}</td>
+                    <td style={cellFor(pitchingSort, 'saves')}>{p.saves ?? 0}</td>
+                    <td style={cellFor(pitchingSort, 'ip')}>{p.ip}</td>
+                    <td style={cellFor(pitchingSort, 'hits')}>{p.hits ?? '—'}</td>
+                    <td style={cellFor(pitchingSort, 'runs')}>{p.runs ?? '—'}</td>
+                    <td style={cellFor(pitchingSort, 'bb')}>{p.bb ?? '—'}</td>
+                    <td style={cellFor(pitchingSort, 'k')}>{p.k ?? '—'}</td>
+                    <td style={cellFor(pitchingSort, 'hrAllowed')}>{p.hrAllowed ?? '—'}</td>
+                    <td style={cellFor(pitchingSort, 'era')}>{p.era}</td>
+                    <td style={cellFor(pitchingSort, 'whip')}>{p.whip}</td>
+                    <td style={cellFor(pitchingSort, 'fip')}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
+                    <td style={cellFor(pitchingSort, 'k4')}>{p.k4}</td>
+                    <td style={cellFor(pitchingSort, 'bb4')}>{p.bb4}</td>
                   </tr>
                 ))}
                 {filteredPitching.length === 0 && (
-                  <tr><td colSpan={9} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{pitchingSearch}"</td></tr>
+                  <tr><td colSpan={18} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{pitchingSearch}"</td></tr>
                 )}
               </tbody>
             </table>
@@ -310,11 +389,10 @@ export default function GameCenter() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
-                  <SortHeader label="#" sortKey="currentRank" currentSort={rankingsSort} setSort={setRankingsSort} align="center" />
-                  <SortHeader label="Player" sortKey="name" currentSort={rankingsSort} setSort={setRankingsSort} align="left" />
-                  <SortHeader label="Move" sortKey="rankChange" currentSort={rankingsSort} setSort={setRankingsSort} />
-                  <SortHeader label="Points" sortKey="totalPoints" currentSort={rankingsSort} setSort={setRankingsSort} highlight />
-                  <SortHeader label="Avg Pts" sortKey="averagePoints" currentSort={rankingsSort} setSort={setRankingsSort} />
+                  <SortHeader label="#"         sortKey="currentRank"     currentSort={rankingsSort} setSort={setRankingsSort} align="center" />
+                  <SortHeader label="Player"    sortKey="name"            currentSort={rankingsSort} setSort={setRankingsSort} align="left" />
+                  <SortHeader label="Move"      sortKey="rankChange"      currentSort={rankingsSort} setSort={setRankingsSort} />
+                  <SortHeader label="Avg Pts"   sortKey="averagePoints"   currentSort={rankingsSort} setSort={setRankingsSort} />
                   <SortHeader label="Composite" sortKey="compositePoints" currentSort={rankingsSort} setSort={setRankingsSort} />
                 </tr>
               </thead>
@@ -323,8 +401,8 @@ export default function GameCenter() {
                   const team = p.team ? getTeam(p.team) : null;
                   return (
                   <tr key={p.playerId} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
-                    <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{p.currentRank}</td>
-                    <td style={{ ...tdStyle(false), textAlign: 'left', fontWeight: 700 }}>
+                    <td style={{ ...cellFor(rankingsSort, 'currentRank'), textAlign: 'center' }}>{p.currentRank}</td>
+                    <td style={{ ...cellFor(rankingsSort, 'name'), textAlign: 'left', fontWeight: 700 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {team ? <TeamLogo teamId={team.id} size={22} rounded="square" /> : <span style={{ width: 22, display: 'inline-block' }} />}
                         {team ? (
@@ -336,20 +414,16 @@ export default function GameCenter() {
                         )}
                       </div>
                     </td>
-                    <td style={{
-                      ...tdStyle(false), fontWeight: 700, fontSize: 12,
-                      color: p.rankChange > 0 ? '#16A34A' : p.rankChange < 0 ? '#DC2626' : colors.textMuted,
-                    }}>
-                      {p.rankChange > 0 ? `+${p.rankChange}` : p.rankChange < 0 ? p.rankChange : '—'}
+                    <td style={{ ...cellFor(rankingsSort, 'rankChange'), textAlign: 'center' }}>
+                      <MoveBadge change={p.rankChange} />
                     </td>
-                    <td style={{ ...tdStyle(true), fontSize: 15 }}>{p.totalPoints.toLocaleString()}</td>
-                    <td style={tdStyle(false)}>{p.averagePoints.toFixed(0)}</td>
-                    <td style={tdStyle(false)}>{p.compositePoints.toFixed(0)}</td>
+                    <td style={cellFor(rankingsSort, 'averagePoints')}>{p.averagePoints.toFixed(0)}</td>
+                    <td style={cellFor(rankingsSort, 'compositePoints')}>{p.compositePoints.toFixed(0)}</td>
                   </tr>
                   );
                 })}
                 {filteredRankings.length === 0 && (
-                  <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{rankingsSearch}"</td></tr>
+                  <tr><td colSpan={5} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{rankingsSearch}"</td></tr>
                 )}
               </tbody>
             </table>

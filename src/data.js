@@ -148,6 +148,10 @@ function transformPitching(apiData) {
     ip: p.inningsPitched || '0',
     hits: p.hits,
     runs: p.runs,
+    // Raw counting stats (walks/strikeouts/HR allowed) — API field name variants guarded
+    bb: p.walks != null ? p.walks : (p.walksAllowed || 0),
+    k: p.strikeouts != null ? p.strikeouts : (p.strikeoutsThrown || 0),
+    hrAllowed: p.homeruns != null ? p.homeruns : (p.homerunsAllowed != null ? p.homerunsAllowed : 0),
     era: p.era != null ? p.era.toFixed(2) : '0.00',
     whip: p.whip != null ? p.whip.toFixed(2) : '0.00',
     fip: p.fip || 0,

@@ -53,7 +53,12 @@ const FIELD_PLACEHOLDERS = {
 };
 
 // ─── 4-Layer Custom Compositor ──────────────────────────────────────────────
-function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team) {
+// options: { hiddenFields: Set<string>, forExport: boolean }
+// - hiddenFields: field keys the user has explicitly toggled off → skip entirely
+// - forExport: true on the final download render → skip empty fields so preview
+//   placeholders don't bake into the exported PNG
+function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
+  const { hiddenFields, forExport } = options;
   ctx.clearRect(0, 0, w, h);
   const teamColor = team?.color;
 
@@ -101,12 +106,19 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
     }
   });
 
-  // Layer 4: Dynamic text fields. Empty fields render as low-opacity placeholders
-  // so the template's zone layout is visible before the user fills inputs.
+  // Layer 4: Dynamic text fields
+  //  - Hidden fields (user toggled off) → skip entirely, no placeholder, no output
+  //  - Empty fields in PREVIEW → placeholder at 32% opacity so the template
+  //    zone layout is visible before inputs are filled
+  //  - Empty fields in EXPORT → skip (preview placeholders shouldn't bake in)
+  //  - Filled fields → render at full opacity always
   if (fieldConfig) {
     fieldConfig.forEach(f => {
+      if (hiddenFields && hiddenFields.has(f.key)) return;
       const value = fields[f.key];
       const hasValue = value && String(value).trim().length > 0;
+      if (!hasValue && forExport) return;
+
       const text = hasValue
         ? String(value).toUpperCase()
         : (FIELD_PLACEHOLDERS[f.key] || String(f.label || f.key).toUpperCase());
@@ -115,10 +127,7 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
       ctx.fillStyle = f.color || '#FFFFFF';
       ctx.font = `${f.fontSize}px ${FONT_MAP[f.font] || FONT_MAP.body}`;
       ctx.textAlign = f.align || 'center';
-      // Placeholders render faded + with tracking so they read as "about to be filled"
-      if (!hasValue) {
-        ctx.globalAlpha = 0.32;
-      }
+      if (!hasValue) ctx.globalAlpha = 0.32;
       if (f.maxWidth) {
         ctx.fillText(text, f.x, f.y, f.maxWidth);
       } else {
@@ -143,6 +152,8 @@ export default function Generate() {
   const [customTeam, setCustomTeam] = useState(() => searchParams.get('team') || 'LAN');
   const [customPlatform, setCustomPlatform] = useState('feed');
   const [customFields, setCustomFields] = useState({});
+  // Fields the user has explicitly toggled off — no placeholder in preview, no text in export
+  const [hiddenFields, setHiddenFields] = useState(() => new Set());
   const [overlays, setOverlays] = useState([]);
   const [selectedOverlayId, setSelectedOverlayId] = useState(null);
   const [overlayImg, setOverlayImg] = useState(null);
@@ -247,18 +258,35 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = getFieldConfig(customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj);
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects]);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields });
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields]);
 
   useEffect(() => { render(); }, [render]);
 
   const download = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Re-render without placeholders so the downloaded PNG only contains real
+    // text + hidden fields stay hidden. Then re-render for preview afterwards.
+    const ctx = canvas.getContext('2d');
+    const fieldConfig = getFieldConfig(customType, customPlatform);
+    const customTeamObj = getTeam(customTeam);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, forExport: true });
     const link = document.createElement('a');
     link.download = `BLW_${customTeam}_${customType}_${customPlatform}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
+    // Restore preview render (with placeholders) right after export
+    render();
+  };
+
+  const toggleFieldHidden = (key) => {
+    setHiddenFields(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   const handleBgDrop = useCallback((e) => {
@@ -413,7 +441,7 @@ export default function Generate() {
                 <Label>Template Type</Label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
                   {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
-                    <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
+                    <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
                       background: customType === key ? colors.redLight : colors.bg,
                       border: customType === key ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
                       color: customType === key ? colors.red : colors.textSecondary,
@@ -441,16 +469,49 @@ export default function Generate() {
                 </Card>
               )}
 
-              {/* 3b. Dynamic Content — text fields that overlay the composition */}
+              {/* 3b. Dynamic Content — text fields that overlay the composition.
+                  Each field has a hide toggle so you can omit a zone entirely
+                  (no placeholder in preview, no text in the exported PNG). */}
               <Card>
-                <Label>Content</Label>
-                {customFieldConfig.map(f => (
-                  <div key={f.key} style={{ marginBottom: 8 }}>
-                    <label style={labelStyle}>{f.label}</label>
-                    <input type="text" value={customFields[f.key] || ''} onChange={e => setCustomFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                      placeholder={`Enter ${f.label.toLowerCase()}...`} style={{ ...inputStyle, marginTop: 3 }} />
-                  </div>
-                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Label style={{ marginBottom: 0 }}>Content</Label>
+                  <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.4 }}>
+                    Click 👁 to hide a field
+                  </span>
+                </div>
+                {customFieldConfig.map(f => {
+                  const isHidden = hiddenFields.has(f.key);
+                  return (
+                    <div key={f.key} style={{ marginBottom: 10, opacity: isHidden ? 0.5 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <label style={labelStyle}>{f.label}</label>
+                        <button
+                          onClick={() => toggleFieldHidden(f.key)}
+                          title={isHidden ? 'Show this field' : 'Hide this field from preview + export'}
+                          style={{
+                            background: isHidden ? colors.bg : 'transparent',
+                            border: `1px solid ${isHidden ? colors.border : 'transparent'}`,
+                            borderRadius: radius.sm,
+                            padding: '2px 8px', cursor: 'pointer',
+                            fontSize: 12, lineHeight: 1,
+                            color: isHidden ? colors.textMuted : colors.textSecondary,
+                            fontFamily: fonts.body, fontWeight: 600,
+                          }}
+                        >
+                          {isHidden ? '🚫 Hidden' : '👁'}
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={customFields[f.key] || ''}
+                        onChange={e => setCustomFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        placeholder={isHidden ? '(field hidden — click 🚫 to show)' : `Enter ${f.label.toLowerCase()}...`}
+                        disabled={isHidden}
+                        style={{ ...inputStyle, marginTop: 0 }}
+                      />
+                    </div>
+                  );
+                })}
               </Card>
 
               {/* 4. Select Media — was Background Photo */}
