@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, API_CONFIG } from '../data';
+import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
@@ -250,7 +250,7 @@ function PlayerCell({ name, team }) {
   const lastName = name.split(' ').pop();
   if (!t) return <span style={{ fontWeight: 700 }}>{name}</span>;
   return (
-    <Link to={`/teams/${t.slug}/players/${slugify(lastName)}`} style={{
+    <Link to={`/teams/${t.slug}/players/${playerSlug({ name })}`} style={{
       color: colors.text, textDecoration: 'none', fontWeight: 700,
       borderBottom: `1px dotted ${colors.border}`,
     }}>
@@ -571,7 +571,7 @@ export default function GameCenter() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {team ? <TeamLogo teamId={team.id} size={22} rounded="square" /> : <span style={{ width: 22, display: 'inline-block' }} />}
                         {team ? (
-                          <Link to={`/teams/${team.slug}/players/${slugify((p.name || '').split(' ').pop())}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
+                          <Link to={`/teams/${team.slug}/players/${playerSlug({ name: p.name })}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
                             {p.name}
                           </Link>
                         ) : (
@@ -661,7 +661,7 @@ export default function GameCenter() {
                       <tr key={`${p.team}_${p.lastName}`} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
                         <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 700 }}>
                           {t ? (
-                            <Link to={`/teams/${t.slug}/players/${slugify(p.lastName)}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
+                            <Link to={`/teams/${t.slug}/players/${playerSlug(p)}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
                               {p.name}
                             </Link>
                           ) : p.name}
