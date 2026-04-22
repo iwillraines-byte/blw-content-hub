@@ -625,20 +625,85 @@ export default function Files() {
     return record;
   }, []);
 
+  // ─── Export library manifest ──────────────────────────────────────────────
+  // Downloads a JSON manifest of every stored file's metadata (name, tags,
+  // Drive source IDs, timestamps, sizes). Blobs are NOT included — the manifest
+  // is a recovery MAP: Drive-imported files can be re-imported via driveFileId;
+  // drag-dropped files are listed so the user knows what was there.
+  const exportLibraryManifest = useCallback(() => {
+    const manifest = {
+      manifestVersion: 1,
+      exportedAt: new Date().toISOString(),
+      app: 'BLW Content Hub',
+      totalFiles: storedMedia.length,
+      notes: 'Drive-sourced files can be re-imported via driveFileId from the same shared folder. Drag-drop files must be re-uploaded manually.',
+      files: storedMedia.map(m => ({
+        id: m.id,
+        name: m.name,
+        team: m.team || null,
+        num: m.num || null,
+        player: m.player || null,
+        assetType: m.assetType || null,
+        source: m.source || 'local',
+        driveFileId: m.driveFileId || null,
+        width: m.width || 0,
+        height: m.height || 0,
+        sizeBytes: m.blob ? m.blob.size : null,
+        createdAt: m.createdAt || null,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `blw-library-manifest-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [storedMedia]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="FILES" subtitle="Upload, tag, and manage team media assets — files persist in your browser">
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontFamily: fonts.condensed, fontSize: 12, color: colors.success, fontWeight: 600 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: fonts.body, fontSize: 13, color: colors.success, fontWeight: 600 }}>
             {storedMedia.length} stored
           </span>
           {untagged.length > 0 && (
-            <span style={{ fontFamily: fonts.condensed, fontSize: 12, color: colors.warning, fontWeight: 600 }}>
+            <span style={{ fontFamily: fonts.body, fontSize: 13, color: colors.warning, fontWeight: 600 }}>
               {untagged.length} untagged
             </span>
           )}
+          <OutlineButton
+            onClick={exportLibraryManifest}
+            disabled={storedMedia.length === 0}
+            style={{ padding: '6px 12px', fontSize: 12 }}
+          >
+            ⬇ Export manifest
+          </OutlineButton>
         </div>
       </PageHeader>
+
+      {/* Browser-storage warning — persistent until cloud migration lands */}
+      <Card style={{
+        border: `1px solid ${colors.warningBorder}`,
+        background: colors.warningBg,
+        display: 'flex', alignItems: 'flex-start', gap: 12,
+      }}>
+        <div style={{ fontSize: 22, lineHeight: 1 }}>⚠️</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: fonts.body, fontSize: 14, fontWeight: 700, color: '#92400E', marginBottom: 2 }}>
+            Files are currently stored in your browser
+          </div>
+          <div style={{ fontSize: 13, color: '#92400E', lineHeight: 1.5 }}>
+            Clearing your browser cache, switching browsers, or using a different device will erase your library.
+            Cloud storage is coming soon. In the meantime, use <strong>Export manifest</strong> above to back up
+            your file metadata — Drive-sourced files can be re-imported from the shared folder.
+          </div>
+        </div>
+      </Card>
 
       {/* Upload Zone */}
       <label style={{ cursor: 'pointer' }}>
