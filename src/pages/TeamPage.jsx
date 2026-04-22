@@ -378,7 +378,7 @@ export default function TeamPage() {
               const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
               const avatar = rosterAvatars[`${FI}|${p.lastName.toUpperCase()}`];
               const statLabel = p.isBatter && p.isPitcher
-                ? 'Two-way'
+                ? 'Two-Way Player'
                 : p.isBatter ? 'Batter'
                 : p.isPitcher ? 'Pitcher'
                 : p.mediaOnly ? 'Roster' : 'Roster';

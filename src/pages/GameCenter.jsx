@@ -58,9 +58,9 @@ function cellFor(sort, key) {
 // For stats where LOWER is better (ERA, WHIP, K for a batter, etc.), we invert
 // so that the best performers still land in the red zone.
 //
-// Quality percentile ≥ 80 → progressively deeper red (deepest at 100)
-// Quality percentile ≤ 20 → progressively deeper blue (deepest at 1)
-// Else no background tint.
+// Quality percentile ≥ 85 → progressively deeper red (deepest at 100)
+// Quality percentile ≤ 15 → progressively deeper blue (deepest at 1)
+// Middle band 16–84 is left untinted to keep tables readable.
 const BATTING_COLOR_COLS = {
   runs: 'higher', hits: 'higher', doubles: 'higher', triples: 'higher',
   hr: 'higher', rbi: 'higher', bb: 'higher',
@@ -117,13 +117,13 @@ function computePercentiles(rows, colConfig) {
 // null outside the red/blue zones so zebra striping shows through.
 function percentileColor(p) {
   if (p == null) return null;
-  if (p >= 80) {
-    const t = Math.min(1, (p - 80) / 20); // 0 at p=80, 1 at p=100
+  if (p >= 85) {
+    const t = Math.min(1, (p - 85) / 15); // 0 at p=85, 1 at p=100
     const alpha = 0.10 + t * 0.40;
     return `rgba(220, 38, 38, ${alpha.toFixed(2)})`;
   }
-  if (p <= 20) {
-    const t = Math.min(1, (20 - p) / 20); // 0 at p=20, 1 at p=0
+  if (p <= 15) {
+    const t = Math.min(1, (15 - p) / 15); // 0 at p=15, 1 at p=0
     const alpha = 0.10 + t * 0.40;
     return `rgba(37, 99, 235, ${alpha.toFixed(2)})`;
   }
@@ -136,6 +136,19 @@ function bgForCell(percentiles, colKey, row) {
   if (!map) return null;
   const pct = map.get(row.playerId ?? row.name);
   return percentileColor(pct);
+}
+
+// Hover tooltip for shaded cells. Only produces text when the percentile is in
+// one of the tinted bands — middle band returns '' so the title attribute stays
+// unset and the browser doesn't render a distracting raw-number tooltip.
+function titleForCell(percentiles, colKey, row) {
+  const map = percentiles[colKey];
+  if (!map) return '';
+  const pct = map.get(row.playerId ?? row.name);
+  if (pct == null) return '';
+  if (pct >= 85) return `Top ${Math.max(1, Math.round(100 - pct))}% · ${colKey.toUpperCase()}`;
+  if (pct <= 15) return `Bottom ${Math.max(1, Math.round(pct))}% · ${colKey.toUpperCase()}`;
+  return '';
 }
 
 // Compact color key explaining the percentile coloring on stats tables.
@@ -175,24 +188,24 @@ function PercentileLegend() {
         {label('← Worst')}
         <span style={{ display: 'inline-flex', marginLeft: 6, marginRight: 2 }}>
           {swatch(0)}
-          {swatch(10)}
-          {swatch(20)}
+          {swatch(7)}
+          {swatch(15)}
         </span>
-        {label('1st – 20th')}
+        {label('1st – 15th')}
       </span>
 
       {/* Middle — untinted */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         {swatch(50, true)}
-        {label('21st – 79th · no tint')}
+        {label('16th – 84th · no tint')}
       </span>
 
       {/* Top end — red, deepest at 100 */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-        {label('80th – 100th')}
+        {label('85th – 100th')}
         <span style={{ display: 'inline-flex', marginLeft: 2, marginRight: 6 }}>
-          {swatch(80)}
-          {swatch(90)}
+          {swatch(85)}
+          {swatch(93)}
           {swatch(100)}
         </span>
         {label('Best →')}
@@ -441,19 +454,19 @@ export default function GameCenter() {
                     <td style={cellFor(battingSort, 'games')}>{p.games ?? '—'}</td>
                     <td style={cellFor(battingSort, 'pa')}>{p.pa ?? '—'}</td>
                     <td style={cellFor(battingSort, 'ab')}>{p.ab ?? '—'}</td>
-                    <td style={{ ...cellFor(battingSort, 'runs'),     background: bgForCell(battingPercentiles, 'runs', p) }}>{p.runs ?? '—'}</td>
-                    <td style={{ ...cellFor(battingSort, 'hits'),     background: bgForCell(battingPercentiles, 'hits', p) }}>{p.hits ?? '—'}</td>
-                    <td style={{ ...cellFor(battingSort, 'doubles'),  background: bgForCell(battingPercentiles, 'doubles', p) }}>{p.doubles ?? '—'}</td>
-                    <td style={{ ...cellFor(battingSort, 'triples'),  background: bgForCell(battingPercentiles, 'triples', p) }}>{p.triples ?? '—'}</td>
-                    <td style={{ ...cellFor(battingSort, 'hr'),       background: bgForCell(battingPercentiles, 'hr', p) }}>{p.hr}</td>
-                    <td style={{ ...cellFor(battingSort, 'rbi'),      background: bgForCell(battingPercentiles, 'rbi', p) }}>{p.rbi}</td>
-                    <td style={{ ...cellFor(battingSort, 'bb'),       background: bgForCell(battingPercentiles, 'bb', p) }}>{p.bb ?? '—'}</td>
-                    <td style={{ ...cellFor(battingSort, 'k'),        background: bgForCell(battingPercentiles, 'k', p) }}>{p.k ?? '—'}</td>
-                    <td style={{ ...cellFor(battingSort, 'avg'),      background: bgForCell(battingPercentiles, 'avg', p) }}>{p.avg}</td>
-                    <td style={{ ...cellFor(battingSort, 'obp'),      background: bgForCell(battingPercentiles, 'obp', p) }}>{p.obp}</td>
-                    <td style={{ ...cellFor(battingSort, 'slg'),      background: bgForCell(battingPercentiles, 'slg', p) }}>{p.slg}</td>
-                    <td style={{ ...cellFor(battingSort, 'ops'),      background: bgForCell(battingPercentiles, 'ops', p) }}>{p.ops}</td>
-                    <td style={{ ...cellFor(battingSort, 'ops_plus'), background: bgForCell(battingPercentiles, 'ops_plus', p) }}>{p.ops_plus}</td>
+                    <td title={titleForCell(battingPercentiles, 'runs', p)}     style={{ ...cellFor(battingSort, 'runs'),     background: bgForCell(battingPercentiles, 'runs', p) }}>{p.runs ?? '—'}</td>
+                    <td title={titleForCell(battingPercentiles, 'hits', p)}     style={{ ...cellFor(battingSort, 'hits'),     background: bgForCell(battingPercentiles, 'hits', p) }}>{p.hits ?? '—'}</td>
+                    <td title={titleForCell(battingPercentiles, 'doubles', p)}  style={{ ...cellFor(battingSort, 'doubles'),  background: bgForCell(battingPercentiles, 'doubles', p) }}>{p.doubles ?? '—'}</td>
+                    <td title={titleForCell(battingPercentiles, 'triples', p)}  style={{ ...cellFor(battingSort, 'triples'),  background: bgForCell(battingPercentiles, 'triples', p) }}>{p.triples ?? '—'}</td>
+                    <td title={titleForCell(battingPercentiles, 'hr', p)}       style={{ ...cellFor(battingSort, 'hr'),       background: bgForCell(battingPercentiles, 'hr', p) }}>{p.hr}</td>
+                    <td title={titleForCell(battingPercentiles, 'rbi', p)}      style={{ ...cellFor(battingSort, 'rbi'),      background: bgForCell(battingPercentiles, 'rbi', p) }}>{p.rbi}</td>
+                    <td title={titleForCell(battingPercentiles, 'bb', p)}       style={{ ...cellFor(battingSort, 'bb'),       background: bgForCell(battingPercentiles, 'bb', p) }}>{p.bb ?? '—'}</td>
+                    <td title={titleForCell(battingPercentiles, 'k', p)}        style={{ ...cellFor(battingSort, 'k'),        background: bgForCell(battingPercentiles, 'k', p) }}>{p.k ?? '—'}</td>
+                    <td title={titleForCell(battingPercentiles, 'avg', p)}      style={{ ...cellFor(battingSort, 'avg'),      background: bgForCell(battingPercentiles, 'avg', p) }}>{p.avg}</td>
+                    <td title={titleForCell(battingPercentiles, 'obp', p)}      style={{ ...cellFor(battingSort, 'obp'),      background: bgForCell(battingPercentiles, 'obp', p) }}>{p.obp}</td>
+                    <td title={titleForCell(battingPercentiles, 'slg', p)}      style={{ ...cellFor(battingSort, 'slg'),      background: bgForCell(battingPercentiles, 'slg', p) }}>{p.slg}</td>
+                    <td title={titleForCell(battingPercentiles, 'ops', p)}      style={{ ...cellFor(battingSort, 'ops'),      background: bgForCell(battingPercentiles, 'ops', p) }}>{p.ops}</td>
+                    <td title={titleForCell(battingPercentiles, 'ops_plus', p)} style={{ ...cellFor(battingSort, 'ops_plus'), background: bgForCell(battingPercentiles, 'ops_plus', p) }}>{p.ops_plus}</td>
                   </tr>
                 ))}
                 {filteredBatting.length === 0 && (
@@ -515,17 +528,17 @@ export default function GameCenter() {
                     <td style={cellFor(pitchingSort, 'w')}>{p.w}</td>
                     <td style={cellFor(pitchingSort, 'l')}>{p.l}</td>
                     <td style={cellFor(pitchingSort, 'saves')}>{p.saves ?? 0}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'ip'),        background: bgForCell(pitchingPercentiles, 'ip', p) }}>{p.ip}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'hits'),      background: bgForCell(pitchingPercentiles, 'hits', p) }}>{p.hits ?? '—'}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'runs'),      background: bgForCell(pitchingPercentiles, 'runs', p) }}>{p.runs ?? '—'}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'bb'),        background: bgForCell(pitchingPercentiles, 'bb', p) }}>{p.bb ?? '—'}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'k'),         background: bgForCell(pitchingPercentiles, 'k', p) }}>{p.k ?? '—'}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'hrAllowed'), background: bgForCell(pitchingPercentiles, 'hrAllowed', p) }}>{p.hrAllowed ?? '—'}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'era'),       background: bgForCell(pitchingPercentiles, 'era', p) }}>{p.era}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'whip'),      background: bgForCell(pitchingPercentiles, 'whip', p) }}>{p.whip}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'fip'),       background: bgForCell(pitchingPercentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'k4'),        background: bgForCell(pitchingPercentiles, 'k4', p) }}>{p.k4}</td>
-                    <td style={{ ...cellFor(pitchingSort, 'bb4'),       background: bgForCell(pitchingPercentiles, 'bb4', p) }}>{p.bb4}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'ip', p)}        style={{ ...cellFor(pitchingSort, 'ip'),        background: bgForCell(pitchingPercentiles, 'ip', p) }}>{p.ip}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'hits', p)}      style={{ ...cellFor(pitchingSort, 'hits'),      background: bgForCell(pitchingPercentiles, 'hits', p) }}>{p.hits ?? '—'}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'runs', p)}      style={{ ...cellFor(pitchingSort, 'runs'),      background: bgForCell(pitchingPercentiles, 'runs', p) }}>{p.runs ?? '—'}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'bb', p)}        style={{ ...cellFor(pitchingSort, 'bb'),        background: bgForCell(pitchingPercentiles, 'bb', p) }}>{p.bb ?? '—'}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'k', p)}         style={{ ...cellFor(pitchingSort, 'k'),         background: bgForCell(pitchingPercentiles, 'k', p) }}>{p.k ?? '—'}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'hrAllowed', p)} style={{ ...cellFor(pitchingSort, 'hrAllowed'), background: bgForCell(pitchingPercentiles, 'hrAllowed', p) }}>{p.hrAllowed ?? '—'}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'era', p)}       style={{ ...cellFor(pitchingSort, 'era'),       background: bgForCell(pitchingPercentiles, 'era', p) }}>{p.era}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'whip', p)}      style={{ ...cellFor(pitchingSort, 'whip'),      background: bgForCell(pitchingPercentiles, 'whip', p) }}>{p.whip}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'fip', p)}       style={{ ...cellFor(pitchingSort, 'fip'),       background: bgForCell(pitchingPercentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'k4', p)}        style={{ ...cellFor(pitchingSort, 'k4'),        background: bgForCell(pitchingPercentiles, 'k4', p) }}>{p.k4}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'bb4', p)}       style={{ ...cellFor(pitchingSort, 'bb4'),       background: bgForCell(pitchingPercentiles, 'bb4', p) }}>{p.bb4}</td>
                   </tr>
                 ))}
                 {filteredPitching.length === 0 && (

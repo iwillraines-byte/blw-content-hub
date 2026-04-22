@@ -149,8 +149,8 @@ export default function Generate() {
     const t = searchParams.get('template');
     return (t && TEMPLATE_TYPES[t]) ? t : 'player-stat';
   });
-  const [customTeam, setCustomTeam] = useState(() => searchParams.get('team') || 'LAN');
-  const [customPlatform, setCustomPlatform] = useState('feed');
+  const [customTeam, setCustomTeam] = useState(() => searchParams.get('team') || '');
+  const [customPlatform, setCustomPlatform] = useState('portrait');
   const [customFields, setCustomFields] = useState({});
   // Fields the user has explicitly toggled off — no placeholder in preview, no text in export
   const [hiddenFields, setHiddenFields] = useState(() => new Set());
@@ -194,9 +194,16 @@ export default function Generate() {
     }
   }, []);
 
-  // Load overlays from IndexedDB
-  useEffect(() => { getOverlays().then(setOverlays); }, []);
-  useEffect(() => { getEffects().then(setUploadedEffects); }, []);
+  // Load overlays + effects from IndexedDB — gated on team selection so we
+  // don't hydrate a team's entire asset library until the user commits to one.
+  useEffect(() => {
+    if (!customTeam) { setOverlays([]); return; }
+    getOverlays().then(setOverlays);
+  }, [customTeam]);
+  useEffect(() => {
+    if (!customTeam) { setUploadedEffects([]); return; }
+    getEffects().then(setUploadedEffects);
+  }, [customTeam]);
 
   // Load selected overlay image
   useEffect(() => {
@@ -419,7 +426,9 @@ export default function Generate() {
         {/* CONTROLS */}
         <div style={{ flex: '1 1 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Custom templates — the only mode.
-              Form flow: Team (sets colors) → Template → Player/Data → Media → Overlay → Effects */}
+              Form flow (left col): Team → Player → Media → Overlay → Content
+              Template Type lives above the preview (right col) because it
+              fundamentally changes what you're looking at. */}
           <>
               {/* 1. Team & Format — first, so brand colors drive the preview immediately */}
               <Card>
@@ -428,6 +437,7 @@ export default function Generate() {
                   <div style={{ flex: 1 }}>
                     <label style={labelStyle}>Team</label>
                     <select value={customTeam} onChange={e => setCustomTeam(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
+                      <option value="">Choose a team…</option>
                       {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
                     </select>
                   </div>
@@ -440,30 +450,12 @@ export default function Generate() {
                 </div>
               </Card>
 
-              {/* 2. Template Type */}
-              <Card>
-                <Label>Template Type</Label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
-                  {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
-                    <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
-                      background: customType === key ? colors.redLight : colors.bg,
-                      border: customType === key ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
-                      color: customType === key ? colors.red : colors.textSecondary,
-                      borderRadius: radius.base, padding: '8px 4px', cursor: 'pointer',
-                      fontFamily: fonts.body, fontSize: 9, fontWeight: 700, textAlign: 'center',
-                    }}>
-                      <div style={{ fontSize: 16 }}>{t.icon}</div>{t.name}
-                    </button>
-                  ))}
-                </div>
-              </Card>
-
-              {/* 3a. Player Selector (for player-centric templates) */}
+              {/* 2. Player Selector (for player-centric templates) */}
               {customTypeObj?.playerCentric && (
                 <Card>
                   <Label>Select Player</Label>
-                  <select value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)} style={{ ...selectStyle }}>
-                    <option value="">Choose a player...</option>
+                  <select value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)} style={{ ...selectStyle }} disabled={!customTeam}>
+                    <option value="">{customTeam ? 'Choose a player...' : 'Select a team first'}</option>
                     {filteredPlayers.map(p => (
                       <option key={`${p.team}_${p.name}`} value={`${p.team}_${p.name}`}>
                         {p.name} — {p.team}
@@ -473,141 +465,122 @@ export default function Generate() {
                 </Card>
               )}
 
-              {/* 3b. Dynamic Content — text fields that overlay the composition.
-                  Each field has a hide toggle so you can omit a zone entirely
-                  (no placeholder in preview, no text in the exported PNG). */}
-              <Card>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Label style={{ marginBottom: 0 }}>Content</Label>
-                  <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.4 }}>
-                    Click 👁 to hide a field
-                  </span>
-                </div>
-                {customFieldConfig.map(f => {
-                  const isHidden = hiddenFields.has(f.key);
-                  return (
-                    <div key={f.key} style={{ marginBottom: 10, opacity: isHidden ? 0.5 : 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                        <label style={labelStyle}>{f.label}</label>
-                        <button
-                          onClick={() => toggleFieldHidden(f.key)}
-                          title={isHidden ? 'Show this field' : 'Hide this field from preview + export'}
-                          style={{
-                            background: isHidden ? colors.bg : 'transparent',
-                            border: `1px solid ${isHidden ? colors.border : 'transparent'}`,
-                            borderRadius: radius.sm,
-                            padding: '2px 8px', cursor: 'pointer',
-                            fontSize: 12, lineHeight: 1,
-                            color: isHidden ? colors.textMuted : colors.textSecondary,
-                            fontFamily: fonts.body, fontWeight: 600,
-                          }}
-                        >
-                          {isHidden ? '🚫 Hidden' : '👁'}
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        value={customFields[f.key] || ''}
-                        onChange={e => setCustomFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        placeholder={isHidden ? '(field hidden — click 🚫 to show)' : `Enter ${f.label.toLowerCase()}...`}
-                        disabled={isHidden}
-                        style={{ ...inputStyle, marginTop: 0 }}
-                      />
-                    </div>
-                  );
-                })}
-              </Card>
-
-              {/* 4. Select Media — was Background Photo */}
+              {/* 3. Select Media — gated on team selection so we don't spin up
+                  a full team's asset library until the user has committed. */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Label style={{ marginBottom: 0 }}>Select Media</Label>
                   <label style={{
-                    background: colors.redLight, border: `1px solid ${colors.redBorder}`,
-                    color: colors.red, borderRadius: radius.sm, padding: '3px 10px',
-                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    background: customTeam ? colors.redLight : colors.bg,
+                    border: `1px solid ${customTeam ? colors.redBorder : colors.border}`,
+                    color: customTeam ? colors.red : colors.textMuted,
+                    borderRadius: radius.sm, padding: '3px 10px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                    cursor: customTeam ? 'pointer' : 'not-allowed',
+                    opacity: customTeam ? 1 : 0.6,
                   }}>
-                    <input type="file" accept="image/*,video/*" onChange={handleBgFileInput} style={{ display: 'none' }} />
+                    <input type="file" accept="image/*,video/*" onChange={handleBgFileInput} disabled={!customTeam} style={{ display: 'none' }} />
                     + Upload New
                   </label>
                 </div>
 
-                {/* Current selection preview */}
-                {bgUrl && (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{
-                      width: '100%', height: 120, borderRadius: radius.base,
-                      background: `url(${bgUrl}) center/cover`,
-                      border: `1px solid ${colors.border}`,
-                    }} />
-                    <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
-                      background: 'none', border: 'none', color: colors.red, fontSize: 11,
-                      fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer', marginTop: 4,
-                    }}>✕ Clear selection</button>
-                  </div>
-                )}
-
-                {/* Media grid — contextual: player's media if selected, else team's */}
-                {playerMediaUrls.length > 0 ? (
-                  <>
-                    <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6 }}>
-                      {selectedPlayer ? `PLAYER MEDIA · ${playerMediaUrls.length}` : `TEAM MEDIA · ${playerMediaUrls.length}`}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
-                      {playerMediaUrls.map(m => (
-                        <div
-                          key={m.id}
-                          onClick={() => selectPlayerMediaAsBg(m.url)}
-                          title={m.name}
-                          style={{
-                            width: '100%', aspectRatio: '1 / 1', borderRadius: radius.base, cursor: 'pointer',
-                            background: `url(${m.url}) center/cover`,
-                            border: bgUrl === m.url ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
-                            position: 'relative',
-                          }}
-                        >
-                          <div style={{
-                            position: 'absolute', bottom: 0, left: 0, right: 0,
-                            background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
-                            padding: '2px 4px',
-                            borderRadius: `0 0 ${radius.base}px ${radius.base}px`,
-                            fontSize: 8, color: '#fff', fontFamily: fonts.condensed, fontWeight: 700,
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
-                            {m.assetType || ''}{m.player ? ` · ${m.player}` : ''}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div onDrop={handleBgDrop} onDragOver={e => e.preventDefault()} style={{
+                {!customTeam ? (
+                  <div style={{
                     border: `2px dashed ${colors.border}`, borderRadius: radius.base,
                     padding: 24, textAlign: 'center', background: colors.bg,
                   }}>
                     <div style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.condensed }}>
-                      {selectedPlayer
-                        ? 'No media for this player yet'
-                        : customTeam ? 'No media uploaded for this team yet' : 'Select a team or player'}
-                    </div>
-                    <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4, fontFamily: fonts.condensed }}>
-                      Upload files in the Files page or drop one here
+                      Select a team above to load media
                     </div>
                   </div>
+                ) : (
+                  <>
+                    {/* Current selection preview */}
+                    {bgUrl && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{
+                          width: '100%', height: 120, borderRadius: radius.base,
+                          background: `url(${bgUrl}) center/cover`,
+                          border: `1px solid ${colors.border}`,
+                        }} />
+                        <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
+                          background: 'none', border: 'none', color: colors.red, fontSize: 11,
+                          fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer', marginTop: 4,
+                        }}>✕ Clear selection</button>
+                      </div>
+                    )}
+
+                    {/* Media grid — contextual: player's media if selected, else team's */}
+                    {playerMediaUrls.length > 0 ? (
+                      <>
+                        <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6 }}>
+                          {selectedPlayer ? `PLAYER MEDIA · ${playerMediaUrls.length}` : `TEAM MEDIA · ${playerMediaUrls.length}`}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                          {playerMediaUrls.map(m => (
+                            <div
+                              key={m.id}
+                              onClick={() => selectPlayerMediaAsBg(m.url)}
+                              title={m.name}
+                              style={{
+                                width: '100%', aspectRatio: '1 / 1', borderRadius: radius.base, cursor: 'pointer',
+                                background: `url(${m.url}) center/cover`,
+                                border: bgUrl === m.url ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
+                                position: 'relative',
+                              }}
+                            >
+                              <div style={{
+                                position: 'absolute', bottom: 0, left: 0, right: 0,
+                                background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                                padding: '2px 4px',
+                                borderRadius: `0 0 ${radius.base}px ${radius.base}px`,
+                                fontSize: 8, color: '#fff', fontFamily: fonts.condensed, fontWeight: 700,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>
+                                {m.assetType || ''}{m.player ? ` · ${m.player}` : ''}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div onDrop={handleBgDrop} onDragOver={e => e.preventDefault()} style={{
+                        border: `2px dashed ${colors.border}`, borderRadius: radius.base,
+                        padding: 24, textAlign: 'center', background: colors.bg,
+                      }}>
+                        <div style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.condensed }}>
+                          {selectedPlayer
+                            ? 'No media for this player yet'
+                            : 'No media uploaded for this team yet'}
+                        </div>
+                        <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4, fontFamily: fonts.condensed }}>
+                          Upload files in the Files page or drop one here
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </Card>
 
-              {/* Overlay Picker — moved below Select Media */}
+              {/* 4. Overlay Picker — also gated on team */}
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Label style={{ marginBottom: 0 }}>Overlay Template</Label>
-                  <button onClick={() => setShowUploadModal(true)} style={{
-                    background: colors.redLight, border: `1px solid ${colors.redBorder}`,
-                    color: colors.red, borderRadius: radius.sm, padding: '3px 10px',
-                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                  <button onClick={() => setShowUploadModal(true)} disabled={!customTeam} style={{
+                    background: customTeam ? colors.redLight : colors.bg,
+                    border: `1px solid ${customTeam ? colors.redBorder : colors.border}`,
+                    color: customTeam ? colors.red : colors.textMuted,
+                    borderRadius: radius.sm, padding: '3px 10px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                    cursor: customTeam ? 'pointer' : 'not-allowed',
+                    opacity: customTeam ? 1 : 0.6,
                   }}>+ Upload Overlay</button>
                 </div>
-                {filteredOverlays.length === 0 ? (
+                {!customTeam ? (
+                  <div style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', padding: 20, fontFamily: fonts.condensed }}>
+                    Select a team above to load overlays
+                  </div>
+                ) : filteredOverlays.length === 0 ? (
                   <div style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', padding: 20 }}>
                     No overlays uploaded for this type/team yet.
                     <br />Upload a PNG with transparency to get started.
@@ -636,6 +609,61 @@ export default function Generate() {
                 )}
               </Card>
 
+              {/* 5. Dynamic Content — text fields that overlay the composition.
+                  Each field has a VISIBLE / HIDDEN badge so you can omit a zone
+                  entirely (no placeholder in preview, no text in the PNG). */}
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Label style={{ marginBottom: 0 }}>Content</Label>
+                  <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.4 }}>
+                    Click the badge to toggle a field
+                  </span>
+                </div>
+                {customFieldConfig.map(f => {
+                  const isHidden = hiddenFields.has(f.key);
+                  // Matched-size toggle: VISIBLE (green) ↔ HIDDEN (muted) so the
+                  // control has the same visual weight whether it's on or off.
+                  const badgeStyle = {
+                    borderRadius: radius.sm,
+                    padding: '3px 10px',
+                    cursor: 'pointer',
+                    fontSize: 10,
+                    lineHeight: 1.2,
+                    fontFamily: fonts.condensed,
+                    fontWeight: 800,
+                    letterSpacing: 0.6,
+                    minWidth: 64,
+                    textAlign: 'center',
+                    border: '1px solid',
+                    background: isHidden ? colors.bg : 'rgba(34,197,94,0.12)',
+                    color: isHidden ? colors.textMuted : '#15803D',
+                    borderColor: isHidden ? colors.border : 'rgba(34,197,94,0.35)',
+                  };
+                  return (
+                    <div key={f.key} style={{ marginBottom: 10, opacity: isHidden ? 0.5 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <label style={labelStyle}>{f.label}</label>
+                        <button
+                          onClick={() => toggleFieldHidden(f.key)}
+                          title={isHidden ? 'Show this field in preview + export' : 'Hide this field from preview + export'}
+                          style={badgeStyle}
+                        >
+                          {isHidden ? 'HIDDEN' : 'VISIBLE'}
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={customFields[f.key] || ''}
+                        onChange={e => setCustomFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        placeholder={isHidden ? '(field hidden — click HIDDEN to show)' : `Enter ${f.label.toLowerCase()}...`}
+                        disabled={isHidden}
+                        style={{ ...inputStyle, marginTop: 0 }}
+                      />
+                    </div>
+                  );
+                })}
+              </Card>
+
           </>
 
           <RedButton onClick={download} style={{ width: '100%', padding: '14px 24px', fontSize: 14 }}>
@@ -643,9 +671,26 @@ export default function Generate() {
           </RedButton>
         </div>
 
-        {/* PREVIEW — canvas + Effects panel directly below so slider changes
-            are visible without scrolling */}
+        {/* PREVIEW — Template Type sits above the preview because it dictates
+            what the canvas is actually showing. Effects panel directly below
+            so slider changes are visible without scrolling. */}
         <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Card>
+            <Label>Template Type</Label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
+                <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
+                  background: customType === key ? colors.redLight : colors.bg,
+                  border: customType === key ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
+                  color: customType === key ? colors.red : colors.textSecondary,
+                  borderRadius: radius.base, padding: '8px 4px', cursor: 'pointer',
+                  fontFamily: fonts.body, fontSize: 10, fontWeight: 700, textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 18 }}>{t.icon}</div>{t.name}
+                </button>
+              ))}
+            </div>
+          </Card>
           <Label>Live Preview</Label>
           <div style={{
             background: '#1A1A22', borderRadius: radius.lg, padding: 16,

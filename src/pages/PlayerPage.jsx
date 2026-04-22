@@ -248,7 +248,11 @@ export default function PlayerPage() {
             {player.name.toUpperCase()}
           </div>
           <div style={{ fontFamily: fonts.body, fontSize: 13, opacity: 0.8 }}>
-            {player.batting && 'Batter'} {player.batting && player.pitching && '·'} {player.pitching && 'Pitcher'}
+            {player.batting && player.pitching
+              ? 'Two-Way Player'
+              : player.batting ? 'Batter'
+              : player.pitching ? 'Pitcher'
+              : ''}
           </div>
         </div>
         {/* Tier badge — prominent rank display in the header.
