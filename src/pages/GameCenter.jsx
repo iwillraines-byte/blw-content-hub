@@ -53,6 +53,91 @@ function cellFor(sort, key) {
   };
 }
 
+// ─── Percentile coloring (Baseball Savant style) ────────────────────────────
+// For stats where HIGHER is better, "quality percentile" == raw percentile.
+// For stats where LOWER is better (ERA, WHIP, K for a batter, etc.), we invert
+// so that the best performers still land in the red zone.
+//
+// Quality percentile ≥ 80 → progressively deeper red (deepest at 100)
+// Quality percentile ≤ 20 → progressively deeper blue (deepest at 1)
+// Else no background tint.
+const BATTING_COLOR_COLS = {
+  runs: 'higher', hits: 'higher', doubles: 'higher', triples: 'higher',
+  hr: 'higher', rbi: 'higher', bb: 'higher',
+  k: 'lower', // strikeouts for a hitter — fewer = better
+  avg: 'higher', obp: 'higher', slg: 'higher', ops: 'higher', ops_plus: 'higher',
+};
+
+const PITCHING_COLOR_COLS = {
+  ip: 'higher',
+  hits: 'lower', runs: 'lower', bb: 'lower', hrAllowed: 'lower',
+  k: 'higher',
+  era: 'lower', whip: 'lower', fip: 'lower',
+  k4: 'higher', bb4: 'lower',
+};
+
+// Compute per-player percentile for every configured column, across the full
+// population (not the filtered subset). Returns { [colKey]: Map<playerKey, pct> }.
+function computePercentiles(rows, colConfig) {
+  const out = {};
+  if (!Array.isArray(rows) || rows.length === 0) return out;
+  const playerKey = p => p.playerId ?? p.name;
+  for (const [colKey, direction] of Object.entries(colConfig)) {
+    const values = [];
+    for (const r of rows) {
+      const v = parseFloat(r[colKey]);
+      if (!isNaN(v)) values.push(v);
+    }
+    if (values.length === 0) { out[colKey] = new Map(); continue; }
+    values.sort((a, b) => a - b);
+    const total = values.length;
+    const map = new Map();
+    for (const r of rows) {
+      const v = parseFloat(r[colKey]);
+      if (isNaN(v)) continue;
+      // Count how many are strictly below; count ties
+      let below = 0;
+      let ties = 0;
+      // Binary-search could speed this up, but with ~100 rows per stat it's fine
+      for (const x of values) {
+        if (x < v) below++;
+        else if (x === v) ties++;
+        else break;
+      }
+      const raw = ((below + 0.5 * ties) / total) * 100;
+      const pct = direction === 'lower' ? 100 - raw : raw;
+      map.set(playerKey(r), pct);
+    }
+    out[colKey] = map;
+  }
+  return out;
+}
+
+// Map a quality percentile (0-100) to a cell background color.
+// null outside the red/blue zones so zebra striping shows through.
+function percentileColor(p) {
+  if (p == null) return null;
+  if (p >= 80) {
+    const t = Math.min(1, (p - 80) / 20); // 0 at p=80, 1 at p=100
+    const alpha = 0.10 + t * 0.40;
+    return `rgba(220, 38, 38, ${alpha.toFixed(2)})`;
+  }
+  if (p <= 20) {
+    const t = Math.min(1, (20 - p) / 20); // 0 at p=20, 1 at p=0
+    const alpha = 0.10 + t * 0.40;
+    return `rgba(37, 99, 235, ${alpha.toFixed(2)})`;
+  }
+  return null;
+}
+
+// Helper: given a computed percentiles map and a row, return the bg color for a cell.
+function bgForCell(percentiles, colKey, row) {
+  const map = percentiles[colKey];
+  if (!map) return null;
+  const pct = map.get(row.playerId ?? row.name);
+  return percentileColor(pct);
+}
+
 // Small colored badge for rank movement (+3 ▲ green, -2 ▼ red, — gray)
 function MoveBadge({ change }) {
   if (!change || change === 0) {
@@ -188,6 +273,11 @@ export default function GameCenter() {
     return applySort(filtered, battingSort);
   }, [batting, battingSearch, battingSort]);
 
+  // Percentile coloring — computed from the FULL population so filtering/sorting
+  // doesn't shift a player's percentile. Memoized on the raw lists only.
+  const battingPercentiles = useMemo(() => computePercentiles(batting, BATTING_COLOR_COLS), [batting]);
+  const pitchingPercentiles = useMemo(() => computePercentiles(pitching, PITCHING_COLOR_COLS), [pitching]);
+
   const filteredPitching = useMemo(() => {
     const q = pitchingSearch.trim().toLowerCase();
     const filtered = q ? pitching.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)) : pitching;
@@ -279,19 +369,19 @@ export default function GameCenter() {
                     <td style={cellFor(battingSort, 'games')}>{p.games ?? '—'}</td>
                     <td style={cellFor(battingSort, 'pa')}>{p.pa ?? '—'}</td>
                     <td style={cellFor(battingSort, 'ab')}>{p.ab ?? '—'}</td>
-                    <td style={cellFor(battingSort, 'runs')}>{p.runs ?? '—'}</td>
-                    <td style={cellFor(battingSort, 'hits')}>{p.hits ?? '—'}</td>
-                    <td style={cellFor(battingSort, 'doubles')}>{p.doubles ?? '—'}</td>
-                    <td style={cellFor(battingSort, 'triples')}>{p.triples ?? '—'}</td>
-                    <td style={cellFor(battingSort, 'hr')}>{p.hr}</td>
-                    <td style={cellFor(battingSort, 'rbi')}>{p.rbi}</td>
-                    <td style={cellFor(battingSort, 'bb')}>{p.bb ?? '—'}</td>
-                    <td style={cellFor(battingSort, 'k')}>{p.k ?? '—'}</td>
-                    <td style={cellFor(battingSort, 'avg')}>{p.avg}</td>
-                    <td style={cellFor(battingSort, 'obp')}>{p.obp}</td>
-                    <td style={cellFor(battingSort, 'slg')}>{p.slg}</td>
-                    <td style={cellFor(battingSort, 'ops')}>{p.ops}</td>
-                    <td style={cellFor(battingSort, 'ops_plus')}>{p.ops_plus}</td>
+                    <td style={{ ...cellFor(battingSort, 'runs'),     background: bgForCell(battingPercentiles, 'runs', p) }}>{p.runs ?? '—'}</td>
+                    <td style={{ ...cellFor(battingSort, 'hits'),     background: bgForCell(battingPercentiles, 'hits', p) }}>{p.hits ?? '—'}</td>
+                    <td style={{ ...cellFor(battingSort, 'doubles'),  background: bgForCell(battingPercentiles, 'doubles', p) }}>{p.doubles ?? '—'}</td>
+                    <td style={{ ...cellFor(battingSort, 'triples'),  background: bgForCell(battingPercentiles, 'triples', p) }}>{p.triples ?? '—'}</td>
+                    <td style={{ ...cellFor(battingSort, 'hr'),       background: bgForCell(battingPercentiles, 'hr', p) }}>{p.hr}</td>
+                    <td style={{ ...cellFor(battingSort, 'rbi'),      background: bgForCell(battingPercentiles, 'rbi', p) }}>{p.rbi}</td>
+                    <td style={{ ...cellFor(battingSort, 'bb'),       background: bgForCell(battingPercentiles, 'bb', p) }}>{p.bb ?? '—'}</td>
+                    <td style={{ ...cellFor(battingSort, 'k'),        background: bgForCell(battingPercentiles, 'k', p) }}>{p.k ?? '—'}</td>
+                    <td style={{ ...cellFor(battingSort, 'avg'),      background: bgForCell(battingPercentiles, 'avg', p) }}>{p.avg}</td>
+                    <td style={{ ...cellFor(battingSort, 'obp'),      background: bgForCell(battingPercentiles, 'obp', p) }}>{p.obp}</td>
+                    <td style={{ ...cellFor(battingSort, 'slg'),      background: bgForCell(battingPercentiles, 'slg', p) }}>{p.slg}</td>
+                    <td style={{ ...cellFor(battingSort, 'ops'),      background: bgForCell(battingPercentiles, 'ops', p) }}>{p.ops}</td>
+                    <td style={{ ...cellFor(battingSort, 'ops_plus'), background: bgForCell(battingPercentiles, 'ops_plus', p) }}>{p.ops_plus}</td>
                   </tr>
                 ))}
                 {filteredBatting.length === 0 && (
@@ -350,17 +440,17 @@ export default function GameCenter() {
                     <td style={cellFor(pitchingSort, 'w')}>{p.w}</td>
                     <td style={cellFor(pitchingSort, 'l')}>{p.l}</td>
                     <td style={cellFor(pitchingSort, 'saves')}>{p.saves ?? 0}</td>
-                    <td style={cellFor(pitchingSort, 'ip')}>{p.ip}</td>
-                    <td style={cellFor(pitchingSort, 'hits')}>{p.hits ?? '—'}</td>
-                    <td style={cellFor(pitchingSort, 'runs')}>{p.runs ?? '—'}</td>
-                    <td style={cellFor(pitchingSort, 'bb')}>{p.bb ?? '—'}</td>
-                    <td style={cellFor(pitchingSort, 'k')}>{p.k ?? '—'}</td>
-                    <td style={cellFor(pitchingSort, 'hrAllowed')}>{p.hrAllowed ?? '—'}</td>
-                    <td style={cellFor(pitchingSort, 'era')}>{p.era}</td>
-                    <td style={cellFor(pitchingSort, 'whip')}>{p.whip}</td>
-                    <td style={cellFor(pitchingSort, 'fip')}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
-                    <td style={cellFor(pitchingSort, 'k4')}>{p.k4}</td>
-                    <td style={cellFor(pitchingSort, 'bb4')}>{p.bb4}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'ip'),        background: bgForCell(pitchingPercentiles, 'ip', p) }}>{p.ip}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'hits'),      background: bgForCell(pitchingPercentiles, 'hits', p) }}>{p.hits ?? '—'}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'runs'),      background: bgForCell(pitchingPercentiles, 'runs', p) }}>{p.runs ?? '—'}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'bb'),        background: bgForCell(pitchingPercentiles, 'bb', p) }}>{p.bb ?? '—'}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'k'),         background: bgForCell(pitchingPercentiles, 'k', p) }}>{p.k ?? '—'}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'hrAllowed'), background: bgForCell(pitchingPercentiles, 'hrAllowed', p) }}>{p.hrAllowed ?? '—'}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'era'),       background: bgForCell(pitchingPercentiles, 'era', p) }}>{p.era}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'whip'),      background: bgForCell(pitchingPercentiles, 'whip', p) }}>{p.whip}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'fip'),       background: bgForCell(pitchingPercentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'k4'),        background: bgForCell(pitchingPercentiles, 'k4', p) }}>{p.k4}</td>
+                    <td style={{ ...cellFor(pitchingSort, 'bb4'),       background: bgForCell(pitchingPercentiles, 'bb4', p) }}>{p.bb4}</td>
                   </tr>
                 ))}
                 {filteredPitching.length === 0 && (
