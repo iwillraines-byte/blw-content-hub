@@ -246,6 +246,64 @@ export async function fetchAllData() {
   return { batting, pitching, rankings };
 }
 
+// ─── LEAGUE SCHEDULE ────────────────────────────────────────────────────────
+// Pulls game-by-game data from Grand Slam Systems /games. Each raw game has
+// apiAbbr-style team codes (LA, AZ, NY) — we remap to our BLW ids (LAN, AZS,
+// NYG) via the existing TEAMS lookup so calendars can filter by team cleanly.
+// Non-BLW opponents (tournaments include teams like LVW, OTR, WD) pass through
+// with a null `homeTeam` / `awayTeam`.
+
+let _gamesCache = null;
+let _gamesFetchedAt = 0;
+
+export async function fetchGames() {
+  if (_gamesCache && (Date.now() - _gamesFetchedAt) < CACHE_TTL) return _gamesCache;
+  try {
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/games?showAll=true`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = Array.isArray(data?.items) ? data.items : [];
+
+    const abbrToId = new Map();
+    for (const t of TEAMS) abbrToId.set((t.apiAbbr || '').toUpperCase(), t.id);
+
+    _gamesCache = items.map(g => ({
+      id: g.id,
+      dateTime: g.dateTime,            // "2026-06-07T18:00:00"
+      timezone: g.timezoneId,
+      status: g.status,                // "SCHEDULED" | "SUBMITTED" | etc
+      home: {
+        apiAbbr: g.homeAbbreviation,
+        teamId: abbrToId.get((g.homeAbbreviation || '').toUpperCase()) || null,
+        name: g.homeName,
+        score: g.homeScore,
+      },
+      away: {
+        apiAbbr: g.awayAbbreviation,
+        teamId: abbrToId.get((g.awayAbbreviation || '').toUpperCase()) || null,
+        name: g.awayName,
+        score: g.awayScore,
+      },
+      tournamentId: g.tournamentId,
+    }));
+    _gamesFetchedAt = Date.now();
+    return _gamesCache;
+  } catch (e) {
+    console.warn('[fetchGames] failed', e);
+    return _gamesCache || [];
+  }
+}
+
+// Utility: returns all games (any status) for a given team id (LAN, AZS, ...).
+// Sorted ascending by dateTime so callers can take the next N upcoming games
+// via `.filter(g => new Date(g.dateTime) > now)`.
+export function gamesForTeam(games, teamId) {
+  if (!teamId || !Array.isArray(games)) return [];
+  return games
+    .filter(g => g.home?.teamId === teamId || g.away?.teamId === teamId)
+    .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
+}
+
 // ─── TEAM ROSTER API ────────────────────────────────────────────────────────
 // Fetches the official team roster from /api/teams/:apiTeamId/roster
 // This is the authoritative source for who's on each team — not just players

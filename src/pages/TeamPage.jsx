@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
+import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
+import { ContentCalendar } from '../content-calendar';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
@@ -20,6 +21,7 @@ export default function TeamPage() {
   const [batting, setBatting] = useState([]);
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
+  const [games, setGames] = useState([]);
   // Avatars keyed by "FI|LASTNAME" (e.g. "C|ROSE") so same-lastname players
   // each get their own headshot. Legacy records without a firstInitial are
   // keyed by "|LASTNAME" and used as a fallback.
@@ -150,13 +152,15 @@ export default function TeamPage() {
       fetchTeamRosterFromApi(team.id),
       findTeamMedia(team.id),
       getManualPlayersByTeam(team.id),
-    ]).then(([liveData, apiRoster, teamMedia, manualList]) => {
+      fetchGames(),
+    ]).then(([liveData, apiRoster, teamMedia, manualList, gameList]) => {
       if (cancel) return;
       setMedia(teamMedia);
       setManualPlayers(manualList);
       setBatting(liveData?.batting || []);
       setPitching(liveData?.pitching || []);
       setRankings(liveData?.rankings || []);
+      setGames(gameList || []);
 
       const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList);
       setRoster(fullRoster);
@@ -673,6 +677,11 @@ export default function TeamPage() {
           </div>
         )}
       </Card>
+
+      {/* Content calendar — 4-week posting cadence. Baseline M/W/F; game weeks
+          bump to game-day × 3 posts; the week after goes light. Pulls games
+          from Grand Slam Systems /games (already proxied via /api/gss). */}
+      <ContentCalendar team={team} games={games} />
     </div>
   );
 }

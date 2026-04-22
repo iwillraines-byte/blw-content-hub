@@ -18,12 +18,20 @@ export default function ContentStudio() {
   // dashboard. Shares the same fetchAllData() call so nothing hits twice.
   const [batting, setBatting] = useState([]);
   const [pitching, setPitching] = useState([]);
+  const [rankings, setRankings] = useState([]);
+  // AI-generated content ideas — populated via /api/ideas. Falls back to the
+  // deterministic `suggestions` list when empty so the dashboard still works
+  // without the Anthropic key configured.
+  const [aiIdeas, setAiIdeas] = useState([]);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [ideasError, setIdeasError] = useState(null);
 
   useEffect(() => {
-    fetchAllData().then(({ batting: b, pitching: p, rankings }) => {
-      setSuggestions(generateContentSuggestions(b, p, rankings));
+    fetchAllData().then(({ batting: b, pitching: p, rankings: r }) => {
+      setSuggestions(generateContentSuggestions(b, p, r));
       setBatting(b || []);
       setPitching(p || []);
+      setRankings(r || []);
       setDataLoaded(true);
     });
     setRequests(getRequests());
@@ -33,6 +41,38 @@ export default function ContentStudio() {
       setMediaStats({ total, untagged });
     });
   }, []);
+
+  // Kick off an ideas request. `seedIdea` is optional — passed through to the
+  // API as the "more like this" seed. Results PREpend to aiIdeas so newer
+  // batches bubble to the top of the list.
+  const requestIdeas = async (seedIdea = null, count = 6) => {
+    setIdeasLoading(true);
+    setIdeasError(null);
+    try {
+      const res = await fetch('/api/ideas', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          context: {
+            teams: TEAMS.map(t => ({ id: t.id, name: t.name, record: t.record, rank: t.rank, color: t.color, accent: t.accent })),
+            batting: batting.slice(0, 20),
+            pitching: pitching.slice(0, 20),
+            rankings: rankings.slice(0, 40),
+          },
+          count,
+          seedIdea,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const tagged = (data.ideas || []).map((i, idx) => ({ ...i, id: i.id || `ai-${Date.now()}-${idx}`, aiGenerated: true }));
+      setAiIdeas(seedIdea ? [...tagged, ...aiIdeas] : tagged);
+    } catch (err) {
+      setIdeasError(err.message || 'Failed to fetch ideas');
+    } finally {
+      setIdeasLoading(false);
+    }
+  };
 
   const buildLink = (s) => {
     const params = new URLSearchParams();
@@ -96,39 +136,102 @@ export default function ContentStudio() {
         {/* LEFT — Content Suggestions */}
         <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card>
-            <SectionHeading>Content ideas</SectionHeading>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
+              <SectionHeading style={{ margin: 0 }}>Content ideas</SectionHeading>
+              <button
+                onClick={() => requestIdeas(null, 6)}
+                disabled={ideasLoading || !dataLoaded}
+                title="Generate a fresh batch of AI-powered content ideas using the current BLW state"
+                style={{
+                  background: ideasLoading ? colors.bg : colors.redLight,
+                  border: `1px solid ${ideasLoading ? colors.border : colors.redBorder}`,
+                  color: ideasLoading ? colors.textMuted : colors.red,
+                  borderRadius: radius.sm, padding: '5px 12px',
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                  cursor: ideasLoading || !dataLoaded ? 'wait' : 'pointer',
+                  letterSpacing: 0.6,
+                }}
+              >
+                {ideasLoading ? '…THINKING' : aiIdeas.length ? '✨ REGENERATE' : '✨ GENERATE IDEAS'}
+              </button>
+            </div>
             <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 14px', fontFamily: fonts.condensed }}>
-              Auto-generated from prowiffleball.com stats — click to create
+              {aiIdeas.length > 0
+                ? 'Fresh AI ideas from the BLW League Assistant — hit "More Like This" on any card for variants.'
+                : 'Auto-generated from prowiffleball.com stats — click to create.'}
             </p>
+            {ideasError && (
+              <div style={{
+                background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B',
+                padding: '8px 12px', borderRadius: radius.sm, fontSize: 12, marginBottom: 10,
+              }}>
+                Couldn't fetch AI ideas: {ideasError}
+                {ideasError.includes('ANTHROPIC_API_KEY') && <div style={{ fontSize: 11, marginTop: 4, opacity: 0.8 }}>
+                  Set ANTHROPIC_API_KEY in Vercel → Settings → Environment Variables and redeploy.
+                </div>}
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {suggestions.map(s => {
+              {(aiIdeas.length > 0 ? aiIdeas : suggestions).map(s => {
                 const team = s.team !== 'BLW' ? getTeam(s.team) : null;
                 const accent = team ? team.color : colors.border;
                 const bgTint = team ? `${team.color}0C` : colors.bg;
                 return (
-                  <Link key={s.id} to={buildLink(s)} style={{ textDecoration: 'none' }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '12px 14px', borderRadius: radius.base,
-                      background: bgTint, borderLeft: `3px solid ${accent}`,
-                      transition: 'box-shadow 0.15s', cursor: 'pointer',
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 2 }}>{s.headline}</div>
-                        <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.description}</div>
+                  <div key={s.id} style={{
+                    position: 'relative',
+                    borderRadius: radius.base,
+                    background: bgTint, borderLeft: `3px solid ${accent}`,
+                  }}>
+                    <Link to={buildLink(s)} style={{ textDecoration: 'none', display: 'block' }}>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '12px 14px', paddingRight: s.aiGenerated ? 120 : 14,
+                        transition: 'box-shadow 0.15s', cursor: 'pointer',
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                            {s.aiGenerated && (
+                              <span style={{
+                                fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
+                                letterSpacing: 0.8, color: '#7C3AED',
+                                background: 'rgba(124,58,237,0.10)', padding: '1px 5px', borderRadius: 3,
+                              }}>✨ AI</span>
+                            )}
+                            <div style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{s.headline}</div>
+                          </div>
+                          <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.description}</div>
+                        </div>
+                        {team && <TeamChip teamId={s.team} small withLogo />}
+                        <span style={{
+                          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                          color: colors.red, whiteSpace: 'nowrap',
+                        }}>Create →</span>
                       </div>
-                      {team && <TeamChip teamId={s.team} small withLogo />}
-                      <span style={{
-                        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                        color: colors.red, whiteSpace: 'nowrap',
-                      }}>Create →</span>
-                    </div>
-                  </Link>
+                    </Link>
+                    {s.aiGenerated && (
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); requestIdeas(s, 3); }}
+                        disabled={ideasLoading}
+                        title="Generate 3 more ideas in the same style as this one"
+                        style={{
+                          position: 'absolute', bottom: 6, right: 10,
+                          background: 'rgba(255,255,255,0.85)',
+                          border: `1px solid ${colors.borderLight}`,
+                          color: colors.textSecondary,
+                          borderRadius: radius.sm, padding: '3px 8px',
+                          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+                          cursor: ideasLoading ? 'wait' : 'pointer',
+                        }}
+                      >
+                        + MORE LIKE THIS
+                      </button>
+                    )}
+                  </div>
                 );
               })}
-              {dataLoaded && suggestions.length === 0 && (
+              {dataLoaded && suggestions.length === 0 && aiIdeas.length === 0 && (
                 <div style={{ fontSize: 13, color: colors.textMuted, padding: 20, textAlign: 'center' }}>
-                  No content ideas yet — stats will populate this list.
+                  No content ideas yet — hit "Generate Ideas" for a fresh AI batch, or stats will populate this list.
                 </div>
               )}
             </div>

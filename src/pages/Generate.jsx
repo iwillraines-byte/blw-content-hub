@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPlayers } from '../data';
+import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPlayers, fetchAllData } from '../data';
 import { Card, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TEMPLATE_TYPES, FONT_MAP, getFieldConfig } from '../template-config';
@@ -30,6 +30,79 @@ function drawDiagonalStripes(ctx, w, h, color, spacing=30, thickness=8) {
     ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + h, h); ctx.stroke();
   }
   ctx.restore();
+}
+
+// Build a short list of recommended stat-line variants for a selected player.
+// Each recommendation is { label, value, badge? } where `badge` is present
+// when the recommendation leans on a top-15% stat — a "worth posting" hint.
+//
+// The percentile calc is the same direction-aware one used on the Game Center
+// tables: for lower-is-better stats (K, ERA, FIP, WHIP, BB/4), "top" means
+// the player's value is low vs the league. So a pitcher with FIP 0.25 still
+// gets tagged "Top 5%" even though 0.25 is numerically small.
+function percentileOfValue(values, target, lowerIsBetter = false) {
+  if (!Array.isArray(values) || values.length === 0 || target == null) return null;
+  const sorted = [...values].filter(v => v != null && !isNaN(v)).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  let below = 0, ties = 0;
+  for (const v of sorted) {
+    if (v < target) below++;
+    else if (v === target) ties++;
+    else break;
+  }
+  const raw = ((below + 0.5 * ties) / sorted.length) * 100;
+  return lowerIsBetter ? 100 - raw : raw;
+}
+
+function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool) {
+  const recs = [];
+  const pctBadge = (pct) => (pct != null && pct >= 85) ? `Top ${Math.max(1, Math.round(100 - pct))}%` : null;
+
+  if (batter) {
+    const opsPct = percentileOfValue(battingPool.map(b => b.ops_plus), batter.ops_plus);
+    const avgPct = percentileOfValue(battingPool.map(b => parseFloat(b.avg)), parseFloat(batter.avg));
+    const hrPct = percentileOfValue(battingPool.map(b => b.hr), batter.hr);
+
+    recs.push({
+      label: 'Slash line',
+      value: `${batter.avg} / ${batter.obp} / ${batter.slg}`,
+      badge: pctBadge(avgPct),
+    });
+    if (batter.hr > 0) {
+      recs.push({
+        label: 'Power',
+        value: `HR ${batter.hr} · RBI ${batter.rbi} · ${batter.slg} SLG`,
+        badge: pctBadge(hrPct),
+      });
+    }
+    recs.push({
+      label: 'Advanced',
+      value: `OPS+ ${batter.ops_plus} · ${batter.ops} OPS`,
+      badge: pctBadge(opsPct),
+    });
+  }
+  if (pitcher) {
+    const fipPct = percentileOfValue(pitchingPool.map(b => b.fip), pitcher.fip, true);
+    const k4Pct = percentileOfValue(pitchingPool.map(b => parseFloat(b.k4)), parseFloat(pitcher.k4));
+    const wPct = percentileOfValue(pitchingPool.map(b => b.w), pitcher.w);
+
+    recs.push({
+      label: 'Dominance',
+      value: `FIP ${typeof pitcher.fip === 'number' ? pitcher.fip.toFixed(2) : pitcher.fip} · K/4 ${pitcher.k4}`,
+      badge: pctBadge(fipPct) || pctBadge(k4Pct),
+    });
+    recs.push({
+      label: 'Record',
+      value: `${pitcher.w}-${pitcher.l} · ${pitcher.era} ERA · ${pitcher.ip} IP`,
+      badge: pctBadge(wPct),
+    });
+    recs.push({
+      label: 'Strikeout',
+      value: `K ${pitcher.k} · K/4 ${pitcher.k4} · ${pitcher.ip} IP`,
+      badge: pctBadge(k4Pct),
+    });
+  }
+  return recs;
 }
 
 // Placeholder text shown in the preview when a field is empty.
@@ -177,6 +250,19 @@ export default function Generate() {
   const [effectFile, setEffectFile] = useState(null);
   const [effectName, setEffectName] = useState('');
 
+  // Live batting + pitching so the "Suggested stat lines" strip can compute
+  // the selected player's percentile and tag top-performers accordingly.
+  const [liveBatting, setLiveBatting] = useState([]);
+  const [livePitching, setLivePitching] = useState([]);
+  const [recommendedStatLines, setRecommendedStatLines] = useState([]); // [{ label, value, badge? }]
+
+  useEffect(() => {
+    fetchAllData().then(({ batting, pitching }) => {
+      setLiveBatting(batting || []);
+      setLivePitching(pitching || []);
+    });
+  }, []);
+
   const allPlayers = getAllPlayers();
   const filteredPlayers = customTeam === 'ALL' ? allPlayers : allPlayers.filter(p => p.team === customTeam);
 
@@ -242,19 +328,26 @@ export default function Generate() {
 
   // Auto-fill stats when player selected (jersey sourced from media if available)
   useEffect(() => {
-    if (!selectedPlayer) return;
+    if (!selectedPlayer) { setRecommendedStatLines([]); return; }
     const p = allPlayers.find(pl => `${pl.team}_${pl.name}` === selectedPlayer);
     if (!p) return;
-    const batter = BATTING_LEADERS.find(b => b.name === p.name && b.team === p.team);
-    const pitcher = PITCHING_LEADERS.find(b => b.name === p.name && b.team === p.team);
+    // Prefer live data so recs are current; fall back to cached fallbacks.
+    const battingPool = liveBatting.length ? liveBatting : BATTING_LEADERS;
+    const pitchingPool = livePitching.length ? livePitching : PITCHING_LEADERS;
+    const batter = battingPool.find(b => b.name === p.name && b.team === p.team);
+    const pitcher = pitchingPool.find(b => b.name === p.name && b.team === p.team);
     const teamObj = getTeam(p.team);
-    // Look up jersey from loaded media
     const mediaJersey = playerMedia.find(m => m.num)?.num || p.num || '';
     const newFields = { playerName: p.name, number: mediaJersey, teamName: teamObj?.name || p.team };
     if (batter) newFields.statLine = `OPS+ ${batter.ops_plus} | AVG ${batter.avg} | HR ${batter.hr} | OBP ${batter.obp}`;
     else if (pitcher) newFields.statLine = `FIP ${pitcher.fip.toFixed(2)} | IP ${pitcher.ip} | W ${pitcher.w} | K/4 ${pitcher.k4}`;
     setCustomFields(prev => ({ ...prev, ...newFields }));
-  }, [selectedPlayer, playerMedia]);
+
+    // Build "Suggested stat lines" — a handful of pre-formatted variants the
+    // user can one-click insert. Percentile badge tags the angle that leans
+    // on a top-15% stat, so designers know which variant to lead with.
+    setRecommendedStatLines(buildRecommendations(p, batter, pitcher, battingPool, pitchingPool));
+  }, [selectedPlayer, playerMedia, liveBatting, livePitching]);
 
   const customPlat = PLATFORMS[customPlatform];
   const scale = Math.min(400 / customPlat.w, 500 / customPlat.h);
@@ -659,6 +752,56 @@ export default function Generate() {
                         disabled={isHidden}
                         style={{ ...inputStyle, marginTop: 0 }}
                       />
+                      {/* Suggested stat lines — player-specific, computed against
+                          the full league. Click to insert into the stat line. */}
+                      {f.key === 'statLine' && !isHidden && recommendedStatLines.length > 0 && (
+                        <div style={{ marginTop: 6 }}>
+                          <div style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 4 }}>
+                            ✨ SUGGESTED STAT LINES
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {recommendedStatLines.map((rec, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setCustomFields(prev => ({ ...prev, [f.key]: rec.value }))}
+                                title={`Insert: ${rec.value}`}
+                                style={{
+                                  background: customFields[f.key] === rec.value ? colors.redLight : colors.bg,
+                                  border: `1px solid ${customFields[f.key] === rec.value ? colors.redBorder : colors.border}`,
+                                  color: customFields[f.key] === rec.value ? colors.red : colors.textSecondary,
+                                  borderRadius: radius.sm,
+                                  padding: '4px 8px',
+                                  cursor: 'pointer',
+                                  fontFamily: fonts.condensed,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  textAlign: 'left',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  maxWidth: '100%',
+                                }}
+                              >
+                                <span style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  {rec.label}
+                                </span>
+                                {rec.badge && (
+                                  <span style={{
+                                    background: 'rgba(220,38,38,0.15)',
+                                    color: '#DC2626',
+                                    padding: '1px 5px',
+                                    borderRadius: 999,
+                                    fontSize: 8,
+                                    letterSpacing: 0.3,
+                                  }}>
+                                    {rec.badge}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
