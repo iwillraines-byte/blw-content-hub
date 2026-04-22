@@ -5,6 +5,7 @@ import { Card, SectionHeading, RedButton, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam } from '../player-store';
+import { TierBadge } from '../tier-badges';
 
 function buildStatLine(player) {
   if (player.batting) {
@@ -19,39 +20,6 @@ function buildStatLine(player) {
   return '';
 }
 
-// ─── Tier badge ─────────────────────────────────────────────────────────────
-// Maps a player's currentRank into a tier with distinctive styling. Placeholder
-// visuals for now — drop real PNG/SVG designs in per tier when ready.
-function getTierInfo(rank) {
-  if (!rank || rank <= 0) return null;
-  if (rank <= 3)   return { tier: 'elite',    label: `#${rank}`,            subLabel: 'ELITE',       bg: 'linear-gradient(135deg, #F5C300, #D69A00)', fg: '#2A1A00', border: '#F5C300' };
-  if (rank <= 10)  return { tier: 'top-10',   label: `TOP 10`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #E5E7EB, #9CA3AF)', fg: '#1F2937', border: '#D1D5DB' };
-  if (rank <= 25)  return { tier: 'top-25',   label: `TOP 25`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #D97706, #92400E)', fg: '#FFF7ED', border: '#D97706' };
-  if (rank <= 50)  return { tier: 'top-50',   label: `TOP 50`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #2563EB, #1E40AF)', fg: '#EFF6FF', border: '#2563EB' };
-  if (rank <= 100) return { tier: 'top-100',  label: `TOP 100`,             subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #16A34A, #15803D)', fg: '#F0FDF4', border: '#16A34A' };
-  return               { tier: 'ranked',    label: `RANKED`,              subLabel: `#${rank}`,    bg: 'linear-gradient(135deg, #6B7280, #4B5563)', fg: '#F9FAFB', border: '#6B7280' };
-}
-
-function TierBadge({ rank }) {
-  const info = getTierInfo(rank);
-  if (!info) return null;
-  return (
-    <div style={{
-      display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      minWidth: 92, padding: '10px 14px',
-      background: info.bg, color: info.fg,
-      border: `2px solid ${info.border}`,
-      borderRadius: radius.base,
-      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-      fontFamily: fonts.heading, letterSpacing: 1,
-    }} title={`Tier: ${info.tier} · BLW Rank #${rank}`}>
-      <div style={{ fontSize: 20, lineHeight: 1 }}>{info.label}</div>
-      <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginTop: 4, opacity: 0.85 }}>
-        {info.subLabel}
-      </div>
-    </div>
-  );
-}
 
 // ─── League rank helpers ────────────────────────────────────────────────────
 // Compute a player's 1-indexed rank for a given numeric stat across the list.
@@ -265,9 +233,10 @@ export default function PlayerPage() {
             {player.batting && 'Batter'} {player.batting && player.pitching && '·'} {player.pitching && 'Pitcher'}
           </div>
         </div>
-        {/* Tier badge — prominent rank display in the header. Placeholder
-            visual; swap in design PNG/SVG when ready. */}
-        {playerRank && <TierBadge rank={playerRank} />}
+        {/* Tier badge — prominent rank display in the header.
+            Images live in /public/badges/. Glow animation is defined in
+            src/tier-badges.js and injected once at app root. */}
+        {playerRank && <TierBadge rank={playerRank} size={120} />}
         <Link to={`/generate?${generateParams.toString()}`} style={{ textDecoration: 'none' }}>
           <RedButton style={{
             background: team.accent, color: team.color,

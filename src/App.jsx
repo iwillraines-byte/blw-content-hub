@@ -11,6 +11,7 @@ import Settings from './pages/Settings';
 import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
 import { TeamLogo } from './components';
+import { TierBadgeStyles } from './tier-badges';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -322,6 +323,8 @@ export default function App() {
       fontFamily: fonts.body, color: colors.text,
       display: 'flex', minHeight: '100vh', background: colors.bg,
     }}>
+      {/* Inject tier-badge glow keyframes once at app root */}
+      <TierBadgeStyles />
       <Sidebar isMobile={isMobile} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
