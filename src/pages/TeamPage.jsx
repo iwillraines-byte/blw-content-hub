@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { TEAMS, getTeam, slugify, fetchAllData, fetchTeamRosterFromApi, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
+import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
@@ -13,7 +13,10 @@ export default function TeamPage() {
   const [media, setMedia] = useState([]);
   const [roster, setRoster] = useState([]);
   const [manualPlayers, setManualPlayers] = useState([]);
-  const [rosterAvatars, setRosterAvatars] = useState({}); // lastName (upper) → objectURL
+  // Avatars keyed by "FI|LASTNAME" (e.g. "C|ROSE") so same-lastname players
+  // each get their own headshot. Legacy records without a firstInitial are
+  // keyed by "|LASTNAME" and used as a fallback.
+  const [rosterAvatars, setRosterAvatars] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [newPlayerFirst, setNewPlayerFirst] = useState('');
@@ -22,41 +25,58 @@ export default function TeamPage() {
   const [newPlayerPosition, setNewPlayerPosition] = useState('');
 
   const rebuildRoster = useCallback((apiRoster, teamMedia, manualList) => {
-    // Jersey lookup from media filenames
-    const jerseyByLastName = {};
-    for (const m of teamMedia) {
-      if (m.player && m.num && !jerseyByLastName[m.player]) {
-        jerseyByLastName[m.player] = m.num;
-      }
+    // Identity key: "FI|LASTNAME" (uppercase) — lets Logan Rose and Carson Rose
+    // coexist on the same roster. Legacy records without a firstInitial use "|LASTNAME".
+    const identityKey = (fi, ln) => `${String(fi || '').toUpperCase()}|${String(ln || '').toUpperCase()}`;
+
+    // Only consider player-scoped media when building the roster.
+    const playerMedia = teamMedia.filter(m => (m.scope || 'player') === 'player');
+
+    // Jersey lookup from media filenames — prefer (initial + lastname) key;
+    // fall back to lastname-only for legacy records.
+    const jerseyByKey = {};
+    for (const m of playerMedia) {
+      if (!m.player || !m.num) continue;
+      const key = identityKey(m.firstInitial, m.player);
+      if (!jerseyByKey[key]) jerseyByKey[key] = m.num;
+      const legacyKey = identityKey('', m.player);
+      if (!jerseyByKey[legacyKey]) jerseyByKey[legacyKey] = m.num;
     }
-    // Also seed from manual players
     for (const p of manualList) {
-      const up = p.lastName.toUpperCase();
-      if (p.num && !jerseyByLastName[up]) jerseyByLastName[up] = p.num;
+      const fi = (p.firstName || '').charAt(0).toUpperCase();
+      const k = identityKey(fi, p.lastName);
+      if (p.num && !jerseyByKey[k]) jerseyByKey[k] = p.num;
     }
 
-    const taken = new Set(apiRoster.map(p => p.lastName.toUpperCase()));
+    const taken = new Set();
     const entries = [];
 
-    // API roster (with jersey from media/manual)
+    // API roster — use first-initial for identity so duplicates don't collide.
     for (const p of apiRoster) {
+      const fi = (p.firstName || '').charAt(0).toUpperCase();
+      const key = identityKey(fi, p.lastName);
+      const legacyKey = identityKey('', p.lastName);
+      taken.add(key);
       entries.push({
         ...p,
-        num: p.num || jerseyByLastName[p.lastName.toUpperCase()] || '',
+        firstInitial: fi,
+        num: p.num || jerseyByKey[key] || jerseyByKey[legacyKey] || '',
         source: 'api',
       });
     }
 
-    // Manual players not already in API roster
+    // Manual players not already represented in the API roster
     for (const p of manualList) {
-      const up = p.lastName.toUpperCase();
-      if (taken.has(up)) continue;
-      taken.add(up);
+      const fi = (p.firstName || '').charAt(0).toUpperCase();
+      const key = identityKey(fi, p.lastName);
+      if (taken.has(key)) continue;
+      taken.add(key);
       entries.push({
         manualId: p.id,
         playerId: null,
         name: p.name,
         firstName: p.firstName,
+        firstInitial: fi,
         lastName: p.lastName,
         team: p.team,
         num: p.num || '',
@@ -69,30 +89,40 @@ export default function TeamPage() {
     }
 
     // Media-only players (not in API, not manually added)
-    for (const m of teamMedia) {
+    for (const m of playerMedia) {
       if (!m.player || m.player === 'TEAM' || m.player === 'LEAGUE') continue;
-      const up = m.player.toUpperCase();
-      if (taken.has(up)) continue;
-      taken.add(up);
-      const lastName = up.charAt(0) + up.slice(1).toLowerCase();
+      const fi = (m.firstInitial || '').toUpperCase();
+      const key = identityKey(fi, m.player);
+      if (taken.has(key)) continue;
+      // Don't create a media-only player if the same lastname already exists
+      // via API under a *different* initial — that's likely the same person
+      // whose file was tagged before the initial convention existed.
+      const lastnameAlreadyInRoster = entries.some(
+        e => e.lastName.toUpperCase() === m.player && (!fi || !e.firstInitial || e.firstInitial === fi)
+      );
+      if (lastnameAlreadyInRoster && !fi) continue;
+      taken.add(key);
+      const pretty = m.player.charAt(0) + m.player.slice(1).toLowerCase();
       entries.push({
-        playerId: null, name: lastName, firstName: '', lastName,
-        team: team.id, num: m.num || '',
+        playerId: null,
+        name: fi ? `${fi}. ${pretty}` : pretty,
+        firstName: fi,
+        firstInitial: fi,
+        lastName: pretty,
+        team: team.id,
+        num: m.num || '',
         isPitcher: false, isBatter: false, mediaOnly: true, source: 'media',
       });
     }
 
-    // Defensive dedup by lastName — in case API returns duplicates or sources overlap
-    // with mismatched casing. Keep first occurrence (API > manual > media order above).
+    // Defensive dedup by identity key — belt-and-braces in case sources overlap
     const seen = new Set();
     const deduped = entries.filter(p => {
-      const key = p.lastName.toUpperCase();
+      const key = identityKey(p.firstInitial, p.lastName);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-    // Also filter out any entry whose team doesn't match this page's team (guard
-    // against cross-team bleed from stale caches or mistagged media)
     const onlyThisTeam = deduped.filter(p => !p.team || p.team === team.id);
     return onlyThisTeam.sort((a, b) => a.lastName.localeCompare(b.lastName));
   }, [team?.id]);
@@ -121,14 +151,20 @@ export default function TeamPage() {
       const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList);
       setRoster(fullRoster);
 
-      // Avatar lookup
+      // Avatar lookup — prefer a headshot whose firstInitial matches the
+      // roster entry. Fall back to any lastname match for legacy records
+      // that pre-date the initial convention.
       const urls = {};
+      const playerOnly = teamMedia.filter(m => (m.scope || 'player') === 'player');
       for (const p of fullRoster) {
-        const headshot = teamMedia.find(m =>
-          m.player === p.lastName.toUpperCase() &&
-          (m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION')
-        );
-        if (headshot?.blob) urls[p.lastName.toUpperCase()] = blobToObjectURL(headshot.blob);
+        const LN = p.lastName.toUpperCase();
+        const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
+        const isHeadshotLike = (m) =>
+          m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION';
+        const exact = playerOnly.find(m => m.player === LN && (m.firstInitial || '').toUpperCase() === FI && isHeadshotLike(m));
+        const legacy = playerOnly.find(m => m.player === LN && !m.firstInitial && isHeadshotLike(m));
+        const headshot = exact || legacy;
+        if (headshot?.blob) urls[`${FI}|${LN}`] = blobToObjectURL(headshot.blob);
       }
       setRosterAvatars(urls);
       setLoaded(true);
@@ -189,6 +225,15 @@ export default function TeamPage() {
     for (const m of media) if (m.blob) urls[m.id] = blobToObjectURL(m.blob);
     return urls;
   }, [media]);
+
+  const teamScopedMedia = useMemo(
+    () => media.filter(m => (m.scope || 'player') === 'team'),
+    [media]
+  );
+  const playerScopedMedia = useMemo(
+    () => media.filter(m => (m.scope || 'player') === 'player'),
+    [media]
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -330,19 +375,22 @@ export default function TeamPage() {
         {loaded && roster.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
             {roster.map((p, idx) => {
-              const avatar = rosterAvatars[p.lastName.toUpperCase()];
+              const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
+              const avatar = rosterAvatars[`${FI}|${p.lastName.toUpperCase()}`];
               const statLabel = p.isBatter && p.isPitcher
                 ? 'Two-way'
                 : p.isBatter ? 'Batter'
                 : p.isPitcher ? 'Pitcher'
                 : p.mediaOnly ? 'Roster' : 'Roster';
-              // Composite key — lastName can collide (Logan Rose / Carson Rose),
-              // so include player identifier + index for absolute uniqueness.
-              const rowKey = `${p.playerId || p.manualId || p.source || 'row'}-${p.lastName}-${idx}`;
+              // Composite key — with first-initial + lastname, Logan Rose and
+              // Carson Rose each get a stable unique key.
+              const rowKey = `${p.playerId || p.manualId || p.source || 'row'}-${FI}-${p.lastName}-${idx}`;
+              // Disambiguated slug: "c-rose" beats "rose".
+              const slug = playerSlug(p);
               return (
                 <div key={rowKey} style={{ position: 'relative' }}>
                   <Link
-                    to={`/teams/${team.slug}/players/${slugify(p.lastName)}`}
+                    to={`/teams/${team.slug}/players/${slug}`}
                     style={{
                       textDecoration: 'none', color: colors.text,
                       padding: 12, borderRadius: radius.base,
@@ -398,23 +446,61 @@ export default function TeamPage() {
         )}
       </Card>
 
-      {/* Recently Uploaded Media */}
+      {/* Team Photos — team-scoped assets (TEAMPHOTO, VENUE, LOGO_*, WORDMARK) */}
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <SectionHeading style={{ margin: 0 }}>Recent media</SectionHeading>
+          <SectionHeading style={{ margin: 0 }}>Team photos</SectionHeading>
           <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>
             Go to Files →
           </Link>
         </div>
-        {media.length === 0 && (
+        {teamScopedMedia.length === 0 && (
+          <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
+            No team-wide photos yet. Upload a group shot, venue pic, or logo in Files — tag as <strong>TEAMPHOTO</strong>, <strong>VENUE</strong>, <strong>LOGO</strong>, or <strong>WORDMARK</strong>.
+          </div>
+        )}
+        {teamScopedMedia.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+            {teamScopedMedia.slice(0, 12).map(m => (
+              <div key={m.id} style={{
+                borderRadius: radius.base, overflow: 'hidden',
+                border: `1px solid ${colors.borderLight}`,
+              }}>
+                <div style={{
+                  width: '100%', height: 110,
+                  background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
+                }} />
+                <div style={{ padding: 8 }}>
+                  <div style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {m.name}
+                  </div>
+                  <div style={{ fontSize: 9, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
+                    {m.assetType}{m.variant ? ` · ${m.variant}` : ''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Recently Uploaded Player Media */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <SectionHeading style={{ margin: 0 }}>Recent player media</SectionHeading>
+          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>
+            Go to Files →
+          </Link>
+        </div>
+        {playerScopedMedia.length === 0 && (
           <div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
-            No media uploaded for this team yet.{' '}
+            No player media uploaded for this team yet.{' '}
             <Link to="/files" style={{ color: colors.red }}>Upload in Files</Link>
           </div>
         )}
-        {media.length > 0 && (
+        {playerScopedMedia.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-            {media.slice(0, 12).map(m => (
+            {playerScopedMedia.slice(0, 12).map(m => (
               <div key={m.id} style={{
                 borderRadius: radius.base, overflow: 'hidden',
                 border: `1px solid ${colors.borderLight}`,

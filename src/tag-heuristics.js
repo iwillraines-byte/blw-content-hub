@@ -81,21 +81,60 @@ function matchJersey(tokens) {
   return null;
 }
 
-// Find last name by matching against roster (provided as array of { lastName })
+// Find last name by matching against roster (provided as array of { lastName }).
+// Returns the matched player plus a `candidates` array of all roster entries
+// sharing that lastname on the same team — callers use this to detect when a
+// first-initial disambiguator is needed.
 function matchLastName(tokens, roster) {
   if (!roster || roster.length === 0) return null;
-  const nameSet = new Map();
+  const byName = new Map(); // lowercase lastName → [players]
   for (const p of roster) {
     if (p.lastName && p.lastName.length >= 3) {
-      nameSet.set(p.lastName.toLowerCase(), p);
+      const k = p.lastName.toLowerCase();
+      if (!byName.has(k)) byName.set(k, []);
+      byName.get(k).push(p);
     }
   }
   for (const tok of tokens) {
     if (tok.length < 3) continue;
-    const hit = nameSet.get(tok);
-    if (hit) return { lastName: hit.lastName.toUpperCase(), player: hit, source: tok };
+    const hits = byName.get(tok);
+    if (hits && hits.length > 0) {
+      // Prefer a player whose team matches another matched team token, if any.
+      const hit = hits[0];
+      return {
+        lastName: hit.lastName.toUpperCase(),
+        player: hit,
+        candidates: hits,
+        source: tok,
+      };
+    }
   }
   return null;
+}
+
+// Given the matched player + all same-lastname candidates + tokens from the
+// filename, pick a first-initial if one is clearly present in the filename.
+// Returns '' when ambiguous or unavailable.
+function matchFirstInitial(tokens, lastNameMatch) {
+  if (!lastNameMatch) return '';
+  const { player, candidates, source } = lastNameMatch;
+  // Only bother when there's a name collision to resolve.
+  if (!candidates || candidates.length <= 1) {
+    return (player.firstName || '').charAt(0).toUpperCase();
+  }
+  // Look for an explicit F.LAST token in the filename — e.g. "c.rose".
+  const dotRe = new RegExp(`^([a-z])\\.${source}$`, 'i');
+  for (const tok of tokens) {
+    const m = dotRe.exec(tok);
+    if (m) return m[1].toUpperCase();
+  }
+  // Fall back: if any candidate's firstName appears as its own token, use that.
+  for (const cand of candidates) {
+    const fn = (cand.firstName || '').toLowerCase();
+    if (fn && tokens.includes(fn)) return fn.charAt(0).toUpperCase();
+  }
+  // Still ambiguous — return empty so the UI prompts for input.
+  return '';
 }
 
 // Find asset type from keyword match
@@ -166,8 +205,51 @@ export function heuristicallyTag({ filename, folderName = '', roster = [] }) {
       p.team === team.team && p.num && p.num.padStart(2, '0') === jersey.num
     );
     if (rosterHit) {
-      lastNameMatch = { lastName: rosterHit.lastName.toUpperCase(), player: rosterHit, source: `jersey-lookup` };
+      lastNameMatch = {
+        lastName: rosterHit.lastName.toUpperCase(),
+        player: rosterHit,
+        candidates: [rosterHit],
+        source: `jersey-lookup`,
+      };
       reasons.push(`player "${rosterHit.lastName}" looked up from team+jersey`);
+    }
+  }
+
+  // First initial — if the filename explicitly encodes F.LAST (e.g. "c.rose"),
+  // prefer that. Otherwise infer from the matched player (useful even when
+  // the lastname isn't ambiguous — makes saved files disambiguation-ready).
+  let firstInitial = '';
+  let ambiguous = false;
+  if (lastNameMatch) {
+    // Look for an explicit F.LASTNAME literal in the raw filename.
+    const ln = lastNameMatch.source;
+    if (ln && /^[a-z]+$/i.test(ln)) {
+      const explicitRe = new RegExp(`(?:^|[^a-z0-9])([a-z])\\.${ln}(?:$|[^a-z0-9])`, 'i');
+      const m = explicitRe.exec(String(filename).toLowerCase());
+      if (m) {
+        firstInitial = m[1].toUpperCase();
+        reasons.push(`first initial "${firstInitial}" parsed from F.LAST form`);
+      }
+    }
+    if (!firstInitial) {
+      const cands = lastNameMatch.candidates || [lastNameMatch.player];
+      if (cands.length > 1) {
+        // Multiple candidates — try to use firstName tokens, else flag ambiguous.
+        for (const cand of cands) {
+          const fn = (cand.firstName || '').toLowerCase();
+          if (fn && filenameTokens.includes(fn)) {
+            firstInitial = fn.charAt(0).toUpperCase();
+            reasons.push(`first initial "${firstInitial}" inferred from first-name token`);
+            break;
+          }
+        }
+        if (!firstInitial) {
+          ambiguous = true;
+          reasons.push(`ambiguous: ${cands.length} players share lastname "${lastNameMatch.lastName}" — need first initial`);
+        }
+      } else {
+        firstInitial = (lastNameMatch.player.firstName || '').charAt(0).toUpperCase();
+      }
     }
   }
 
@@ -181,11 +263,17 @@ export function heuristicallyTag({ filename, folderName = '', roster = [] }) {
   if (parts >= 3) confidence = 'high';
   else if (parts === 2) confidence = 'medium';
   else if (parts === 1) confidence = 'low';
+  // Knock down confidence when the lastname is ambiguous and we couldn't pick
+  // an initial — the user needs to confirm which player this is.
+  if (ambiguous && confidence === 'high') confidence = 'medium';
+  else if (ambiguous && confidence === 'medium') confidence = 'low';
 
   return {
     team: team?.team || null,
     num: jersey?.num || null,
     lastName: lastNameMatch?.lastName || null,
+    firstInitial: firstInitial || null,
+    ambiguous,
     assetType: assetTypeMatch?.assetType || null,
     confidence,
     reasons,
@@ -193,11 +281,31 @@ export function heuristicallyTag({ filename, folderName = '', roster = [] }) {
 }
 
 // ─── Helper: check if an already-named file is "good enough" ────────────────
-// If filename follows TEAM_##_LASTNAME_TYPE.ext convention, we skip tagging.
+// Accepts any of:
+//   TEAM_##_F.LASTNAME_TYPE.ext     (preferred — player-scoped with initial)
+//   TEAM_##_LASTNAME_TYPE.ext       (legacy — player-scoped, no initial)
+//   TEAM_TEAMPHOTO[_variant].ext    (team-scoped)
+//   TEAM_VENUE[_variant].ext
+//   TEAM_LOGO_* / TEAM_WORDMARK[_variant].ext
+const TEAM_SCOPE_PREFIXES = new Set([
+  'TEAMPHOTO', 'VENUE', 'WORDMARK',
+  'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON',
+  'LOGO',
+]);
+
 export function isAlreadyTagged(filename) {
   const parts = filename.replace(/\.[^.]+$/, '').split('_');
-  if (parts.length < 4) return false;
+  if (parts.length < 2) return false;
   const teamOk = TEAMS.some(t => t.id === parts[0].toUpperCase());
-  const numOk = /^\d{2}$/.test(parts[1]) || parts[1] === ''; // jersey can be blank
-  return teamOk && numOk;
+  if (!teamOk) return false;
+
+  // Team-scoped: TEAM_{TYPE}[_VARIANT]
+  const t1 = (parts[1] || '').toUpperCase();
+  const t1t2 = (parts[2] || '').toUpperCase() ? `${t1}_${(parts[2] || '').toUpperCase()}` : t1;
+  if (TEAM_SCOPE_PREFIXES.has(t1) || TEAM_SCOPE_PREFIXES.has(t1t2)) return true;
+
+  // Player-scoped: needs 4 segments with jersey # in slot [1]
+  if (parts.length < 4) return false;
+  const numOk = /^\d{2}$/.test(parts[1]) || parts[1] === '';
+  return numOk;
 }

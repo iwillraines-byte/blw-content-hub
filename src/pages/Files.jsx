@@ -3,27 +3,27 @@ import { Link } from 'react-router-dom';
 import { TEAMS, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL } from '../media-store';
+import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, TEAM_SCOPE_TYPES } from '../media-store';
 import {
   getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder,
   extractFolderId, listFolderFiles, downloadFileAsBlob,
 } from '../drive-api';
-import { heuristicallyTag } from '../tag-heuristics';
+import { heuristicallyTag, isAlreadyTagged } from '../tag-heuristics';
 import { autoTagBlob } from '../auto-tag-api';
 import { getAllPlayersDirectory } from '../data';
 
-const ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK', 'TEAMPHOTO', 'VENUE'];
+const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
+const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
+const ASSET_TYPES = [...PLAYER_ASSET_TYPES, ...TEAM_ASSET_TYPES];
 const typeIcons = { HEADSHOT: '👤', ACTION: '📸', ACTION2: '📸', HIGHLIGHT: '🎬', HIGHLIGHT2: '🎬', LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨', PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️', TEAMPHOTO: '👥', VENUE: '🏟️', FILE: '📄', LINK: '🔗' };
 const sourceLabels = { local: 'Local', gdrive: 'Google Drive' };
 const sourceColors = { local: colors.red, gdrive: '#34A853' };
 
-// Check if file follows naming convention: at least TEAM_##_LASTNAME_TYPE
+// A file is considered properly named if it matches any of the conventions
+// that the parser recognises (player-scoped w/ or w/o initial, team-scoped).
+// Delegates to isAlreadyTagged so the rules live in one place.
 function isProperlyNamed(name) {
-  const parts = name.replace(/\.[^.]+$/, '').split('_');
-  if (parts.length < 4) return false;
-  const teamMatch = TEAMS.some(t => t.id === parts[0].toUpperCase());
-  const numMatch = /^\d{2}$/.test(parts[1]);
-  return teamMatch && numMatch;
+  return isAlreadyTagged(name);
 }
 
 // TagRow — single untagged file row with:
@@ -32,14 +32,33 @@ function isProperlyNamed(name) {
 //   - Manual dropdown overrides so user can correct AI guesses before Apply
 // The parent may also push an AI result via `tagHint` prop (used for bulk runs).
 function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy }) {
+  const [tagScope, setTagScope] = useState('player'); // 'player' | 'team'
   const [tagTeam, setTagTeam] = useState('');
   const [tagNum, setTagNum] = useState('');
+  const [tagInitial, setTagInitial] = useState('');
   const [tagName, setTagName] = useState('');
   const [tagType, setTagType] = useState('HEADSHOT');
+  const [tagVariant, setTagVariant] = useState('');
   const [saving, setSaving] = useState(false);
   const [hintSource, setHintSource] = useState(''); // "heuristic" | "ai" | "" (none)
   const [confidence, setConfidence] = useState('');
   const [reasoning, setReasoning] = useState('');
+  const [ambiguous, setAmbiguous] = useState(false);
+
+  // Switching scope clears inputs that don't apply in the other mode so the
+  // preview doesn't retain stale data.
+  const switchScope = (next) => {
+    if (next === tagScope) return;
+    setTagScope(next);
+    if (next === 'team') {
+      setTagNum(''); setTagInitial(''); setTagName('');
+      // Default team-scoped type
+      if (!TEAM_SCOPE_TYPES.has(tagType)) setTagType('TEAMPHOTO');
+    } else {
+      setTagVariant('');
+      if (TEAM_SCOPE_TYPES.has(tagType)) setTagType('HEADSHOT');
+    }
+  };
 
   // Layer 1 — run once on mount to pre-fill fields from filename heuristics
   useEffect(() => {
@@ -48,9 +67,15 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
     const guess = heuristicallyTag({ filename: file.name, roster });
     if (guess.confidence === 'none') return;
     if (guess.team && !tagTeam) setTagTeam(guess.team);
+    if (guess.assetType) {
+      setTagType(guess.assetType);
+      // If heuristic says the type is team-scoped, switch modes.
+      if (TEAM_SCOPE_TYPES.has(guess.assetType)) setTagScope('team');
+    }
     if (guess.num && !tagNum) setTagNum(guess.num);
     if (guess.lastName && !tagName) setTagName(guess.lastName);
-    if (guess.assetType) setTagType(guess.assetType);
+    if (guess.firstInitial && !tagInitial) setTagInitial(guess.firstInitial);
+    if (guess.ambiguous) setAmbiguous(true);
     if (!hintSource) {
       setHintSource('heuristic');
       setConfidence(guess.confidence);
@@ -70,9 +95,14 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
       return;
     }
     if (tagHint.team) setTagTeam(tagHint.team);
+    if (tagHint.assetType) {
+      setTagType(tagHint.assetType);
+      if (TEAM_SCOPE_TYPES.has(tagHint.assetType)) setTagScope('team');
+    }
     if (tagHint.num) setTagNum(tagHint.num);
     if (tagHint.lastName) setTagName(tagHint.lastName);
-    if (tagHint.assetType) setTagType(tagHint.assetType);
+    if (tagHint.firstInitial) setTagInitial(tagHint.firstInitial);
+    setAmbiguous(Boolean(tagHint.ambiguous));
     setHintSource('ai');
     setConfidence(tagHint.confidence || 'low');
     setReasoning(tagHint.reasoning || '');
@@ -83,9 +113,18 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
   };
 
   const ext = file.name.split('.').pop() || 'png';
-  const preview = tagTeam && tagName
-    ? `${tagTeam}_${(tagNum || '00').padStart(2, '0')}_${tagName.toUpperCase()}_${tagType}.${ext}`
-    : null;
+  let preview = null;
+  if (tagScope === 'team' && tagTeam) {
+    const type = TEAM_SCOPE_TYPES.has(tagType) ? tagType : 'TEAMPHOTO';
+    const v = tagVariant.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    preview = v
+      ? `${tagTeam}_${type}_${v}.${ext}`
+      : `${tagTeam}_${type}.${ext}`;
+  } else if (tagScope === 'player' && tagTeam && tagName) {
+    const FI = (tagInitial || '').toUpperCase().slice(0, 1);
+    const nameSeg = FI ? `${FI}.${tagName.toUpperCase()}` : tagName.toUpperCase();
+    preview = `${tagTeam}_${(tagNum || '00').padStart(2, '0')}_${nameSeg}_${tagType}.${ext}`;
+  }
 
   const apply = async () => {
     if (!preview) return;
@@ -132,20 +171,67 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
         <div style={{ fontSize: 11, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</div>
       </div>
 
+      {/* Scope toggle — Player vs Team. Team mode hides jersey# and lastname. */}
+      <div style={{ display: 'inline-flex', border: `1px solid ${colors.border}`, borderRadius: radius.sm, overflow: 'hidden', flexShrink: 0 }}>
+        {['player', 'team'].map(s => (
+          <button
+            key={s}
+            onClick={() => switchScope(s)}
+            style={{
+              background: tagScope === s ? colors.red : colors.white,
+              color: tagScope === s ? '#fff' : colors.textSecondary,
+              border: 'none', padding: '4px 8px',
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+              letterSpacing: 0.5, cursor: 'pointer',
+            }}
+            title={s === 'team' ? 'Team-wide asset (no player)' : 'Tagged to a specific player'}
+          >{s.toUpperCase()}</button>
+        ))}
+      </div>
+
       {/* Tag inputs */}
       <select value={tagTeam} onChange={e => { setTagTeam(e.target.value); setHintSource(''); }} style={{ ...selectStyle, ...compact, width: 80 }}>
         <option value="">Team</option>
         {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
       </select>
 
-      <input type="text" value={tagNum} onChange={e => { setTagNum(e.target.value.replace(/\D/g, '').slice(0, 2)); setHintSource(''); }}
-        placeholder="##" maxLength={2} style={{ ...inputStyle, ...compact, width: 44, textAlign: 'center' }} />
+      {tagScope === 'player' && (
+        <>
+          <input type="text" value={tagNum} onChange={e => { setTagNum(e.target.value.replace(/\D/g, '').slice(0, 2)); setHintSource(''); }}
+            placeholder="##" maxLength={2} style={{ ...inputStyle, ...compact, width: 44, textAlign: 'center' }} />
 
-      <input type="text" value={tagName} onChange={e => { setTagName(e.target.value.toUpperCase().replace(/[^A-Z]/g, '')); setHintSource(''); }}
-        placeholder="LASTNAME" style={{ ...inputStyle, ...compact, width: 100 }} />
+          <input type="text" value={tagInitial}
+            onChange={e => {
+              const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 1);
+              setTagInitial(v); setHintSource(''); if (v) setAmbiguous(false);
+            }}
+            placeholder="F"
+            title={ambiguous ? 'Two players share this lastname — first initial required' : 'First initial (optional but recommended)'}
+            maxLength={1}
+            style={{
+              ...inputStyle, ...compact, width: 34, textAlign: 'center',
+              borderColor: ambiguous && !tagInitial ? '#D97706' : inputStyle.borderColor,
+              background: ambiguous && !tagInitial ? '#FEF3C7' : inputStyle.background,
+            }}
+          />
 
-      <select value={tagType} onChange={e => setTagType(e.target.value)} style={{ ...selectStyle, ...compact, width: 110 }}>
-        {ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          <input type="text" value={tagName} onChange={e => { setTagName(e.target.value.toUpperCase().replace(/[^A-Z]/g, '')); setHintSource(''); }}
+            placeholder="LASTNAME" style={{ ...inputStyle, ...compact, width: 100 }} />
+        </>
+      )}
+
+      {tagScope === 'team' && (
+        <input type="text" value={tagVariant}
+          onChange={e => { setTagVariant(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')); setHintSource(''); }}
+          placeholder="Variant (optional)"
+          title='Optional variant suffix, e.g. "DUGOUT", "FIELD", "01"'
+          style={{ ...inputStyle, ...compact, width: 178 }} />
+      )}
+
+      <select value={tagType} onChange={e => setTagType(e.target.value)} style={{ ...selectStyle, ...compact, width: 130 }}>
+        {(tagScope === 'team' ? TEAM_ASSET_TYPES : PLAYER_ASSET_TYPES).map(t => (
+          <option key={t} value={t}>{t}</option>
+        ))}
       </select>
 
       {/* Preview / error */}
@@ -155,8 +241,12 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
             AI: {aiError}
           </div>
         ) : preview ? (
-          <div style={{ fontSize: 10, color: colors.success, fontFamily: fonts.condensed, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            → {preview}
+          <div style={{
+            fontSize: 10, fontFamily: fonts.condensed, fontWeight: 600,
+            color: ambiguous && !tagInitial ? '#92400E' : colors.success,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }} title={ambiguous && !tagInitial ? 'Add a first initial — two players share this lastname' : preview}>
+            {ambiguous && !tagInitial ? '⚠︎ ' : '→ '}{preview}
           </div>
         ) : null}
       </div>
@@ -470,9 +560,17 @@ export default function Files() {
   const [bulkAiProgress, setBulkAiProgress] = useState(null); // { done, total, failed }
 
   useEffect(() => {
-    // Preload the full player directory once for heuristic matching
+    // Preload the full player directory once for heuristic matching. We pull
+    // firstName/firstInitial so the heuristic can detect same-lastname
+    // collisions and ask for the first initial.
     getAllPlayersDirectory().then(list => {
-      setRoster(list.map(p => ({ team: p.team, lastName: p.lastName, num: p.num || '' })));
+      setRoster(list.map(p => ({
+        team: p.team,
+        firstName: p.firstName || '',
+        firstInitial: p.firstInitial || (p.firstName || '').charAt(0).toUpperCase(),
+        lastName: p.lastName,
+        num: p.num || '',
+      })));
     }).catch(() => {});
   }, []);
 
@@ -642,8 +740,11 @@ export default function Files() {
         name: m.name,
         team: m.team || null,
         num: m.num || null,
+        firstInitial: m.firstInitial || null,
         player: m.player || null,
         assetType: m.assetType || null,
+        scope: m.scope || null,
+        variant: m.variant || null,
         source: m.source || 'local',
         driveFileId: m.driveFileId || null,
         width: m.width || 0,
@@ -770,10 +871,10 @@ export default function Files() {
               <div style={{ display: 'flex', gap: 8, padding: '4px 10px 8px', fontSize: 9, fontFamily: fonts.condensed, color: colors.textMuted, fontWeight: 600, textTransform: 'uppercase' }}>
                 <div style={{ width: 48 }} />
                 <div style={{ width: 160 }}>Original</div>
+                <div style={{ width: 90 }}>Scope</div>
                 <div style={{ width: 80 }}>Team</div>
-                <div style={{ width: 44 }}>#</div>
-                <div style={{ width: 100 }}>Last Name</div>
-                <div style={{ width: 110 }}>Asset Type</div>
+                <div style={{ width: 186 }}>Player (# · F · Lastname) / Variant</div>
+                <div style={{ width: 130 }}>Asset Type</div>
                 <div style={{ flex: 1 }}>New Name</div>
               </div>
               {untagged.map(file => {

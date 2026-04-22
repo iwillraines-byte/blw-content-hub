@@ -102,8 +102,12 @@ export default function PlayerPage() {
         setPitchingLeaders(allData.pitching || []);
         const p = getPlayerByTeamLastName(team.id, lastName, manualList);
         if (p) {
-          // Media match ignores jersey number — just team + lastName
-          const m = await findPlayerMedia(team.id, p.lastName);
+          // Media match uses team + lastName, disambiguated by first initial
+          // when the player has one (handles Logan Rose vs Carson Rose). Legacy
+          // records with no firstInitial still surface — see findPlayerMedia.
+          const m = await findPlayerMedia(team.id, p.lastName, {
+            firstInitial: p.firstInitial,
+          });
           if (cancel) return;
           // Source jersey from first uploaded media file if available
           const mediaJersey = m.find(x => x.num)?.num || '';
@@ -150,6 +154,18 @@ export default function PlayerPage() {
     );
   }
 
+  // Legacy slug resolved but multiple players share this lastname — warn so
+  // the user knows to use the new first-initial link on the team page.
+  const ambiguityBanner = player.ambiguous ? (
+    <div style={{
+      background: '#FEF3C7', color: '#92400E',
+      border: '1px solid #FDE68A', borderRadius: radius.sm,
+      padding: '10px 14px', fontSize: 13, fontFamily: fonts.body,
+    }}>
+      ⚠︎ {player.candidateCount} players on {team.name} share the lastname "{player.lastName}". Showing <strong>{player.name}</strong> — use the roster on the team page for a direct link to each player.
+    </div>
+  ) : null;
+
   // Group media by asset type
   const grouped = media.reduce((acc, m) => {
     const k = m.assetType || 'FILE';
@@ -194,6 +210,8 @@ export default function PlayerPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {ambiguityBanner}
+
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontFamily: fonts.condensed }}>
         <Link to={`/teams/${team.slug}`} style={{

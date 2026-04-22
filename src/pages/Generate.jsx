@@ -214,12 +214,16 @@ export default function Generate() {
       if (selectedPlayer) {
         const p = allPlayers.find(pl => `${pl.team}_${pl.name}` === selectedPlayer);
         if (p) {
-          // Match by team + lastName only — jersey numbers are optional
-          mediaItems = await findPlayerMedia(p.team, p.lastName);
+          // Pass first initial to disambiguate when two players on the team
+          // share a lastname (e.g. Logan Rose vs Carson Rose). Legacy media
+          // records without an initial still surface — see findPlayerMedia.
+          const firstInitial = (p.firstName || (p.name || '').split(' ')[0] || '').charAt(0);
+          mediaItems = await findPlayerMedia(p.team, p.lastName, { firstInitial });
         }
       } else if (customTeam) {
-        // No player selected — show all team media
-        mediaItems = await findTeamMedia(customTeam);
+        // No player selected — show all team media (player-scoped only; team
+        // assets have their own surface on the team page).
+        mediaItems = await findTeamMedia(customTeam, { scope: 'player' });
       }
       setPlayerMedia(mediaItems);
       setPlayerMediaUrls(mediaItems.map(m => ({

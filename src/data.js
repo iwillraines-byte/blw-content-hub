@@ -359,18 +359,31 @@ export function slugify(str) {
 // stats, media files, and manually-added players. Returns one entry per
 // (team, lastName).
 export async function getAllPlayersDirectory(mediaList = [], manualPlayers = []) {
-  const registry = new Map(); // `${team}_${UPPER_LASTNAME}` → entry
-  const key = (team, lastName) => `${team}_${String(lastName || '').toUpperCase()}`;
+  // Identity = team + first-initial + lastname. Handles same-lastname players
+  // on one team (e.g. Logan Rose / Carson Rose). Callers that don't supply a
+  // first initial (legacy media, some manual entries) fall into a "" bucket;
+  // we reconcile those back to the initialled entry whenever possible.
+  const registry = new Map(); // `${team}_${FI}_${UPPER_LASTNAME}` → entry
+  const key = (team, firstInitial, lastName) =>
+    `${team}_${(firstInitial || '').toUpperCase()}_${String(lastName || '').toUpperCase()}`;
 
   const upsert = (team, name, patch) => {
     if (!team || !name) return;
     const lastName = name.split(' ').pop();
-    const k = key(team, lastName);
+    const firstName = name.split(' ').slice(0, -1).join(' ');
+    const firstInitial = firstName.charAt(0).toUpperCase();
+    const k = key(team, firstInitial, lastName);
     const existing = registry.get(k) || {
-      name: '', firstName: '', lastName,
+      name: '', firstName: '', firstInitial, lastName,
       team, num: '', hasStats: false, hasMedia: false, hasManual: false, isPitcher: false, isBatter: false,
     };
-    registry.set(k, { ...existing, name: existing.name || name, firstName: existing.firstName || name.split(' ').slice(0, -1).join(' '), ...patch });
+    registry.set(k, {
+      ...existing,
+      name: existing.name || name,
+      firstName: existing.firstName || firstName,
+      firstInitial: existing.firstInitial || firstInitial,
+      ...patch,
+    });
   };
 
   // Batting stats (cached)
@@ -391,24 +404,47 @@ export async function getAllPlayersDirectory(mediaList = [], manualPlayers = [])
       });
     }
   }
-  // Media files
+  // Media files — prefer (initial + lastname) key; fall back to lastname-only
+  // match so legacy records attach to an existing initialled entry instead of
+  // creating a phantom duplicate.
   for (const m of mediaList) {
     if (!m.team || !m.player || m.player === 'TEAM' || m.player === 'LEAGUE') continue;
+    if (m.scope === 'team') continue; // team-scoped assets aren't players
     const titleLast = m.player.charAt(0) + m.player.slice(1).toLowerCase();
-    const k = key(m.team, m.player);
-    if (registry.has(k)) {
-      const e = registry.get(k);
-      registry.set(k, { ...e, hasMedia: true, num: e.num || m.num || '' });
+    const FI = (m.firstInitial || '').toUpperCase();
+    let matched = null;
+    if (FI) {
+      matched = registry.get(key(m.team, FI, m.player));
+    }
+    if (!matched) {
+      // Legacy record (no initial) or no exact match — try to find a single
+      // initialled entry with matching team + lastname. If there's exactly
+      // one, attach to it; otherwise bucket under "" (ambiguous).
+      const siblings = [...registry.values()].filter(
+        e => e.team === m.team && e.lastName.toUpperCase() === m.player.toUpperCase()
+      );
+      if (siblings.length === 1) matched = siblings[0];
+    }
+    if (matched) {
+      matched.hasMedia = true;
+      if (!matched.num && m.num) matched.num = m.num;
     } else {
-      upsert(m.team, titleLast, { hasMedia: true, num: m.num || '' });
+      upsert(m.team, FI ? `${FI}. ${titleLast}` : titleLast, { hasMedia: true, num: m.num || '' });
     }
   }
   // Manual players
   for (const p of manualPlayers) {
-    const k = key(p.team, p.lastName);
+    const FI = (p.firstName || '').charAt(0).toUpperCase();
+    const k = key(p.team, FI, p.lastName);
     const existing = registry.get(k);
     if (existing) {
-      registry.set(k, { ...existing, hasManual: true, manualId: p.id, num: existing.num || p.num || '', firstName: existing.firstName || p.firstName || '' });
+      registry.set(k, {
+        ...existing,
+        hasManual: true, manualId: p.id,
+        num: existing.num || p.num || '',
+        firstName: existing.firstName || p.firstName || '',
+        firstInitial: existing.firstInitial || FI,
+      });
     } else {
       upsert(p.team, p.name || p.lastName, { hasManual: true, manualId: p.id, num: p.num || '' });
     }
@@ -489,21 +525,72 @@ export function getTeamRoster(teamId, mediaList = []) {
   return Array.from(roster.values()).sort((a, b) => a.lastName.localeCompare(b.lastName));
 }
 
-// Fetch detailed player info for the player page
+// Parse a player slug. Supports two forms:
+//   "rose"     → { firstInitial: '', lastName: 'rose' }         (legacy)
+//   "c-rose"   → { firstInitial: 'C', lastName: 'rose' }        (disambiguated)
+// When a player's actual last name is hyphenated (e.g. "smith-jones"), the
+// legacy parse would swallow the first segment as an initial. We guard
+// against that by only treating the first segment as an initial when it's a
+// single letter.
+function parsePlayerSlug(slug) {
+  const norm = slugify(slug);
+  const parts = norm.split('-');
+  if (parts.length >= 2 && parts[0].length === 1 && /^[a-z]$/.test(parts[0])) {
+    return { firstInitial: parts[0].toUpperCase(), lastName: parts.slice(1).join('-') };
+  }
+  return { firstInitial: '', lastName: norm };
+}
+export { parsePlayerSlug };
+
+// Fetch detailed player info for the player page.
+// Disambiguates between same-lastname players using a first-initial prefix in
+// the slug (e.g. "c-rose" vs "l-rose"). Legacy slugs without an initial still
+// resolve: if there's exactly one player with that lastname we return them;
+// if there are multiple, we return the first and flag `ambiguous: true` so
+// the UI can warn.
 export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []) {
-  const LN_NORM = slugify(lastNameSlug);
-  const matchName = (name) => slugify(name.split(' ').pop()) === LN_NORM;
+  const { firstInitial: WANT_FI, lastName: LN_NORM } = parsePlayerSlug(lastNameSlug);
 
-  const batting = (_battingCache || BATTING_FALLBACK).find(p => p.team === teamId && matchName(p.name));
-  const pitching = (_pitchingCache || PITCHING_FALLBACK).find(p => p.team === teamId && matchName(p.name));
-  const ranking = (_rankingsCache || []).find(r => matchName(r.name));
+  const matchLast = (name) => slugify(String(name || '').split(' ').pop()) === LN_NORM;
+  const matchFullSlug = (name) => {
+    const n = String(name || '').trim();
+    const fi = n.charAt(0).toUpperCase();
+    const ln = slugify(n.split(' ').pop());
+    return WANT_FI ? (fi === WANT_FI && ln === LN_NORM) : (ln === LN_NORM);
+  };
 
-  // Also check fetched roster (players without current stats)
+  // Gather all candidates for this team/lastname across every source.
+  const battingAll = (_battingCache || BATTING_FALLBACK).filter(p => p.team === teamId && matchLast(p.name));
+  const pitchingAll = (_pitchingCache || PITCHING_FALLBACK).filter(p => p.team === teamId && matchLast(p.name));
   const rosterCached = _rosterCache.get(teamId);
-  const rosterPlayer = rosterCached?.roster.find(p => matchName(p.name));
+  const rosterAll = (rosterCached?.roster || []).filter(p => matchLast(p.name));
+  const manualAll = manualPlayers.filter(p => p.team === teamId && matchLast(p.name || p.lastName));
+  const rankingAll = (_rankingsCache || []).filter(r => matchLast(r.name));
 
-  // And manual entries
-  const manual = manualPlayers.find(p => p.team === teamId && matchName(p.name || p.lastName));
+  // Narrow by first-initial when requested.
+  const byInitial = (arr) => WANT_FI
+    ? arr.filter(p => String(p.name || p.lastName || '').trim().charAt(0).toUpperCase() === WANT_FI)
+    : arr;
+
+  const battingMatches = byInitial(battingAll);
+  const pitchingMatches = byInitial(pitchingAll);
+  const rosterMatches = byInitial(rosterAll);
+  const manualMatches = byInitial(manualAll);
+  const rankingMatches = byInitial(rankingAll);
+
+  // Count unique candidates on this team by full-name — detects legacy slug
+  // collisions so the UI can warn.
+  const candidateNames = new Set();
+  for (const p of [...battingAll, ...pitchingAll, ...rosterAll, ...manualAll]) {
+    if (p.name) candidateNames.add(p.name);
+  }
+  const ambiguous = !WANT_FI && candidateNames.size > 1;
+
+  const batting = battingMatches[0] || battingAll[0] || null;
+  const pitching = pitchingMatches[0] || pitchingAll[0] || null;
+  const rosterPlayer = rosterMatches[0] || rosterAll[0] || null;
+  const manual = manualMatches[0] || manualAll[0] || null;
+  const ranking = rankingMatches[0] || rankingAll[0] || null;
 
   const source = batting || pitching || rosterPlayer || manual;
   if (!source && !ranking) return null;
@@ -516,6 +603,7 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     name,
     firstName,
     lastName,
+    firstInitial: firstName.charAt(0).toUpperCase(),
     team: teamId,
     num: source?.num || '',
     batting: batting || null,
@@ -523,7 +611,19 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     ranking: ranking || null,
     roster: rosterPlayer || null,
     manual: manual || null,
+    ambiguous,
+    candidateCount: candidateNames.size,
   };
+}
+
+// Build the canonical disambiguated slug for a player.
+export function playerSlug(player) {
+  if (!player) return '';
+  const fn = player.firstName || String(player.name || '').split(' ').slice(0, -1).join(' ');
+  const ln = player.lastName || String(player.name || '').split(' ').pop();
+  const fi = (fn || '').charAt(0).toLowerCase();
+  const lnSlug = slugify(ln);
+  return fi ? `${fi}-${lnSlug}` : lnSlug;
 }
 
 // ─── CONTENT SUGGESTIONS ENGINE ─────────────────────────────────────────────

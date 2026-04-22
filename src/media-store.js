@@ -1,9 +1,128 @@
 // ─── IndexedDB Store for Media Files (Photos/Assets) ────────────────────────
-// Shared between Files page and Generate page for player-media matching
+// Shared between Files page and Generate page for player-media matching.
+//
+// Filename conventions supported:
+//   Player-scoped (preferred):  {TEAM}_{##}_{F.LASTNAME}_{TYPE}.ext
+//     e.g.  LAN_03_C.ROSE_HEADSHOT.png
+//   Player-scoped (legacy):     {TEAM}_{##}_{LASTNAME}_{TYPE}.ext
+//     e.g.  LAN_03_ROSE_HEADSHOT.png
+//   Team-scoped:                {TEAM}_{TYPE}[_VARIANT].ext
+//     e.g.  LAN_TEAMPHOTO.jpg, LAN_VENUE_DUGOUT.jpg, LAN_LOGO_PRIMARY.png
+//
+// Team-scoped records set scope='team' and leave num/player empty. The scope
+// is inferred from assetType so existing records backfill on read without a
+// schema migration.
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Must match overlay-store.js
 const STORE_NAME = 'media';
+
+// Asset types that belong to the team itself, not any one player.
+export const TEAM_SCOPE_TYPES = new Set([
+  'TEAMPHOTO', 'VENUE',
+  'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON',
+  'WORDMARK',
+]);
+
+// Infer scope from asset type. Unknown types default to 'player'.
+export function inferScope(assetType) {
+  return TEAM_SCOPE_TYPES.has(String(assetType || '').toUpperCase())
+    ? 'team'
+    : 'player';
+}
+
+// Parse a filename into {team, num, firstInitial, player, assetType}.
+// Handles both player-scoped and team-scoped conventions, plus the legacy
+// lastname-only form. Fields may be empty if the filename doesn't conform.
+export function parseFilename(name) {
+  const base = String(name || '').replace(/\.[^.]+$/, '');
+  const parts = base.split('_');
+  const team = (parts[0] || '').toUpperCase();
+
+  // Team-scoped form: {TEAM}_{TYPE}[_VARIANT]
+  // Recognised when the second segment is a known team-scope asset type.
+  const maybeType = (parts[1] || '').toUpperCase();
+  if (TEAM_SCOPE_TYPES.has(maybeType)) {
+    const variant = (parts[2] || '').toUpperCase();
+    // LOGO_PRIMARY / LOGO_DARK / WORDMARK etc. have a compound type in
+    // positions [1] + [2]; only treat [2] as variant if the combined form
+    // isn't itself a team-scope type.
+    const combined = maybeType + (variant ? '_' + variant : '');
+    const assetType = TEAM_SCOPE_TYPES.has(combined) ? combined : maybeType;
+    const extraVariant = TEAM_SCOPE_TYPES.has(combined)
+      ? (parts[3] || '').toUpperCase()
+      : variant;
+    return {
+      team,
+      num: '',
+      firstInitial: '',
+      player: '',
+      assetType,
+      variant: extraVariant,
+      scope: 'team',
+    };
+  }
+
+  // Player-scoped form: {TEAM}_{##}_{F.LASTNAME or LASTNAME}_{TYPE}
+  const num = parts[1] || '';
+  const playerRaw = (parts[2] || '').toUpperCase();
+  const assetTypePart = (parts[3] || 'FILE').toUpperCase();
+  let firstInitial = '';
+  let player = playerRaw;
+  // Recognise "F.LASTNAME" form — single-letter initial, dot, lastname.
+  const dotMatch = /^([A-Z])\.([A-Z][A-Z'-]*)$/.exec(playerRaw);
+  if (dotMatch) {
+    firstInitial = dotMatch[1];
+    player = dotMatch[2];
+  }
+
+  return {
+    team,
+    num,
+    firstInitial,
+    player,
+    assetType: assetTypePart,
+    variant: '',
+    scope: inferScope(assetTypePart),
+  };
+}
+
+// Build a player-scoped filename. Uses F.LASTNAME form when firstInitial is
+// provided, otherwise falls back to legacy lastname-only form.
+export function buildPlayerFilename({ team, num, firstInitial, lastName, assetType, ext }) {
+  const T = (team || 'UNK').toUpperCase();
+  const N = (num || '00').toString().padStart(2, '0');
+  const LN = (lastName || 'UNKNOWN').toUpperCase();
+  const FI = (firstInitial || '').toUpperCase().slice(0, 1);
+  const nameSegment = FI ? `${FI}.${LN}` : LN;
+  const AT = (assetType || 'FILE').toUpperCase();
+  const E = (ext || 'jpg').replace(/^\./, '');
+  return `${T}_${N}_${nameSegment}_${AT}.${E}`;
+}
+
+// Build a team-scoped filename.
+export function buildTeamFilename({ team, assetType, variant, ext }) {
+  const T = (team || 'UNK').toUpperCase();
+  const AT = (assetType || 'TEAMPHOTO').toUpperCase();
+  const V = (variant || '').toUpperCase();
+  const E = (ext || 'jpg').replace(/^\./, '');
+  return V ? `${T}_${AT}_${V}.${E}` : `${T}_${AT}.${E}`;
+}
+
+// Normalise a record — sets scope + fills firstInitial when missing.
+// Used to backfill legacy records on read (no IndexedDB migration needed).
+function normaliseRecord(r) {
+  if (!r) return r;
+  const out = { ...r };
+  // Backfill scope
+  if (!out.scope) out.scope = inferScope(out.assetType);
+  // Backfill firstInitial from the stored name if we can parse one
+  if (out.firstInitial == null) {
+    const parsed = parseFilename(out.name || '');
+    out.firstInitial = parsed.firstInitial || '';
+  }
+  return out;
+}
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -31,22 +150,18 @@ function openDB() {
 export async function saveMedia({ name, blob, width, height, driveFileId, source }) {
   const db = await openDB();
   const id = crypto.randomUUID();
-
-  // Parse naming convention: {TEAM}_{JERSEY#}_{LASTNAME}_{ASSET_TYPE}.{ext}
-  const parts = name.replace(/\.[^.]+$/, '').split('_');
-  const team = parts[0] || '';
-  const num = parts[1] || '';
-  const player = parts[2] || '';
-  const assetType = parts[3] || 'FILE';
+  const parsed = parseFilename(name);
 
   const record = {
     id, name, blob, width, height,
-    team: team.toUpperCase(),
-    num,
-    player: player.toUpperCase(),
-    assetType: assetType.toUpperCase(),
+    team: parsed.team,
+    num: parsed.num,
+    firstInitial: parsed.firstInitial,
+    player: parsed.player,
+    assetType: parsed.assetType,
+    variant: parsed.variant,
+    scope: parsed.scope,
     createdAt: Date.now(),
-    // Optional provenance — set when imported from Google Drive
     driveFileId: driveFileId || null,
     source: source || 'local',
   };
@@ -64,7 +179,7 @@ export async function getAllMedia() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const req = tx.objectStore(STORE_NAME).getAll();
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => resolve((req.result || []).map(normaliseRecord));
     req.onerror = () => reject(req.error);
   });
 }
@@ -81,11 +196,14 @@ export async function updateMedia(id, updates) {
       const updated = { ...existing, ...updates };
       // Re-parse naming convention from new name
       if (updates.name) {
-        const parts = updates.name.replace(/\.[^.]+$/, '').split('_');
-        updated.team = (parts[0] || '').toUpperCase();
-        updated.num = parts[1] || '';
-        updated.player = (parts[2] || '').toUpperCase();
-        updated.assetType = (parts[3] || 'FILE').toUpperCase();
+        const parsed = parseFilename(updates.name);
+        updated.team = parsed.team;
+        updated.num = parsed.num;
+        updated.firstInitial = parsed.firstInitial;
+        updated.player = parsed.player;
+        updated.assetType = parsed.assetType;
+        updated.variant = parsed.variant;
+        updated.scope = parsed.scope;
       }
       store.put(updated);
       tx.oncomplete = () => resolve(updated);
@@ -105,39 +223,80 @@ export async function deleteMedia(id) {
 }
 
 // ─── Player-Media Matching ──────────────────────────────────────────────────
-// Primary match is TEAM + LASTNAME. Jersey number is optional and secondary,
-// since numbers are being added manually over time.
+// Primary match is TEAM + LASTNAME. Disambiguation when two players on a team
+// share a lastname uses (in priority order): jersey #, first initial.
+//
+// Legacy records (no firstInitial) still resolve when the lastname is
+// unambiguous or when the caller doesn't supply a firstInitial.
+//
+// Signature is backward-compatible: the old third arg `jerseyNum` still works.
+// New callers can pass an options object: { firstInitial, jerseyNum }.
 
-export async function findPlayerMedia(team, lastName, jerseyNum = null) {
+export async function findPlayerMedia(team, lastName, optsOrJersey = null) {
   const all = await getAllMedia();
-  const T = team.toUpperCase();
-  const LN = lastName.toUpperCase();
+  const T = String(team || '').toUpperCase();
+  const LN = String(lastName || '').toUpperCase();
 
-  // Match TEAM_anything_LASTNAME_anything
-  let matches = all.filter(f => {
-    const name = f.name.toUpperCase();
-    const parts = name.replace(/\.[^.]+$/, '').split('_');
-    if (parts[0] !== T) return false;
-    // Last name can be in position 2 (TEAM_##_LASTNAME) or position 1 (TEAM_LASTNAME if no jersey)
-    return parts.includes(LN) || f.player === LN;
+  // Normalise options (back-compat with the old positional jerseyNum arg)
+  const opts = (optsOrJersey && typeof optsOrJersey === 'object')
+    ? optsOrJersey
+    : { jerseyNum: optsOrJersey };
+  const wantInitial = (opts.firstInitial || '').toUpperCase().slice(0, 1);
+  const wantNum = opts.jerseyNum;
+
+  // Exclude team-scoped records from player matches.
+  const playerRecords = all.filter(f => f.scope !== 'team');
+
+  // Match TEAM + LASTNAME (via stored fields OR filename tokens, for legacy)
+  let matches = playerRecords.filter(f => {
+    if ((f.team || '').toUpperCase() !== T) return false;
+    if ((f.player || '').toUpperCase() === LN) return true;
+    // Fallback: scan tokens for legacy records that might not have populated
+    // the player field correctly.
+    const parts = String(f.name || '').replace(/\.[^.]+$/, '').split('_');
+    return parts.some(p => p.toUpperCase() === LN);
   });
 
-  // Optional jersey filter
-  if (jerseyNum != null && jerseyNum !== '') {
-    const padded = String(jerseyNum).padStart(2, '0');
-    matches = matches.filter(f => f.num === padded || f.num === String(jerseyNum));
+  // Optional jersey filter — jersey # is unique per team, strongest signal.
+  if (wantNum != null && wantNum !== '') {
+    const padded = String(wantNum).padStart(2, '0');
+    const byNum = matches.filter(f => f.num === padded || f.num === String(wantNum));
+    if (byNum.length) matches = byNum;
+  }
+
+  // Optional first-initial filter — used when two players share a lastname.
+  // If any records have a firstInitial set, restrict to matching ones; if
+  // none do (all legacy), leave the set alone so records still surface.
+  if (wantInitial) {
+    const withInitial = matches.filter(f => (f.firstInitial || '').toUpperCase() === wantInitial);
+    const anyHaveInitial = matches.some(f => f.firstInitial);
+    if (withInitial.length) {
+      matches = withInitial;
+    } else if (anyHaveInitial) {
+      // Records exist with initials, but none match ours → no hits.
+      matches = [];
+    }
+    // else: all legacy, keep everything (unambiguous fallback)
   }
 
   return matches;
 }
 
-// All media for a team (any player), sorted by most recent first
-export async function findTeamMedia(team) {
+// All media for a team (any player), sorted by most recent first.
+// By default returns both player- and team-scoped records — pass
+// { scope: 'team' } or { scope: 'player' } to filter.
+export async function findTeamMedia(team, opts = {}) {
   const all = await getAllMedia();
-  const T = team.toUpperCase();
-  return all
-    .filter(f => f.team === T)
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const T = String(team || '').toUpperCase();
+  let filtered = all.filter(f => (f.team || '').toUpperCase() === T);
+  if (opts.scope) {
+    filtered = filtered.filter(f => (f.scope || inferScope(f.assetType)) === opts.scope);
+  }
+  if (opts.assetType) {
+    const wantType = String(opts.assetType).toUpperCase();
+    filtered = filtered.filter(f => (f.assetType || '').toUpperCase() === wantType);
+  }
+  return filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 export function blobToObjectURL(blob) {

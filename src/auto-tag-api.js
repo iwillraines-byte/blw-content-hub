@@ -160,14 +160,18 @@ async function postAutoTag(body) {
 }
 
 // ─── Helper: build a tagged filename from auto-tag results ──────────────────
-// Preserves the original extension.
-export function buildFilenameFromTags({ team, num, lastName, assetType }, originalFilename) {
+// Preserves the original extension. Emits the F.LASTNAME form when a
+// firstInitial is provided; falls back to legacy LASTNAME-only otherwise.
+export function buildFilenameFromTags({ team, num, firstInitial, lastName, assetType }, originalFilename) {
   const ext = (originalFilename || '').split('.').pop() || 'jpg';
+  const FI = (firstInitial || '').toUpperCase().slice(0, 1);
+  const LN = (lastName || 'UNKNOWN').toUpperCase();
+  const nameSegment = FI ? `${FI}.${LN}` : LN;
   const parts = [
-    team || 'UNK',
-    num || '00',
-    lastName || 'UNKNOWN',
-    assetType || 'FILE',
+    (team || 'UNK').toUpperCase(),
+    (num || '00').toString().padStart(2, '0'),
+    nameSegment,
+    (assetType || 'FILE').toUpperCase(),
   ];
   return `${parts.join('_')}.${ext}`;
 }
