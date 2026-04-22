@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
+import { BattingTable, PitchingTable } from '../stats-tables';
+import { TierBadge } from '../tier-badges';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
@@ -13,6 +15,11 @@ export default function TeamPage() {
   const [media, setMedia] = useState([]);
   const [roster, setRoster] = useState([]);
   const [manualPlayers, setManualPlayers] = useState([]);
+  // Live batting + pitching — populated by fetchAllData() below so the
+  // team-filtered stats tables don't have to hit the API twice.
+  const [batting, setBatting] = useState([]);
+  const [pitching, setPitching] = useState([]);
+  const [rankings, setRankings] = useState([]);
   // Avatars keyed by "FI|LASTNAME" (e.g. "C|ROSE") so same-lastname players
   // each get their own headshot. Legacy records without a firstInitial are
   // keyed by "|LASTNAME" and used as a fallback.
@@ -143,10 +150,13 @@ export default function TeamPage() {
       fetchTeamRosterFromApi(team.id),
       findTeamMedia(team.id),
       getManualPlayersByTeam(team.id),
-    ]).then(([, apiRoster, teamMedia, manualList]) => {
+    ]).then(([liveData, apiRoster, teamMedia, manualList]) => {
       if (cancel) return;
       setMedia(teamMedia);
       setManualPlayers(manualList);
+      setBatting(liveData?.batting || []);
+      setPitching(liveData?.pitching || []);
+      setRankings(liveData?.rankings || []);
 
       const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList);
       setRoster(fullRoster);
@@ -220,6 +230,53 @@ export default function TeamPage() {
   const topPitcher = teamPitchers[0];
   const hrLeader = [...teamBatters].sort((a, b) => (b.hr || 0) - (a.hr || 0))[0];
 
+  // Combined team aggregates — computed from live batting + pitching so they
+  // update as the season progresses. Weighted where it matters (AVG by AB,
+  // ERA / K-rates by innings pitched) so they reflect real team performance.
+  const teamAggregates = useMemo(() => {
+    const teamBat = batting.filter(p => p.team === team.id);
+    const teamPit = pitching.filter(p => p.team === team.id);
+    if (teamBat.length === 0 && teamPit.length === 0) return null;
+
+    const sumAb = teamBat.reduce((s, p) => s + (p.ab || 0), 0);
+    const sumHits = teamBat.reduce((s, p) => s + (p.hits || 0), 0);
+    const sumHr = teamBat.reduce((s, p) => s + (p.hr || 0), 0);
+    const sumRbi = teamBat.reduce((s, p) => s + (p.rbi || 0), 0);
+    const avgOpsPlus = teamBat.length
+      ? teamBat.reduce((s, p) => s + (p.ops_plus || 0), 0) / teamBat.length
+      : 0;
+
+    // Weighted ERA: (sum of ER) / IP * 9 — but we don't have ER cleanly.
+    // Use avg of player ERAs weighted by IP as a good approximation.
+    const sumIp = teamPit.reduce((s, p) => s + parseFloat(p.ip || 0), 0);
+    const weightedEra = sumIp > 0
+      ? teamPit.reduce((s, p) => s + parseFloat(p.era || 0) * parseFloat(p.ip || 0), 0) / sumIp
+      : 0;
+    const weightedK4 = sumIp > 0
+      ? teamPit.reduce((s, p) => s + parseFloat(p.k4 || 0) * parseFloat(p.ip || 0), 0) / sumIp
+      : 0;
+
+    return {
+      avg: sumAb > 0 ? (sumHits / sumAb).toFixed(3) : '.000',
+      hr: sumHr,
+      rbi: sumRbi,
+      opsPlus: Math.round(avgOpsPlus),
+      era: weightedEra.toFixed(2),
+      k4: weightedK4.toFixed(2),
+      ip: sumIp.toFixed(1),
+    };
+  }, [batting, pitching, team?.id]);
+
+  // Rank lookup for roster tiles. Uses the composite rankings list (joined by
+  // name since rankings include all BLW players, not just this team).
+  const rankByName = useMemo(() => {
+    const m = new Map();
+    for (const r of rankings) {
+      if (r.name && r.currentRank != null) m.set(r.name.toLowerCase(), r.currentRank);
+    }
+    return m;
+  }, [rankings]);
+
   const thumbUrls = useMemo(() => {
     const urls = {};
     for (const m of media) if (m.blob) urls[m.id] = blobToObjectURL(m.blob);
@@ -237,47 +294,108 @@ export default function TeamPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Team Header */}
+      {/* Team Header — header band + combined-stats band stacked so the team's
+          identity + composite standing + aggregate performance all read at a
+          glance. Composite rank pill lives to the right of the name so it
+          reads like an overall "ranking badge" inside the primary team mark. */}
       <div style={{
         background: `linear-gradient(135deg, ${team.color}, ${team.dark})`,
         color: team.accent,
         borderRadius: radius.lg,
         padding: 24,
-        display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap',
+        display: 'flex', flexDirection: 'column', gap: 16,
       }}>
-        <TeamLogo
-          teamId={team.id}
-          size={96}
-          rounded="square"
-        />
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 1.5, opacity: 0.7 }}>
-            RANK #{team.rank} · {team.city.toUpperCase()}
+        {/* Top row — logo, identity, record / pct / diff */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+          {/* Light backdrop so the team logo reads on any gradient — fixes
+              MIA / CHI / LAN where logo color matches the primary team color. */}
+          <div style={{
+            background: 'rgba(255,255,255,0.92)',
+            borderRadius: radius.base,
+            padding: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }}>
+            <TeamLogo teamId={team.id} size={80} rounded="square" />
           </div>
-          <div style={{ fontFamily: fonts.heading, fontSize: 42, letterSpacing: 1.5, lineHeight: 1, margin: '4px 0 6px' }}>
-            {team.name.toUpperCase()}
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 1.5, opacity: 0.7 }}>
+              {team.city.toUpperCase()}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '4px 0 6px' }}>
+              <div style={{ fontFamily: fonts.heading, fontSize: 42, letterSpacing: 1.5, lineHeight: 1 }}>
+                {team.name.toUpperCase()}
+              </div>
+              {/* Composite rank pill — sourced from TEAMS.rank (standings composite).
+                  Dark backdrop + white text so it reads regardless of team colors
+                  (CHI's accent is pure white, which would vanish on a light bg). */}
+              {team.rank != null && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: 'rgba(0,0,0,0.3)',
+                  color: '#FFFFFF',
+                  padding: '5px 12px', borderRadius: 999,
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 1.2,
+                  border: `1px solid rgba(255,255,255,0.22)`,
+                  whiteSpace: 'nowrap',
+                }}>
+                  <span style={{ fontFamily: fonts.heading, fontSize: 14, lineHeight: 1 }}>#{team.rank}</span>
+                  <span style={{ opacity: 0.85 }}>COMPOSITE</span>
+                </span>
+              )}
+            </div>
+            {team.owner && (
+              <div style={{ fontFamily: fonts.body, fontSize: 13, opacity: 0.8 }}>Owner: {team.owner}</div>
+            )}
           </div>
-          {team.owner && (
-            <div style={{ fontFamily: fonts.body, fontSize: 13, opacity: 0.8 }}>Owner: {team.owner}</div>
-          )}
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>RECORD</div>
+              <div style={{ fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1 }}>{team.record}</div>
+            </div>
+            <div>
+              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>PCT</div>
+              <div style={{ fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1 }}>{team.pct}</div>
+            </div>
+            <div>
+              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>DIFF</div>
+              <div style={{
+                fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1,
+                color: team.diff.startsWith('+') && team.diff !== '0' ? '#4ADE80' : team.diff === '0' ? team.accent : '#F87171',
+              }}>{team.diff}</div>
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>RECORD</div>
-            <div style={{ fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1 }}>{team.record}</div>
+
+        {/* Bottom row — combined team stats. Hidden until live data arrives. */}
+        {teamAggregates && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
+            gap: 14,
+            paddingTop: 14,
+            borderTop: '1px solid rgba(255,255,255,0.14)',
+          }}>
+            {[
+              { label: 'TEAM AVG', value: teamAggregates.avg },
+              { label: 'TEAM HR',  value: teamAggregates.hr  },
+              { label: 'TEAM RBI', value: teamAggregates.rbi },
+              { label: 'AVG OPS+', value: teamAggregates.opsPlus },
+              { label: 'TEAM ERA', value: teamAggregates.era },
+              { label: 'TEAM K/4', value: teamAggregates.k4  },
+              { label: 'TEAM IP',  value: teamAggregates.ip  },
+            ].map(s => (
+              <div key={s.label}>
+                <div style={{ fontFamily: fonts.condensed, fontSize: 9, letterSpacing: 1, opacity: 0.6 }}>
+                  {s.label}
+                </div>
+                <div style={{ fontFamily: fonts.heading, fontSize: 22, letterSpacing: 0.6, lineHeight: 1.1 }}>
+                  {s.value}
+                </div>
+              </div>
+            ))}
           </div>
-          <div>
-            <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>PCT</div>
-            <div style={{ fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1 }}>{team.pct}</div>
-          </div>
-          <div>
-            <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>DIFF</div>
-            <div style={{
-              fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1,
-              color: team.diff.startsWith('+') && team.diff !== '0' ? '#4ADE80' : team.diff === '0' ? team.accent : '#F87171',
-            }}>{team.diff}</div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Team Stats Summary */}
@@ -387,6 +505,9 @@ export default function TeamPage() {
               const rowKey = `${p.playerId || p.manualId || p.source || 'row'}-${FI}-${p.lastName}-${idx}`;
               // Disambiguated slug: "c-rose" beats "rose".
               const slug = playerSlug(p);
+              // Composite rank for this player — powers the tier badge on the
+              // right edge of the tile. Null for players not yet ranked.
+              const playerRank = rankByName.get((p.name || '').toLowerCase());
               return (
                 <div key={rowKey} style={{ position: 'relative' }}>
                   <Link
@@ -426,6 +547,11 @@ export default function TeamPage() {
                         </span>
                       </div>
                     </div>
+                    {playerRank != null && (
+                      <div style={{ flexShrink: 0, marginLeft: 4 }}>
+                        <TierBadge rank={playerRank} size={36} />
+                      </div>
+                    )}
                   </Link>
                   {p.manual && p.manualId && (
                     <button
@@ -483,6 +609,31 @@ export default function TeamPage() {
           </div>
         )}
       </Card>
+
+      {/* Team-filtered stat tables — same components the Game Center uses so
+          percentile shading, tooltips, rank columns, and clickable player links
+          all stay consistent. Percentiles are still computed against the full
+          league population, so these cells show each player's standing across
+          BLW, not just within the team. */}
+      {batting.some(p => p.team === team.id) && (
+        <BattingTable
+          rows={batting.filter(p => p.team === team.id)}
+          populationRows={batting}
+          title={`${team.name} — Batting`}
+          showSearch={false}
+          emptyMessage="No batting data for this team yet."
+        />
+      )}
+      {pitching.some(p => p.team === team.id) && (
+        <PitchingTable
+          rows={pitching.filter(p => p.team === team.id)}
+          populationRows={pitching}
+          title={`${team.name} — Pitching`}
+          showSearch={false}
+          showLegend={false}
+          emptyMessage="No pitching data for this team yet."
+        />
+      )}
 
       {/* Recently Uploaded Player Media */}
       <Card>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo } from '../components';
+import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
 import { getRequests, countByStatus, oldestPendingDays } from '../requests-store';
 import { getAllMedia } from '../media-store';
@@ -13,10 +14,16 @@ export default function ContentStudio() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [requests, setRequests] = useState([]);
   const [mediaStats, setMediaStats] = useState({ total: 0, untagged: 0 });
+  // Live batting + pitching for the Stats Leaders teaser at the bottom of the
+  // dashboard. Shares the same fetchAllData() call so nothing hits twice.
+  const [batting, setBatting] = useState([]);
+  const [pitching, setPitching] = useState([]);
 
   useEffect(() => {
-    fetchAllData().then(({ batting, pitching, rankings }) => {
-      setSuggestions(generateContentSuggestions(batting, pitching, rankings));
+    fetchAllData().then(({ batting: b, pitching: p, rankings }) => {
+      setSuggestions(generateContentSuggestions(b, p, rankings));
+      setBatting(b || []);
+      setPitching(p || []);
       setDataLoaded(true);
     });
     setRequests(getRequests());
@@ -194,6 +201,38 @@ export default function ContentStudio() {
           </Card>
         </div>
       </div>
+
+      {/* Stats Leaders — top 10 batters + top 10 pitchers, percentile shading
+          computed across the full BLW population. A teaser of the Game Center. */}
+      {dataLoaded && (batting.length > 0 || pitching.length > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <SectionHeading style={{ margin: 0 }}>Stats Leaders</SectionHeading>
+            <Link to="/game-center" style={{ fontSize: 12, fontFamily: fonts.condensed, fontWeight: 700, color: colors.red, textDecoration: 'none' }}>
+              View full leaderboards →
+            </Link>
+          </div>
+          {batting.length > 0 && (
+            <BattingTable
+              rows={batting}
+              populationRows={batting}
+              title="Top 10 Batters"
+              showSearch={false}
+              limit={10}
+            />
+          )}
+          {pitching.length > 0 && (
+            <PitchingTable
+              rows={pitching}
+              populationRows={pitching}
+              title="Top 10 Pitchers"
+              showSearch={false}
+              showLegend={false}
+              limit={10}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
