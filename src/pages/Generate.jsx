@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPlayers, fetchAllData } from '../data';
 import { Card, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
@@ -7,6 +7,8 @@ import { TEMPLATE_TYPES, FONT_MAP, getFieldConfig } from '../template-config';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
+import { getPresetOverlays, loadPresetImage } from '../preset-overlays';
+import { applyOverrides, setFieldOverride, getOverrides, resetOverrides } from '../field-overrides-store';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -263,6 +265,21 @@ export default function Generate() {
     });
   }, []);
 
+  // Field layout overrides (x / y / fontSize / font per field, per template/platform).
+  // Version counter forces re-render of the preview + download when the user
+  // edits a position or font. The actual source of truth is localStorage;
+  // this counter just invalidates the useCallback dependencies.
+  const [overridesVersion, setOverridesVersion] = useState(0);
+  const [showLayoutEditor, setShowLayoutEditor] = useState(false);
+  const patchFieldOverride = (fieldKey, partial) => {
+    setFieldOverride(customType, customPlatform, fieldKey, partial);
+    setOverridesVersion(v => v + 1);
+  };
+  const resetLayoutOverrides = () => {
+    resetOverrides(customType, customPlatform);
+    setOverridesVersion(v => v + 1);
+  };
+
   const allPlayers = getAllPlayers();
   const filteredPlayers = customTeam === 'ALL' ? allPlayers : allPlayers.filter(p => p.team === customTeam);
 
@@ -291,9 +308,16 @@ export default function Generate() {
     getEffects().then(setUploadedEffects);
   }, [customTeam]);
 
-  // Load selected overlay image
+  // Load selected overlay image. Supports two sources:
+  //   - `preset:...` ids → bundled PNGs under src/assets/overlays/ (designer-delivered)
+  //   - plain UUIDs → user-uploaded overlays in IndexedDB
   useEffect(() => {
     if (!selectedOverlayId) { setOverlayImg(null); return; }
+    if (String(selectedOverlayId).startsWith('preset:')) {
+      const preset = presetOverlays.find(p => p.id === selectedOverlayId);
+      if (preset) loadPresetImage(preset).then(setOverlayImg);
+      return;
+    }
     const ov = overlays.find(o => o.id === selectedOverlayId);
     if (ov?.imageBlob) {
       overlayBlobToImage(ov.imageBlob).then(setOverlayImg);
@@ -360,10 +384,10 @@ export default function Generate() {
     if (!canvas) return;
     canvas.width = customPlat.w; canvas.height = customPlat.h;
     const ctx = canvas.getContext('2d');
-    const fieldConfig = getFieldConfig(customType, customPlatform);
+    const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
     renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields });
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields]);
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, overridesVersion]);
 
   useEffect(() => { render(); }, [render]);
 
@@ -373,7 +397,7 @@ export default function Generate() {
     // Re-render without placeholders so the downloaded PNG only contains real
     // text + hidden fields stay hidden. Then re-render for preview afterwards.
     const ctx = canvas.getContext('2d');
-    const fieldConfig = getFieldConfig(customType, customPlatform);
+    const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
     renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, forExport: true });
     const link = document.createElement('a');
@@ -506,8 +530,22 @@ export default function Generate() {
   const getEffectOpacity = (type, id) => activeEffects.find(e => e.type === type && e.id === id)?.opacity ?? 0.5;
 
   const customTypeObj = TEMPLATE_TYPES[customType];
-  const customFieldConfig = getFieldConfig(customType, customPlatform);
+  // Applied config — merges user overrides on top of the template defaults.
+  // Reading `overridesVersion` here just forces recomputation; applyOverrides
+  // re-reads from localStorage so the latest edits surface immediately.
+  const customFieldConfig = useMemo(
+    () => applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform),
+    [customType, customPlatform, overridesVersion]
+  );
+  const hasOverrides = useMemo(
+    () => Object.keys(getOverrides(customType, customPlatform)).length > 0,
+    [customType, customPlatform, overridesVersion]
+  );
   const filteredOverlays = overlays.filter(o => o.type === customType && (!o.team || o.team === customTeam));
+  // Designer-delivered preset overlays (bundled, not uploaded). Matches team
+  // + template type. Empty list when the designer hasn't dropped any for
+  // this combination — the uploaded-overlay flow remains as fallback.
+  const presetOverlays = customTeam ? getPresetOverlays(customTeam, customType) : [];
 
   const labelStyle = { fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 };
 
@@ -673,32 +711,85 @@ export default function Generate() {
                   <div style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', padding: 20, fontFamily: fonts.condensed }}>
                     Select a team above to load overlays
                   </div>
-                ) : filteredOverlays.length === 0 ? (
+                ) : (presetOverlays.length === 0 && filteredOverlays.length === 0) ? (
                   <div style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', padding: 20 }}>
-                    No overlays uploaded for this type/team yet.
-                    <br />Upload a PNG with transparency to get started.
+                    No overlays for this type/team yet.
+                    <br />Upload a PNG with transparency, or ask the designer for a preset.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {filteredOverlays.map(o => (
-                      <div key={o.id} style={{ position: 'relative' }}>
-                        <div onClick={() => setSelectedOverlayId(o.id === selectedOverlayId ? null : o.id)} style={{
-                          width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
-                          background: '#1A1A22', border: selectedOverlayId === o.id ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 9, fontFamily: fonts.condensed, color: colors.textMuted, textAlign: 'center', padding: 4,
-                        }}>
-                          {o.name}
+                  <>
+                    {presetOverlays.length > 0 && (
+                      <>
+                        <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6 }}>
+                          PRESETS · {presetOverlays.length}
                         </div>
-                        <button onClick={() => handleDeleteOverlay(o.id)} style={{
-                          position: 'absolute', top: -4, right: -4, width: 16, height: 16,
-                          borderRadius: '50%', background: '#EF4444', color: '#fff',
-                          border: 'none', fontSize: 8, cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>✕</button>
-                      </div>
-                    ))}
-                  </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: filteredOverlays.length > 0 ? 12 : 0 }}>
+                          {presetOverlays.map(p => (
+                            <div
+                              key={p.id}
+                              onClick={() => setSelectedOverlayId(p.id === selectedOverlayId ? null : p.id)}
+                              title={`${p.name}${p.teamId === 'all' ? ' · league-wide preset' : ''}`}
+                              style={{
+                                width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
+                                background: `#1A1A22 url(${p.url}) center/cover`,
+                                border: selectedOverlayId === p.id ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
+                                position: 'relative',
+                              }}
+                            >
+                              <div style={{
+                                position: 'absolute', top: 4, right: 4,
+                                background: p.teamId === 'all' ? 'rgba(0,0,0,0.65)' : 'rgba(124,58,237,0.85)',
+                                color: '#fff',
+                                borderRadius: 2, padding: '1px 4px',
+                                fontSize: 7, fontFamily: fonts.condensed, fontWeight: 800, letterSpacing: 0.5,
+                              }}>
+                                {p.teamId === 'all' ? 'LEAGUE' : 'PRESET'}
+                              </div>
+                              <div style={{
+                                position: 'absolute', bottom: 0, left: 0, right: 0,
+                                background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)',
+                                padding: '2px 4px',
+                                borderRadius: `0 0 ${radius.base}px ${radius.base}px`,
+                                fontSize: 8, color: '#fff', fontFamily: fonts.condensed, fontWeight: 700,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>
+                                {p.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {filteredOverlays.length > 0 && (
+                      <>
+                        {presetOverlays.length > 0 && (
+                          <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6 }}>
+                            UPLOADED · {filteredOverlays.length}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {filteredOverlays.map(o => (
+                            <div key={o.id} style={{ position: 'relative' }}>
+                              <div onClick={() => setSelectedOverlayId(o.id === selectedOverlayId ? null : o.id)} style={{
+                                width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
+                                background: '#1A1A22', border: selectedOverlayId === o.id ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 9, fontFamily: fonts.condensed, color: colors.textMuted, textAlign: 'center', padding: 4,
+                              }}>
+                                {o.name}
+                              </div>
+                              <button onClick={() => handleDeleteOverlay(o.id)} style={{
+                                position: 'absolute', top: -4, right: -4, width: 16, height: 16,
+                                borderRadius: '50%', background: '#EF4444', color: '#fff',
+                                border: 'none', fontSize: 8, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
                 )}
               </Card>
 
@@ -706,14 +797,44 @@ export default function Generate() {
                   Each field has a VISIBLE / HIDDEN badge so you can omit a zone
                   entirely (no placeholder in preview, no text in the PNG). */}
               <Card>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
                   <Label style={{ marginBottom: 0 }}>Content</Label>
-                  <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.4 }}>
-                    Click the badge to toggle a field
-                  </span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {hasOverrides && (
+                      <button
+                        onClick={resetLayoutOverrides}
+                        title={`Revert position/font edits for ${customType} · ${customPlatform} back to template defaults`}
+                        style={{
+                          background: colors.bg,
+                          border: `1px solid ${colors.border}`,
+                          color: colors.textMuted,
+                          borderRadius: radius.sm, padding: '3px 8px',
+                          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+                          cursor: 'pointer',
+                        }}
+                      >↺ RESET LAYOUT</button>
+                    )}
+                    <button
+                      onClick={() => setShowLayoutEditor(v => !v)}
+                      title={showLayoutEditor ? 'Hide per-field layout controls' : 'Show per-field layout controls (position + font)'}
+                      style={{
+                        background: showLayoutEditor ? colors.redLight : colors.bg,
+                        border: `1px solid ${showLayoutEditor ? colors.redBorder : colors.border}`,
+                        color: showLayoutEditor ? colors.red : colors.textSecondary,
+                        borderRadius: radius.sm, padding: '3px 10px',
+                        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {showLayoutEditor ? '✕ CLOSE LAYOUT' : '⚙ EDIT LAYOUT'}
+                    </button>
+                  </div>
                 </div>
                 {customFieldConfig.map(f => {
                   const isHidden = hiddenFields.has(f.key);
+                  const overridesForCombo = getOverrides(customType, customPlatform);
+                  const fieldOverride = overridesForCombo[f.key];
+                  const isOverridden = !!fieldOverride;
                   // Matched-size toggle: VISIBLE (green) ↔ HIDDEN (muted) so the
                   // control has the same visual weight whether it's on or off.
                   const badgeStyle = {
@@ -735,7 +856,16 @@ export default function Generate() {
                   return (
                     <div key={f.key} style={{ marginBottom: 10, opacity: isHidden ? 0.5 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                        <label style={labelStyle}>{f.label}</label>
+                        <label style={labelStyle}>
+                          {f.label}
+                          {isOverridden && (
+                            <span title="This field has layout overrides applied" style={{
+                              display: 'inline-block', marginLeft: 6,
+                              width: 6, height: 6, borderRadius: '50%', background: colors.red,
+                              verticalAlign: 'middle',
+                            }} />
+                          )}
+                        </label>
                         <button
                           onClick={() => toggleFieldHidden(f.key)}
                           title={isHidden ? 'Show this field in preview + export' : 'Hide this field from preview + export'}
@@ -752,6 +882,77 @@ export default function Generate() {
                         disabled={isHidden}
                         style={{ ...inputStyle, marginTop: 0 }}
                       />
+                      {/* Layout panel — visible when the user toggled EDIT LAYOUT.
+                          X/Y are in canvas pixels at native resolution; font is
+                          the key into FONT_MAP (heading/body/condensed); font size
+                          is also in native pixels. Changes persist to localStorage. */}
+                      {showLayoutEditor && !isHidden && (
+                        <div style={{
+                          marginTop: 6, padding: 8,
+                          background: colors.bg, border: `1px solid ${colors.borderLight}`,
+                          borderRadius: radius.sm,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.6 }}>
+                              LAYOUT · {customPlat.w}×{customPlat.h}px
+                            </span>
+                            {isOverridden && (
+                              <button
+                                onClick={() => patchFieldOverride(f.key, null)}
+                                title="Revert this field to the template default"
+                                style={{
+                                  background: 'transparent', border: 'none',
+                                  color: colors.textMuted, fontFamily: fonts.condensed,
+                                  fontSize: 9, fontWeight: 700, letterSpacing: 0.4, cursor: 'pointer',
+                                }}
+                              >↺ Reset</button>
+                            )}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+                            <div>
+                              <label style={{ ...labelStyle, fontSize: 9, marginBottom: 2, display: 'block' }}>X (px)</label>
+                              <input
+                                type="number" min={0} max={customPlat.w}
+                                value={f.x ?? 0}
+                                onChange={e => patchFieldOverride(f.key, { x: Math.max(0, Math.min(customPlat.w, parseInt(e.target.value, 10) || 0)) })}
+                                style={{ ...inputStyle, fontSize: 12, marginTop: 0 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ ...labelStyle, fontSize: 9, marginBottom: 2, display: 'block' }}>Y (px)</label>
+                              <input
+                                type="number" min={0} max={customPlat.h}
+                                value={f.y ?? 0}
+                                onChange={e => patchFieldOverride(f.key, { y: Math.max(0, Math.min(customPlat.h, parseInt(e.target.value, 10) || 0)) })}
+                                style={{ ...inputStyle, fontSize: 12, marginTop: 0 }}
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                            <div>
+                              <label style={{ ...labelStyle, fontSize: 9, marginBottom: 2, display: 'block' }}>Font size (px)</label>
+                              <input
+                                type="number" min={8} max={200}
+                                value={f.fontSize ?? 24}
+                                onChange={e => patchFieldOverride(f.key, { fontSize: Math.max(8, Math.min(200, parseInt(e.target.value, 10) || 24)) })}
+                                style={{ ...inputStyle, fontSize: 12, marginTop: 0 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ ...labelStyle, fontSize: 9, marginBottom: 2, display: 'block' }}>Font</label>
+                              <select
+                                value={f.font || 'body'}
+                                onChange={e => patchFieldOverride(f.key, { font: e.target.value })}
+                                style={{ ...selectStyle, fontSize: 12, marginTop: 0 }}
+                              >
+                                <option value="heading">Heading (Bebas Neue)</option>
+                                <option value="body">Body (Barlow)</option>
+                                <option value="condensed">Condensed (Barlow Condensed)</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {/* Suggested stat lines — player-specific, computed against
                           the full league. Click to insert into the stat line. */}
                       {f.key === 'statLine' && !isHidden && recommendedStatLines.length > 0 && (

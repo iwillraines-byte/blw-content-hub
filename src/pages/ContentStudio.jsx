@@ -4,7 +4,7 @@ import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG } 
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
-import { getRequests, countByStatus, oldestPendingDays } from '../requests-store';
+import { getRequests, saveRequests, countByStatus, oldestPendingDays } from '../requests-store';
 import { getAllMedia } from '../media-store';
 import { isAlreadyTagged } from '../tag-heuristics';
 
@@ -25,6 +25,14 @@ export default function ContentStudio() {
   const [aiIdeas, setAiIdeas] = useState([]);
   const [ideasLoading, setIdeasLoading] = useState(false);
   const [ideasError, setIdeasError] = useState(null);
+  // Most recently queued idea id — we flash a "✓ Queued" state on that
+  // card's button for a few seconds so the user knows the request landed.
+  const [queuedIdeaId, setQueuedIdeaId] = useState(null);
+  useEffect(() => {
+    if (!queuedIdeaId) return;
+    const t = setTimeout(() => setQueuedIdeaId(null), 4000);
+    return () => clearTimeout(t);
+  }, [queuedIdeaId]);
 
   useEffect(() => {
     fetchAllData().then(({ batting: b, pitching: p, rankings: r }) => {
@@ -82,6 +90,47 @@ export default function ContentStudio() {
       Object.entries(s.prefill).forEach(([k, v]) => { if (v) params.set(k, v); });
     }
     return `/generate?${params.toString()}`;
+  };
+
+  // "Send to Requests" — turns a content idea into a tracked pending request.
+  // Idempotent-ish: if the same idea was just added (same headline + team)
+  // in the last 60 seconds, skip so double-click doesn't create duplicates.
+  const queueIdeaAsRequest = (s) => {
+    const existing = getRequests();
+    const duplicate = existing.find(r =>
+      r.note?.startsWith(s.headline) &&
+      r.team === (s.team || 'BLW') &&
+      r.createdAt && (Date.now() - r.createdAt) < 60_000
+    );
+    if (duplicate) {
+      setQueuedIdeaId(s.id);
+      return;
+    }
+    const now = new Date();
+    const noteLines = [
+      s.headline,
+      s.description,
+      s.templateId ? `Template: ${s.templateId}` : null,
+      s.prefill && Object.keys(s.prefill).length > 0
+        ? `Prefill: ${Object.entries(s.prefill).map(([k, v]) => `${k}=${v}`).join(' · ')}`
+        : null,
+      s.aiGenerated ? 'Source: ✨ AI content idea' : 'Source: Dashboard content idea',
+    ].filter(Boolean).join('\n');
+    const newRequest = {
+      id: crypto.randomUUID(),
+      team: s.team && s.team !== 'BLW' ? s.team : 'BLW',
+      template: s.templateId || '',
+      status: 'pending',
+      requester: 'You (Admin)',
+      date: now.toLocaleString(undefined, { month: 'short', day: 'numeric' }),
+      createdAt: now.getTime(),
+      priority: 'medium',
+      note: noteLines,
+    };
+    const updated = [newRequest, ...existing];
+    saveRequests(updated);
+    setRequests(updated);
+    setQueuedIdeaId(s.id);
   };
 
   // ─── Live-state card data ─────────────────────────────────────────────────
@@ -176,45 +225,70 @@ export default function ContentStudio() {
                 const team = s.team !== 'BLW' ? getTeam(s.team) : null;
                 const accent = team ? team.color : colors.border;
                 const bgTint = team ? `${team.color}0C` : colors.bg;
+                const queued = queuedIdeaId === s.id;
                 return (
                   <div key={s.id} style={{
                     position: 'relative',
                     borderRadius: radius.base,
                     background: bgTint, borderLeft: `3px solid ${accent}`,
+                    padding: '12px 14px',
+                    paddingBottom: s.aiGenerated ? 34 : 12,
                   }}>
-                    <Link to={buildLink(s)} style={{ textDecoration: 'none', display: 'block' }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '12px 14px', paddingRight: s.aiGenerated ? 120 : 14,
-                        transition: 'box-shadow 0.15s', cursor: 'pointer',
-                      }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                            {s.aiGenerated && (
-                              <span style={{
-                                fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
-                                letterSpacing: 0.8, color: '#7C3AED',
-                                background: 'rgba(124,58,237,0.10)', padding: '1px 5px', borderRadius: 3,
-                              }}>✨ AI</span>
-                            )}
-                            <div style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{s.headline}</div>
-                          </div>
-                          <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.description}</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+                          {s.aiGenerated && (
+                            <span style={{
+                              fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
+                              letterSpacing: 0.8, color: '#7C3AED',
+                              background: 'rgba(124,58,237,0.10)', padding: '1px 5px', borderRadius: 3,
+                            }}>✨ AI</span>
+                          )}
+                          <div style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{s.headline}</div>
                         </div>
-                        {team && <TeamChip teamId={s.team} small withLogo />}
-                        <span style={{
-                          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                          color: colors.red, whiteSpace: 'nowrap',
-                        }}>Create →</span>
+                        <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.description}</div>
                       </div>
-                    </Link>
+                      {team && <div style={{ flexShrink: 0 }}><TeamChip teamId={s.team} small withLogo /></div>}
+                    </div>
+                    {/* Actions row — two explicit buttons so the card doesn't
+                        hide the fact that you can BOTH queue AND generate. */}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => queueIdeaAsRequest(s)}
+                        title={queued ? 'Already queued — check Requests' : 'Create a tracked pending request from this idea'}
+                        style={{
+                          background: queued ? 'rgba(34,197,94,0.12)' : colors.white,
+                          border: `1px solid ${queued ? 'rgba(34,197,94,0.4)' : colors.border}`,
+                          color: queued ? '#15803D' : colors.textSecondary,
+                          borderRadius: radius.sm, padding: '5px 10px',
+                          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                          cursor: queued ? 'default' : 'pointer', letterSpacing: 0.4,
+                        }}
+                      >
+                        {queued ? '✓ QUEUED' : '📋 SEND TO REQUESTS'}
+                      </button>
+                      <button
+                        onClick={() => navigate(buildLink(s))}
+                        title="Open Generate with team, template, and fields pre-filled from this idea"
+                        style={{
+                          background: colors.redLight,
+                          border: `1px solid ${colors.redBorder}`,
+                          color: colors.red,
+                          borderRadius: radius.sm, padding: '5px 10px',
+                          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                          cursor: 'pointer', letterSpacing: 0.4,
+                        }}
+                      >
+                        🎨 OPEN IN GENERATE →
+                      </button>
+                    </div>
                     {s.aiGenerated && (
                       <button
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); requestIdeas(s, 3); }}
                         disabled={ideasLoading}
                         title="Generate 3 more ideas in the same style as this one"
                         style={{
-                          position: 'absolute', bottom: 6, right: 10,
+                          position: 'absolute', bottom: 8, right: 10,
                           background: 'rgba(255,255,255,0.85)',
                           border: `1px solid ${colors.borderLight}`,
                           color: colors.textSecondary,
