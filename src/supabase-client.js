@@ -1,11 +1,15 @@
-// Browser-side Supabase client — uses the public anon key. Row Level Security
-// is enabled on every table in the project, so this client can read/write
-// NOTHING until we add RLS policies in Phase 5 (auth + roles).
+// Browser-side Supabase client — uses the public anon key.
 //
-// In Phases 1-4 the browser talks to Supabase EXCLUSIVELY via our /api/
-// serverless endpoints (which use the service_role key). This client is
-// still exported for future use — once auth lands, pages can query
-// directly with RLS-enforced access.
+// Phase 5a (auth): persistSession is now ON. The SDK keeps the session token
+// in localStorage under `sb-<project-ref>-auth-token` and refreshes it in the
+// background. `detectSessionInUrl` lets magic-link redirects land directly on
+// our app with the access token in the URL hash and the SDK parses it out.
+//
+// Row Level Security policies land in Phase 5b. Until then, ALL direct table
+// reads/writes from this browser client will be denied by default (RLS
+// default-deny is already enabled on every table from db/001_initial_schema).
+// All data access in the app still flows through our /api/cloud-* serverless
+// endpoints which use the service_role key on the server.
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -19,6 +23,16 @@ export const supabaseConfigured = !!(URL && ANON);
 // boots — the cloud features just show "not configured" states.
 export const supabase = supabaseConfigured
   ? createClient(URL, ANON, {
-      auth: { persistSession: false }, // phase 5 will flip this
+      auth: {
+        // Phase 5a: keep the user signed in across page loads and tabs.
+        persistSession: true,
+        // Refresh the JWT in the background before it expires.
+        autoRefreshToken: true,
+        // Parse magic-link tokens from the URL hash on landing.
+        detectSessionInUrl: true,
+        // Use implicit flow — tokens come back in the hash, not a code-exchange.
+        flowType: 'implicit',
+        storageKey: 'blw-auth-v1',
+      },
     })
   : null;

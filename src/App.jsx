@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { TEAMS, API_CONFIG } from './data';
-import { colors, fonts, radius, sidebar as sidebarConfig } from './theme';
+import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './theme';
 import ContentStudio from './pages/ContentStudio';
 import Generate from './pages/Generate';
 import Requests from './pages/Requests';
@@ -10,12 +10,15 @@ import Files from './pages/Files';
 import Settings from './pages/Settings';
 import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
+import Login from './pages/Login';
+import AuthCallback from './pages/AuthCallback';
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
 import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
 import { supabaseConfigured } from './supabase-client';
 import { ToastProvider } from './toast';
 import { QuickSwitcher } from './quick-switcher';
+import { AuthProvider, useAuth } from './auth';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -384,20 +387,149 @@ function TopBar({ isMobile, onMenuToggle }) {
           }}>🔔</div>
         )}
 
-        {/* User avatar */}
-        <div style={{
-          width: 34, height: 34, borderRadius: radius.full,
-          background: colors.navy, color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: fonts.condensed, fontSize: 13, fontWeight: 700,
-          flexShrink: 0,
-        }}>WR</div>
+        {/* User profile menu (replaces the old hardcoded "WR" avatar) */}
+        <ProfileMenu isMobile={isMobile} />
       </div>
     </header>
   );
 }
 
-export default function App() {
+// Profile menu — initials avatar that opens a dropdown with the signed-in
+// email, a link to Settings, and a sign-out action. When Supabase is not
+// configured (no auth), falls back to a static "BL" chip so the layout
+// doesn't shift in dev.
+function ProfileMenu({ isMobile }) {
+  const { user, signOut, isConfigured } = useAuth();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  // Close on outside click / Escape.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const email = user?.email || '';
+  const initials = (email ? email[0] : 'B').toUpperCase()
+    + (email.split('@')[0]?.[1] || 'L').toUpperCase();
+
+  const doSignOut = async () => {
+    setOpen(false);
+    await signOut();
+    navigate('/login', { replace: true });
+  };
+
+  return (
+    <div ref={rootRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title={email || 'Account'}
+        style={{
+          width: 34, height: 34, borderRadius: radius.full,
+          background: colors.navy, color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: fonts.condensed, fontSize: 13, fontWeight: 700,
+          flexShrink: 0, border: 'none', cursor: 'pointer',
+          boxShadow: open ? '0 0 0 2px rgba(221,60,60,0.4)' : 'none',
+          transition: 'box-shadow 0.15s',
+        }}
+      >
+        {initials}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          minWidth: 240, maxWidth: 280,
+          background: colors.white, border: `1px solid ${colors.border}`,
+          borderRadius: radius.base, boxShadow: shadows.lg,
+          zIndex: 60, overflow: 'hidden',
+        }}>
+          {/* Identity block */}
+          <div style={{
+            padding: '12px 14px', borderBottom: `1px solid ${colors.borderLight}`,
+            background: colors.bg,
+          }}>
+            <div style={{
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+              color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase',
+            }}>Signed in as</div>
+            <div style={{
+              fontFamily: fonts.body, fontSize: 13, color: colors.text,
+              marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap', fontWeight: 600,
+            }}>
+              {email || (isConfigured ? '(no session)' : 'Auth not configured')}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <button onClick={() => { setOpen(false); navigate('/settings'); }} style={menuItemStyle}>
+            <span style={{ width: 18, textAlign: 'center' }}>⚙</span>
+            Settings
+          </button>
+
+          {isConfigured && user && (
+            <button onClick={doSignOut} style={{ ...menuItemStyle, color: colors.red }}>
+              <span style={{ width: 18, textAlign: 'center' }}>↪</span>
+              Sign out
+            </button>
+          )}
+
+          {isConfigured && !user && (
+            <button onClick={() => { setOpen(false); navigate('/login'); }} style={menuItemStyle}>
+              <span style={{ width: 18, textAlign: 'center' }}>→</span>
+              Sign in
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const menuItemStyle = {
+  display: 'flex', alignItems: 'center', gap: 10,
+  width: '100%', padding: '10px 14px',
+  background: 'none', border: 'none', cursor: 'pointer',
+  fontFamily: fonts.body, fontSize: 13, color: colors.text,
+  textAlign: 'left',
+};
+
+// Renders a spinner while AuthProvider is restoring the session on a hard
+// refresh. Prevents the "flash of /login" that would happen if we gated
+// before AuthProvider had a chance to read storage.
+function AuthLoadingSplash() {
+  return (
+    <div style={{
+      minHeight: '100vh', background: colors.navy,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        width: 32, height: 32,
+        border: `3px solid rgba(255,255,255,0.15)`,
+        borderTopColor: '#fff', borderRadius: '50%',
+        animation: 'authspin 0.9s linear infinite',
+      }} />
+      <style>{`@keyframes authspin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  );
+}
+
+// Inner app — assumes a user is already signed in (or auth isn't configured).
+// This is the old App body, now gated behind AuthGate.
+function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
 
@@ -409,7 +541,6 @@ export default function App() {
   }, []);
 
   return (
-    <ToastProvider>
     <div style={{
       fontFamily: fonts.body, color: colors.text,
       display: 'flex', minHeight: '100vh', background: colors.bg,
@@ -451,6 +582,45 @@ export default function App() {
         </main>
       </div>
     </div>
-    </ToastProvider>
+  );
+}
+
+// Router-level auth gate.
+//   - `/login` and `/auth/callback` are public — always accessible
+//   - Everything else requires a session when Supabase is configured
+//   - When Supabase is NOT configured (dev without env vars), the gate is
+//     disabled entirely so the app behaves like it did pre-5a
+function AuthGate() {
+  const { user, loading, isConfigured } = useAuth();
+  const location = useLocation();
+
+  if (isConfigured && loading) return <AuthLoadingSplash />;
+
+  // Public routes — render regardless of auth state. If an already-signed-in
+  // user lands on /login we bounce them to the dashboard.
+  if (location.pathname === '/login') {
+    if (user) return <Navigate to="/dashboard" replace />;
+    return <Routes><Route path="/login" element={<Login />} /></Routes>;
+  }
+  if (location.pathname === '/auth/callback') {
+    return <Routes><Route path="/auth/callback" element={<AuthCallback />} /></Routes>;
+  }
+
+  // Protected routes.
+  if (isConfigured && !user) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?next=${next}`} replace />;
+  }
+
+  return <AppShell />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <AuthGate />
+      </ToastProvider>
+    </AuthProvider>
   );
 }
