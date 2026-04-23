@@ -36,83 +36,6 @@ function isProperlyNamed(name) {
 //   - Manual dropdown overrides so user can correct AI guesses before Apply
 // The parent may also push an AI result via `tagHint` prop (used for bulk runs).
 function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy }) {
-  // Cloud backup state — tracks the one-shot library sync when the user
-  // clicks "Back up library to cloud". `backupProgress` shape:
-  //   { stage, done, total, results } when running / done, or null when idle.
-  const [backupProgress, setBackupProgress] = useState(null);
-  const [backupError, setBackupError] = useState(null);
-  const runBackup = useCallback(async () => {
-    setBackupError(null);
-    setBackupProgress({ stage: 'starting', done: 0, total: 0 });
-    try {
-      const results = await backupLibraryToCloud({
-        onProgress: (p) => setBackupProgress(p),
-      });
-      setBackupProgress({ stage: 'done', results });
-      const totalOk = Object.values(results).reduce((s, k) => s + (k.ok || 0), 0);
-      const totalFail = Object.values(results).reduce((s, k) => s + (k.fail || 0), 0);
-      if (totalFail === 0) {
-        toast.success('Backup complete', { detail: `${totalOk} records mirrored to Supabase` });
-      } else {
-        toast.warn(`Backup finished with ${totalFail} failures`, { detail: `${totalOk} records uploaded; see summary below` });
-      }
-    } catch (err) {
-      setBackupError(err.message || 'Backup failed');
-      setBackupProgress(null);
-      toast.error('Backup failed', { detail: err.message?.slice(0, 80) });
-    }
-  }, [toast]);
-
-  // Manual "pull fresh from cloud" — same call as the throttled auto-hydrate
-  // on app mount but with force:true so it runs even if we ran one <10 min ago.
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshReport, setRefreshReport] = useState(null);
-  // Bulk-select state — toggling select mode reveals a checkbox per tile.
-  // Tiles gain a border when selected; the click target swaps from "preview"
-  // to "toggle selection" while we're in select mode.
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const toggleSelection = useCallback((id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
-  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
-  const exitSelectMode = useCallback(() => { setSelectMode(false); clearSelection(); }, [clearSelection]);
-  // Storage meter — fetched alongside the backup banner when cloud is on.
-  // Nullable while loading; `{ error }` if the endpoint 500s.
-  const [usage, setUsage] = useState(null);
-  useEffect(() => {
-    if (!supabaseConfigured) return;
-    fetch('/api/cloud-usage')
-      .then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'usage fetch failed'); }))
-      .then(setUsage)
-      .catch(err => setUsage({ error: err.message }));
-  }, [backupProgress?.stage]); // re-fetch after a successful backup
-  const runRefresh = useCallback(async () => {
-    setRefreshing(true);
-    setRefreshReport(null);
-    try {
-      const report = await refreshFromCloud({ force: true });
-      setRefreshReport(report);
-      // Nudge the stored media list — refreshFromCloud put new records
-      // into IDB, but this page read into `storedMedia` state on mount.
-      // Re-reading is the simplest way to surface any new arrivals.
-      const media = await getAllMedia();
-      setStoredMedia(media);
-      const urls = {};
-      media.forEach(m => { if (m.blob) urls[m.id] = blobToObjectURL(m.blob); });
-      setThumbUrls(urls);
-    } catch (err) {
-      setRefreshReport({ error: err.message });
-    } finally {
-      setRefreshing(false);
-      setTimeout(() => setRefreshReport(null), 6000);
-    }
-  }, []);
-
   const [tagScope, setTagScope] = useState('player'); // 'player' | 'team'
   const [tagTeam, setTagTeam] = useState('');
   const [tagNum, setTagNum] = useState('');
@@ -641,6 +564,86 @@ export default function Files() {
   // Bulk AI auto-tag progress
   const [bulkAiProgress, setBulkAiProgress] = useState(null); // { done, total, failed }
 
+  // Cloud backup state — tracks the one-shot library sync when the user
+  // clicks "Back up library to cloud". `backupProgress` shape:
+  //   { stage, done, total, results } when running / done, or null when idle.
+  const [backupProgress, setBackupProgress] = useState(null);
+  const [backupError, setBackupError] = useState(null);
+  const runBackup = useCallback(async () => {
+    setBackupError(null);
+    setBackupProgress({ stage: 'starting', done: 0, total: 0 });
+    try {
+      const results = await backupLibraryToCloud({
+        onProgress: (p) => setBackupProgress(p),
+      });
+      setBackupProgress({ stage: 'done', results });
+      const totalOk = Object.values(results).reduce((s, k) => s + (k.ok || 0), 0);
+      const totalFail = Object.values(results).reduce((s, k) => s + (k.fail || 0), 0);
+      if (totalFail === 0) {
+        toast.success('Backup complete', { detail: `${totalOk} records mirrored to Supabase` });
+      } else {
+        toast.warn(`Backup finished with ${totalFail} failures`, { detail: `${totalOk} records uploaded; see summary below` });
+      }
+    } catch (err) {
+      setBackupError(err.message || 'Backup failed');
+      setBackupProgress(null);
+      toast.error('Backup failed', { detail: err.message?.slice(0, 80) });
+    }
+  }, [toast]);
+
+  // Manual "pull fresh from cloud" — same call as the throttled auto-hydrate
+  // on app mount but with force:true so it runs even if we ran one <10 min ago.
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshReport, setRefreshReport] = useState(null);
+
+  // Bulk-select state — toggling select mode reveals a checkbox per tile.
+  // Tiles gain a border when selected; the click target swaps from "preview"
+  // to "toggle selection" while we're in select mode.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const toggleSelection = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearBulkSelection = useCallback(() => setSelectedIds(new Set()), []);
+  const exitSelectMode = useCallback(() => { setSelectMode(false); clearBulkSelection(); }, [clearBulkSelection]);
+
+  // Storage meter — fetched alongside the backup banner when cloud is on.
+  // Nullable while loading; `{ error }` if the endpoint 500s.
+  const [usage, setUsage] = useState(null);
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    fetch('/api/cloud-usage')
+      .then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'usage fetch failed'); }))
+      .then(setUsage)
+      .catch(err => setUsage({ error: err.message }));
+  }, [backupProgress?.stage]); // re-fetch after a successful backup
+
+  const runRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setRefreshReport(null);
+    try {
+      const report = await refreshFromCloud({ force: true });
+      setRefreshReport(report);
+      // Nudge the stored media list — refreshFromCloud put new records
+      // into IDB, but this page read into `storedMedia` state on mount.
+      // Re-reading is the simplest way to surface any new arrivals.
+      const media = await getAllMedia();
+      setStoredMedia(media);
+      const urls = {};
+      media.forEach(m => { if (m.blob) urls[m.id] = blobToObjectURL(m.blob); });
+      setThumbUrls(urls);
+    } catch (err) {
+      setRefreshReport({ error: err.message });
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setRefreshReport(null), 6000);
+    }
+  }, []);
+
   useEffect(() => {
     // Preload the full player directory once for heuristic matching. We pull
     // firstName/firstInitial so the heuristic can detect same-lastname
@@ -730,7 +733,7 @@ export default function Files() {
       for (const id of ids) { if (n[id]) URL.revokeObjectURL(n[id]); delete n[id]; }
       return n;
     });
-    clearSelection();
+    clearBulkSelection();
     setSelectMode(false);
     toast.info(`Deleted ${snapshots.length} file${snapshots.length === 1 ? '' : 's'}`, {
       duration: 10000,
@@ -756,7 +759,7 @@ export default function Files() {
         },
       },
     });
-  }, [selectedIds, storedMedia, clearSelection, toast]);
+  }, [selectedIds, storedMedia, clearBulkSelection, toast]);
 
   const handleDelete = useCallback(async (id) => {
     // Snapshot the record before deleting so Undo can restore it. The blob
@@ -1388,7 +1391,7 @@ export default function Files() {
             }}
           >SELECT ALL ({filtered.length})</button>
           <button
-            onClick={clearSelection}
+            onClick={clearBulkSelection}
             style={{
               background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
               color: '#fff', padding: '4px 10px', borderRadius: radius.sm,
