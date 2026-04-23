@@ -34,6 +34,96 @@ function drawDiagonalStripes(ctx, w, h, color, spacing=30, thickness=8) {
   ctx.restore();
 }
 
+// Draggable field-position editor overlaid on the preview canvas. Renders
+// a small chip for each field at its current (x,y); drag chips to reposition.
+// Chip positions are in PREVIEW pixels; final x/y are translated back to
+// NATIVE canvas pixels via the `scale` factor on drag end.
+function DragOverlay({ fields, hiddenFields, customFields, canvasW, canvasH, scale, onDragEnd }) {
+  const [dragging, setDragging] = useState(null); // { key, startX, startY, x0, y0 }
+  const [liveDelta, setLiveDelta] = useState({ dx: 0, dy: 0 });
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e) => {
+      setLiveDelta({
+        dx: (e.clientX - dragging.startX) / scale,
+        dy: (e.clientY - dragging.startY) / scale,
+      });
+    };
+    const onUp = () => {
+      const newX = Math.max(0, Math.min(canvasW, dragging.x0 + liveDeltaRef.current.dx));
+      const newY = Math.max(0, Math.min(canvasH, dragging.y0 + liveDeltaRef.current.dy));
+      onDragEnd(dragging.key, Math.round(newX), Math.round(newY));
+      setDragging(null);
+      setLiveDelta({ dx: 0, dy: 0 });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [dragging, canvasW, canvasH, scale, onDragEnd]);
+
+  // Track latest delta in a ref for the pointerup handler — closures would
+  // otherwise see the stale initial value.
+  const liveDeltaRef = useRef({ dx: 0, dy: 0 });
+  useEffect(() => { liveDeltaRef.current = liveDelta; }, [liveDelta]);
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      pointerEvents: 'none', // children opt in below so the canvas stays clickable
+    }}>
+      {fields.map(f => {
+        if (hiddenFields.has(f.key)) return null;
+        const isDragging = dragging?.key === f.key;
+        const baseX = f.x || 0;
+        const baseY = f.y || 0;
+        const liveX = baseX + (isDragging ? liveDelta.dx : 0);
+        const liveY = baseY + (isDragging ? liveDelta.dy : 0);
+        // Translate alignment so the chip anchors where the text actually
+        // renders on the canvas (canvas uses ctx.textAlign = f.align).
+        const translateX = f.align === 'center' ? '-50%' : f.align === 'right' ? '-100%' : '0';
+        const hasValue = !!(customFields[f.key] || '').trim();
+        return (
+          <div
+            key={f.key}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragging({ key: f.key, startX: e.clientX, startY: e.clientY, x0: baseX, y0: baseY });
+            }}
+            title={`${f.label} · drag to reposition · ${Math.round(liveX)},${Math.round(liveY)}`}
+            style={{
+              position: 'absolute',
+              left: liveX * scale,
+              top: liveY * scale,
+              transform: `translate(${translateX}, -50%)`,
+              pointerEvents: 'auto',
+              cursor: isDragging ? 'grabbing' : 'grab',
+              userSelect: 'none', touchAction: 'none',
+              background: isDragging ? 'rgba(220,38,38,0.95)' : 'rgba(17,24,39,0.72)',
+              color: '#fff',
+              padding: '3px 8px', borderRadius: 4,
+              fontFamily: 'var(--blw-cond, "Barlow Condensed", sans-serif)',
+              fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+              whiteSpace: 'nowrap',
+              border: `1px solid ${isDragging ? '#DC2626' : 'rgba(255,255,255,0.25)'}`,
+              boxShadow: isDragging ? '0 4px 18px rgba(220,38,38,0.45)' : '0 2px 6px rgba(0,0,0,0.4)',
+              zIndex: isDragging ? 20 : 10,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            <span style={{ opacity: hasValue ? 1 : 0.75 }}>⋮⋮</span>
+            {f.label.toUpperCase()}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Build a short list of recommended stat-line variants for a selected player.
 // Each recommendation is { label, value, badge? } where `badge` is present
 // when the recommendation leans on a top-15% stat — a "worth posting" hint.
@@ -1035,17 +1125,38 @@ export default function Generate() {
               ))}
             </div>
           </Card>
-          <Label>Live Preview</Label>
+          <Label>Live Preview {showLayoutEditor && <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.red, letterSpacing: 0.5, marginLeft: 6 }}>· DRAG FIELDS TO REPOSITION</span>}</Label>
           <div style={{
             background: '#1A1A22', borderRadius: radius.lg, padding: 16,
             border: `1px solid ${colors.border}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%',
             boxSizing: 'border-box',
           }}>
-            <canvas ref={canvasRef} style={{
+            <div style={{
+              position: 'relative',
               width: activeW * scale, height: activeH * scale,
-              borderRadius: radius.base, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-            }} />
+            }}>
+              <canvas ref={canvasRef} style={{
+                width: activeW * scale, height: activeH * scale,
+                borderRadius: radius.base, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                display: 'block',
+              }} />
+              {/* Drag overlay — only visible when EDIT LAYOUT is on. Each
+                  field becomes a small draggable handle pinned at its current
+                  (x,y). Dragging translates preview-pixel deltas back to
+                  native canvas pixels via the `scale` factor. */}
+              {showLayoutEditor && (
+                <DragOverlay
+                  fields={customFieldConfig}
+                  hiddenFields={hiddenFields}
+                  customFields={customFields}
+                  canvasW={activeW}
+                  canvasH={activeH}
+                  scale={scale}
+                  onDragEnd={(fieldKey, x, y) => patchFieldOverride(fieldKey, { x, y })}
+                />
+              )}
+            </div>
           </div>
           <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, textAlign: 'center' }}>
             {activeW}x{activeH}px — Click download for full resolution

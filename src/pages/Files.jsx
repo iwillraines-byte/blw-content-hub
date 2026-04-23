@@ -13,6 +13,7 @@ import { autoTagBlob } from '../auto-tag-api';
 import { getAllPlayersDirectory } from '../data';
 import { supabaseConfigured } from '../supabase-client';
 import { backupLibraryToCloud } from '../cloud-backup';
+import { refreshFromCloud } from '../cloud-reader';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -50,6 +51,42 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
     } catch (err) {
       setBackupError(err.message || 'Backup failed');
       setBackupProgress(null);
+    }
+  }, []);
+
+  // Manual "pull fresh from cloud" — same call as the throttled auto-hydrate
+  // on app mount but with force:true so it runs even if we ran one <10 min ago.
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshReport, setRefreshReport] = useState(null);
+  // Storage meter — fetched alongside the backup banner when cloud is on.
+  // Nullable while loading; `{ error }` if the endpoint 500s.
+  const [usage, setUsage] = useState(null);
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    fetch('/api/cloud-usage')
+      .then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'usage fetch failed'); }))
+      .then(setUsage)
+      .catch(err => setUsage({ error: err.message }));
+  }, [backupProgress?.stage]); // re-fetch after a successful backup
+  const runRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setRefreshReport(null);
+    try {
+      const report = await refreshFromCloud({ force: true });
+      setRefreshReport(report);
+      // Nudge the stored media list — refreshFromCloud put new records
+      // into IDB, but this page read into `storedMedia` state on mount.
+      // Re-reading is the simplest way to surface any new arrivals.
+      const media = await getAllMedia();
+      setStoredMedia(media);
+      const urls = {};
+      media.forEach(m => { if (m.blob) urls[m.id] = blobToObjectURL(m.blob); });
+      setThumbUrls(urls);
+    } catch (err) {
+      setRefreshReport({ error: err.message });
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setRefreshReport(null), 6000);
     }
   }, []);
 
@@ -826,6 +863,49 @@ export default function Files() {
               already in this browser — media, overlays, effects, requests, and settings. You can rerun this any
               time; it's idempotent.
             </div>
+            {/* Storage meter — visible-at-a-glance sense of how much headroom
+                you have against Supabase's free-tier 1 GB storage limit. */}
+            {usage && !usage.error && usage.storage && (() => {
+              const used = usage.storage.total.bytes;
+              const cap = usage.limits?.storageBytes || (1024 ** 3);
+              const pct = Math.min(100, Math.round((used / cap) * 100));
+              const fmt = (n) => n < 1024 ? `${n} B`
+                : n < 1024 ** 2 ? `${(n / 1024).toFixed(1)} KB`
+                : n < 1024 ** 3 ? `${(n / (1024 ** 2)).toFixed(1)} MB`
+                : `${(n / (1024 ** 3)).toFixed(2)} GB`;
+              const barColor = pct >= 90 ? '#DC2626' : pct >= 70 ? '#F59E0B' : '#0EA5E9';
+              return (
+                <div style={{ marginTop: 10, fontSize: 11, fontFamily: fonts.condensed, color: '#075985' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                    <span style={{ fontWeight: 700, letterSpacing: 0.5 }}>
+                      CLOUD STORAGE · {usage.storage.total.count} files
+                    </span>
+                    <span style={{ fontWeight: 700 }}>
+                      {fmt(used)} / {fmt(cap)} <span style={{ opacity: 0.7 }}>({pct}%)</span>
+                    </span>
+                  </div>
+                  <div style={{
+                    width: '100%', height: 6, background: 'rgba(14,165,233,0.12)',
+                    borderRadius: 999, overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      width: `${Math.max(pct, 1)}%`, height: '100%',
+                      background: barColor, transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                  <div style={{ marginTop: 3, opacity: 0.7, fontSize: 10 }}>
+                    {Object.entries(usage.tables || {}).filter(([k]) => ['media','requests','request_comments','manual_players'].includes(k)).map(([k, v]) =>
+                      `${k.replace('_',' ')}: ${v.rows ?? '—'}`
+                    ).join(' · ')}
+                  </div>
+                </div>
+              );
+            })()}
+            {usage?.error && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#991B1B' }}>
+                Couldn't load usage meter: {usage.error}
+              </div>
+            )}
             {backupProgress?.stage === 'done' && backupProgress.results && (() => {
               const r = backupProgress.results;
               const totalOk = Object.values(r).reduce((s, k) => s + (k.ok || 0), 0);
@@ -862,13 +942,33 @@ export default function Files() {
               </div>
             )}
           </div>
-          <RedButton
-            onClick={runBackup}
-            disabled={!!backupProgress && backupProgress.stage !== 'done'}
-            style={{ padding: '8px 16px', fontSize: 12 }}
-          >
-            {backupProgress && backupProgress.stage !== 'done' ? 'Backing up…' : '☁ Back up library to cloud'}
-          </RedButton>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+            <RedButton
+              onClick={runBackup}
+              disabled={!!backupProgress && backupProgress.stage !== 'done'}
+              style={{ padding: '8px 16px', fontSize: 12 }}
+            >
+              {backupProgress && backupProgress.stage !== 'done' ? 'Backing up…' : '☁ Back up library to cloud'}
+            </RedButton>
+            <OutlineButton
+              onClick={runRefresh}
+              disabled={refreshing}
+              title="Force-pull the latest records from Supabase now (bypasses the 10-min throttle)"
+              style={{ padding: '6px 12px', fontSize: 11 }}
+            >
+              {refreshing ? '↻ Refreshing…' : '↻ Refresh from cloud'}
+            </OutlineButton>
+            {refreshReport && !refreshReport.error && (
+              <div style={{ fontSize: 10, color: '#075985', fontFamily: fonts.condensed, textAlign: 'center' }}>
+                Media +{refreshReport.media?.newBlobs || 0} · Requests {refreshReport.requests?.fetched || 0}
+              </div>
+            )}
+            {refreshReport?.error && (
+              <div style={{ fontSize: 10, color: '#991B1B', textAlign: 'center' }}>
+                Refresh failed: {refreshReport.error}
+              </div>
+            )}
+          </div>
         </Card>
       ) : (
         <Card style={{

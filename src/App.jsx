@@ -12,7 +12,8 @@ import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
-import { refreshFromCloud } from './cloud-reader';
+import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
+import { supabaseConfigured } from './supabase-client';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -206,11 +207,43 @@ function getPageTitle(pathname) {
   return 'BLW Content Hub';
 }
 
+// Small chip that shows how long ago the app last pulled from Supabase.
+// Ticks every 30s so the number stays honest without being noisy. Hidden
+// entirely when Supabase isn't configured (no cloud = no sync concept).
+function useSyncedAgoLabel() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  if (!supabaseConfigured) return null;
+  const at = lastHydratedAt();
+  if (!at) return 'Never';
+  const diff = Math.max(0, now - at);
+  if (diff < 60_000) return 'Just now';
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 function TopBar({ isMobile, onMenuToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentTeam = useCurrentTeamFromUrl();
   const title = getPageTitle(location.pathname);
+  const syncedAgo = useSyncedAgoLabel();
+  const [resyncing, setResyncing] = useState(false);
+  const forceResync = async () => {
+    if (resyncing) return;
+    setResyncing(true);
+    try {
+      await refreshFromCloud({ force: true });
+    } finally {
+      setResyncing(false);
+    }
+  };
 
   // Selecting a team navigates to that team's page.
   // "ALL" navigates to Dashboard — the app-wide landing view.
@@ -251,6 +284,32 @@ function TopBar({ isMobile, onMenuToggle }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flexShrink: 0 }}>
+        {/* Cloud sync chip — only rendered when Supabase is configured.
+            Clicking forces a re-hydrate from the cloud. */}
+        {syncedAgo !== null && (
+          <button
+            onClick={forceResync}
+            disabled={resyncing}
+            title={resyncing ? 'Pulling fresh data from the cloud…' : 'Click to force a fresh pull from Supabase'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: radius.full,
+              background: resyncing ? 'rgba(14,165,233,0.18)' : 'rgba(14,165,233,0.10)',
+              border: `1px solid rgba(14,165,233,0.35)`,
+              cursor: resyncing ? 'wait' : 'pointer',
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+              color: '#075985', letterSpacing: 0.5,
+            }}
+          >
+            <span style={{
+              display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+              background: resyncing ? '#0EA5E9' : '#075985',
+              animation: resyncing ? 'syncpulse 1.2s ease-in-out infinite' : 'none',
+            }} />
+            {!isMobile && (resyncing ? 'SYNCING…' : `SYNCED ${syncedAgo.toUpperCase()}`)}
+          </button>
+        )}
+        <style>{`@keyframes syncpulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }`}</style>
         {/* API Status — hide label on mobile */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
