@@ -2,6 +2,8 @@
 // For players signed to teams but not yet appearing in the Grand Slam Systems
 // API (e.g., preseason signings, practice squad). Persisted in the browser.
 
+import { cloud } from './cloud-sync';
+
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Bumped from 2 to add players store
 const STORE_NAME = 'players';
@@ -47,7 +49,7 @@ export async function savePlayer({ name, firstName, lastName, team, num, positio
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(record);
-    tx.oncomplete = () => resolve(record);
+    tx.oncomplete = () => { cloud.syncManualPlayer(record); resolve(record); };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -81,7 +83,7 @@ export async function updatePlayer(id, updates) {
         merged.name = `${merged.firstName} ${merged.lastName}`.trim();
       }
       store.put(merged);
-      tx.oncomplete = () => resolve(merged);
+      tx.oncomplete = () => { cloud.syncManualPlayer(merged); resolve(merged); };
     };
     tx.onerror = () => reject(tx.error);
   });
@@ -92,7 +94,7 @@ export async function deletePlayer(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).delete(id);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { cloud.deleteManualPlayer(id); resolve(); };
     tx.onerror = () => reject(tx.error);
   });
 }

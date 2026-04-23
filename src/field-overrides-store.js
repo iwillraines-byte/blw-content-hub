@@ -9,6 +9,8 @@
 // Storage: localStorage. Multi-user lift to Supabase is planned — when that
 // lands, the same shape moves server-side and gets scoped by user or team.
 
+import { cloud } from './cloud-sync';
+
 const LS_KEY = 'blw_field_overrides_v1';
 
 // ─── Base I/O ────────────────────────────────────────────────────────────────
@@ -47,8 +49,10 @@ export function setFieldOverride(templateType, platform, fieldKey, partial) {
   const combo = { ...(all[key] || {}) };
   if (partial === null || (partial && Object.keys(partial).length === 0 && !partial.clear)) {
     delete combo[fieldKey];
+    cloud.deleteFieldOverride(templateType, platform, fieldKey);
   } else {
     combo[fieldKey] = { ...(combo[fieldKey] || {}), ...partial };
+    cloud.syncFieldOverride(templateType, platform, fieldKey, combo[fieldKey]);
   }
   if (Object.keys(combo).length === 0) {
     delete all[key];
@@ -61,6 +65,12 @@ export function setFieldOverride(templateType, platform, fieldKey, partial) {
 // Reset all overrides for a template/platform combo back to defaults.
 export function resetOverrides(templateType, platform) {
   const all = readAll();
+  const combo = all[comboKey(templateType, platform)] || {};
+  // Delete each field override from the cloud before wiping locally so the
+  // cloud matches the reset-to-defaults state.
+  for (const fieldKey of Object.keys(combo)) {
+    cloud.deleteFieldOverride(templateType, platform, fieldKey);
+  }
   delete all[comboKey(templateType, platform)];
   writeAll(all);
 }

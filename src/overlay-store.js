@@ -1,5 +1,7 @@
 // ─── IndexedDB Store for Overlay Template PNGs + Effect PNGs ───────────────
 
+import { cloud } from './cloud-sync';
+
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Bumped for players store addition
 const STORE_NAME = 'overlays';
@@ -37,7 +39,7 @@ export async function saveOverlay({ name, type, team, platform, imageBlob, width
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(record);
-    tx.oncomplete = () => resolve(record);
+    tx.oncomplete = () => { cloud.syncOverlay(record); resolve(record); };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -67,7 +69,7 @@ export async function deleteOverlay(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).delete(id);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { cloud.deleteOverlay(id); resolve(); };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -81,7 +83,7 @@ export async function saveEffect({ name, imageBlob, width, height }) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(EFFECTS_STORE, 'readwrite');
     tx.objectStore(EFFECTS_STORE).put(record);
-    tx.oncomplete = () => resolve(record);
+    tx.oncomplete = () => { cloud.syncEffect(record); resolve(record); };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -101,7 +103,7 @@ export async function deleteEffect(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(EFFECTS_STORE, 'readwrite');
     tx.objectStore(EFFECTS_STORE).delete(id);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { cloud.deleteEffect(id); resolve(); };
     tx.onerror = () => reject(tx.error);
   });
 }

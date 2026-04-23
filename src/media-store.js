@@ -13,6 +13,8 @@
 // is inferred from assetType so existing records backfill on read without a
 // schema migration.
 
+import { cloud } from './cloud-sync';
+
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Must match overlay-store.js
 const STORE_NAME = 'media';
@@ -169,7 +171,7 @@ export async function saveMedia({ name, blob, width, height, driveFileId, source
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(record);
-    tx.oncomplete = () => resolve(record);
+    tx.oncomplete = () => { cloud.syncMedia(record); resolve(record); };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -206,7 +208,7 @@ export async function updateMedia(id, updates) {
         updated.scope = parsed.scope;
       }
       store.put(updated);
-      tx.oncomplete = () => resolve(updated);
+      tx.oncomplete = () => { cloud.syncMedia(updated); resolve(updated); };
     };
     tx.onerror = () => reject(tx.error);
   });
@@ -217,7 +219,7 @@ export async function deleteMedia(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).delete(id);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { cloud.deleteMedia(id); resolve(); };
     tx.onerror = () => reject(tx.error);
   });
 }

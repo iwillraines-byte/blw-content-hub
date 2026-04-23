@@ -10,6 +10,8 @@
 //   - Auto-tag per image:          ~$0.002
 // So a counter of 50 ideas + 100 auto-tags ≈ $0.25/day.
 
+import { cloud } from './cloud-sync';
+
 const LS_KEY = 'blw_ai_usage_v1';
 
 function todayKey() {
@@ -53,6 +55,9 @@ export function recordUsage(kind, n = 1) {
     delete all[keys.shift()];
   }
   writeAll(all);
+  // Mirror to cloud — sends the absolute count (not delta) so concurrent
+  // writes from multiple browsers won't double-count once Phase 5 lands.
+  cloud.syncAiUsage(key, kind, today[kind]);
 }
 
 // Sum of all counts today — handy for a single "AI calls today" chip.
