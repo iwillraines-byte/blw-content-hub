@@ -12,6 +12,7 @@ import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
+import { refreshFromCloud } from './cloud-reader';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -317,6 +318,13 @@ function TopBar({ isMobile, onMenuToggle }) {
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
+
+  // Phase 4: on app mount, pull latest records from Supabase into the local
+  // IDB / localStorage cache. Throttled to once per 10 min so navigation
+  // between pages doesn't spam the API. Silently no-ops if not configured.
+  useEffect(() => {
+    refreshFromCloud().catch(err => console.warn('[cloud-reader] hydrate failed', err));
+  }, []);
 
   return (
     <div style={{

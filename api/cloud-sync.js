@@ -40,16 +40,58 @@ const COMPOSITE_PK = {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'content-type');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'POST required' });
-    return;
-  }
 
   const sb = getServiceClient();
   if (!sb) return missingConfigResponse(res);
+
+  // ── GET: list records of a kind ─────────────────────────────────────────
+  // Called by src/cloud-reader.js on app mount to hydrate the IndexedDB /
+  // localStorage cache from whatever's in Supabase. For kinds with a blob
+  // (media/overlay/effect) we include a short-lived signed URL so the
+  // browser can download the binary without needing the service_role key.
+  if (req.method === 'GET') {
+    const kind = req.query.kind;
+    const table = TABLE_FOR[kind];
+    if (!table) {
+      res.status(400).json({ error: `Unknown kind: ${kind}` });
+      return;
+    }
+    try {
+      const { data, error } = await sb.from(table).select('*');
+      if (error) throw error;
+      let records = data || [];
+
+      if (BLOB_KINDS.has(kind)) {
+        const bucket = BUCKET_FOR[kind];
+        // Sign all storage paths in a single batch — ~60 min expiry so a
+        // user browsing a full library doesn't hit a URL-expired mid-scroll.
+        const paths = records.map(r => r.storage_path).filter(Boolean);
+        if (paths.length > 0) {
+          const { data: signed, error: signErr } = await sb
+            .storage.from(bucket)
+            .createSignedUrls(paths, 60 * 60);
+          if (signErr) throw signErr;
+          const byPath = new Map((signed || []).map(s => [s.path, s.signedUrl]));
+          records = records.map(r => ({ ...r, signedUrl: byPath.get(r.storage_path) || null }));
+        }
+      }
+
+      res.status(200).json({ records });
+      return;
+    } catch (err) {
+      console.error('[cloud-sync GET]', kind, err);
+      res.status(500).json({ error: 'cloud read failed', detail: err.message });
+      return;
+    }
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'POST or GET' });
+    return;
+  }
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
