@@ -12,6 +12,7 @@ import { applyOverrides, setFieldOverride, getOverrides, resetOverrides } from '
 import { useToast } from '../toast';
 import { cloud } from '../cloud-sync';
 import { TemplatePreview } from '../template-preview';
+import { useAuth, isAthleteRole } from '../auth';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -312,13 +313,34 @@ export default function Generate() {
   const canvasRef = useRef(null);
   const [searchParams] = useSearchParams();
 
+  // Phase 5b: athletes are pinned to their own team. If the role is 'athlete'
+  // and a profile has loaded with a team_id, `customTeam` defaults to that
+  // and the team <select> is disabled. URL ?team= params are ignored for
+  // athletes so a deep link can't sneak them past the restriction.
+  const { role, teamId: profileTeamId } = useAuth();
+  const isAthlete = isAthleteRole(role);
+  const athleteLockedTeam = isAthlete ? (profileTeamId || '') : '';
+
   // Custom-template state (the only mode — Classic was removed).
   // URL params from dashboard Content-Idea deep links pre-fill these on mount.
   const [customType, setCustomType] = useState(() => {
     const t = searchParams.get('template');
     return (t && TEMPLATE_TYPES[t]) ? t : 'player-stat';
   });
-  const [customTeam, setCustomTeam] = useState(() => searchParams.get('team') || '');
+  const [customTeam, setCustomTeam] = useState(() => {
+    // Athlete roles are forced to their assigned team.
+    if (isAthleteRole(role) && profileTeamId) return profileTeamId;
+    return searchParams.get('team') || '';
+  });
+
+  // If the role/teamId resolves after first render (profile loads async),
+  // retroactively pin the athlete to their team.
+  useEffect(() => {
+    if (isAthlete && profileTeamId && customTeam !== profileTeamId) {
+      setCustomTeam(profileTeamId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAthlete, profileTeamId]);
   const [customPlatform, setCustomPlatform] = useState('portrait');
   const [customFields, setCustomFields] = useState({});
   // Fields the user has explicitly toggled off — no placeholder in preview, no text in export
@@ -695,10 +717,43 @@ export default function Generate() {
                 <Label>Team & Format</Label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>Team</label>
-                    <select value={customTeam} onChange={e => setCustomTeam(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-                      <option value="">Choose a team…</option>
-                      {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+                    <label style={labelStyle}>
+                      Team
+                      {isAthlete && (
+                        <span title="Your role is restricted to this team" style={{
+                          marginLeft: 6, fontSize: 9, fontWeight: 700,
+                          color: colors.textSecondary, letterSpacing: 0.5,
+                        }}>🔒 LOCKED</span>
+                      )}
+                    </label>
+                    <select
+                      value={customTeam}
+                      onChange={e => setCustomTeam(e.target.value)}
+                      disabled={isAthlete}
+                      title={isAthlete ? 'Your role is restricted to your own team' : undefined}
+                      style={{
+                        ...selectStyle,
+                        marginTop: 4,
+                        opacity: isAthlete ? 0.7 : 1,
+                        cursor: isAthlete ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {isAthlete ? (
+                        // Athlete: only their team is selectable. If the profile
+                        // somehow has no team_id, we degrade to a "no team" state.
+                        athleteLockedTeam ? (
+                          <option value={athleteLockedTeam}>
+                            {athleteLockedTeam} — {TEAMS.find(t => t.id === athleteLockedTeam)?.name || 'Your team'}
+                          </option>
+                        ) : (
+                          <option value="">No team assigned — ask your admin</option>
+                        )
+                      ) : (
+                        <>
+                          <option value="">Choose a team…</option>
+                          {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+                        </>
+                      )}
                     </select>
                   </div>
                   <div style={{ flex: 1 }}>

@@ -18,17 +18,20 @@ import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
 import { supabaseConfigured } from './supabase-client';
 import { ToastProvider } from './toast';
 import { QuickSwitcher } from './quick-switcher';
-import { AuthProvider, useAuth } from './auth';
+import { AuthProvider, useAuth, ROLE_LABELS, isAthleteRole, isAdminRole } from './auth';
 
 const MOBILE_BREAKPOINT = 768;
 
+// Nav items. `roles` declares who can see each item — missing means
+// "everyone signed-in". Athletes get a trimmed sidebar (no Files, no
+// request queue admin, no global Settings).
 const navItems = [
-  { path: "/dashboard", label: "Dashboard", icon: "⚡" },
-  { path: "/generate", label: "Generate", icon: "✦" },
-  { path: "/requests", label: "Requests", icon: "☰" },
-  { path: "/game-center", label: "ProWiffle Stats", icon: "▣" },
-  { path: "/files", label: "Files", icon: "◫" },
-  { path: "/settings", label: "Settings", icon: "⚙" },
+  { path: "/dashboard",   label: "Dashboard",        icon: "⚡" },
+  { path: "/generate",    label: "Generate",         icon: "✦" },
+  { path: "/requests",    label: "Requests",         icon: "☰",  roles: ['master_admin', 'admin', 'content'] },
+  { path: "/game-center", label: "ProWiffle Stats",  icon: "▣" },
+  { path: "/files",       label: "Files",            icon: "◫",  roles: ['master_admin', 'admin', 'content'] },
+  { path: "/settings",    label: "Settings",         icon: "⚙" },
 ];
 
 const pageTitles = {
@@ -113,6 +116,7 @@ function TeamsDropdown({ location }) {
 
 function Sidebar({ isMobile, open, onClose }) {
   const location = useLocation();
+  const { role, isConfigured } = useAuth();
 
   // Close sidebar on navigation (mobile)
   useEffect(() => {
@@ -120,6 +124,15 @@ function Sidebar({ isMobile, open, onClose }) {
   }, [location.pathname]);
 
   if (isMobile && !open) return null;
+
+  // When Supabase isn't configured (dev without env vars) we don't filter —
+  // assume the dev sees everything. Otherwise only render items whose
+  // `roles` list includes the current role (or items with no `roles` set).
+  const visibleNavItems = navItems.filter(n => {
+    if (!n.roles) return true;
+    if (!isConfigured) return true;
+    return role && n.roles.includes(role);
+  });
 
   return (
     <>
@@ -161,7 +174,7 @@ function Sidebar({ isMobile, open, onClose }) {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-          {navItems.map(n => {
+          {visibleNavItems.map(n => {
             const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/dashboard');
             return (
               <Link key={n.path} to={n.path} style={{
@@ -399,7 +412,7 @@ function TopBar({ isMobile, onMenuToggle }) {
 // configured (no auth), falls back to a static "BL" chip so the layout
 // doesn't shift in dev.
 function ProfileMenu({ isMobile }) {
-  const { user, signOut, isConfigured } = useAuth();
+  const { user, role, teamId, signOut, isConfigured } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
@@ -472,6 +485,28 @@ function ProfileMenu({ isMobile }) {
             }}>
               {email || (isConfigured ? '(no session)' : 'Auth not configured')}
             </div>
+            {/* Role + team chips — only when a profile has loaded */}
+            {role && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                  letterSpacing: 0.5, textTransform: 'uppercase',
+                  padding: '2px 8px', borderRadius: radius.full,
+                  background: isAdminRole(role) ? 'rgba(221,60,60,0.12)' : 'rgba(59,130,246,0.10)',
+                  color: isAdminRole(role) ? colors.red : '#1D4ED8',
+                  border: `1px solid ${isAdminRole(role) ? 'rgba(221,60,60,0.25)' : 'rgba(59,130,246,0.25)'}`,
+                }}>{ROLE_LABELS[role] || role}</span>
+                {teamId && (
+                  <span style={{
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                    letterSpacing: 0.5,
+                    padding: '2px 8px', borderRadius: radius.full,
+                    background: colors.bg, color: colors.textSecondary,
+                    border: `1px solid ${colors.border}`,
+                  }}>{teamId}</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -506,6 +541,43 @@ const menuItemStyle = {
   fontFamily: fonts.body, fontSize: 13, color: colors.text,
   textAlign: 'left',
 };
+
+// Small "you don't have access" card shown when a user's role can't
+// reach the route they navigated to directly. The nav already hides the
+// link for athletes, but a typed URL or a bookmark would otherwise 404-
+// ish into a broken page. This gives them a clear "ask your admin" nudge.
+function AccessDenied({ what }) {
+  const { role } = useAuth();
+  return (
+    <div style={{
+      padding: 48, textAlign: 'center', fontFamily: fonts.body,
+      color: colors.textSecondary,
+    }}>
+      <div style={{ fontSize: 42, marginBottom: 10 }}>🔒</div>
+      <h1 style={{
+        fontFamily: fonts.heading, fontSize: 28, color: colors.text,
+        margin: 0, letterSpacing: 1.2, fontWeight: 400,
+      }}>Access restricted</h1>
+      <p style={{ marginTop: 10, fontSize: 14 }}>
+        Your role ({ROLE_LABELS[role] || role || 'unknown'}) can't view {what}.
+        Ask an admin if you need access.
+      </p>
+    </div>
+  );
+}
+
+// Route gate — wraps a child in an AccessDenied shell if the current role
+// isn't allowed. Used for athlete-hidden routes like /files and /requests.
+function RequireRole({ roles, what, children }) {
+  const { role, isConfigured } = useAuth();
+  // Dev without Supabase: show everything.
+  if (!isConfigured) return children;
+  // Profile still loading (no role yet): render nothing briefly to avoid
+  // a flash of "Access restricted" while the fetch resolves.
+  if (!role) return null;
+  if (!roles.includes(role)) return <AccessDenied what={what} />;
+  return children;
+}
 
 // Renders a spinner while AuthProvider is restoring the session on a hard
 // refresh. Prevents the "flash of /login" that would happen if we gated
@@ -568,9 +640,17 @@ function AppShell() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<ContentStudio />} />
             <Route path="/generate" element={<Generate />} />
-            <Route path="/requests" element={<Requests />} />
+            <Route path="/requests" element={
+              <RequireRole roles={['master_admin', 'admin', 'content']} what="the Requests queue">
+                <Requests />
+              </RequireRole>
+            } />
             <Route path="/game-center" element={<GameCenter />} />
-            <Route path="/files" element={<Files />} />
+            <Route path="/files" element={
+              <RequireRole roles={['master_admin', 'admin', 'content']} what="the Files library">
+                <Files />
+              </RequireRole>
+            } />
             <Route path="/settings" element={<Settings />} />
             <Route path="/teams/:slug" element={<TeamPage />} />
             <Route path="/teams/:slug/players/:lastName" element={<PlayerPage />} />
