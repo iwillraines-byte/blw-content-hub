@@ -11,6 +11,7 @@ import { getPresetOverlays, loadPresetImage } from '../preset-overlays';
 import { applyOverrides, setFieldOverride, getOverrides, resetOverrides } from '../field-overrides-store';
 import { useToast } from '../toast';
 import { cloud } from '../cloud-sync';
+import { TemplatePreview } from '../template-preview';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -1149,16 +1150,27 @@ export default function Generate() {
         <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Card>
             <Label>Template Type</Label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
                 <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
-                  background: customType === key ? colors.redLight : colors.bg,
+                  background: customType === key ? colors.redLight : colors.white,
                   border: customType === key ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
                   color: customType === key ? colors.red : colors.textSecondary,
-                  borderRadius: radius.base, padding: '8px 4px', cursor: 'pointer',
+                  borderRadius: radius.base, padding: 6, cursor: 'pointer',
                   fontFamily: fonts.body, fontSize: 10, fontWeight: 700, textAlign: 'center',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                 }}>
-                  <div style={{ fontSize: 18 }}>{t.icon}</div>{t.name}
+                  <TemplatePreview
+                    templateKey={key}
+                    platform={customPlatform}
+                    team={customTeam}
+                    width={72}
+                    height={72}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ fontSize: 12 }}>{t.icon}</span>
+                    <span>{t.name}</span>
+                  </div>
                 </button>
               ))}
             </div>

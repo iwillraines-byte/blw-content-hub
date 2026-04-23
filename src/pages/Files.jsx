@@ -67,6 +67,20 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
   // on app mount but with force:true so it runs even if we ran one <10 min ago.
   const [refreshing, setRefreshing] = useState(false);
   const [refreshReport, setRefreshReport] = useState(null);
+  // Bulk-select state — toggling select mode reveals a checkbox per tile.
+  // Tiles gain a border when selected; the click target swaps from "preview"
+  // to "toggle selection" while we're in select mode.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const toggleSelection = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  const exitSelectMode = useCallback(() => { setSelectMode(false); clearSelection(); }, [clearSelection]);
   // Storage meter — fetched alongside the backup banner when cloud is on.
   // Nullable while loading; `{ error }` if the endpoint 500s.
   const [usage, setUsage] = useState(null);
@@ -699,6 +713,51 @@ export default function Files() {
     return updated;
   }, []);
 
+  // Bulk delete — snapshot each record first so a single Undo toast can
+  // restore the whole batch in one click. Fires deletions sequentially so
+  // IDB + cloud-sync queues don't thunder.
+  const bulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const snapshots = ids.map(id => storedMedia.find(m => m.id === id)).filter(Boolean);
+    if (snapshots.length === 0) return;
+    for (const id of ids) {
+      try { await deleteMedia(id); } catch {}
+    }
+    setStoredMedia(prev => prev.filter(m => !selectedIds.has(m.id)));
+    setThumbUrls(prev => {
+      const n = { ...prev };
+      for (const id of ids) { if (n[id]) URL.revokeObjectURL(n[id]); delete n[id]; }
+      return n;
+    });
+    clearSelection();
+    setSelectMode(false);
+    toast.info(`Deleted ${snapshots.length} file${snapshots.length === 1 ? '' : 's'}`, {
+      duration: 10000,
+      action: {
+        label: 'UNDO ALL',
+        onClick: async () => {
+          const restored = [];
+          for (const s of snapshots) {
+            try {
+              const r = await saveMedia({
+                name: s.name, blob: s.blob, width: s.width, height: s.height, source: s.source || 'local',
+              });
+              restored.push(r);
+            } catch {}
+          }
+          setStoredMedia(prev => [...restored, ...prev]);
+          setThumbUrls(prev => {
+            const n = { ...prev };
+            for (const r of restored) { if (r.blob) n[r.id] = blobToObjectURL(r.blob); }
+            return n;
+          });
+          toast.success(`Restored ${restored.length} file${restored.length === 1 ? '' : 's'}`);
+        },
+      },
+    });
+  }, [selectedIds, storedMedia, clearSelection, toast]);
+
   const handleDelete = useCallback(async (id) => {
     // Snapshot the record before deleting so Undo can restore it. The blob
     // is preserved in memory — if the user doesn't undo within the toast's
@@ -1195,12 +1254,27 @@ export default function Files() {
         )}
       </Card>
 
-      {/* Search */}
+      {/* Search + bulk-select toggle */}
       <Card style={{ padding: 14 }}>
         <input type="text" placeholder="Search by filename, team, or player..." value={search}
           onChange={e => setSearch(e.target.value)} style={inputStyle} />
-        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 8, fontFamily: fonts.condensed }}>
-          {filtered.length} tagged file{filtered.length !== 1 ? 's' : ''} found
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.condensed }}>
+            {filtered.length} tagged file{filtered.length !== 1 ? 's' : ''} found
+          </div>
+          <button
+            onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
+            style={{
+              background: selectMode ? colors.redLight : colors.bg,
+              border: `1px solid ${selectMode ? colors.redBorder : colors.border}`,
+              color: selectMode ? colors.red : colors.textSecondary,
+              borderRadius: radius.sm, padding: '4px 12px',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+              cursor: 'pointer',
+            }}
+          >
+            {selectMode ? '✕ EXIT SELECT' : '☑ SELECT MULTIPLE'}
+          </button>
         </div>
       </Card>
 
@@ -1209,12 +1283,35 @@ export default function Files() {
         {filtered.map((f) => {
           const t = getTeam(f.team);
           const isLocal = f.source === 'local';
+          const isSelected = selectedIds.has(f.id);
           return (
             <Card
               key={f.id}
-              onClick={() => { if (f.thumbUrl || f.url) setPreviewFile(f); }}
-              style={{ padding: 12, position: 'relative', cursor: (f.thumbUrl || f.url) ? 'pointer' : 'default' }}
+              onClick={() => {
+                if (selectMode) { toggleSelection(f.id); return; }
+                if (f.thumbUrl || f.url) setPreviewFile(f);
+              }}
+              style={{
+                padding: 12, position: 'relative',
+                cursor: selectMode ? 'pointer' : ((f.thumbUrl || f.url) ? 'pointer' : 'default'),
+                outline: isSelected ? `3px solid ${colors.red}` : 'none',
+                boxShadow: isSelected ? '0 0 0 4px rgba(220,38,38,0.15)' : undefined,
+                transition: 'outline 0.15s',
+              }}
             >
+              {selectMode && (
+                <div style={{
+                  position: 'absolute', top: 6, left: 6,
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: isSelected ? colors.red : 'rgba(255,255,255,0.95)',
+                  border: `2px solid ${isSelected ? colors.red : colors.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: 12, fontWeight: 800,
+                  zIndex: 5, pointerEvents: 'none',
+                }}>
+                  {isSelected && '✓'}
+                </div>
+              )}
               <div style={{
                 width: '100%', height: 100, borderRadius: radius.base, marginBottom: 8,
                 background: f.thumbUrl ? `url(${f.thumbUrl}) center/cover` : t ? `linear-gradient(135deg, ${t.color}22, ${t.color}08)` : colors.bg,
@@ -1258,6 +1355,70 @@ export default function Files() {
         <Card style={{ textAlign: 'center', padding: 40, color: colors.textMuted }}>
           No files yet. Upload files above to get started.
         </Card>
+      )}
+
+      {/* Bulk-select floating action bar — only visible when the user has
+          actually selected something. Sticks to the bottom center of the
+          viewport so it stays reachable without scrolling. */}
+      {selectMode && selectedIds.size > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: 20, left: '50%', transform: 'translateX(-50%)',
+          background: colors.text, color: '#fff',
+          padding: '10px 16px', borderRadius: radius.full,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
+          display: 'flex', alignItems: 'center', gap: 10,
+          zIndex: 150, maxWidth: 'calc(100vw - 32px)',
+          fontFamily: fonts.body,
+        }}>
+          <span style={{ fontFamily: fonts.condensed, fontSize: 12, fontWeight: 800, letterSpacing: 0.6 }}>
+            {selectedIds.size} SELECTED
+          </span>
+          <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.25)' }} />
+          <button
+            onClick={() => {
+              const allIds = new Set(filtered.map(f => f.id));
+              setSelectedIds(allIds);
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff', padding: '4px 10px', borderRadius: radius.sm,
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+              cursor: 'pointer',
+            }}
+          >SELECT ALL ({filtered.length})</button>
+          <button
+            onClick={clearSelection}
+            style={{
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff', padding: '4px 10px', borderRadius: radius.sm,
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+              cursor: 'pointer',
+            }}
+          >CLEAR</button>
+          <button
+            onClick={() => {
+              if (confirm(`Delete ${selectedIds.size} file${selectedIds.size === 1 ? '' : 's'}? You can undo right after.`)) {
+                bulkDelete();
+              }
+            }}
+            style={{
+              background: colors.red, border: 'none',
+              color: '#fff', padding: '6px 14px', borderRadius: radius.sm,
+              fontFamily: fonts.condensed, fontSize: 12, fontWeight: 800, letterSpacing: 0.6,
+              cursor: 'pointer',
+            }}
+          >🗑 DELETE</button>
+          <button
+            onClick={exitSelectMode}
+            style={{
+              background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.65)',
+              padding: 0, cursor: 'pointer', fontSize: 16, lineHeight: 1,
+              width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            title="Exit select mode"
+          >✕</button>
+        </div>
       )}
 
       {/* Preview Modal */}
