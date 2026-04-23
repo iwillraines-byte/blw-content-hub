@@ -7,6 +7,7 @@ import { colors, fonts, radius } from '../theme';
 import { getRequests, saveRequests, countByStatus, oldestPendingDays } from '../requests-store';
 import { getAllMedia } from '../media-store';
 import { isAlreadyTagged } from '../tag-heuristics';
+import { getUsageToday, recordUsage } from '../ai-usage-store';
 
 export default function ContentStudio() {
   const navigate = useNavigate();
@@ -25,14 +26,20 @@ export default function ContentStudio() {
   const [aiIdeas, setAiIdeas] = useState([]);
   const [ideasLoading, setIdeasLoading] = useState(false);
   const [ideasError, setIdeasError] = useState(null);
-  // Most recently queued idea id — we flash a "✓ Queued" state on that
-  // card's button for a few seconds so the user knows the request landed.
-  const [queuedIdeaId, setQueuedIdeaId] = useState(null);
+  // Most recently queued idea id → request id. Flashes a "✓ Queued" state
+  // on that card's button for a few seconds and surfaces a "View request →"
+  // link so the user can jump straight to the newly-created request.
+  const [queuedIdeas, setQueuedIdeas] = useState({}); // { [ideaId]: requestId }
+  // Daily usage counter surfaced in the Content Ideas header so the user
+  // has a running tally of AI calls today (cost proxy). Re-read whenever
+  // aiIdeas changes so increments after a request reflect right away.
+  const [usageToday, setUsageToday] = useState(() => getUsageToday());
   useEffect(() => {
-    if (!queuedIdeaId) return;
-    const t = setTimeout(() => setQueuedIdeaId(null), 4000);
+    const keys = Object.keys(queuedIdeas);
+    if (keys.length === 0) return;
+    const t = setTimeout(() => setQueuedIdeas({}), 8000);
     return () => clearTimeout(t);
-  }, [queuedIdeaId]);
+  }, [queuedIdeas]);
 
   useEffect(() => {
     fetchAllData().then(({ batting: b, pitching: p, rankings: r }) => {
@@ -75,6 +82,12 @@ export default function ContentStudio() {
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       const tagged = (data.ideas || []).map((i, idx) => ({ ...i, id: i.id || `ai-${Date.now()}-${idx}`, aiGenerated: true }));
       setAiIdeas(seedIdea ? [...tagged, ...aiIdeas] : tagged);
+      // One AI call generated N ideas — track both so the counter reflects
+      // reality. `ideas` is the headline number; `ideasCalls` is invocations
+      // (useful if you want to reason about API spend later).
+      recordUsage('ideas', tagged.length);
+      recordUsage('ideasCalls', 1);
+      setUsageToday(getUsageToday());
     } catch (err) {
       setIdeasError(err.message || 'Failed to fetch ideas');
     } finally {
@@ -103,7 +116,7 @@ export default function ContentStudio() {
       r.createdAt && (Date.now() - r.createdAt) < 60_000
     );
     if (duplicate) {
-      setQueuedIdeaId(s.id);
+      setQueuedIdeas(prev => ({ ...prev, [s.id]: duplicate.id }));
       return;
     }
     const now = new Date();
@@ -130,7 +143,7 @@ export default function ContentStudio() {
     const updated = [newRequest, ...existing];
     saveRequests(updated);
     setRequests(updated);
-    setQueuedIdeaId(s.id);
+    setQueuedIdeas(prev => ({ ...prev, [s.id]: newRequest.id }));
   };
 
   // ─── Live-state card data ─────────────────────────────────────────────────
@@ -185,24 +198,40 @@ export default function ContentStudio() {
         {/* LEFT — Content Suggestions */}
         <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
               <SectionHeading style={{ margin: 0 }}>Content ideas</SectionHeading>
-              <button
-                onClick={() => requestIdeas(null, 6)}
-                disabled={ideasLoading || !dataLoaded}
-                title="Generate a fresh batch of AI-powered content ideas using the current BLW state"
-                style={{
-                  background: ideasLoading ? colors.bg : colors.redLight,
-                  border: `1px solid ${ideasLoading ? colors.border : colors.redBorder}`,
-                  color: ideasLoading ? colors.textMuted : colors.red,
-                  borderRadius: radius.sm, padding: '5px 12px',
-                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-                  cursor: ideasLoading || !dataLoaded ? 'wait' : 'pointer',
-                  letterSpacing: 0.6,
-                }}
-              >
-                {ideasLoading ? '…THINKING' : aiIdeas.length ? '✨ REGENERATE' : '✨ GENERATE IDEAS'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {(usageToday.ideas || 0) > 0 && (
+                  <span
+                    title={`${usageToday.ideas} ideas generated in ${usageToday.ideasCalls || 1} call${(usageToday.ideasCalls || 1) === 1 ? '' : 's'} today. Resets at local midnight.`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      background: 'rgba(124,58,237,0.10)', color: '#7C3AED',
+                      borderRadius: 999, padding: '3px 9px',
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                      letterSpacing: 0.6,
+                    }}
+                  >
+                    ✨ {usageToday.ideas} TODAY
+                  </span>
+                )}
+                <button
+                  onClick={() => requestIdeas(null, 6)}
+                  disabled={ideasLoading || !dataLoaded}
+                  title="Generate a fresh batch of AI-powered content ideas using the current BLW state"
+                  style={{
+                    background: ideasLoading ? colors.bg : colors.redLight,
+                    border: `1px solid ${ideasLoading ? colors.border : colors.redBorder}`,
+                    color: ideasLoading ? colors.textMuted : colors.red,
+                    borderRadius: radius.sm, padding: '5px 12px',
+                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                    cursor: ideasLoading || !dataLoaded ? 'wait' : 'pointer',
+                    letterSpacing: 0.6,
+                  }}
+                >
+                  {ideasLoading ? '…THINKING' : aiIdeas.length ? '✨ REGENERATE' : '✨ GENERATE IDEAS'}
+                </button>
+              </div>
             </div>
             <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 14px', fontFamily: fonts.condensed }}>
               {aiIdeas.length > 0
@@ -225,7 +254,8 @@ export default function ContentStudio() {
                 const team = s.team !== 'BLW' ? getTeam(s.team) : null;
                 const accent = team ? team.color : colors.border;
                 const bgTint = team ? `${team.color}0C` : colors.bg;
-                const queued = queuedIdeaId === s.id;
+                const queuedRequestId = queuedIdeas[s.id];
+                const queued = !!queuedRequestId;
                 return (
                   <div key={s.id} style={{
                     position: 'relative',
@@ -253,20 +283,40 @@ export default function ContentStudio() {
                     {/* Actions row — two explicit buttons so the card doesn't
                         hide the fact that you can BOTH queue AND generate. */}
                     <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => queueIdeaAsRequest(s)}
-                        title={queued ? 'Already queued — check Requests' : 'Create a tracked pending request from this idea'}
-                        style={{
-                          background: queued ? 'rgba(34,197,94,0.12)' : colors.white,
-                          border: `1px solid ${queued ? 'rgba(34,197,94,0.4)' : colors.border}`,
-                          color: queued ? '#15803D' : colors.textSecondary,
-                          borderRadius: radius.sm, padding: '5px 10px',
-                          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                          cursor: queued ? 'default' : 'pointer', letterSpacing: 0.4,
-                        }}
-                      >
-                        {queued ? '✓ QUEUED' : '📋 SEND TO REQUESTS'}
-                      </button>
+                      {queued ? (
+                        <div style={{ display: 'flex', alignItems: 'stretch', borderRadius: radius.sm, overflow: 'hidden', border: '1px solid rgba(34,197,94,0.4)' }}>
+                          <span style={{
+                            background: 'rgba(34,197,94,0.12)', color: '#15803D',
+                            padding: '5px 10px', fontFamily: fonts.condensed,
+                            fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+                            display: 'inline-flex', alignItems: 'center',
+                          }}>✓ QUEUED</span>
+                          <Link
+                            to={`/requests?id=${queuedRequestId}`}
+                            style={{
+                              background: '#15803D', color: '#fff',
+                              padding: '5px 10px', textDecoration: 'none',
+                              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                              letterSpacing: 0.4, display: 'inline-flex', alignItems: 'center',
+                            }}
+                          >VIEW REQUEST →</Link>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => queueIdeaAsRequest(s)}
+                          title="Create a tracked pending request from this idea"
+                          style={{
+                            background: colors.white,
+                            border: `1px solid ${colors.border}`,
+                            color: colors.textSecondary,
+                            borderRadius: radius.sm, padding: '5px 10px',
+                            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                            cursor: 'pointer', letterSpacing: 0.4,
+                          }}
+                        >
+                          📋 SEND TO REQUESTS
+                        </button>
+                      )}
                       <button
                         onClick={() => navigate(buildLink(s))}
                         title="Open Generate with team, template, and fields pre-filled from this idea"

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TEAMS, TEMPLATES, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, StatusBadge, PriorityDot, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
@@ -23,6 +23,12 @@ const roleColors = {
 export default function Requests() {
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFilter = searchParams.get('status') || 'ALL';
+  const targetRequestId = searchParams.get('id');
+  // Maps request id → DOM node so we can scroll the deep-linked request
+  // into view once it's rendered. Ref bag pattern so refs survive re-renders.
+  const cardRefs = useRef({});
+  // Tracks when a highlight flash on the target request should fade out.
+  const [flashingId, setFlashingId] = useState(null);
 
   // Requests + comments persisted in localStorage so they survive refreshes
   // and drive the dashboard "N pending" card.
@@ -39,6 +45,31 @@ export default function Requests() {
   // Persist on every change
   useEffect(() => { saveRequests(requests); }, [requests]);
   useEffect(() => { saveComments(comments); }, [comments]);
+
+  // Deep-link handler: when arriving with ?id=..., clear any non-matching
+  // status filter, scroll the card into view, and flash a highlight for a
+  // few seconds. Runs after requests have loaded so the DOM node exists.
+  useEffect(() => {
+    if (!targetRequestId) return;
+    const match = requests.find(r => r.id === targetRequestId);
+    if (!match) return;
+    // If a filter is hiding the target, clear it so the user sees the card.
+    if (statusFilter !== 'ALL' && statusFilter !== match.status) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('status');
+      setSearchParams(next, { replace: true });
+    }
+    // Scroll + flash on the next tick once the row is rendered.
+    const t = setTimeout(() => {
+      const node = cardRefs.current[targetRequestId];
+      if (node) {
+        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setFlashingId(targetRequestId);
+        setTimeout(() => setFlashingId(null), 2800);
+      }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [targetRequestId, requests, statusFilter]);
 
   const setRequests = (updater) => setRequestsState(prev => typeof updater === 'function' ? updater(prev) : updater);
   const setComments = (updater) => setCommentsState(prev => typeof updater === 'function' ? updater(prev) : updater);
@@ -176,9 +207,15 @@ export default function Requests() {
         const tp = TEMPLATES.find(t => t.id === r.template);
         const reqComments = comments.filter(c => c.requestId === r.id);
         const expanded = expandedComments[r.id];
+        const isFlashing = flashingId === r.id;
 
         return (
-          <Card key={r.id}>
+          <div key={r.id} ref={node => { if (node) cardRefs.current[r.id] = node; }}>
+            <Card style={{
+              outline: isFlashing ? `3px solid ${colors.red}` : 'none',
+              boxShadow: isFlashing ? '0 0 0 4px rgba(220,38,38,0.15)' : undefined,
+              transition: 'outline 0.3s ease, box-shadow 0.3s ease',
+            }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <PriorityDot p={r.priority} />
               <TeamChip teamId={r.team} withLogo />
@@ -255,7 +292,8 @@ export default function Requests() {
                 </div>
               </div>
             )}
-          </Card>
+            </Card>
+          </div>
         );
       })}
     </div>
