@@ -11,6 +11,8 @@ import {
 import { heuristicallyTag, isAlreadyTagged } from '../tag-heuristics';
 import { autoTagBlob } from '../auto-tag-api';
 import { getAllPlayersDirectory } from '../data';
+import { supabaseConfigured } from '../supabase-client';
+import { backupLibraryToCloud } from '../cloud-backup';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -32,6 +34,25 @@ function isProperlyNamed(name) {
 //   - Manual dropdown overrides so user can correct AI guesses before Apply
 // The parent may also push an AI result via `tagHint` prop (used for bulk runs).
 function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy }) {
+  // Cloud backup state — tracks the one-shot library sync when the user
+  // clicks "Back up library to cloud". `backupProgress` shape:
+  //   { stage, done, total, results } when running / done, or null when idle.
+  const [backupProgress, setBackupProgress] = useState(null);
+  const [backupError, setBackupError] = useState(null);
+  const runBackup = useCallback(async () => {
+    setBackupError(null);
+    setBackupProgress({ stage: 'starting', done: 0, total: 0 });
+    try {
+      const results = await backupLibraryToCloud({
+        onProgress: (p) => setBackupProgress(p),
+      });
+      setBackupProgress({ stage: 'done', results });
+    } catch (err) {
+      setBackupError(err.message || 'Backup failed');
+      setBackupProgress(null);
+    }
+  }, []);
+
   const [tagScope, setTagScope] = useState('player'); // 'player' | 'team'
   const [tagTeam, setTagTeam] = useState('');
   const [tagNum, setTagNum] = useState('');
@@ -787,24 +808,86 @@ export default function Files() {
         </div>
       </PageHeader>
 
-      {/* Browser-storage warning — persistent until cloud migration lands */}
-      <Card style={{
-        border: `1px solid ${colors.warningBorder}`,
-        background: colors.warningBg,
-        display: 'flex', alignItems: 'flex-start', gap: 12,
-      }}>
-        <div style={{ fontSize: 22, lineHeight: 1 }}>⚠️</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: fonts.body, fontSize: 14, fontWeight: 700, color: '#92400E', marginBottom: 2 }}>
-            Files are currently stored in your browser
+      {/* Cloud storage banner — the tone shifts based on whether Supabase
+          is configured and whether a backup is running. */}
+      {supabaseConfigured ? (
+        <Card style={{
+          border: `1px solid rgba(14,165,233,0.35)`,
+          background: 'rgba(14,165,233,0.08)',
+          display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: 22, lineHeight: 1 }}>☁️</div>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontFamily: fonts.body, fontSize: 14, fontWeight: 700, color: '#075985', marginBottom: 2 }}>
+              Cloud backup is available
+            </div>
+            <div style={{ fontSize: 13, color: '#075985', lineHeight: 1.5 }}>
+              New uploads are already syncing to the cloud automatically. Click the button to back up everything
+              already in this browser — media, overlays, effects, requests, and settings. You can rerun this any
+              time; it's idempotent.
+            </div>
+            {backupProgress?.stage === 'done' && backupProgress.results && (() => {
+              const r = backupProgress.results;
+              const totalOk = Object.values(r).reduce((s, k) => s + (k.ok || 0), 0);
+              const totalFail = Object.values(r).reduce((s, k) => s + (k.fail || 0), 0);
+              return (
+                <div style={{
+                  marginTop: 8, padding: 10,
+                  background: totalFail === 0 ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)',
+                  border: `1px solid ${totalFail === 0 ? 'rgba(34,197,94,0.35)' : 'rgba(245,158,11,0.35)'}`,
+                  borderRadius: radius.sm,
+                  fontSize: 12, color: totalFail === 0 ? '#15803D' : '#92400E',
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    {totalFail === 0 ? '✓ Backup complete' : '⚠ Backup finished with some failures'}
+                  </div>
+                  <div style={{ fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 0.3 }}>
+                    Media: {r.media.ok}/{r.media.ok + r.media.fail} · Overlays: {r.overlays.ok}/{r.overlays.ok + r.overlays.fail} ·
+                    Effects: {r.effects.ok}/{r.effects.ok + r.effects.fail} · Requests: {r.requests.ok}/{r.requests.ok + r.requests.fail} ·
+                    Comments: {r.comments.ok}/{r.comments.ok + r.comments.fail} · Players: {r.manualPlayers.ok}/{r.manualPlayers.ok + r.manualPlayers.fail} ·
+                    Layout: {r.fieldOverrides.ok}/{r.fieldOverrides.ok + r.fieldOverrides.fail}
+                  </div>
+                </div>
+              );
+            })()}
+            {backupProgress && backupProgress.stage !== 'done' && backupProgress.stage !== 'starting' && (
+              <div style={{ marginTop: 8, fontFamily: fonts.condensed, fontSize: 11, color: '#075985' }}>
+                Uploading {backupProgress.stage}… {backupProgress.done || 0}/{backupProgress.total || 0}
+                {backupProgress.record && <span style={{ opacity: 0.7 }}> — {backupProgress.record}</span>}
+              </div>
+            )}
+            {backupError && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#991B1B', fontWeight: 600 }}>
+                Error: {backupError}
+              </div>
+            )}
           </div>
-          <div style={{ fontSize: 13, color: '#92400E', lineHeight: 1.5 }}>
-            Clearing your browser cache, switching browsers, or using a different device will erase your library.
-            Cloud storage is coming soon. In the meantime, use <strong>Export manifest</strong> above to back up
-            your file metadata — Drive-sourced files can be re-imported from the shared folder.
+          <RedButton
+            onClick={runBackup}
+            disabled={!!backupProgress && backupProgress.stage !== 'done'}
+            style={{ padding: '8px 16px', fontSize: 12 }}
+          >
+            {backupProgress && backupProgress.stage !== 'done' ? 'Backing up…' : '☁ Back up library to cloud'}
+          </RedButton>
+        </Card>
+      ) : (
+        <Card style={{
+          border: `1px solid ${colors.warningBorder}`,
+          background: colors.warningBg,
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+        }}>
+          <div style={{ fontSize: 22, lineHeight: 1 }}>⚠️</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: fonts.body, fontSize: 14, fontWeight: 700, color: '#92400E', marginBottom: 2 }}>
+              Files are currently stored in your browser
+            </div>
+            <div style={{ fontSize: 13, color: '#92400E', lineHeight: 1.5 }}>
+              Supabase isn't configured for this deployment yet, so files live only in this browser.
+              Use <strong>Export manifest</strong> above to back up your file metadata in the meantime.
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* Upload Zone */}
       <label style={{ cursor: 'pointer' }}>
