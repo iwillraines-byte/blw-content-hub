@@ -246,7 +246,55 @@ export const cloud = {
       record: { day, kind, count: count || 0 },
     });
   },
+
+  // Generate log — one entry per PNG download. Thumbnail is a small dataURL
+  // produced from the preview canvas that we upload alongside the row so the
+  // dashboard can show a gallery of recent posts.
+  async logGenerate({ id, team, templateType, platform, settings, thumbnailDataUrl }) {
+    if (!id) return;
+    let blobPayload = null;
+    if (thumbnailDataUrl && thumbnailDataUrl.startsWith('data:')) {
+      // Extract base64 + mime from the data URL.
+      const match = thumbnailDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        blobPayload = { base64: match[2], mime: match[1] };
+      }
+    }
+    fireAndForget({
+      kind: 'generate-log', action: 'upsert',
+      record: {
+        id,
+        team: team || null,
+        template_type: templateType || null,
+        platform: platform || null,
+        settings: settings || {},
+      },
+      blob: blobPayload,
+    });
+  },
 };
+
+// ─── Reads (used by dashboard recent posts + settings history) ──────────────
+
+export async function fetchRecentGenerates(limit = 10) {
+  if (!supabaseConfigured) return [];
+  try {
+    const res = await fetch(`/api/cloud-sync?kind=generate-log&limit=${limit}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.records || []).map(r => ({
+      id: r.id,
+      team: r.team,
+      templateType: r.template_type,
+      platform: r.platform,
+      settings: r.settings || {},
+      thumbnailUrl: r.signedUrl || null,
+      createdAt: r.created_at ? new Date(r.created_at) : null,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 // Awaitable versions — Phase 3's migration tool uses these so it can count
 // successes and surface progress.

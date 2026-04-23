@@ -9,6 +9,7 @@ import { getAllMedia } from '../media-store';
 import { isAlreadyTagged } from '../tag-heuristics';
 import { getUsageToday, recordUsage } from '../ai-usage-store';
 import { useToast } from '../toast';
+import { fetchRecentGenerates } from '../cloud-sync';
 
 export default function ContentStudio() {
   const navigate = useNavigate();
@@ -32,6 +33,12 @@ export default function ContentStudio() {
   // on that card's button for a few seconds and surfaces a "View request →"
   // link so the user can jump straight to the newly-created request.
   const [queuedIdeas, setQueuedIdeas] = useState({}); // { [ideaId]: requestId }
+  // Public recent-posts strip — last 10 downloads across all users. Populates
+  // asynchronously; stays empty until someone generates something.
+  const [recentPosts, setRecentPosts] = useState([]);
+  useEffect(() => {
+    fetchRecentGenerates(10).then(setRecentPosts);
+  }, []);
   // Daily usage counter surfaced in the Content Ideas header so the user
   // has a running tally of AI calls today (cost proxy). Re-read whenever
   // aiIdeas changes so increments after a request reflect right away.
@@ -205,6 +212,13 @@ export default function ContentStudio() {
           warn={mediaStats.untagged > 0}
         />
       </div>
+
+      {/* Recent posts — public feed of the last 10 downloads across the team.
+          Click a thumbnail to re-open Generate with the same composition.
+          Empty state hides the whole row until someone has actually posted. */}
+      {recentPosts.length > 0 && (
+        <RecentPostsStrip posts={recentPosts} />
+      )}
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {/* LEFT — Content Suggestions */}
@@ -484,6 +498,106 @@ function truncate(str, n) {
 }
 
 // Single live-state card at the top of the dashboard
+// Public recent-posts feed — the last 10 downloads rendered as a horizontal
+// thumbnail strip. Clicking a thumbnail restores its composition in Generate.
+function RecentPostsStrip({ posts }) {
+  const timeAgo = (d) => {
+    if (!d) return '';
+    const diff = Date.now() - d.getTime();
+    if (diff < 60_000) return 'Just now';
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  // Restore a download by dropping its snapshot back into Generate's URL params.
+  const buildRegenerateLink = (post) => {
+    const params = new URLSearchParams();
+    if (post.templateType) params.set('template', post.templateType);
+    if (post.team) params.set('team', post.team);
+    if (post.settings?.fields) {
+      for (const [k, v] of Object.entries(post.settings.fields)) {
+        if (v != null && v !== '') params.set(k, v);
+      }
+    }
+    return `/generate?${params.toString()}`;
+  };
+
+  return (
+    <Card style={{ padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <SectionHeading style={{ margin: 0 }}>Recent posts</SectionHeading>
+        <span style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.5 }}>
+          LAST {posts.length} · PUBLIC
+        </span>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+        gap: 10,
+      }}>
+        {posts.map(post => {
+          const team = post.team ? getTeam(post.team) : null;
+          return (
+            <Link
+              key={post.id}
+              to={buildRegenerateLink(post)}
+              title={`${post.team || 'BLW'} · ${post.templateType || 'template'} · ${post.platform || ''} — click to re-open in Generate`}
+              style={{ textDecoration: 'none', display: 'block' }}
+            >
+              <div style={{
+                borderRadius: radius.base, overflow: 'hidden',
+                border: `1px solid ${colors.borderLight}`,
+                background: '#1A1A22',
+                aspectRatio: '1 / 1',
+                position: 'relative',
+              }}>
+                {post.thumbnailUrl ? (
+                  <img
+                    src={post.thumbnailUrl}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '100%', height: '100%',
+                    background: team ? `linear-gradient(135deg, ${team.color}, ${team.dark})` : colors.bg,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: fonts.heading, fontSize: 24, color: team?.accent || colors.textMuted,
+                    letterSpacing: 1,
+                  }}>{post.team || '—'}</div>
+                )}
+                {team && (
+                  <span style={{
+                    position: 'absolute', top: 6, left: 6,
+                    background: team.color, color: team.accent,
+                    padding: '2px 6px', borderRadius: 3,
+                    fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                  }}>{team.id}</span>
+                )}
+              </div>
+              <div style={{ padding: '6px 2px 0' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {post.templateType || 'post'}
+                </div>
+                <div style={{ fontSize: 10, fontFamily: fonts.condensed, color: colors.textMuted, letterSpacing: 0.3, display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{post.platform || '—'}</span>
+                  <span>{timeAgo(post.createdAt)}</span>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
   return (
     <Link to={to} style={{ textDecoration: 'none' }}>

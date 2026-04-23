@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { TEAMS, API_CONFIG } from '../data';
+import { Link } from 'react-router-dom';
+import { TEAMS, API_CONFIG, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
+import { fetchRecentGenerates } from '../cloud-sync';
 
 export default function Settings() {
   const [driveKey, setDriveKey] = useState('');
@@ -179,6 +181,11 @@ export default function Settings() {
         ))}
       </Card>
 
+      {/* Download history — full list of generated posts (currently across
+          everyone, per-user scoping lands in Phase 5). Paginated client-side
+          to 50 most recent so the page doesn't blow up when there are 1000s. */}
+      <DownloadHistoryCard />
+
       <Card>
         <SectionHeading>About</SectionHeading>
         <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
@@ -189,5 +196,117 @@ export default function Settings() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function DownloadHistoryCard() {
+  const [history, setHistory] = useState(null); // null = loading, [] = empty
+  const [visible, setVisible] = useState(20);
+
+  useEffect(() => {
+    fetchRecentGenerates(100).then(setHistory);
+  }, []);
+
+  const buildRegenerateLink = (post) => {
+    const params = new URLSearchParams();
+    if (post.templateType) params.set('template', post.templateType);
+    if (post.team) params.set('team', post.team);
+    if (post.settings?.fields) {
+      for (const [k, v] of Object.entries(post.settings.fields)) {
+        if (v != null && v !== '') params.set(k, v);
+      }
+    }
+    return `/generate?${params.toString()}`;
+  };
+
+  const fmtDate = (d) => {
+    if (!d) return '';
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+  };
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <SectionHeading style={{ margin: 0 }}>Download history</SectionHeading>
+        <span style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.5 }}>
+          {history == null ? 'LOADING…' : `${history.length} POST${history.length === 1 ? '' : 'S'}`}
+        </span>
+      </div>
+      {history != null && history.length === 0 && (
+        <div style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', padding: 20 }}>
+          No downloads yet. Head to <Link to="/generate" style={{ color: colors.red }}>Generate</Link> and make your first post.
+        </div>
+      )}
+      {history != null && history.length > 0 && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {history.slice(0, visible).map(post => {
+              const team = post.team ? getTeam(post.team) : null;
+              return (
+                <div key={post.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: 8, borderRadius: radius.sm,
+                  border: `1px solid ${colors.borderLight}`,
+                  background: colors.bg,
+                }}>
+                  {/* Thumbnail */}
+                  <div style={{
+                    width: 48, height: 48, borderRadius: radius.sm, overflow: 'hidden',
+                    flexShrink: 0, background: '#1A1A22',
+                    border: `1px solid ${colors.borderLight}`,
+                  }}>
+                    {post.thumbnailUrl ? (
+                      <img src={post.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{
+                        width: '100%', height: '100%',
+                        background: team ? `linear-gradient(135deg, ${team.color}, ${team.dark})` : colors.bg,
+                      }} />
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {team && (
+                        <span style={{
+                          background: team.color, color: team.accent,
+                          padding: '1px 6px', borderRadius: 3,
+                          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+                        }}>{team.id}</span>
+                      )}
+                      <span>{post.templateType || '—'}</span>
+                      <span style={{ color: colors.textMuted, fontWeight: 400, fontSize: 11 }}>·  {post.platform || '—'}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, letterSpacing: 0.3, marginTop: 2 }}>
+                      {fmtDate(post.createdAt)}
+                    </div>
+                  </div>
+                  <Link
+                    to={buildRegenerateLink(post)}
+                    title="Re-open in Generate with this composition pre-filled"
+                    style={{
+                      background: colors.redLight,
+                      border: `1px solid ${colors.redBorder}`,
+                      color: colors.red,
+                      borderRadius: radius.sm, padding: '5px 10px',
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+                      textDecoration: 'none', whiteSpace: 'nowrap',
+                    }}
+                  >↺ REGENERATE</Link>
+                </div>
+              );
+            })}
+          </div>
+          {visible < history.length && (
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <OutlineButton onClick={() => setVisible(v => v + 20)} style={{ padding: '6px 14px', fontSize: 11 }}>
+                Load more ({history.length - visible} more)
+              </OutlineButton>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
   );
 }

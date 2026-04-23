@@ -19,8 +19,19 @@
 
 import { getServiceClient, missingConfigResponse } from './_supabase.js';
 
-const BLOB_KINDS = new Set(['media', 'overlay', 'effect']);
-const BUCKET_FOR = { media: 'media', overlay: 'overlays', effect: 'effects' };
+const BLOB_KINDS = new Set(['media', 'overlay', 'effect', 'generate-log']);
+const BUCKET_FOR = {
+  media: 'media', overlay: 'overlays', effect: 'effects',
+  // generate-log uploads a small thumbnail PNG into its own bucket.
+  'generate-log': 'generate-thumbs',
+};
+// generate-log stores its blob path in a different column than the other
+// blob kinds — standard kinds use `storage_path`, generate-log uses
+// `thumbnail_storage_path`. This map lets the upsert path pick the right one.
+const STORAGE_PATH_COL = {
+  media: 'storage_path', overlay: 'storage_path', effect: 'storage_path',
+  'generate-log': 'thumbnail_storage_path',
+};
 const TABLE_FOR = {
   media: 'media',
   overlay: 'overlays',
@@ -30,6 +41,7 @@ const TABLE_FOR = {
   'manual-player': 'manual_players',
   'field-override': 'field_overrides',
   'ai-usage': 'ai_usage',
+  'generate-log': 'generate_log',
 };
 
 // Kinds with a composite primary key — delete targets look different.
@@ -60,22 +72,29 @@ export default async function handler(req, res) {
       return;
     }
     try {
-      const { data, error } = await sb.from(table).select('*');
+      // Generate-log reads default to newest-first, limited to 100 so the
+      // dashboard doesn't over-fetch; extend via ?limit= if a caller needs
+      // the full history.
+      let q = sb.from(table).select('*');
+      if (kind === 'generate-log') {
+        const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+        q = q.order('created_at', { ascending: false }).limit(limit);
+      }
+      const { data, error } = await q;
       if (error) throw error;
       let records = data || [];
 
       if (BLOB_KINDS.has(kind)) {
         const bucket = BUCKET_FOR[kind];
-        // Sign all storage paths in a single batch — ~60 min expiry so a
-        // user browsing a full library doesn't hit a URL-expired mid-scroll.
-        const paths = records.map(r => r.storage_path).filter(Boolean);
+        const pathCol = STORAGE_PATH_COL[kind] || 'storage_path';
+        const paths = records.map(r => r[pathCol]).filter(Boolean);
         if (paths.length > 0) {
           const { data: signed, error: signErr } = await sb
             .storage.from(bucket)
             .createSignedUrls(paths, 60 * 60);
           if (signErr) throw signErr;
           const byPath = new Map((signed || []).map(s => [s.path, s.signedUrl]));
-          records = records.map(r => ({ ...r, signedUrl: byPath.get(r.storage_path) || null }));
+          records = records.map(r => ({ ...r, signedUrl: byPath.get(r[pathCol]) || null }));
         }
       }
 
@@ -165,9 +184,13 @@ export default async function handler(req, res) {
           upsert: true,
         });
       if (upErr) throw upErr;
-      payload.storage_path = storagePath;
-      payload.mime_type = payload.mime_type || mime;
-      payload.size_bytes = payload.size_bytes ?? buf.length;
+      const pathCol = STORAGE_PATH_COL[kind] || 'storage_path';
+      payload[pathCol] = storagePath;
+      // mime_type / size_bytes columns only exist on the main 3 blob tables.
+      if (['media', 'overlay', 'effect'].includes(kind)) {
+        payload.mime_type = payload.mime_type || mime;
+        payload.size_bytes = payload.size_bytes ?? buf.length;
+      }
     }
 
     // Figure out the onConflict target for upsert. Most tables have id PK;

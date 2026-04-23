@@ -10,6 +10,7 @@ import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
 import { getPresetOverlays, loadPresetImage } from '../preset-overlays';
 import { applyOverrides, setFieldOverride, getOverrides, resetOverrides } from '../field-overrides-store';
 import { useToast } from '../toast';
+import { cloud } from '../cloud-sync';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -496,6 +497,40 @@ export default function Generate() {
     link.download = `BLW_${customTeam}_${customType}_${customPlatform}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
+
+    // Log the generation to Supabase so the dashboard "Recent posts" strip
+    // and Settings download history have something to show. We build a
+    // small thumbnail (~400 px wide) via an offscreen canvas so the stored
+    // image is dashboard-sized, not full 1080× resolution.
+    try {
+      const thumb = document.createElement('canvas');
+      const targetW = 400;
+      const thumbScale = targetW / customPlat.w;
+      thumb.width = targetW;
+      thumb.height = Math.round(customPlat.h * thumbScale);
+      const tctx = thumb.getContext('2d');
+      tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+      const thumbnailDataUrl = thumb.toDataURL('image/png');
+      cloud.logGenerate({
+        id: crypto.randomUUID(),
+        team: customTeam,
+        templateType: customType,
+        platform: customPlatform,
+        // Snapshot what made this composition — lets us restore it from
+        // the dashboard / settings history via URL params.
+        settings: {
+          fields: customFields,
+          hiddenFields: Array.from(hiddenFields),
+          selectedPlayer,
+          overlayId: selectedOverlayId,
+          effects: activeEffects.map(e => ({ id: e.id, type: e.type, opacity: e.opacity })),
+        },
+        thumbnailDataUrl,
+      });
+    } catch (err) {
+      console.warn('[generate-log] failed to snapshot', err);
+    }
+
     // Restore preview render (with placeholders) right after export
     render();
     toast.success('Downloaded', { detail: `${customTeam} · ${customType} · ${customPlat.label}` });
