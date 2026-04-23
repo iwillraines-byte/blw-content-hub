@@ -9,6 +9,7 @@ import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store'
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
 import { getPresetOverlays, loadPresetImage } from '../preset-overlays';
 import { applyOverrides, setFieldOverride, getOverrides, resetOverrides } from '../field-overrides-store';
+import { useToast } from '../toast';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -305,6 +306,7 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
 
 // ─── Main Generate Component ────────────────────────────────────────────────
 export default function Generate() {
+  const toast = useToast();
   const canvasRef = useRef(null);
   const [searchParams] = useSearchParams();
 
@@ -496,6 +498,7 @@ export default function Generate() {
     link.click();
     // Restore preview render (with placeholders) right after export
     render();
+    toast.success('Downloaded', { detail: `${customTeam} · ${customType} · ${customPlat.label}` });
   };
 
   const toggleFieldHidden = (key) => {

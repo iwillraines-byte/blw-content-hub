@@ -14,6 +14,7 @@ import { getAllPlayersDirectory } from '../data';
 import { supabaseConfigured } from '../supabase-client';
 import { backupLibraryToCloud } from '../cloud-backup';
 import { refreshFromCloud } from '../cloud-reader';
+import { useToast } from '../toast';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -48,11 +49,19 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
         onProgress: (p) => setBackupProgress(p),
       });
       setBackupProgress({ stage: 'done', results });
+      const totalOk = Object.values(results).reduce((s, k) => s + (k.ok || 0), 0);
+      const totalFail = Object.values(results).reduce((s, k) => s + (k.fail || 0), 0);
+      if (totalFail === 0) {
+        toast.success('Backup complete', { detail: `${totalOk} records mirrored to Supabase` });
+      } else {
+        toast.warn(`Backup finished with ${totalFail} failures`, { detail: `${totalOk} records uploaded; see summary below` });
+      }
     } catch (err) {
       setBackupError(err.message || 'Backup failed');
       setBackupProgress(null);
+      toast.error('Backup failed', { detail: err.message?.slice(0, 80) });
     }
-  }, []);
+  }, [toast]);
 
   // Manual "pull fresh from cloud" — same call as the throttled auto-hydrate
   // on app mount but with force:true so it runs even if we ran one <10 min ago.
@@ -598,6 +607,7 @@ function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRenam
 }
 
 export default function Files() {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [storedMedia, setStoredMedia] = useState([]);
   const [thumbUrls, setThumbUrls] = useState({});
@@ -690,11 +700,44 @@ export default function Files() {
   }, []);
 
   const handleDelete = useCallback(async (id) => {
+    // Snapshot the record before deleting so Undo can restore it. The blob
+    // is preserved in memory — if the user doesn't undo within the toast's
+    // lifetime, it's garbage-collected along with the closure.
+    const snapshot = storedMedia.find(m => m.id === id);
     await deleteMedia(id);
     setStoredMedia(prev => prev.filter(m => m.id !== id));
     if (thumbUrls[id]) URL.revokeObjectURL(thumbUrls[id]);
     setThumbUrls(prev => { const n = { ...prev }; delete n[id]; return n; });
-  }, [thumbUrls]);
+
+    if (snapshot) {
+      toast.info(`Deleted ${snapshot.name}`, {
+        duration: 8000,
+        action: {
+          label: 'UNDO',
+          onClick: async () => {
+            try {
+              // saveMedia generates a new id — that's OK, the intent is "make
+              // it come back", we don't need identity preservation.
+              const restored = await saveMedia({
+                name: snapshot.name,
+                blob: snapshot.blob,
+                width: snapshot.width,
+                height: snapshot.height,
+                source: snapshot.source || 'local',
+              });
+              setStoredMedia(prev => [restored, ...prev]);
+              if (restored.blob) {
+                setThumbUrls(prev => ({ ...prev, [restored.id]: blobToObjectURL(restored.blob) }));
+              }
+              toast.success('Restored');
+            } catch (err) {
+              toast.error('Couldn\'t restore', { detail: err.message });
+            }
+          },
+        },
+      });
+    }
+  }, [storedMedia, thumbUrls, toast]);
 
   // ─── AI auto-tag — single file + bulk ─────────────────────────────────────
   // The parent owns the AI calls so we can reliably know when each finishes

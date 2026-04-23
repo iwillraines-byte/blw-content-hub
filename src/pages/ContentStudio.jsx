@@ -8,9 +8,11 @@ import { getRequests, saveRequests, countByStatus, oldestPendingDays } from '../
 import { getAllMedia } from '../media-store';
 import { isAlreadyTagged } from '../tag-heuristics';
 import { getUsageToday, recordUsage } from '../ai-usage-store';
+import { useToast } from '../toast';
 
 export default function ContentStudio() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [suggestions, setSuggestions] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [requests, setRequests] = useState([]);
@@ -88,8 +90,12 @@ export default function ContentStudio() {
       recordUsage('ideas', tagged.length);
       recordUsage('ideasCalls', 1);
       setUsageToday(getUsageToday());
+      toast.success(seedIdea ? 'Generated more ideas' : `${tagged.length} fresh ideas`, {
+        detail: seedIdea ? `Seeded from "${seedIdea.headline}"` : 'Scroll down in Content ideas to see them',
+      });
     } catch (err) {
       setIdeasError(err.message || 'Failed to fetch ideas');
+      toast.error('Couldn\'t fetch AI ideas', { detail: err.message?.slice(0, 80) });
     } finally {
       setIdeasLoading(false);
     }
@@ -144,6 +150,11 @@ export default function ContentStudio() {
     saveRequests(updated);
     setRequests(updated);
     setQueuedIdeas(prev => ({ ...prev, [s.id]: newRequest.id }));
+    // Toast with a one-click View Request action.
+    toast.success('Request queued', {
+      detail: s.headline,
+      action: { label: 'VIEW', onClick: () => navigate(`/requests?id=${newRequest.id}`) },
+    });
   };
 
   // ─── Live-state card data ─────────────────────────────────────────────────
@@ -180,6 +191,7 @@ export default function ContentStudio() {
               : 'Created today'}
           to={pendingCount > 0 ? '/requests?status=pending' : '/requests'}
           cta={pendingCount > 0 ? 'Review pending →' : '+ New Request'}
+          warn={oldestDays != null && oldestDays > 3}
         />
         <LiveCard
           icon="◫"

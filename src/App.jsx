@@ -14,6 +14,8 @@ import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
 import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
 import { supabaseConfigured } from './supabase-client';
+import { ToastProvider } from './toast';
+import { QuickSwitcher } from './quick-switcher';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -284,6 +286,27 @@ function TopBar({ isMobile, onMenuToggle }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flexShrink: 0 }}>
+        {/* Cmd+K hint — desktop only; hints the global switcher hotkey */}
+        {!isMobile && (
+          <button
+            onClick={() => {
+              // Synthesize a Cmd+K keystroke so the switcher opens.
+              const ev = new KeyboardEvent('keydown', { key: 'k', metaKey: true, ctrlKey: true, bubbles: true });
+              window.dispatchEvent(ev);
+            }}
+            title="Quick switcher · ⌘K"
+            style={{
+              background: colors.bg, border: `1px solid ${colors.border}`,
+              color: colors.textSecondary, cursor: 'pointer',
+              padding: '4px 10px', borderRadius: radius.full,
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <span>⌘K</span>
+            <span style={{ opacity: 0.6 }}>JUMP TO…</span>
+          </button>
+        )}
         {/* Cloud sync chip — only rendered when Supabase is configured.
             Clicking forces a re-hydrate from the cloud. */}
         {syncedAgo !== null && (
@@ -386,12 +409,15 @@ export default function App() {
   }, []);
 
   return (
+    <ToastProvider>
     <div style={{
       fontFamily: fonts.body, color: colors.text,
       display: 'flex', minHeight: '100vh', background: colors.bg,
     }}>
       {/* Inject tier-badge glow keyframes once at app root */}
       <TierBadgeStyles />
+      {/* Global Cmd+K / Ctrl+K quick switcher */}
+      <QuickSwitcher />
       <Sidebar isMobile={isMobile} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -425,5 +451,6 @@ export default function App() {
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }
