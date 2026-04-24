@@ -8,6 +8,7 @@ import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth, isAdminRole } from '../auth';
 import PeopleAdminCard from './PeopleAdmin';
 import TypographyCard from './TypographyCard';
+import ThemeModeCard from './ThemeModeCard';
 
 export default function Settings() {
   const { role } = useAuth();
@@ -44,7 +45,8 @@ export default function Settings() {
       {/* People admin — only visible to master_admin / admin roles. */}
       {isAdminRole(role) && <PeopleAdminCard />}
 
-      {/* Typography — personal preference, visible to everyone */}
+      {/* Appearance + Typography — personal preferences, visible to everyone */}
+      <ThemeModeCard />
       <TypographyCard />
 
       <Card>
