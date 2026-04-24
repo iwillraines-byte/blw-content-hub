@@ -41,14 +41,15 @@ export const colors = {
   infoBorder: 'rgba(59, 130, 246, 0.2)',
 };
 
-// `heading` resolves via a CSS custom property so it can be swapped at
-// runtime (Settings → Typography picker, see src/fonts.js). The fallback
-// inside var() makes static builds, SSR, and pre-bootstrap renders still
-// look correct before applyFont() runs.
+// All three font slots resolve via CSS custom properties so the user
+// can swap the entire type system at runtime (Settings → Typography
+// picker, see src/fonts.js). Each var() has a built-in fallback so
+// pre-bootstrap renders and any component that bypasses applyFont()
+// still get a sensible default.
 export const fonts = {
-  heading: 'var(--font-heading, "Bebas Neue", sans-serif)',
-  body: "'Barlow', sans-serif",
-  condensed: "'Barlow Condensed', sans-serif",
+  heading:   'var(--font-heading, "Bebas Neue", sans-serif)',
+  body:      'var(--font-body, "Barlow", sans-serif)',
+  condensed: 'var(--font-condensed, "Barlow Condensed", sans-serif)',
 };
 
 export const radius = {

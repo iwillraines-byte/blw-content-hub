@@ -126,43 +126,47 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
 
   return (
     <div style={{
-      minWidth: 210,
+      // Now that the tier-badge column is gone, the stats card gets the
+      // breathing room. Larger min-width + flex basis so it can expand
+      // into what used to be column 4.
+      minWidth: 280,
+      flex: '1 1 280px',
       background: colors.white,
       border: `1px solid ${colors.borderLight}`,
       borderRadius: radius.base,
       overflow: 'hidden',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
     }}>
       <div style={{
         background: `linear-gradient(135deg, ${team.color}, ${team.dark})`,
         color: '#fff',
-        padding: '8px 12px',
-        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-        letterSpacing: 1.2, textAlign: 'center', textTransform: 'uppercase',
+        padding: '10px 14px',
+        fontFamily: fonts.condensed, fontSize: 12, fontWeight: 700,
+        letterSpacing: 1.4, textAlign: 'center', textTransform: 'uppercase',
       }}>
         2026 Season Stats
       </div>
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        padding: '10px 4px', gap: 2,
+        padding: '16px 8px', gap: 4,
       }}>
         {tiles.map(t => (
           <div key={t.label} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-            padding: '4px 2px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+            padding: '2px 4px',
           }}>
             <div style={{
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-              color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+              color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
             }}>{t.label}</div>
             <div style={{
-              fontFamily: fonts.heading, fontSize: 22,
+              fontFamily: fonts.heading, fontSize: 34,
               color: t.highlight ? colors.red : colors.text,
               lineHeight: 1, letterSpacing: 0.5,
             }}>{t.value ?? '—'}</div>
             <div style={{
-              fontFamily: fonts.condensed, fontSize: 9, fontWeight: 600,
-              color: colors.textMuted, letterSpacing: 0.3,
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
+              color: colors.textMuted, letterSpacing: 0.4,
             }}>
               {t.rank ? `#${t.rank} / ${t.total}` : '—'}
             </div>
@@ -225,19 +229,37 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
         position: 'relative',
       }}>
         {/* Col 1 — Profile + name + team chip. flex:1 so name breathes if there's space. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '2 1 300px', minWidth: 260 }}>
-          <div style={{
-            width: 100, height: 100, borderRadius: radius.full,
-            background: avatarUrl
-              ? `url(${avatarUrl}) center/cover`
-              : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
-            color: '#fff', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: fonts.heading, fontSize: 38, letterSpacing: 1,
-            border: `3px solid ${team.color}`,
-            boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
-          }}>
-            {!avatarUrl && (player.lastName || '??').slice(0, 2).toUpperCase()}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: '2 1 300px', minWidth: 260 }}>
+          {/* Profile circle — wrapped in position:relative so the tier
+              badge can overlay on the bottom-right. The wrapper has the
+              same footprint as the old circle so no layout shift. */}
+          <div style={{ position: 'relative', flexShrink: 0, width: 112, height: 112 }}>
+            <div style={{
+              width: 112, height: 112, borderRadius: radius.full,
+              background: avatarUrl
+                ? `url(${avatarUrl}) center/cover`
+                : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
+              color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: fonts.heading, fontSize: 42, letterSpacing: 1,
+              border: `3px solid ${team.color}`,
+              boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
+            }}>
+              {!avatarUrl && (player.lastName || '??').slice(0, 2).toUpperCase()}
+            </div>
+            {/* Tier badge — overlaid at bottom-right of the circle.
+                Drop shadow gives it pop against either a photo or a
+                colored gradient background. */}
+            {playerRank && (
+              <div style={{
+                position: 'absolute',
+                bottom: -6, right: -10,
+                filter: 'drop-shadow(0 3px 8px rgba(0,0,0,0.25))',
+                pointerEvents: 'none',
+              }}>
+                <TierBadge rank={playerRank} size={56} />
+              </div>
+            )}
           </div>
           <div style={{ minWidth: 0 }}>
             {firstName && (
@@ -305,12 +327,6 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
           bTotal={bTotal} pTotal={pTotal}
         />
 
-        {/* Col 4 — Tier badge (floats right if present) */}
-        {playerRank && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <TierBadge rank={playerRank} size={90} />
-          </div>
-        )}
       </div>
     </div>
   );
