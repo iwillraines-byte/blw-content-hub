@@ -1,0 +1,409 @@
+// Admin endpoint for ingesting player bios from a published Google Sheet
+// (File → Share → Publish to web → CSV). Fetches the CSV server-side,
+// parses it, fuzzy-matches headers to our manual_players columns, and
+// upserts records into Supabase.
+//
+// Request body:
+//   {
+//     csvUrl:      string,          // required — the published CSV URL
+//     columnMap?:  Record<string, string>,  // optional — override auto-detection
+//     dryRun?:     boolean,         // preview only, no writes (default false)
+//   }
+//
+// Response:
+//   {
+//     detectedMap:  { heightIn: 'Height', team: 'Team', ... },
+//     headers:      ['Timestamp', 'First Name', ...],
+//     summary: { processed, created, updated, skipped },
+//     rows: [
+//       { status: 'created' | 'updated' | 'skipped', reason?, record },
+//       ...
+//     ],
+//   }
+//
+// Safety:
+//   - Admin JWT required (requireAdmin)
+//   - Data only written to the `manual_players` table — API stats + media
+//     never touched.
+//   - Upsert key: (team, last_name, COALESCE(nickname-safe first-initial))
+//     so a row is matched by full-name equality rather than blindly
+//     inserting dupes. See resolveExistingPlayer() below.
+
+import { requireUser, requireAdmin } from './_supabase.js';
+
+// Canonical BLW team mapping — matches src/data.js TEAMS. Values are the
+// set of strings a sheet might contain for each team_id.
+const TEAM_ALIASES = {
+  LAN: ['lan', 'la', 'la naturals', 'los angeles naturals', 'naturals'],
+  AZS: ['azs', 'az', 'az saguaros', 'arizona saguaros', 'saguaros'],
+  LVS: ['lvs', 'lv', 'lv scorpions', 'las vegas scorpions', 'scorpions'],
+  NYG: ['nyg', 'ny', 'ny greenapples', 'ny green apples', 'new york green apples', 'green apples', 'greenapples'],
+  DAL: ['dal', 'dal pandas', 'dallas pandas', 'pandas'],
+  BOS: ['bos', 'bos harborhawks', 'bos harbor hawks', 'boston harbor hawks', 'harbor hawks', 'harborhawks'],
+  PHI: ['phi', 'phi wiffleclub', 'philadelphia wiffle club', 'wiffle club', 'wiffleclub'],
+  CHI: ['chi', 'chi bats', 'chicago bats', 'bats'],
+  MIA: ['mia', 'mia mirage', 'miami mirage', 'mirage'],
+  SDO: ['sdo', 'sd', 'sd orcas', 'san diego orcas', 'orcas'],
+};
+
+// Aliases for each target field — header matching is case + space +
+// punctuation insensitive. Longer keys are tried first so "first name"
+// matches before falling back to bare "name".
+const FIELD_ALIASES = {
+  team:       ['team', 'teamid', 'teamabbreviation', 'teamabbr', 'club'],
+  lastName:   ['lastname', 'last', 'surname', 'familyname'],
+  firstName:  ['firstname', 'first', 'givenname', 'fname'],
+  fullName:   ['fullname', 'name', 'playername'],   // will be split if present
+  num:        ['num', 'number', 'jerseynumber', 'jersey', 'jersey#', '#'],
+  position:   ['position', 'pos', 'primaryposition'],
+  heightIn:   ['height', 'heightinches', 'heightin', 'ht', 'heightft', 'heightftin'],
+  weightLbs:  ['weight', 'weightlbs', 'weightpounds', 'wt', 'lbs'],
+  birthdate:  ['birthdate', 'dateofbirth', 'dob', 'birthday'],
+  bats:       ['bats', 'battinghand', 'batside', 'b'],
+  throws:     ['throws', 'throwinghand', 'throwside', 't'],
+  birthplace: ['birthplace', 'hometown', 'home', 'from', 'bornin'],
+  nickname:   ['nickname', 'alias', 'nickname(s)'],
+};
+
+const norm = (s) => String(s || '').toLowerCase().replace(/[\s_\-.()/]+/g, '');
+
+// Minimal RFC-4180 CSV parser. Handles quoted fields, "" escapes, \r\n.
+// Sheets' published CSVs are well-formed so we don't need Papa Parse.
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else {
+        field += c;
+      }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(x => String(x).trim() !== ''));
+}
+
+// Fuzzy-match every header to a known field. Returns
+// { heightIn: 'Height (in inches)', team: 'Team', ... }
+function autoDetectColumns(headers) {
+  const map = {};
+  const used = new Set();
+  const normHeaders = headers.map(h => ({ raw: h, n: norm(h) }));
+  // Greedy: for each field, try its aliases in order; first unused match wins.
+  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+    for (const alias of aliases) {
+      const a = norm(alias);
+      const hit = normHeaders.find(h => !used.has(h.raw) && h.n === a);
+      if (hit) {
+        map[field] = hit.raw;
+        used.add(hit.raw);
+        break;
+      }
+    }
+    // Substring fallback — e.g. "Your height (inches)" matches "height"
+    if (!map[field]) {
+      for (const alias of aliases) {
+        const a = norm(alias);
+        const hit = normHeaders.find(h => !used.has(h.raw) && h.n.includes(a));
+        if (hit) {
+          map[field] = hit.raw;
+          used.add(hit.raw);
+          break;
+        }
+      }
+    }
+  }
+  return map;
+}
+
+// Normalize a team string to a canonical id like "LAN". Returns null if
+// nothing plausible matched.
+function resolveTeamId(raw) {
+  const n = norm(raw);
+  if (!n) return null;
+  for (const [id, aliases] of Object.entries(TEAM_ALIASES)) {
+    if (n === norm(id) || aliases.some(a => norm(a) === n)) return id;
+  }
+  // substring fallback
+  for (const [id, aliases] of Object.entries(TEAM_ALIASES)) {
+    if (aliases.some(a => n.includes(norm(a)) || norm(a).includes(n))) return id;
+  }
+  return null;
+}
+
+// Parse a height string into total inches. Accepts 73, "6'1", "6'1\"",
+// "6 ft 1 in", "6 1", etc. Returns null if unparseable.
+function parseHeightInches(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return raw > 0 && raw < 120 ? raw : null;
+  const s = String(raw).trim();
+  // Pure inches
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    return n > 0 && n < 120 ? Math.round(n) : null;
+  }
+  // Feet+inches — common formats
+  const m = s.match(/^(\d+)\s*['’´]\s*(\d+(?:\.\d+)?)?\s*["”]?$/)
+         || s.match(/^(\d+)\s*(?:ft|foot|feet)\s*(\d+(?:\.\d+)?)?\s*(?:in|inch|inches|")?$/i)
+         || s.match(/^(\d+)\s+(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const ft = Number(m[1]);
+    const inch = m[2] ? Number(m[2]) : 0;
+    const total = ft * 12 + inch;
+    return total > 0 && total < 120 ? Math.round(total) : null;
+  }
+  return null;
+}
+
+function parseWeightLbs(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return raw > 0 && raw < 600 ? Math.round(raw) : null;
+  const s = String(raw).replace(/[^\d.]/g, '');
+  if (!s) return null;
+  const n = Number(s);
+  return n > 0 && n < 600 ? Math.round(n) : null;
+}
+
+// Parse "R" | "Right" | "right-handed" → "R". Unknown → null.
+function parseHand(raw, allowSwitch = false) {
+  if (!raw) return null;
+  const n = norm(raw);
+  if (n === 'r' || n.startsWith('right')) return 'R';
+  if (n === 'l' || n.startsWith('left'))  return 'L';
+  if (allowSwitch && (n === 's' || n.startsWith('switch') || n.startsWith('both'))) return 'S';
+  return null;
+}
+
+// Parse into an ISO date (YYYY-MM-DD) or null.
+function parseBirthdate(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  // Already ISO?
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // MM/DD/YYYY or M/D/YYYY
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) {
+    const [, mm, dd, yy] = m;
+    const year = yy.length === 2 ? (Number(yy) > 30 ? 1900 + Number(yy) : 2000 + Number(yy)) : Number(yy);
+    return `${String(year).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  }
+  // Fallback: try Date parse
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getUTCFullYear();
+    if (y > 1900 && y < 2100) {
+      return `${y}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    }
+  }
+  return null;
+}
+
+// Find an existing manual_players row matching (team, lastName, firstInitial).
+async function resolveExistingPlayer(sb, teamId, lastName, firstInitial) {
+  const { data, error } = await sb.from('manual_players')
+    .select('id, first_name, last_name, team')
+    .eq('team', teamId)
+    .ilike('last_name', lastName);  // case-insensitive
+  if (error) throw error;
+  if (!data || data.length === 0) return null;
+  if (data.length === 1) return data[0];
+  // Disambiguate by first-initial when we have it.
+  if (firstInitial) {
+    const hit = data.find(r => (r.first_name || '').charAt(0).toUpperCase() === firstInitial.toUpperCase());
+    if (hit) return hit;
+  }
+  return data[0]; // best-effort
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+  if (requireAdmin(res, ctx.profile)) return;
+  const sb = ctx.sb;
+
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const body = req.body || {};
+  const { csvUrl, columnMap: overrideMap, dryRun = false } = body;
+  if (!csvUrl || typeof csvUrl !== 'string') {
+    return res.status(400).json({ error: 'csvUrl is required' });
+  }
+  if (!/^https?:\/\//i.test(csvUrl)) {
+    return res.status(400).json({ error: 'csvUrl must be an http(s) URL' });
+  }
+
+  // Fetch the sheet
+  let csvText;
+  try {
+    const upstream = await fetch(csvUrl, {
+      headers: { 'Accept': 'text/csv,*/*' },
+      redirect: 'follow',
+    });
+    if (!upstream.ok) {
+      return res.status(502).json({ error: `Sheet fetch failed: ${upstream.status} ${upstream.statusText}` });
+    }
+    csvText = await upstream.text();
+  } catch (err) {
+    return res.status(502).json({ error: 'Sheet fetch failed', detail: err.message });
+  }
+
+  // Parse + detect columns
+  const rows = parseCsv(csvText);
+  if (rows.length < 2) {
+    return res.status(400).json({ error: 'Sheet has fewer than 2 rows (need header + at least one data row)' });
+  }
+  const headers = rows[0].map(h => String(h || '').trim());
+  const detectedMap = autoDetectColumns(headers);
+  const map = { ...detectedMap, ...(overrideMap || {}) };
+
+  // Column → index lookup for fast access
+  const colIdx = {};
+  for (const [field, header] of Object.entries(map)) {
+    const idx = headers.indexOf(header);
+    if (idx !== -1) colIdx[field] = idx;
+  }
+
+  // Must have team + lastName columns to be useful
+  if (colIdx.team == null) {
+    return res.status(400).json({
+      error: 'Could not detect a TEAM column. Please add a mapping override.',
+      headers, detectedMap,
+    });
+  }
+  if (colIdx.lastName == null && colIdx.fullName == null) {
+    return res.status(400).json({
+      error: 'Could not detect a NAME column (need "Last Name" or "Full Name").',
+      headers, detectedMap,
+    });
+  }
+
+  const summary = { processed: 0, created: 0, updated: 0, skipped: 0 };
+  const resultRows = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const raw = {};
+    for (const [field, idx] of Object.entries(colIdx)) {
+      raw[field] = row[idx];
+    }
+
+    summary.processed++;
+
+    // Resolve team
+    const teamId = resolveTeamId(raw.team);
+    if (!teamId) {
+      summary.skipped++;
+      resultRows.push({ row: r + 1, status: 'skipped', reason: `Unknown team "${raw.team}"`, record: raw });
+      continue;
+    }
+
+    // Resolve name — prefer explicit lastName; otherwise split fullName
+    let firstName = raw.firstName ? String(raw.firstName).trim() : '';
+    let lastName = raw.lastName ? String(raw.lastName).trim() : '';
+    if ((!firstName || !lastName) && raw.fullName) {
+      const parts = String(raw.fullName).trim().split(/\s+/);
+      if (!lastName && parts.length > 0) lastName = parts[parts.length - 1];
+      if (!firstName && parts.length > 1) firstName = parts.slice(0, -1).join(' ');
+    }
+    if (!lastName) {
+      summary.skipped++;
+      resultRows.push({ row: r + 1, status: 'skipped', reason: 'No last name', record: raw });
+      continue;
+    }
+    const firstInitial = firstName.charAt(0).toUpperCase();
+
+    // Build the update payload. Only include fields whose columns exist
+    // and whose parsed values are non-null — we don't want to wipe
+    // previously-entered data with a blank from a partially-filled row.
+    const updates = {};
+    if (firstName) updates.first_name = firstName;
+    updates.last_name = lastName;
+    updates.team = teamId;
+    if (colIdx.num != null) {
+      const n = String(raw.num || '').trim();
+      if (n) updates.num = n;
+    }
+    if (colIdx.position != null) {
+      const p = String(raw.position || '').trim();
+      if (p) updates.position = p;
+    }
+    if (colIdx.heightIn != null) {
+      const h = parseHeightInches(raw.heightIn);
+      if (h != null) updates.height_in = h;
+    }
+    if (colIdx.weightLbs != null) {
+      const w = parseWeightLbs(raw.weightLbs);
+      if (w != null) updates.weight_lbs = w;
+    }
+    if (colIdx.birthdate != null) {
+      const d = parseBirthdate(raw.birthdate);
+      if (d) updates.birthdate = d;
+    }
+    if (colIdx.bats != null) {
+      const b = parseHand(raw.bats, true);
+      if (b) updates.bats = b;
+    }
+    if (colIdx.throws != null) {
+      const t = parseHand(raw.throws, false);
+      if (t) updates.throws = t;
+    }
+    if (colIdx.birthplace != null) {
+      const p = String(raw.birthplace || '').trim();
+      if (p) updates.birthplace = p;
+    }
+    if (colIdx.nickname != null) {
+      const nn = String(raw.nickname || '').trim();
+      if (nn) updates.nickname = nn;
+    }
+
+    // Upsert
+    try {
+      const existing = await resolveExistingPlayer(sb, teamId, lastName, firstInitial);
+      if (existing) {
+        if (!dryRun) {
+          const { error } = await sb.from('manual_players').update(updates).eq('id', existing.id);
+          if (error) throw error;
+        }
+        summary.updated++;
+        resultRows.push({ row: r + 1, status: 'updated', id: existing.id, record: updates });
+      } else {
+        const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const newRow = { id, ...updates };
+        if (!dryRun) {
+          const { error } = await sb.from('manual_players').insert(newRow);
+          if (error) throw error;
+        }
+        summary.created++;
+        resultRows.push({ row: r + 1, status: 'created', id, record: newRow });
+      }
+    } catch (err) {
+      summary.skipped++;
+      resultRows.push({ row: r + 1, status: 'skipped', reason: err.message, record: updates });
+    }
+  }
+
+  return res.status(200).json({
+    detectedMap,
+    headers,
+    rowsInSheet: rows.length - 1,
+    summary,
+    rows: resultRows.slice(0, 200),  // cap response size
+    dryRun,
+  });
+}

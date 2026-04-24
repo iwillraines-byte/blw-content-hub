@@ -9,6 +9,7 @@ import { useAuth, isAdminRole } from '../auth';
 import PeopleAdminCard from './PeopleAdmin';
 import TypographyCard from './TypographyCard';
 import ThemeModeCard from './ThemeModeCard';
+import PlayerBioImportCard from './PlayerBioImportCard';
 
 export default function Settings() {
   const { role } = useAuth();
@@ -44,6 +45,10 @@ export default function Settings() {
 
       {/* People admin — only visible to master_admin / admin roles. */}
       {isAdminRole(role) && <PeopleAdminCard />}
+
+      {/* Player bio import — admin-only. Pulls a published Google Sheet
+          CSV into manual_players so player pages show vitals. */}
+      {isAdminRole(role) && <PlayerBioImportCard />}
 
       {/* Appearance + Typography — personal preferences, visible to everyone */}
       <ThemeModeCard />
