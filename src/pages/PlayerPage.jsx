@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
-import { Card, SectionHeading, RedButton, TeamLogo } from '../components';
+import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { findPlayerMedia, blobToObjectURL } from '../media-store';
-import { getManualPlayersByTeam } from '../player-store';
+import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
+import { getManualPlayersByTeam, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
+import { useAuth, isAdminRole } from '../auth';
+import { useToast } from '../toast';
 
 function buildStatLine(player) {
   if (player.batting) {
@@ -177,7 +179,144 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
   );
 }
 
-function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref }) {
+// Admin-only photo picker modal. Renders every piece of media for the
+// team in a grid so the admin can click any asset — headshot, action
+// shot, even a team photo — as this player's profile circle. "Reset to
+// default" clears the override so the default HEADSHOT heuristic
+// resumes. Closes on background click, ESC, or after a successful pick.
+function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, saving }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // Split media by asset-type group so the picker reads "Headshots on
+  // top, action shots, then team photos" — easier to scan at a glance.
+  const groups = {};
+  for (const m of teamMedia) {
+    const k = m.assetType || 'FILE';
+    (groups[k] = groups[k] || []).push(m);
+  }
+  // Preferred order so headshots surface first
+  const orderedKeys = ['HEADSHOT', 'PORTRAIT', 'ACTION', 'ACTION2', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW', 'TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK', 'FILE'];
+  const sortedKeys = [
+    ...orderedKeys.filter(k => groups[k]?.length),
+    ...Object.keys(groups).filter(k => !orderedKeys.includes(k)),
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+        zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 820, maxHeight: '85vh',
+          background: colors.white, borderRadius: radius.lg,
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.35)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: 18, borderBottom: `1px solid ${colors.borderLight}`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <TeamLogo teamId={team.id} size={28} rounded="square" />
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontFamily: fonts.heading, fontSize: 22, margin: 0, letterSpacing: 1.2, fontWeight: 400 }}>
+              Choose profile photo
+            </h2>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+              Pick any asset uploaded for {team.name}. Click outside or press ESC to cancel.
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 22, color: colors.textSecondary, padding: '2px 6px',
+          }}>✕</button>
+        </div>
+
+        {/* Grid */}
+        <div style={{ padding: 18, overflowY: 'auto', flex: 1 }}>
+          {teamMedia.length === 0 && (
+            <div style={{ padding: 40, textAlign: 'center', color: colors.textSecondary, fontSize: 13 }}>
+              No media uploaded for {team.name} yet. Go to <strong>Files</strong> to add some.
+            </div>
+          )}
+          {sortedKeys.map(key => (
+            <div key={key} style={{ marginBottom: 20 }}>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+                marginBottom: 8,
+              }}>
+                {key} ({groups[key].length})
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8,
+              }}>
+                {groups[key].map(m => {
+                  const url = mediaUrls[m.id];
+                  const active = m.id === currentId;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => !saving && onPick(m.id)}
+                      disabled={saving}
+                      title={m.name}
+                      style={{
+                        display: 'flex', flexDirection: 'column',
+                        padding: 0, border: `2px solid ${active ? colors.red : colors.borderLight}`,
+                        borderRadius: radius.base, overflow: 'hidden',
+                        background: colors.white, cursor: saving ? 'wait' : 'pointer',
+                        boxShadow: active ? `0 0 0 2px ${colors.redBorder}` : 'none',
+                        transition: 'all 0.12s',
+                      }}
+                    >
+                      <div style={{
+                        width: '100%', aspectRatio: '1 / 1',
+                        background: url
+                          ? `url(${url}) center/cover`
+                          : `linear-gradient(135deg, ${team.color}30, ${team.color}10)`,
+                      }} />
+                      <div style={{
+                        padding: '4px 6px', fontSize: 10, fontFamily: fonts.condensed,
+                        color: colors.text, textAlign: 'left',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{m.name}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: 14, borderTop: `1px solid ${colors.borderLight}`,
+          display: 'flex', gap: 8, justifyContent: 'flex-end',
+        }}>
+          <OutlineButton onClick={() => !saving && onPick(null)} disabled={saving}>
+            Reset to default
+          </OutlineButton>
+          <OutlineButton onClick={onClose} disabled={saving}>
+            Cancel
+          </OutlineButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref, canEditPhoto, onEditPhoto }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
   const height = formatHeight(v.heightIn);
@@ -252,18 +391,45 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
             }}>
               {!avatarUrl && (player.lastName || '??').slice(0, 2).toUpperCase()}
             </div>
-            {/* Tier badge — overlaid at bottom-right of the circle.
-                Bumped size 56 → 80 so the rank reads clearly from a
-                scrolled view without cluttering the circle. Drop shadow
-                lifts it off either a photo or a colored gradient. */}
+            {/* Admin-only pencil icon at top-left of the circle. Opens
+                the photo picker modal. Tier badge sits at bottom-right,
+                so these two never collide. */}
+            {canEditPhoto && (
+              <button
+                onClick={onEditPhoto}
+                title="Change profile photo"
+                style={{
+                  position: 'absolute',
+                  top: -4, left: -4,
+                  width: 32, height: 32, borderRadius: radius.full,
+                  background: colors.white,
+                  border: `2px solid ${team.color}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+                  fontSize: 14, lineHeight: 1,
+                  padding: 0,
+                }}
+              >
+                ✎
+              </button>
+            )}
+            {/* Tier badge — overlaid at the 4:30 perimeter point.
+                Geometry: circle 128 (radius 64), badge 96. Its CENTER
+                sits on the circle perimeter at 45° which is (cos45° × 64,
+                sin45° × 64) ≈ (45, 45) from the circle center. So the
+                badge top-left offsets (64 + 45 − 48, 64 + 45 − 48) ≈
+                (61, 61), i.e. bottom: -29, right: -29 from the 128px
+                wrapper. Drop shadow lifts it off either a photo or a
+                colored gradient. */}
             {playerRank && (
               <div style={{
                 position: 'absolute',
-                bottom: -10, right: -14,
+                bottom: -29, right: -29,
                 filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.28))',
                 pointerEvents: 'none',
               }}>
-                <TierBadge rank={playerRank} size={80} />
+                <TierBadge rank={playerRank} size={96} />
               </div>
             )}
           </div>
@@ -363,12 +529,20 @@ function StatTile({ label, value, rank, total, highlight }) {
 export default function PlayerPage() {
   const { slug, lastName } = useParams();
   const team = getTeam(slug);
+  const toast = useToast();
+  const { role } = useAuth();
+  const isAdmin = isAdminRole(role);
 
   const [player, setPlayer] = useState(null);
   const [media, setMedia] = useState([]);
+  // Full team media (all players + team-scoped assets) for the photo picker.
+  // Lazy-loaded the first time the picker opens, then kept in state.
+  const [teamMedia, setTeamMedia] = useState([]);
   const [battingLeaders, setBattingLeaders] = useState([]);
   const [pitchingLeaders, setPitchingLeaders] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
 
   useEffect(() => {
     let cancel = false;
@@ -400,11 +574,23 @@ export default function PlayerPage() {
     return () => { cancel = true; };
   }, [team?.id, lastName]);
 
+  // Blob URLs for BOTH player-scoped media AND any team media that was
+  // loaded for the photo picker. Dedup by id so a single url cache
+  // serves every render (profile circle, gallery, picker tile).
   const mediaUrls = useMemo(() => {
     const urls = {};
-    for (const m of media) if (m.blob) urls[m.id] = blobToObjectURL(m.blob);
+    const seen = new Set();
+    const addAll = (list) => {
+      for (const m of list) {
+        if (!m || seen.has(m.id)) continue;
+        seen.add(m.id);
+        if (m.blob) urls[m.id] = blobToObjectURL(m.blob);
+      }
+    };
+    addAll(media);
+    addAll(teamMedia);
     return urls;
-  }, [media]);
+  }, [media, teamMedia]);
 
   if (!team) {
     return (
@@ -462,8 +648,53 @@ export default function PlayerPage() {
   const statLine = buildStatLine(player);
   if (statLine) generateParams.set('statLine', statLine);
 
-  const headshot = media.find(m => m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT');
+  // Avatar resolution: admin-picked override wins (player.profileMediaId
+  // points at a specific media.id from THIS or ANY team asset). Fall
+  // back to the first HEADSHOT/PORTRAIT in this player's media set.
+  const overrideMedia = player.profileMediaId
+    ? ([...media, ...teamMedia].find(m => m.id === player.profileMediaId) || null)
+    : null;
+  const headshot = overrideMedia
+    || media.find(m => m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT');
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
+
+  // Open the photo picker — lazy-load the team's media the first time so
+  // we don't fetch every team's blobs on every player page view.
+  const openPhotoPicker = useCallback(async () => {
+    if (teamMedia.length === 0) {
+      try {
+        const tm = await findTeamMedia(team.id);
+        setTeamMedia(tm || []);
+      } catch (err) {
+        console.warn('findTeamMedia failed', err);
+      }
+    }
+    setPhotoPickerOpen(true);
+  }, [team?.id, teamMedia.length]);
+
+  // Write the profile_media_id override and update local state so the
+  // new avatar renders immediately without a round-trip refetch.
+  const choosePhoto = useCallback(async (mediaId) => {
+    if (!team?.id || !player?.lastName) return;
+    setSavingPhoto(true);
+    try {
+      await upsertManualPlayer({
+        team: team.id,
+        lastName: player.lastName,
+        firstInitial: player.firstInitial,
+        firstName: player.firstName,
+        num: player.num,
+        updates: { profile_media_id: mediaId || null },
+      });
+      setPlayer(prev => prev ? { ...prev, profileMediaId: mediaId || null } : prev);
+      toast.success(mediaId ? 'Profile photo updated' : 'Profile photo reset');
+      setPhotoPickerOpen(false);
+    } catch (err) {
+      toast.error('Failed to save', { detail: err.message?.slice(0, 80) });
+    } finally {
+      setSavingPhoto(false);
+    }
+  }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
 
   // ─── Per-stat league-rank lookups ────────────────────────────────────────
   // Rank this player against all BLW batters/pitchers for each displayed stat
@@ -518,7 +749,24 @@ export default function PlayerPage() {
         bTotal={bTotal}
         pTotal={pTotal}
         generateHref={`/generate?${generateParams.toString()}`}
+        canEditPhoto={isAdmin}
+        onEditPhoto={openPhotoPicker}
       />
+
+      {/* Admin-only profile-picture picker modal. Shows the full set of
+          team media with the current selection highlighted. "Reset" goes
+          back to the default headshot heuristic. */}
+      {photoPickerOpen && (
+        <PhotoPicker
+          team={team}
+          teamMedia={teamMedia}
+          mediaUrls={mediaUrls}
+          currentId={player.profileMediaId || headshot?.id || null}
+          onClose={() => !savingPhoto && setPhotoPickerOpen(false)}
+          onPick={choosePhoto}
+          saving={savingPhoto}
+        />
+      )}
 
       {/* Stats Cards — curated set with per-stat league rank */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>

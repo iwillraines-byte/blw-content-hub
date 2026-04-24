@@ -151,6 +151,9 @@ function mapPlayerToRow(p) {
     birthplace: p.birthplace || null,
     status:     p.status || null,
     nickname:   p.nickname || null,
+    // Profile-pic override (db/005). NULL keeps the default headshot
+    // heuristic; a media.id points at a specific uploaded asset.
+    profile_media_id: p.profileMediaId ?? p.profile_media_id ?? null,
   };
 }
 

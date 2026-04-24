@@ -665,6 +665,9 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     team: teamId,
     num: source?.num || '',
     position: manual?.position || null,
+    // Admin-chosen profile pic (db/005). NULL → fall back to the default
+    // HEADSHOT/PORTRAIT heuristic in PlayerPage.
+    profileMediaId: manual?.profile_media_id || manual?.profileMediaId || null,
     batting: batting || null,
     pitching: pitching || null,
     ranking: ranking || null,

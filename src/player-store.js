@@ -69,6 +69,66 @@ export async function getManualPlayersByTeam(teamId) {
   return all.filter(p => p.team === teamId);
 }
 
+// Upsert a manual_players row from a "team + lastName (+ firstInitial)"
+// key — used by admin tools that want to attach a setting to a player
+// who may only exist in API data (batting/pitching) and therefore has
+// no manual row yet. Returns the merged record after save.
+//
+// Matching rule: case-insensitive lastName on the team, optionally
+// narrowed by firstInitial. If no row matches, a new one is created.
+export async function upsertManualPlayer({ team, lastName, firstInitial, firstName, num, updates = {} }) {
+  if (!team || !lastName) throw new Error('team + lastName required');
+  const all = await getAllManualPlayers();
+  const lnNorm = String(lastName).toLowerCase();
+  const finNorm = firstInitial ? String(firstInitial).toUpperCase() : null;
+  const match = all.find(p => {
+    if (p.team !== team) return false;
+    const pLn = String(p.lastName || '').toLowerCase();
+    if (pLn !== lnNorm) return false;
+    if (!finNorm) return true;
+    const pFn = String(p.firstName || p.name || '').trim();
+    return pFn.charAt(0).toUpperCase() === finNorm;
+  });
+
+  const db = await openDB();
+  if (match) {
+    // Update existing
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const merged = { ...match, ...updates };
+      if (updates.firstName || updates.lastName) {
+        merged.name = `${merged.firstName || ''} ${merged.lastName || ''}`.trim();
+      }
+      store.put(merged);
+      tx.oncomplete = () => { cloud.syncManualPlayer(merged); resolve(merged); };
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  // Create new stub row so the setting has somewhere to live.
+  const id = crypto.randomUUID();
+  const fn = firstName || '';
+  const record = {
+    id,
+    name: `${fn} ${lastName}`.trim(),
+    firstName: fn,
+    lastName,
+    team,
+    num: num || '',
+    position: '',
+    notes: '',
+    manual: true,
+    createdAt: Date.now(),
+    ...updates,
+  };
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(record);
+    tx.oncomplete = () => { cloud.syncManualPlayer(record); resolve(record); };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function updatePlayer(id, updates) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
