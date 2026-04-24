@@ -568,13 +568,21 @@ function AccessDenied({ what }) {
   );
 }
 
-// "/" redirect — athletes land on /my-stats, staff on /dashboard. Until a
-// profile loads we render null so a freshly-signed-in user doesn't flash
-// through the wrong page on the way to the right one.
+// "/" redirect — athletes land on /my-stats, staff on /dashboard.
+// If profile is still loading, render a tiny placeholder. If the user is
+// signed in but has NO profile row (migration 003 hasn't run), route to
+// /settings so the in-page ProfileNotFound card can surface the fix.
 function HomeRedirect() {
-  const { role, isConfigured } = useAuth();
+  const { role, user, profileLoading, isConfigured } = useAuth();
   if (!isConfigured) return <Navigate to="/dashboard" replace />;
-  if (!role) return null;
+  if (profileLoading) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center', color: colors.textSecondary, fontSize: 13 }}>
+        Loading your profile…
+      </div>
+    );
+  }
+  if (user && !role) return <ProfileNotFound />;
   if (isAthleteRole(role)) return <Navigate to="/my-stats" replace />;
   return <Navigate to="/dashboard" replace />;
 }
@@ -582,14 +590,71 @@ function HomeRedirect() {
 // Route gate — wraps a child in an AccessDenied shell if the current role
 // isn't allowed. Used for athlete-hidden routes like /files and /requests.
 function RequireRole({ roles, what, children }) {
-  const { role, isConfigured } = useAuth();
+  const { role, isConfigured, profileLoading, user } = useAuth();
   // Dev without Supabase: show everything.
   if (!isConfigured) return children;
-  // Profile still loading (no role yet): render nothing briefly to avoid
-  // a flash of "Access restricted" while the fetch resolves.
+  // Actively loading the profile — render a tiny spinner so the page isn't
+  // blank (previously returned null which made /dashboard look broken).
+  if (profileLoading) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center', color: colors.textSecondary, fontSize: 13 }}>
+        Loading your profile…
+      </div>
+    );
+  }
+  // Signed in but the profile couldn't be loaded (migration 003 hasn't run,
+  // or the trigger didn't fire for this user). Give them a clear message
+  // instead of a silent-null "page is blank" state.
+  if (user && !role) return <ProfileNotFound />;
   if (!role) return null;
   if (!roles.includes(role)) return <AccessDenied what={what} />;
   return children;
+}
+
+// Shown when the user is signed in but has no profile row. Tells them
+// exactly what to do rather than leaving the page blank or access-denied.
+function ProfileNotFound() {
+  const { user } = useAuth();
+  return (
+    <div style={{
+      maxWidth: 600, margin: '40px auto', padding: 32,
+      background: colors.white, borderRadius: radius.lg,
+      border: `1px solid ${colors.borderLight}`,
+      fontFamily: fonts.body, color: colors.text,
+    }}>
+      <div style={{ fontSize: 36, marginBottom: 6 }}>🛠</div>
+      <h1 style={{ fontFamily: fonts.heading, fontSize: 28, margin: 0, letterSpacing: 1.2, fontWeight: 400 }}>
+        Profile setup required
+      </h1>
+      <p style={{ fontSize: 14, color: colors.textSecondary, margin: '10px 0 16px', lineHeight: 1.6 }}>
+        You're signed in as <strong>{user?.email}</strong> but no profile row exists in the database.
+        That means a role + team haven't been assigned yet, so role-gated pages (Dashboard, Files, Requests, My Team)
+        are hiding themselves until setup is done.
+      </p>
+      <div style={{
+        padding: 14, borderRadius: radius.base,
+        background: colors.bg, border: `1px solid ${colors.borderLight}`,
+        fontSize: 13, color: colors.text, lineHeight: 1.6,
+      }}>
+        <strong>To fix (master admin only):</strong>
+        <ol style={{ margin: '6px 0 0 20px', padding: 0 }}>
+          <li>Run <code>db/003_profiles_and_policies.sql</code> in the Supabase SQL editor.</li>
+          <li>Run:<br/>
+            <code style={{
+              display: 'block', marginTop: 6, padding: 8, background: '#0B0D10', color: '#A7F3D0',
+              fontSize: 12, borderRadius: 4, overflowX: 'auto',
+            }}>
+              UPDATE public.profiles SET role='master_admin' WHERE email='{user?.email}';
+            </code>
+          </li>
+          <li>Hard-refresh this page (Cmd+Shift+R).</li>
+        </ol>
+      </div>
+      <p style={{ fontSize: 12, color: colors.textMuted, marginTop: 12, lineHeight: 1.5 }}>
+        If you already ran the SQL, your browser may have a stale cached session. Try signing out (top-right avatar → Sign out) and back in.
+      </p>
+    </div>
+  );
 }
 
 // Renders a spinner while AuthProvider is restoring the session on a hard
@@ -608,6 +673,31 @@ function AuthLoadingSplash() {
         animation: 'authspin 0.9s linear infinite',
       }} />
       <style>{`@keyframes authspin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  );
+}
+
+// Small persistent banner across the top of the app when a signed-in user
+// has no profile row (migration 003 not run OR auto-create trigger didn't
+// fire). Self-dismissing once the profile appears.
+function ProfileSetupBanner() {
+  const { user, role, profileLoading, isConfigured } = useAuth();
+  if (!isConfigured || profileLoading) return null;
+  if (!user || role) return null;
+  return (
+    <div style={{
+      background: '#FEF3C7', color: '#92400E',
+      borderBottom: '1px solid #FDE68A',
+      padding: '8px 16px',
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      fontSize: 12, fontFamily: fonts.body,
+    }}>
+      <span style={{ fontSize: 16 }}>⚠</span>
+      <span style={{ flex: 1, minWidth: 240 }}>
+        <strong>Profile setup required.</strong> Some pages are hidden until
+        an admin runs <code>db/003_profiles_and_policies.sql</code> and promotes
+        your account. See Dashboard for the steps.
+      </span>
     </div>
   );
 }
@@ -641,6 +731,10 @@ function AppShell() {
           isMobile={isMobile}
           onMenuToggle={() => setSidebarOpen(prev => !prev)}
         />
+
+        {/* Sticky banner that nudges profile setup when the user's role
+            hasn't loaded. Hidden in dev + once the profile lands. */}
+        <ProfileSetupBanner />
 
         <main style={{
           flex: 1,
