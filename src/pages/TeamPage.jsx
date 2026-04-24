@@ -307,7 +307,10 @@ export default function TeamPage() {
         border: `1px solid ${colors.borderLight}`,
         borderLeft: `4px solid ${team.color}`,
         borderRadius: radius.lg,
-        boxShadow: '0 1px 3px rgba(17,24,39,0.04), 0 1px 2px rgba(17,24,39,0.03)',
+        // Subtle two-layer drop shadow — matches PlayerHero so the two
+        // pages share a visual weight. Outer layer is ambient, inner is
+        // an edge sharpener.
+        boxShadow: '0 8px 24px rgba(17,24,39,0.08), 0 2px 6px rgba(17,24,39,0.05)',
         overflow: 'hidden',
         position: 'relative',
       }}>

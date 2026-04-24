@@ -210,7 +210,11 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
       border: `1px solid ${colors.borderLight}`,
       borderLeft: `4px solid ${team.color}`,
       borderRadius: radius.lg,
-      boxShadow: '0 1px 3px rgba(17,24,39,0.04), 0 1px 2px rgba(17,24,39,0.03)',
+      // Subtle two-layer drop shadow — gives the hero card a bit of lift
+      // off the page without going full Material-raised. The wider, softer
+      // outer layer does the ambient feel; the tighter inner layer sharpens
+      // the edge on the sides of the card.
+      boxShadow: '0 8px 24px rgba(17,24,39,0.08), 0 2px 6px rgba(17,24,39,0.05)',
       overflow: 'hidden',
       position: 'relative',
     }}>
@@ -231,33 +235,35 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
         {/* Col 1 — Profile + name + team chip. flex:1 so name breathes if there's space. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: '2 1 300px', minWidth: 260 }}>
           {/* Profile circle — wrapped in position:relative so the tier
-              badge can overlay on the bottom-right. The wrapper has the
-              same footprint as the old circle so no layout shift. */}
-          <div style={{ position: 'relative', flexShrink: 0, width: 112, height: 112 }}>
+              badge can overlay on the bottom-right. Circle bumped to
+              128px to give the 80px tier badge more landing room without
+              eating too much of the photo/initials. */}
+          <div style={{ position: 'relative', flexShrink: 0, width: 128, height: 128 }}>
             <div style={{
-              width: 112, height: 112, borderRadius: radius.full,
+              width: 128, height: 128, borderRadius: radius.full,
               background: avatarUrl
                 ? `url(${avatarUrl}) center/cover`
                 : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
               color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: fonts.heading, fontSize: 42, letterSpacing: 1,
+              fontFamily: fonts.heading, fontSize: 46, letterSpacing: 1,
               border: `3px solid ${team.color}`,
               boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
             }}>
               {!avatarUrl && (player.lastName || '??').slice(0, 2).toUpperCase()}
             </div>
             {/* Tier badge — overlaid at bottom-right of the circle.
-                Drop shadow gives it pop against either a photo or a
-                colored gradient background. */}
+                Bumped size 56 → 80 so the rank reads clearly from a
+                scrolled view without cluttering the circle. Drop shadow
+                lifts it off either a photo or a colored gradient. */}
             {playerRank && (
               <div style={{
                 position: 'absolute',
-                bottom: -6, right: -10,
-                filter: 'drop-shadow(0 3px 8px rgba(0,0,0,0.25))',
+                bottom: -10, right: -14,
+                filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.28))',
                 pointerEvents: 'none',
               }}>
-                <TierBadge rank={playerRank} size={56} />
+                <TierBadge rank={playerRank} size={80} />
               </div>
             )}
           </div>
