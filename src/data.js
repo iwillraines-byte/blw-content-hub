@@ -224,7 +224,12 @@ export async function fetchPitchingLeaders() {
 export async function fetchRankings() {
   if (!isCacheStale() && _rankingsCache) return _rankingsCache;
   try {
-    const res = await fetch(`${GSS_BASE}/rankings/0`);
+    // Without ?showAll=true the endpoint caps the response at the leaderboard
+    // page size (~72 players), so a player like Bryson Livingston at #118
+    // wouldn't exist in the cache. Same-lastname cousins (Brody + Bryson)
+    // then silently inherit whichever record was returned — causing the
+    // wrong tier badge to show. Always fetch the full list.
+    const res = await fetch(`${GSS_BASE}/rankings/0?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     _rankingsCache = transformRankings(data);
@@ -648,9 +653,20 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   const pitching = pitchingMatches[0] || pitchingAll[0] || null;
   const rosterPlayer = rosterMatches[0] || rosterAll[0] || null;
   const manual = manualMatches[0] || manualAll[0] || null;
-  const ranking = rankingMatches[0] || rankingAll[0] || null;
 
   const source = batting || pitching || rosterPlayer || manual;
+  if (!source && rankingMatches.length === 0 && rankingAll.length === 0) return null;
+
+  // ─── Ranking match — prefer EXACT full-name equality when we know the
+  // source player's name, so same-initial siblings (Brody + Bryson both
+  // "B. Livingston") don't inherit each other's ranking record. First
+  // initial alone isn't enough because both "B.Livingston"s match.
+  const sourceName = source?.name || '';
+  const exactRankingMatch = sourceName
+    ? rankingAll.find(r => r.name === sourceName)
+    : null;
+  const ranking = exactRankingMatch || rankingMatches[0] || (rankingAll.length === 1 ? rankingAll[0] : null);
+
   if (!source && !ranking) return null;
 
   const name = source?.name || ranking?.name || '';

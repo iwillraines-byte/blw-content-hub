@@ -86,6 +86,58 @@ function formatBirthdate(iso) {
   } catch { return null; }
 }
 
+// League-rank row — uses the same VitalRow layout but injects a movement
+// indicator (▲3 / ▼2 / —) when we know the rank delta. rankChange > 0
+// means the player MOVED UP (lower rank number = better), so a green
+// up-arrow. < 0 = moved down = red down-arrow. 0 = steady (gray dash).
+function LeagueRankRow({ ranking }) {
+  const rank = ranking?.currentRank || null;
+  const change = typeof ranking?.rankChange === 'number' ? ranking.rankChange : 0;
+  if (!rank) {
+    return <VitalRow label="League Rank" value={null} />;
+  }
+  const arrow = change > 0 ? '▲' : change < 0 ? '▼' : '—';
+  const arrowColor = change > 0 ? '#15803D' : change < 0 ? '#991B1B' : colors.textMuted;
+  const compositePts = typeof ranking?.compositePoints === 'number'
+    ? ranking.compositePoints.toLocaleString()
+    : null;
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', borderBottom: `1px solid ${colors.divider}` }}>
+      <div style={{
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+        color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+        width: 76, flexShrink: 0,
+      }}>League Rank</div>
+      <div style={{
+        fontFamily: fonts.body, fontSize: 13, color: colors.text, fontWeight: 600,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <span style={{ fontFamily: fonts.heading, fontSize: 18, lineHeight: 1, letterSpacing: 0.5 }}>
+          #{rank}
+        </span>
+        {change !== 0 && (
+          <span title={change > 0 ? `Up ${change} from last week` : `Down ${Math.abs(change)} from last week`} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+            color: arrowColor,
+          }}>
+            <span style={{ fontSize: 10 }}>{arrow}</span>
+            {Math.abs(change)}
+          </span>
+        )}
+        {compositePts && (
+          <span style={{
+            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
+            color: colors.textMuted, letterSpacing: 0.3,
+          }}>
+            {compositePts} PTS
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Compact "HT/WT" style stat row with bold value on the right.
 function VitalRow({ label, value, dot }) {
   return (
@@ -470,6 +522,28 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
                 fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
                 color: colors.textSecondary, letterSpacing: 0.5,
               }}>{position}</span>
+              {/* Composite rank chip — pulls from the league-wide composite
+                  rankings feed. Surfaces the number right next to the tier
+                  badge's visual tier so a scanner can read "OH, they're
+                  #19 league-wide, that's the real context." */}
+              {playerRank && (
+                <>
+                  <span style={{ color: colors.textMuted, fontSize: 11 }}>·</span>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
+                    padding: '2px 8px', borderRadius: radius.full,
+                    background: `${team.color}18`, color: team.color,
+                    border: `1px solid ${team.color}40`,
+                    textTransform: 'uppercase',
+                  }}>
+                    <span style={{ fontFamily: fonts.heading, fontSize: 12, lineHeight: 1 }}>
+                      #{playerRank}
+                    </span>
+                    <span>Composite</span>
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Generate CTA */}
@@ -490,6 +564,10 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
           <VitalRow label="Bat/Thr" value={batThrow} />
           <VitalRow label="Birthplace" value={birthplace} />
           <VitalRow label="Status" value={statusLabel} dot={statusColor} />
+          {/* League rank — shown prominently in vitals so a viewer
+              sees composite standing alongside physical profile.
+              Renders arrow + delta when rank changed this week. */}
+          <LeagueRankRow ranking={player.ranking} />
         </div>
 
         {/* Col 3 — Season stats */}
