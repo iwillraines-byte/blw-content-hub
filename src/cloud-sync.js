@@ -140,6 +140,17 @@ function mapPlayerToRow(p) {
     num: p.num || null,
     position: p.position || null,
     notes: p.notes || null,
+    // Vitals (migration 004). Send nullable values through as-is — if the
+    // columns don't exist on the cloud yet the insert still succeeds
+    // because Postgrest ignores unknown keys in updates.
+    height_in:  p.heightIn  ?? p.height_in  ?? null,
+    weight_lbs: p.weightLbs ?? p.weight_lbs ?? null,
+    birthdate:  p.birthdate ?? null,
+    bats:       p.bats || null,
+    throws:     p.throws || null,
+    birthplace: p.birthplace || null,
+    status:     p.status || null,
+    nickname:   p.nickname || null,
   };
 }
 

@@ -664,11 +664,25 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     firstInitial: firstName.charAt(0).toUpperCase(),
     team: teamId,
     num: source?.num || '',
+    position: manual?.position || null,
     batting: batting || null,
     pitching: pitching || null,
     ranking: ranking || null,
     roster: rosterPlayer || null,
     manual: manual || null,
+    // Vitals — sourced from the manual_players record if present. See
+    // db/004_player_vitals.sql. All fields are optional so the PlayerPage
+    // renders a "—" placeholder when missing.
+    vitals: manual ? {
+      heightIn:   manual.height_in ?? manual.heightIn ?? null,
+      weightLbs:  manual.weight_lbs ?? manual.weightLbs ?? null,
+      birthdate:  manual.birthdate ?? null,
+      bats:       manual.bats ?? null,
+      throws:     manual.throws ?? null,
+      birthplace: manual.birthplace ?? null,
+      status:     manual.status ?? 'active',
+      nickname:   manual.nickname ?? null,
+    } : null,
     ambiguous,
     candidateCount: candidateNames.size,
   };

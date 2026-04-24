@@ -298,108 +298,157 @@ export default function TeamPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Team Header — header band + combined-stats band stacked so the team's
-          identity + composite standing + aggregate performance all read at a
-          glance. Composite rank pill lives to the right of the name so it
-          reads like an overall "ranking badge" inside the primary team mark. */}
+      {/* Team Header — matches the PlayerPage hero treatment.
+          White card with a team-colored left-accent border + a soft team-
+          colored wash behind the logo pane. Info is split across columns:
+          [logo + identity + owner] [record/pct/diff + rank] [aggregates card] */}
       <div style={{
-        background: `linear-gradient(135deg, ${team.color}, ${team.dark})`,
-        color: team.accent,
+        background: colors.white,
+        border: `1px solid ${colors.borderLight}`,
+        borderLeft: `4px solid ${team.color}`,
         borderRadius: radius.lg,
-        padding: 24,
-        display: 'flex', flexDirection: 'column', gap: 16,
+        boxShadow: '0 1px 3px rgba(17,24,39,0.04), 0 1px 2px rgba(17,24,39,0.03)',
+        overflow: 'hidden',
+        position: 'relative',
       }}>
-        {/* Top row — logo, identity, record / pct / diff */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-          {/* Light backdrop so the team logo reads on any gradient — fixes
-              MIA / CHI / LAN where logo color matches the primary team color. */}
-          <div style={{
-            background: 'rgba(255,255,255,0.92)',
-            borderRadius: radius.base,
-            padding: 8,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          }}>
-            <TeamLogo teamId={team.id} size={80} rounded="square" />
-          </div>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 1.5, opacity: 0.7 }}>
-              {team.city.toUpperCase()}
+        {/* Soft team wash behind the logo column */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, width: 260, height: '100%',
+          background: `linear-gradient(135deg, ${team.color}18, ${team.color}04 75%, transparent)`,
+          pointerEvents: 'none',
+        }} />
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 24,
+          padding: 22, alignItems: 'center', position: 'relative',
+        }}>
+          {/* Col 1 — Logo + identity */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '2 1 320px', minWidth: 280 }}>
+            <div style={{
+              background: colors.white,
+              borderRadius: radius.base,
+              padding: 10,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+              border: `2px solid ${team.color}`,
+              flexShrink: 0,
+            }}>
+              <TeamLogo teamId={team.id} size={88} rounded="square" />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '4px 0 6px' }}>
-              <div style={{ fontFamily: fonts.heading, fontSize: 42, letterSpacing: 1.5, lineHeight: 1 }}>
-                {team.name.toUpperCase()}
-              </div>
-              {/* Composite rank pill — sourced from TEAMS.rank (standings composite).
-                  Dark backdrop + white text so it reads regardless of team colors
-                  (CHI's accent is pure white, which would vanish on a light bg). */}
-              {team.rank != null && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: 'rgba(0,0,0,0.3)',
-                  color: '#FFFFFF',
-                  padding: '5px 12px', borderRadius: 999,
-                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 1.2,
-                  border: `1px solid rgba(255,255,255,0.22)`,
-                  whiteSpace: 'nowrap',
-                }}>
-                  <span style={{ fontFamily: fonts.heading, fontSize: 14, lineHeight: 1 }}>#{team.rank}</span>
-                  <span style={{ opacity: 0.85 }}>COMPOSITE</span>
-                </span>
-              )}
-            </div>
-            {team.owner && (
-              <div style={{ fontFamily: fonts.body, fontSize: 13, opacity: 0.8 }}>Owner: {team.owner}</div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>RECORD</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1 }}>{team.record}</div>
-            </div>
-            <div>
-              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>PCT</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1 }}>{team.pct}</div>
-            </div>
-            <div>
-              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, opacity: 0.6 }}>DIFF</div>
+            <div style={{ minWidth: 0 }}>
               <div style={{
-                fontFamily: fonts.heading, fontSize: 32, letterSpacing: 1,
-                color: team.diff.startsWith('+') && team.diff !== '0' ? '#4ADE80' : team.diff === '0' ? team.accent : '#F87171',
-              }}>{team.diff}</div>
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                color: colors.textSecondary, letterSpacing: 1.5, textTransform: 'uppercase',
+              }}>
+                {team.city}
+              </div>
+              <div style={{
+                fontFamily: fonts.heading, fontSize: 40, lineHeight: 0.95,
+                color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
+                margin: '3px 0 8px', textTransform: 'uppercase',
+              }}>
+                {team.name}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {team.rank != null && (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    background: `${team.color}15`, color: team.color,
+                    border: `1px solid ${team.color}40`,
+                    padding: '3px 10px', borderRadius: 999,
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                  }}>
+                    <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>#{team.rank}</span>
+                    <span>COMPOSITE</span>
+                  </span>
+                )}
+                {team.owner && (
+                  <span style={{ fontFamily: fonts.body, fontSize: 12, color: colors.textSecondary }}>
+                    <span style={{
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                      color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase',
+                      marginRight: 4,
+                    }}>Owner</span>
+                    {team.owner}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Bottom row — combined team stats. Hidden until live data arrives. */}
-        {teamAggregates && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
-            gap: 14,
-            paddingTop: 14,
-            borderTop: '1px solid rgba(255,255,255,0.14)',
-          }}>
+          {/* Col 2 — Record / PCT / Diff mini stats */}
+          <div style={{ display: 'flex', gap: 20, flex: '1 1 240px', minWidth: 240, justifyContent: 'space-around' }}>
             {[
-              { label: 'TEAM AVG', value: teamAggregates.avg },
-              { label: 'TEAM HR',  value: teamAggregates.hr  },
-              { label: 'TEAM RBI', value: teamAggregates.rbi },
-              { label: 'AVG OPS+', value: teamAggregates.opsPlus },
-              { label: 'TEAM ERA', value: teamAggregates.era },
-              { label: 'TEAM K/4', value: teamAggregates.k4  },
-              { label: 'TEAM IP',  value: teamAggregates.ip  },
+              { label: 'RECORD', value: team.record, color: colors.text },
+              { label: 'PCT',    value: team.pct,    color: colors.text },
+              {
+                label: 'DIFF',
+                value: team.diff,
+                color: team.diff?.startsWith('+') && team.diff !== '0'
+                  ? '#15803D'
+                  : team.diff === '0' ? colors.textSecondary : '#991B1B',
+              },
             ].map(s => (
-              <div key={s.label}>
-                <div style={{ fontFamily: fonts.condensed, fontSize: 9, letterSpacing: 1, opacity: 0.6 }}>
-                  {s.label}
-                </div>
-                <div style={{ fontFamily: fonts.heading, fontSize: 22, letterSpacing: 0.6, lineHeight: 1.1 }}>
-                  {s.value}
-                </div>
+              <div key={s.label} style={{ textAlign: 'center' }}>
+                <div style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                  color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+                }}>{s.label}</div>
+                <div style={{
+                  fontFamily: fonts.heading, fontSize: 28, lineHeight: 1,
+                  color: s.color, letterSpacing: 0.4, marginTop: 2,
+                }}>{s.value || '—'}</div>
               </div>
             ))}
           </div>
-        )}
+
+          {/* Col 3 — Combined team aggregates card */}
+          {teamAggregates && (
+            <div style={{
+              minWidth: 240, flex: '1 1 240px',
+              background: colors.white,
+              border: `1px solid ${colors.borderLight}`,
+              borderRadius: radius.base,
+              overflow: 'hidden',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}>
+              <div style={{
+                background: `linear-gradient(135deg, ${team.color}, ${team.dark})`,
+                color: '#fff',
+                padding: '8px 12px',
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                letterSpacing: 1.2, textAlign: 'center', textTransform: 'uppercase',
+              }}>
+                Team Aggregates
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+                padding: '10px 4px', gap: 2,
+              }}>
+                {[
+                  { label: 'AVG',  value: teamAggregates.avg },
+                  { label: 'HR',   value: teamAggregates.hr,  highlight: true },
+                  { label: 'ERA',  value: teamAggregates.era },
+                  { label: 'K/4',  value: teamAggregates.k4  },
+                ].map(t => (
+                  <div key={t.label} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                    padding: '4px 2px',
+                  }}>
+                    <div style={{
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                      color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase',
+                    }}>{t.label}</div>
+                    <div style={{
+                      fontFamily: fonts.heading, fontSize: 22,
+                      color: t.highlight ? team.color : colors.text,
+                      lineHeight: 1, letterSpacing: 0.5,
+                    }}>{t.value ?? '—'}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Team Stats Summary */}

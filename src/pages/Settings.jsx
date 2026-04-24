@@ -7,6 +7,7 @@ import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth, isAdminRole } from '../auth';
 import PeopleAdminCard from './PeopleAdmin';
+import TypographyCard from './TypographyCard';
 
 export default function Settings() {
   const { role } = useAuth();
@@ -42,6 +43,9 @@ export default function Settings() {
 
       {/* People admin — only visible to master_admin / admin roles. */}
       {isAdminRole(role) && <PeopleAdminCard />}
+
+      {/* Typography — personal preference, visible to everyone */}
+      <TypographyCard />
 
       <Card>
         <SectionHeading>API status</SectionHeading>

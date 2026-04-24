@@ -41,8 +41,12 @@ export const colors = {
   infoBorder: 'rgba(59, 130, 246, 0.2)',
 };
 
+// `heading` resolves via a CSS custom property so it can be swapped at
+// runtime (Settings → Typography picker, see src/fonts.js). The fallback
+// inside var() makes static builds, SSR, and pre-bootstrap renders still
+// look correct before applyFont() runs.
 export const fonts = {
-  heading: "'Bebas Neue', sans-serif",
+  heading: 'var(--font-heading, "Bebas Neue", sans-serif)',
   body: "'Barlow', sans-serif",
   condensed: "'Barlow Condensed', sans-serif",
 };
