@@ -670,6 +670,51 @@ export default function PlayerPage() {
     return urls;
   }, [media, teamMedia]);
 
+  // ─── Photo-picker callbacks ────────────────────────────────────────────
+  // IMPORTANT: these useCallbacks MUST live above every conditional return
+  // below — React's rules-of-hooks don't allow hook counts to change
+  // between renders. (First-render hits "!loaded" → early return, later
+  // renders don't — would change hook count and white-screen the page.)
+  //
+  // Open the photo picker — lazy-load the team's media the first time so
+  // we don't fetch every team's blobs on every player page view.
+  const openPhotoPicker = useCallback(async () => {
+    if (!team?.id) return;
+    if (teamMedia.length === 0) {
+      try {
+        const tm = await findTeamMedia(team.id);
+        setTeamMedia(tm || []);
+      } catch (err) {
+        console.warn('findTeamMedia failed', err);
+      }
+    }
+    setPhotoPickerOpen(true);
+  }, [team?.id, teamMedia.length]);
+
+  // Write the profile_media_id override and update local state so the
+  // new avatar renders immediately without a round-trip refetch.
+  const choosePhoto = useCallback(async (mediaId) => {
+    if (!team?.id || !player?.lastName) return;
+    setSavingPhoto(true);
+    try {
+      await upsertManualPlayer({
+        team: team.id,
+        lastName: player.lastName,
+        firstInitial: player.firstInitial,
+        firstName: player.firstName,
+        num: player.num,
+        updates: { profile_media_id: mediaId || null },
+      });
+      setPlayer(prev => prev ? { ...prev, profileMediaId: mediaId || null } : prev);
+      toast.success(mediaId ? 'Profile photo updated' : 'Profile photo reset');
+      setPhotoPickerOpen(false);
+    } catch (err) {
+      toast.error('Failed to save', { detail: err.message?.slice(0, 80) });
+    } finally {
+      setSavingPhoto(false);
+    }
+  }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
+
   if (!team) {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
@@ -735,44 +780,6 @@ export default function PlayerPage() {
   const headshot = overrideMedia
     || media.find(m => m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT');
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
-
-  // Open the photo picker — lazy-load the team's media the first time so
-  // we don't fetch every team's blobs on every player page view.
-  const openPhotoPicker = useCallback(async () => {
-    if (teamMedia.length === 0) {
-      try {
-        const tm = await findTeamMedia(team.id);
-        setTeamMedia(tm || []);
-      } catch (err) {
-        console.warn('findTeamMedia failed', err);
-      }
-    }
-    setPhotoPickerOpen(true);
-  }, [team?.id, teamMedia.length]);
-
-  // Write the profile_media_id override and update local state so the
-  // new avatar renders immediately without a round-trip refetch.
-  const choosePhoto = useCallback(async (mediaId) => {
-    if (!team?.id || !player?.lastName) return;
-    setSavingPhoto(true);
-    try {
-      await upsertManualPlayer({
-        team: team.id,
-        lastName: player.lastName,
-        firstInitial: player.firstInitial,
-        firstName: player.firstName,
-        num: player.num,
-        updates: { profile_media_id: mediaId || null },
-      });
-      setPlayer(prev => prev ? { ...prev, profileMediaId: mediaId || null } : prev);
-      toast.success(mediaId ? 'Profile photo updated' : 'Profile photo reset');
-      setPhotoPickerOpen(false);
-    } catch (err) {
-      toast.error('Failed to save', { detail: err.message?.slice(0, 80) });
-    } finally {
-      setSavingPhoto(false);
-    }
-  }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
 
   // ─── Per-stat league-rank lookups ────────────────────────────────────────
   // Rank this player against all BLW batters/pitchers for each displayed stat
