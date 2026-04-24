@@ -4,7 +4,7 @@
 //
 // Call via: GET /api/cloud-health
 
-import { getServiceClient, missingConfigResponse } from './_supabase.js';
+import { getServiceClient, missingConfigResponse, requireUser, requireAdmin } from './_supabase.js';
 
 const EXPECTED_TABLES = [
   'media', 'overlays', 'effects', 'requests', 'request_comments',
@@ -15,8 +15,12 @@ const EXPECTED_BUCKETS = ['media', 'overlays', 'effects'];
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
-  const sb = getServiceClient();
-  if (!sb) return missingConfigResponse(res);
+  // Diagnostic endpoint — restricted to admin+ so a curious athlete can't
+  // enumerate our schema state or learn what buckets exist.
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+  if (requireAdmin(res, ctx.profile)) return;
+  const sb = ctx.sb;
 
   const result = {
     configured: true,

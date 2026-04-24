@@ -17,7 +17,20 @@
 // `storage_path` set. If the DB insert fails afterwards we don't orphan-clean
 // in this pass — Phase 3's migration tool handles reconciliation.
 
-import { getServiceClient, missingConfigResponse } from './_supabase.js';
+import { getServiceClient, missingConfigResponse, requireUser } from './_supabase.js';
+
+// Phase 5c: kinds that athletes are allowed to write, keyed by the column
+// that stores the team abbreviation. If a kind isn't listed, athletes can't
+// create/update it at all. Admins/content/master_admin can write anything.
+const ATHLETE_WRITABLE = {
+  'media':         'team',
+  'request':       'team',
+  'generate-log':  'team',
+};
+// Kinds athletes are allowed to DELETE. Athletes can only delete their own
+// generate-log records (their own generation history). They cannot delete
+// media, overlays, requests, etc.
+const ATHLETE_DELETABLE = new Set(['generate-log']);
 
 const BLOB_KINDS = new Set(['media', 'overlay', 'effect', 'generate-log']);
 const BUCKET_FOR = {
@@ -53,11 +66,18 @@ const COMPOSITE_PK = {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
-  const sb = getServiceClient();
-  if (!sb) return missingConfigResponse(res);
+  // Phase 5c: every cloud-sync call now requires a valid user session.
+  // requireUser() returns null after writing a 401 if the token is missing
+  // or invalid — so we just bail if it returned null.
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+  const { user, profile, sb } = ctx;
+  const userRole = profile?.role || null;
+  const userTeamId = profile?.team_id || null;
+  const isAthlete = userRole === 'athlete';
 
   // ── GET: list records of a kind ─────────────────────────────────────────
   // Called by src/cloud-reader.js on app mount to hydrate the IndexedDB /
@@ -126,6 +146,32 @@ export default async function handler(req, res) {
     return;
   }
 
+  // ── Role gating on writes ────────────────────────────────────────────────
+  // Athletes are restricted — they can only write a small subset of kinds,
+  // and only for records pinned to their team. Admins/content bypass this.
+  if (isAthlete) {
+    if (action === 'delete' && !ATHLETE_DELETABLE.has(kind)) {
+      res.status(403).json({ error: `Athletes cannot delete ${kind} records` });
+      return;
+    }
+    if (action === 'upsert') {
+      const teamCol = ATHLETE_WRITABLE[kind];
+      if (!teamCol) {
+        res.status(403).json({ error: `Athletes cannot write ${kind} records` });
+        return;
+      }
+      const recordTeam = record?.[teamCol];
+      if (!userTeamId) {
+        res.status(403).json({ error: 'Your profile has no team assigned — ask an admin.' });
+        return;
+      }
+      if (recordTeam && recordTeam !== userTeamId) {
+        res.status(403).json({ error: `Athletes can only write records for team ${userTeamId} (got ${recordTeam})` });
+        return;
+      }
+    }
+  }
+
   try {
     // ── DELETE ──────────────────────────────────────────────────────────────
     if (action === 'delete') {
@@ -167,6 +213,15 @@ export default async function handler(req, res) {
       return;
     }
     const payload = { ...record };
+
+    // Stamp owner_id from the validated JWT so the client can't spoof it.
+    // Tables without an owner_id column (field_overrides, ai_usage) will
+    // silently ignore the extra field via Postgres strict-column behavior —
+    // so we only set it where we know the column exists.
+    const HAS_OWNER = new Set(['media', 'overlay', 'effect', 'request', 'request-comment', 'manual-player', 'generate-log']);
+    if (HAS_OWNER.has(kind)) {
+      payload.owner_id = user.id;
+    }
 
     // Upload blob first if this kind carries one.
     if (BLOB_KINDS.has(kind) && blob?.base64) {

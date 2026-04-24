@@ -5,8 +5,11 @@ import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inpu
 import { colors, fonts, radius } from '../theme';
 import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
 import { fetchRecentGenerates } from '../cloud-sync';
+import { useAuth, isAdminRole } from '../auth';
+import PeopleAdminCard from './PeopleAdmin';
 
 export default function Settings() {
+  const { role } = useAuth();
   const [driveKey, setDriveKey] = useState('');
   const [driveKeyDraft, setDriveKeyDraft] = useState('');
   const [driveKeyMasked, setDriveKeyMasked] = useState(true);
@@ -36,6 +39,9 @@ export default function Settings() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="SETTINGS" subtitle="Team colors, integrations, and configuration" />
+
+      {/* People admin — only visible to master_admin / admin roles. */}
+      {isAdminRole(role) && <PeopleAdminCard />}
 
       <Card>
         <SectionHeading>API status</SectionHeading>

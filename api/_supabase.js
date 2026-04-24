@@ -33,3 +33,72 @@ export function missingConfigResponse(res) {
     detail: 'VITE_SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY are missing from the server environment.',
   });
 }
+
+// ─── Phase 5c: Auth helpers ──────────────────────────────────────────────────
+//
+// Every protected endpoint uses requireUser() to:
+//   1. Extract the Bearer token from the Authorization header
+//   2. Validate the JWT using supabase.auth.getUser(token)
+//   3. Load the user's profile row (role, team_id) for role-based gating
+//   4. Return { user, profile } — or null after writing a 401
+//
+// Callers:
+//   const ctx = await requireUser(req, res);
+//   if (!ctx) return; // 401 already sent
+//   if (!ctx.profile || !['master_admin','admin'].includes(ctx.profile.role)) {
+//     return res.status(403).json({ error: 'Forbidden' });
+//   }
+//
+// The service-role client is used to read the profile so RLS doesn't block us
+// (the user's anon-scoped query would also work since they can read own row,
+// but the service role is simpler and the endpoint is already trusted).
+
+export async function requireUser(req, res) {
+  const sb = getServiceClient();
+  if (!sb) {
+    missingConfigResponse(res);
+    return null;
+  }
+  const auth = req.headers.authorization || req.headers.Authorization || '';
+  const match = /^Bearer\s+(.+)$/i.exec(auth);
+  if (!match) {
+    res.status(401).json({ error: 'Missing Authorization header' });
+    return null;
+  }
+  const token = match[1];
+  const { data, error } = await sb.auth.getUser(token);
+  if (error || !data?.user) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+    return null;
+  }
+  const user = data.user;
+  // Load the profile for role + team_id. If missing, continue with null
+  // profile — some endpoints may still work (e.g. logging own activity).
+  let profile = null;
+  try {
+    const { data: p } = await sb
+      .from('profiles')
+      .select('id, email, role, team_id, display_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    profile = p || null;
+  } catch {
+    // Profile table may not exist yet in a fresh deploy — don't fail auth.
+  }
+  return { user, profile, sb };
+}
+
+// Gating helper — returns true + sends a 403 if the role isn't allowed.
+// Usage: if (requireRole(res, ctx.profile, ['master_admin','admin'])) return;
+export function requireRole(res, profile, allowedRoles) {
+  if (!profile || !allowedRoles.includes(profile.role)) {
+    res.status(403).json({ error: 'Forbidden', detail: `role '${profile?.role || 'none'}' is not permitted` });
+    return true;
+  }
+  return false;
+}
+
+// Shorthand for admin-only endpoints.
+export function requireAdmin(res, profile) {
+  return requireRole(res, profile, ['master_admin', 'admin']);
+}

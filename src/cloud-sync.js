@@ -11,6 +11,7 @@
 //     users who don't have cloud enabled.
 
 import { supabaseConfigured } from './supabase-client';
+import { authedFetch } from './authed-fetch';
 
 // ─── Blob helpers ────────────────────────────────────────────────────────────
 
@@ -33,7 +34,11 @@ async function blobToBase64(blob) {
 async function postSync(body) {
   if (!supabaseConfigured) return { skipped: true };
   try {
-    const res = await fetch('/api/cloud-sync', {
+    // Phase 5c: include the user's JWT so the server can enforce role checks
+    // and stamp owner_id from a trusted source. authedFetch silently does
+    // nothing extra when there's no session (pre-login fire-and-forget
+    // will just 401 — which is fine since we're logged in by then anyway).
+    const res = await authedFetch('/api/cloud-sync', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

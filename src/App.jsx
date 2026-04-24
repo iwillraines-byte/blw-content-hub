@@ -12,6 +12,7 @@ import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
 import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
+import MyStats from './pages/MyStats';
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
 import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
@@ -26,7 +27,8 @@ const MOBILE_BREAKPOINT = 768;
 // "everyone signed-in". Athletes get a trimmed sidebar (no Files, no
 // request queue admin, no global Settings).
 const navItems = [
-  { path: "/dashboard",   label: "Dashboard",        icon: "⚡" },
+  { path: "/my-stats",    label: "My Team",          icon: "★",  roles: ['athlete'] },
+  { path: "/dashboard",   label: "Dashboard",        icon: "⚡", roles: ['master_admin', 'admin', 'content'] },
   { path: "/generate",    label: "Generate",         icon: "✦" },
   { path: "/requests",    label: "Requests",         icon: "☰",  roles: ['master_admin', 'admin', 'content'] },
   { path: "/game-center", label: "ProWiffle Stats",  icon: "▣" },
@@ -566,6 +568,17 @@ function AccessDenied({ what }) {
   );
 }
 
+// "/" redirect — athletes land on /my-stats, staff on /dashboard. Until a
+// profile loads we render null so a freshly-signed-in user doesn't flash
+// through the wrong page on the way to the right one.
+function HomeRedirect() {
+  const { role, isConfigured } = useAuth();
+  if (!isConfigured) return <Navigate to="/dashboard" replace />;
+  if (!role) return null;
+  if (isAthleteRole(role)) return <Navigate to="/my-stats" replace />;
+  return <Navigate to="/dashboard" replace />;
+}
+
 // Route gate — wraps a child in an AccessDenied shell if the current role
 // isn't allowed. Used for athlete-hidden routes like /files and /requests.
 function RequireRole({ roles, what, children }) {
@@ -637,8 +650,13 @@ function AppShell() {
           boxSizing: 'border-box',
         }}>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<ContentStudio />} />
+            <Route path="/" element={<HomeRedirect />} />
+            <Route path="/dashboard" element={
+              <RequireRole roles={['master_admin', 'admin', 'content']} what="the Dashboard">
+                <ContentStudio />
+              </RequireRole>
+            } />
+            <Route path="/my-stats" element={<MyStats />} />
             <Route path="/generate" element={<Generate />} />
             <Route path="/requests" element={
               <RequireRole roles={['master_admin', 'admin', 'content']} what="the Requests queue">

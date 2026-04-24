@@ -10,7 +10,7 @@
 //   limits: { storageBytes: 1_073_741_824, dbRows: 500_000 },   // free-tier ballpark
 // }
 
-import { getServiceClient, missingConfigResponse } from './_supabase.js';
+import { getServiceClient, missingConfigResponse, requireUser, requireRole } from './_supabase.js';
 
 const BUCKETS = ['media', 'overlays', 'effects'];
 const TABLES = [
@@ -27,7 +27,11 @@ const FREE_TIER_STORAGE_BYTES = 1024 * 1024 * 1024;
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const sb = getServiceClient();
+  // Storage meter — staff-only. Athletes don't see the Files page at all.
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+  if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return;
+  const sb = ctx.sb;
   if (!sb) return missingConfigResponse(res);
 
   const storage = { total: { bytes: 0, count: 0 } };

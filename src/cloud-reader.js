@@ -14,7 +14,8 @@
 // move on — the existing IDB cache keeps working, offline behaviour is
 // preserved.
 
-import { supabaseConfigured } from './supabase-client';
+import { supabaseConfigured, supabase } from './supabase-client';
+import { authedFetch } from './authed-fetch';
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3;
@@ -161,7 +162,10 @@ export function lastHydratedAt() {
 }
 
 async function fetchKind(kind) {
-  const res = await fetch(`/api/cloud-sync?kind=${kind}`);
+  // Phase 5c: cloud-sync now requires a JWT. authedFetch attaches it from
+  // the active session; if there's no session we'll get a 401 which the
+  // caller treats as "not yet authenticated".
+  const res = await authedFetch(`/api/cloud-sync?kind=${kind}`);
   if (!res.ok) throw new Error(`GET ${kind} → HTTP ${res.status}`);
   const data = await res.json();
   return data.records || [];

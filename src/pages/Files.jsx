@@ -15,6 +15,7 @@ import { supabaseConfigured } from '../supabase-client';
 import { backupLibraryToCloud } from '../cloud-backup';
 import { refreshFromCloud } from '../cloud-reader';
 import { useToast } from '../toast';
+import { authedFetch } from '../authed-fetch';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -616,7 +617,10 @@ export default function Files() {
   const [usage, setUsage] = useState(null);
   useEffect(() => {
     if (!supabaseConfigured) return;
-    fetch('/api/cloud-usage')
+    // Phase 5c: cloud-usage now requires an admin/content JWT. Athletes
+    // shouldn't be reaching the Files page anyway (role-gated at the route
+    // level), but authedFetch handles the token plumbing.
+    authedFetch('/api/cloud-usage')
       .then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'usage fetch failed'); }))
       .then(setUsage)
       .catch(err => setUsage({ error: err.message }));
