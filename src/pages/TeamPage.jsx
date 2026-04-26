@@ -7,7 +7,7 @@ import { ContentCalendar } from '../content-calendar';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
-import { getManualPlayersByTeam, savePlayer, deletePlayer } from '../player-store';
+import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
 
 export default function TeamPage() {
   const { slug } = useParams();
@@ -33,10 +33,22 @@ export default function TeamPage() {
   const [newPlayerNum, setNewPlayerNum] = useState('');
   const [newPlayerPosition, setNewPlayerPosition] = useState('');
 
-  const rebuildRoster = useCallback((apiRoster, teamMedia, manualList) => {
+  const rebuildRoster = useCallback((apiRoster, teamMedia, manualList, allManual = manualList) => {
     // Identity key: "FI|LASTNAME" (uppercase) — lets Logan Rose and Carson Rose
     // coexist on the same roster. Legacy records without a firstInitial use "|LASTNAME".
     const identityKey = (fi, ln) => `${String(fi || '').toUpperCase()}|${String(ln || '').toUpperCase()}`;
+
+    // Cross-team override index — a manual_players row whose team !== this
+    // team means the player has been TRADED away (or otherwise reassigned)
+    // and shouldn't appear in this team's roster even if they're still in
+    // the API's apiRoster for this team. Build a Set keyed by identity.
+    const tradedAwayKeys = new Set();
+    for (const p of allManual) {
+      if (!p?.team || p.team === team.id) continue;
+      const fi = (p.firstName || '').charAt(0).toUpperCase();
+      tradedAwayKeys.add(identityKey(fi, p.lastName));
+      tradedAwayKeys.add(identityKey('', p.lastName));  // legacy/fallback
+    }
 
     // Only consider player-scoped media when building the roster.
     const playerMedia = teamMedia.filter(m => (m.scope || 'player') === 'player');
@@ -61,10 +73,12 @@ export default function TeamPage() {
     const entries = [];
 
     // API roster — use first-initial for identity so duplicates don't collide.
+    // Skip anyone who's been traded away via a manual override.
     for (const p of apiRoster) {
       const fi = (p.firstName || '').charAt(0).toUpperCase();
       const key = identityKey(fi, p.lastName);
       const legacyKey = identityKey('', p.lastName);
+      if (tradedAwayKeys.has(key) || tradedAwayKeys.has(legacyKey)) continue;
       taken.add(key);
       entries.push({
         ...p,
@@ -151,10 +165,17 @@ export default function TeamPage() {
       fetchAllData(),
       fetchTeamRosterFromApi(team.id),
       findTeamMedia(team.id),
-      getManualPlayersByTeam(team.id),
+      // Pull EVERY manual_players row, not just this team's, so trade
+      // overrides resolve correctly (a Livingston traded to PHI needs
+      // to be EXCLUDED from DAL's roster while still in batting cache).
+      getAllManualPlayers(),
       fetchGames(),
-    ]).then(([liveData, apiRoster, teamMedia, manualList, gameList]) => {
+    ]).then(([liveData, apiRoster, teamMedia, allManual, gameList]) => {
       if (cancel) return;
+      // Filter the manual list to just this team for the existing
+      // rebuildRoster signature (it expects per-team rows). The cross-
+      // team filter happens inside the rebuild now (see updates below).
+      const manualList = allManual.filter(p => p.team === team.id);
       setMedia(teamMedia);
       setManualPlayers(manualList);
       setBatting(liveData?.batting || []);
@@ -162,7 +183,7 @@ export default function TeamPage() {
       setRankings(liveData?.rankings || []);
       setGames(gameList || []);
 
-      const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList);
+      const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList, allManual);
       setRoster(fullRoster);
 
       // Avatar lookup — prefer a headshot whose firstInitial matches the
@@ -197,12 +218,14 @@ export default function TeamPage() {
     });
     const updated = [...manualPlayers, record];
     setManualPlayers(updated);
-    // Rebuild roster
-    const [apiRoster, teamMedia] = await Promise.all([
+    // Rebuild roster — pass allManual so cross-team trade overrides
+    // continue to apply when we re-render after a local edit.
+    const [apiRoster, teamMedia, allManual] = await Promise.all([
       fetchTeamRosterFromApi(team.id),
       findTeamMedia(team.id),
+      getAllManualPlayers(),
     ]);
-    setRoster(rebuildRoster(apiRoster, teamMedia, updated));
+    setRoster(rebuildRoster(apiRoster, teamMedia, updated, allManual));
     // Reset form
     setNewPlayerFirst(''); setNewPlayerLast(''); setNewPlayerNum(''); setNewPlayerPosition('');
     setShowAddPlayer(false);
@@ -212,11 +235,12 @@ export default function TeamPage() {
     await deletePlayer(manualId);
     const updated = manualPlayers.filter(p => p.id !== manualId);
     setManualPlayers(updated);
-    const [apiRoster, teamMedia] = await Promise.all([
+    const [apiRoster, teamMedia, allManual] = await Promise.all([
       fetchTeamRosterFromApi(team.id),
       findTeamMedia(team.id),
+      getAllManualPlayers(),
     ]);
-    setRoster(rebuildRoster(apiRoster, teamMedia, updated));
+    setRoster(rebuildRoster(apiRoster, teamMedia, updated, allManual));
   };
 
   if (!team) {

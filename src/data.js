@@ -519,8 +519,26 @@ export async function getAllPlayersDirectory(mediaList = [], manualPlayers = [])
   });
 }
 
-export function getTeamRoster(teamId, mediaList = []) {
+export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
   const roster = new Map(); // key: lastName (uppercase) → player object
+
+  // Build the override index — name (lowercased) → manual_players.team.
+  // A player with an override is on the team the override says, regardless
+  // of where the API has them.
+  const overrideByName = new Map();
+  for (const p of manualPlayers) {
+    if (!p?.team) continue;
+    const key = (p.name || `${p.firstName || ''} ${p.lastName || ''}`).trim().toLowerCase();
+    if (key) overrideByName.set(key, p.team);
+  }
+
+  // Player belongs on this team if (a) override puts them here, or
+  // (b) no override and the API has them here.
+  const belongsHere = (apiPlayer) => {
+    const key = String(apiPlayer.name || '').trim().toLowerCase();
+    if (overrideByName.has(key)) return overrideByName.get(key) === teamId;
+    return apiPlayer.team === teamId;
+  };
 
   const addStatPlayer = (p, statType) => {
     const lastName = p.name.split(' ').pop();
@@ -543,13 +561,33 @@ export function getTeamRoster(teamId, mediaList = []) {
     }
   };
 
-  // Players with stats
+  // Players with stats — honoring overrides
   (_battingCache || BATTING_FALLBACK)
-    .filter(p => p.team === teamId)
+    .filter(belongsHere)
     .forEach(p => addStatPlayer(p, 'batting'));
   (_pitchingCache || PITCHING_FALLBACK)
-    .filter(p => p.team === teamId)
+    .filter(belongsHere)
     .forEach(p => addStatPlayer(p, 'pitching'));
+
+  // Manual players assigned to this team but with no API stats yet
+  // (e.g. a brand-new FA signing).
+  for (const m of manualPlayers) {
+    if (m.team !== teamId) continue;
+    const lastName = m.lastName || (m.name || '').split(' ').pop();
+    if (!lastName) continue;
+    const key = lastName.toUpperCase();
+    if (roster.has(key)) continue;
+    roster.set(key, {
+      name: m.name || `${m.firstName || ''} ${lastName}`.trim(),
+      firstName: m.firstName || '',
+      lastName,
+      team: teamId,
+      num: m.num || '',
+      stats: [],
+      hasStats: false,
+      hasMedia: false,
+    });
+  }
 
   // Add players referenced only by media
   mediaList
@@ -623,8 +661,43 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   };
 
   // Gather all candidates for this team/lastname across every source.
-  const battingAll = (_battingCache || BATTING_FALLBACK).filter(p => p.team === teamId && matchLast(p.name));
-  const pitchingAll = (_pitchingCache || PITCHING_FALLBACK).filter(p => p.team === teamId && matchLast(p.name));
+  //
+  // Key wrinkle: a player in `manualPlayers` whose team !== teamId has
+  // been TRADED to another team (manual_players is the override layer).
+  // So when assembling the candidate set for THIS teamId we:
+  //   - allow batting/pitching/roster matches whose name doesn't have
+  //     an override pointing them somewhere else
+  //   - allow manual matches whose team === teamId (they live here now)
+  // The result: visiting /teams/PHI/players/livingston resolves to the
+  // traded Livingston instead of the original DAL one.
+  const overrideByName = new Map();
+  for (const p of manualPlayers) {
+    if (!p?.team) continue;
+    const key = (p.name || `${p.firstName || ''} ${p.lastName || ''}`).trim().toLowerCase();
+    if (key) overrideByName.set(key, p.team);
+  }
+  const isOnDifferentTeamViaOverride = (apiName) => {
+    const key = String(apiName || '').trim().toLowerCase();
+    if (!overrideByName.has(key)) return false;
+    return overrideByName.get(key) !== teamId;
+  };
+
+  const battingAll = (_battingCache || BATTING_FALLBACK)
+    .filter(p => matchLast(p.name) && !isOnDifferentTeamViaOverride(p.name))
+    .filter(p => {
+      // Player belongs to teamId either because (a) the API agrees, or
+      // (b) the manual override puts them here.
+      const overrideTeam = overrideByName.get(String(p.name).toLowerCase());
+      if (overrideTeam) return overrideTeam === teamId;
+      return p.team === teamId;
+    });
+  const pitchingAll = (_pitchingCache || PITCHING_FALLBACK)
+    .filter(p => matchLast(p.name) && !isOnDifferentTeamViaOverride(p.name))
+    .filter(p => {
+      const overrideTeam = overrideByName.get(String(p.name).toLowerCase());
+      if (overrideTeam) return overrideTeam === teamId;
+      return p.team === teamId;
+    });
   const rosterCached = _rosterCache.get(teamId);
   const rosterAll = (rosterCached?.roster || []).filter(p => matchLast(p.name));
   const manualAll = manualPlayers.filter(p => p.team === teamId && matchLast(p.name || p.lastName));

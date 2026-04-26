@@ -4,7 +4,7 @@ import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi 
 import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
-import { getManualPlayersByTeam, upsertManualPlayer } from '../player-store';
+import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
 import { useAuth, isAdminRole } from '../auth';
 import { useToast } from '../toast';
@@ -756,8 +756,10 @@ export default function PlayerPage() {
   useEffect(() => {
     let cancel = false;
     if (!team?.id) return;
-    // Load stats AND team roster AND manual players in parallel
-    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getManualPlayersByTeam(team.id)])
+    // Load stats AND team roster AND ALL manual players in parallel.
+    // We pass the FULL manual_players list (not just this team's) so
+    // cross-team trade overrides resolve correctly.
+    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getAllManualPlayers()])
       .then(async ([allData, , manualList]) => {
         if (cancel) return;
         setBattingLeaders(allData.batting || []);

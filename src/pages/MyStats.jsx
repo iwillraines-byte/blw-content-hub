@@ -17,6 +17,7 @@ import { fetchAllData, getTeam, getTeamRoster, slugify, TEAMS } from '../data';
 import { Card, PageHeader, SectionHeading, RedButton, TeamLogo } from '../components';
 import { colors, fonts, radius, shadows } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
+import { getAllManualPlayers } from '../player-store';
 import { useAuth, ROLE_LABELS } from '../auth';
 
 export default function MyStats() {
@@ -24,9 +25,13 @@ export default function MyStats() {
   const team = teamId ? getTeam(teamId) : null;
   const [apiData, setApiData] = useState(null);
   const [teamMedia, setTeamMedia] = useState([]);
+  const [manualPlayers, setManualPlayers] = useState([]);
 
   useEffect(() => {
     fetchAllData().then(setApiData).catch(() => {});
+    // Pull ALL manual players (not just this team's) so trade overrides
+    // resolve correctly when filtering API rosters.
+    getAllManualPlayers().then(setManualPlayers).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -36,8 +41,8 @@ export default function MyStats() {
 
   const roster = useMemo(() => {
     if (!team) return [];
-    return getTeamRoster(team.id, teamMedia);
-  }, [team, teamMedia]);
+    return getTeamRoster(team.id, teamMedia, manualPlayers);
+  }, [team, teamMedia, manualPlayers]);
 
   // Team record — API dependent. Data.js exposes TEAMS with cached records.
   const teamRecord = team?.record || '';
