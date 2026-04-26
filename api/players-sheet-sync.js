@@ -46,6 +46,51 @@ const TEAM_ALIASES = {
   SDO: ['sdo', 'sd', 'sd orcas', 'san diego orcas', 'orcas'],
 };
 
+// Header normaliser — used by the PII deny-list and the column matcher.
+// Defined here (above any caller) so module load order never trips us up.
+const norm = (s) => String(s || '').toLowerCase().replace(/[\s_\-.()/]+/g, '');
+
+// PII deny-list — even if an admin tries to manually map one of these
+// headers to a target field via columnMap, we refuse. Better to be a
+// dumb-no than a smart-yes for personal data we have no business storing.
+//
+// Matched against the NORMALIZED header (lowercase, no punct/spaces).
+// Substring match — so "email", "your email", "email address",
+// "contactemail" all get blocked.
+const PII_DENY = [
+  'email',
+  'mail',
+  'phone',
+  'mobile',
+  'cell',
+  'tel',
+  'address',
+  'street',
+  'zip',
+  'zipcode',
+  'postal',
+  'ssn',
+  'socialsecurity',
+  'dl',          // driver's license
+  'driverlicense',
+  'passport',
+  'instagram',
+  'twitter',
+  'tiktok',
+  'snapchat',
+  'discord',
+  'venmo',
+  'cashapp',
+  'paypal',
+  'emergencycontact',
+  'guardian',
+  'parent',
+];
+function isPiiHeader(header) {
+  const n = norm(header);
+  return PII_DENY.some(p => n.includes(p));
+}
+
 // Aliases for each target field — header matching is case + space +
 // punctuation insensitive. Longer keys are tried first so "first name"
 // matches before falling back to bare "name".
@@ -64,8 +109,6 @@ const FIELD_ALIASES = {
   birthplace: ['birthplace', 'hometown', 'home', 'from', 'bornin'],
   nickname:   ['nickname', 'alias', 'nickname(s)'],
 };
-
-const norm = (s) => String(s || '').toLowerCase().replace(/[\s_\-.()/]+/g, '');
 
 // Minimal RFC-4180 CSV parser. Handles quoted fields, "" escapes, \r\n.
 // Sheets' published CSVs are well-formed so we don't need Papa Parse.
@@ -97,15 +140,19 @@ function parseCsv(text) {
 
 // Fuzzy-match every header to a known field. Returns
 // { heightIn: 'Height (in inches)', team: 'Team', ... }
+// PII headers (email, phone, address, social handles, etc.) are excluded
+// from consideration — even if their normalized form coincidentally
+// matches one of our aliases, we won't map them.
 function autoDetectColumns(headers) {
   const map = {};
   const used = new Set();
-  const normHeaders = headers.map(h => ({ raw: h, n: norm(h) }));
+  const eligible = headers.map(h => ({ raw: h, n: norm(h), pii: isPiiHeader(h) }))
+    .filter(h => !h.pii);
   // Greedy: for each field, try its aliases in order; first unused match wins.
   for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
     for (const alias of aliases) {
       const a = norm(alias);
-      const hit = normHeaders.find(h => !used.has(h.raw) && h.n === a);
+      const hit = eligible.find(h => !used.has(h.raw) && h.n === a);
       if (hit) {
         map[field] = hit.raw;
         used.add(hit.raw);
@@ -116,7 +163,7 @@ function autoDetectColumns(headers) {
     if (!map[field]) {
       for (const alias of aliases) {
         const a = norm(alias);
-        const hit = normHeaders.find(h => !used.has(h.raw) && h.n.includes(a));
+        const hit = eligible.find(h => !used.has(h.raw) && h.n.includes(a));
         if (hit) {
           map[field] = hit.raw;
           used.add(hit.raw);
@@ -126,6 +173,20 @@ function autoDetectColumns(headers) {
     }
   }
   return map;
+}
+
+// Categorize every header into mapped / pii-blocked / unmapped so the UI
+// can show admins exactly what's getting through and what isn't. Used
+// for transparency in the response, NOT for any write logic.
+function categorizeHeaders(headers, finalMap) {
+  const mappedRawSet = new Set(Object.values(finalMap));
+  const out = { mapped: [], piiBlocked: [], unmapped: [] };
+  for (const h of headers) {
+    if (isPiiHeader(h)) out.piiBlocked.push(h);
+    else if (mappedRawSet.has(h)) out.mapped.push(h);
+    else out.unmapped.push(h);
+  }
+  return out;
 }
 
 // Normalize a team string to a canonical id like "LAN". Returns null if
@@ -270,7 +331,21 @@ export default async function handler(req, res) {
   }
   const headers = rows[0].map(h => String(h || '').trim());
   const detectedMap = autoDetectColumns(headers);
-  const map = { ...detectedMap, ...(overrideMap || {}) };
+
+  // Strip any override-map entries that point at a PII-blocked header.
+  // Even if the admin tried to manually map "Email Address" to firstName
+  // or birthplace, we refuse — better to drop the row than to write PII.
+  const cleanOverride = {};
+  const blockedOverrides = [];
+  for (const [field, header] of Object.entries(overrideMap || {})) {
+    if (header && isPiiHeader(header)) {
+      blockedOverrides.push({ field, header });
+    } else if (header) {
+      cleanOverride[field] = header;
+    }
+  }
+  const map = { ...detectedMap, ...cleanOverride };
+  const headerCategories = categorizeHeaders(headers, map);
 
   // Column → index lookup for fast access
   const colIdx = {};
@@ -401,6 +476,8 @@ export default async function handler(req, res) {
   return res.status(200).json({
     detectedMap,
     headers,
+    headerCategories,           // { mapped: [...], piiBlocked: [...], unmapped: [...] }
+    blockedOverrides,           // entries the admin tried to map but were refused
     rowsInSheet: rows.length - 1,
     summary,
     rows: resultRows.slice(0, 200),  // cap response size

@@ -132,9 +132,19 @@ export default function PlayerBioImportCard() {
         Pulls a published Google Sheet (or any CSV) into <code>manual_players</code> — height/weight/birthdate/bats/throws/birthplace/nickname — so player pages show vitals. Matches existing rows by team + last name (disambiguated by first initial). <strong>Preview</strong> shows what would change without writing; <strong>Apply</strong> commits.
       </p>
 
+      {/* Privacy reassurance — shown above the form so it's the first thing
+          a security-minded admin reads. */}
+      <div style={{
+        padding: 10, marginBottom: 12, borderRadius: radius.base,
+        background: colors.infoBg, border: `1px solid ${colors.infoBorder}`,
+        fontSize: 12, color: colors.text, lineHeight: 1.5,
+      }}>
+        <strong>🛡 Privacy:</strong> The app is gated by login — only invited users can view player pages, nothing is "public on the web." Even so, this importer <strong>refuses to write</strong> any column whose header looks like PII (email, phone, address, social handles, emergency contact). Run a Preview first to see exactly what gets through.
+      </div>
+
       <details style={{ marginBottom: 12, fontSize: 12, color: colors.textSecondary }}>
         <summary style={{ cursor: 'pointer', fontWeight: 700, color: colors.text }}>
-          How to publish your sheet as CSV →
+          How to publish your sheet as CSV (with a private-subset trick) →
         </summary>
         <ol style={{ margin: '8px 0 0 20px', padding: 0, lineHeight: 1.6 }}>
           <li>In Google Sheets: <strong>File → Share → Publish to web</strong></li>
@@ -142,6 +152,9 @@ export default function PlayerBioImportCard() {
           <li>Click <strong>Publish</strong>, copy the generated URL (ends in <code>output=csv</code>)</li>
           <li>Paste it below and hit Preview</li>
         </ol>
+        <div style={{ marginTop: 10, padding: 10, background: colors.bg, borderRadius: radius.base, border: `1px solid ${colors.borderLight}` }}>
+          <strong>Even safer:</strong> create a <em>second</em> sheet (new file or new tab) with only the columns you want public-ish. Use <code>=IMPORTRANGE(...)</code> or <code>=ARRAYFORMULA(Responses!B:B)</code> to pull just team / name / height / weight / birthplace / etc. — leave email + emergency contact behind. Publish that filtered sheet instead. The published-CSV URL itself is reachable by anyone who knows it, so the less PII it contains, the better.
+        </div>
       </details>
 
       <Label>Published CSV URL</Label>
@@ -180,6 +193,53 @@ export default function PlayerBioImportCard() {
               }}>PREVIEW — no writes yet</span>
             )}
           </div>
+
+          {/* Privacy / column triage panel — shows what got through and
+              what's being intentionally ignored. Most important visual
+              for an admin worried about PII. */}
+          {preview.headerCategories && (
+            <div style={{
+              padding: 10, marginBottom: 10, borderRadius: radius.base,
+              background: colors.bg, border: `1px solid ${colors.borderLight}`,
+            }}>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase',
+                marginBottom: 8,
+              }}>What's getting through</div>
+              <HeaderRow
+                icon="✓"
+                color={colors.success}
+                label="Imported"
+                items={preview.headerCategories.mapped}
+                emptyText="(none yet — adjust the mapping below)"
+              />
+              <HeaderRow
+                icon="🛡"
+                color={colors.red}
+                label="Refused (PII)"
+                items={preview.headerCategories.piiBlocked}
+                emptyText="(no PII columns detected — good)"
+                bold
+              />
+              <HeaderRow
+                icon="○"
+                color={colors.textMuted}
+                label="Ignored"
+                items={preview.headerCategories.unmapped}
+                emptyText="(every column was mapped or refused)"
+              />
+              {preview.blockedOverrides && preview.blockedOverrides.length > 0 && (
+                <div style={{
+                  marginTop: 8, padding: 8, borderRadius: radius.sm,
+                  background: 'rgba(221,60,60,0.08)', border: `1px solid ${colors.redBorder}`,
+                  fontSize: 11, color: '#991B1B',
+                }}>
+                  <strong>Refused {preview.blockedOverrides.length} mapping override(s)</strong> — these tried to point at a PII header so we dropped them: {preview.blockedOverrides.map(o => `${o.field}→${o.header}`).join(', ')}.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Toggle mapping editor */}
           <button onClick={() => setShowMapping(v => !v)} style={{
@@ -220,7 +280,9 @@ export default function PlayerBioImportCard() {
                       style={{ ...selectStyle, fontSize: 11, padding: '4px 6px' }}
                     >
                       <option value="">— not mapped —</option>
-                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                      {headers
+                        .filter(h => !preview.headerCategories?.piiBlocked?.includes(h))
+                        .map(h => <option key={h} value={h}>{h}</option>)}
                     </select>
                     {f.desc && (
                       <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 2, lineHeight: 1.3 }}>{f.desc}</div>
@@ -289,6 +351,38 @@ export default function PlayerBioImportCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+// One row in the privacy/triage panel — icon + colored label + a wrap of
+// header chips. `bold=true` makes the label visually heavier so the
+// "Refused (PII)" row reads as the safety-net it is.
+function HeaderRow({ icon, color, label, items, emptyText, bold }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '4px 0' }}>
+      <div style={{
+        flexShrink: 0, width: 110, display: 'flex', alignItems: 'center', gap: 6,
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: bold ? 800 : 700,
+        color, letterSpacing: 0.5, textTransform: 'uppercase',
+      }}>
+        <span style={{ fontSize: 12 }}>{icon}</span>
+        {label} ({items.length})
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {items.length === 0
+          ? <span style={{ fontSize: 11, color: colors.textMuted, fontStyle: 'italic' }}>{emptyText}</span>
+          : items.map(h => (
+              <span key={h} style={{
+                padding: '2px 8px', borderRadius: radius.full,
+                background: colors.white, color: colors.text,
+                border: `1px solid ${colors.borderLight}`,
+                fontSize: 10, fontFamily: fonts.body,
+                whiteSpace: 'nowrap', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis',
+              }} title={h}>{h}</span>
+            ))
+        }
+      </div>
+    </div>
   );
 }
 
