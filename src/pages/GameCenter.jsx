@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG } from '../data';
+import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
@@ -334,11 +334,34 @@ export default function GameCenter() {
         if (rp.playerId) idToTeam.set(rp.playerId, rp.team);
         if (rp.name) nameToTeam.set(rp.name.toLowerCase(), rp.team);
       }
-      const rWithTeam = r.map(p => ({
-        ...p,
-        team: idToTeam.get(p.playerId) || nameToTeam.get((p.name || '').toLowerCase()) || null,
-      }));
-      setBatting(b); setPitching(p); setRankings(rWithTeam); setLoading(false);
+      // Apply canonical-team override + name resolution to every leaderboard
+      // entry. Stats stay (they're tied to the player); the team field is
+      // overridden so traded/renamed players show under their real team.
+      const overlayCanonical = (player) => {
+        const canonical = resolveCanonicalName(player.name || '');
+        const canonTeam = canonicalTeamOf(canonical);
+        return {
+          ...player,
+          name: canonical || player.name,
+          team: canonTeam || player.team,
+        };
+      };
+      const rWithTeam = r.map(p => {
+        const canonical = resolveCanonicalName(p.name || '');
+        const canonTeam = canonicalTeamOf(canonical);
+        return {
+          ...p,
+          name: canonical || p.name,
+          team: canonTeam
+            || idToTeam.get(p.playerId)
+            || nameToTeam.get((canonical || p.name || '').toLowerCase())
+            || null,
+        };
+      });
+      setBatting(b.map(overlayCanonical));
+      setPitching(p.map(overlayCanonical));
+      setRankings(rWithTeam);
+      setLoading(false);
     });
   }, []);
 

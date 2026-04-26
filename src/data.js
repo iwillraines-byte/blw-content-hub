@@ -648,6 +648,45 @@ export async function getAllPlayersDirectory(mediaList = [], manualPlayers = [])
     }
   }
 
+  // Canonical roster injection — ensures every league-confirmed BLW
+  // player appears in the directory even without stats / media / a
+  // manual_players row. Match by lastName because the registry's
+  // composite key uses team+initial+lastName and a canonical entry
+  // might land on a different team than the API stats record (Konnor
+  // Jaso → LV, even though batting cache has him on LAN). When the
+  // canonical team differs from a stats-only entry, prune the stats
+  // entry and replace with a canonical-team entry that carries forward
+  // the stats flags so the player's team affiliation reads correctly.
+  for (const c of CANONICAL_ROSTER_2026) {
+    const lastName = c.name.split(' ').pop();
+    const firstName = c.name.split(' ').slice(0, -1).join(' ');
+    const FI = firstName.charAt(0).toUpperCase();
+    const targetKey = key(c.team, FI, lastName);
+    if (registry.has(targetKey)) continue;
+    // Pull any existing entry for this name on the wrong team and
+    // migrate its flags onto the canonical entry. Match by name across
+    // all teams.
+    const wrongTeamEntries = [...registry.entries()].filter(([, v]) =>
+      v.lastName.toUpperCase() === lastName.toUpperCase()
+      && (!FI || (v.firstName || '').charAt(0).toUpperCase() === FI)
+      && v.team !== c.team
+    );
+    let migratedFlags = {};
+    for (const [k, v] of wrongTeamEntries) {
+      migratedFlags = {
+        hasStats:   migratedFlags.hasStats   || v.hasStats,
+        hasMedia:   migratedFlags.hasMedia   || v.hasMedia,
+        hasManual:  migratedFlags.hasManual  || v.hasManual,
+        manualId:   migratedFlags.manualId   || v.manualId,
+        isBatter:   migratedFlags.isBatter   || v.isBatter,
+        isPitcher:  migratedFlags.isPitcher  || v.isPitcher,
+        num:        migratedFlags.num        || v.num,
+      };
+      registry.delete(k);
+    }
+    upsert(c.team, c.name, migratedFlags);
+  }
+
   return Array.from(registry.values()).sort((a, b) => {
     if (a.team !== b.team) return a.team.localeCompare(b.team);
     return a.lastName.localeCompare(b.lastName);
@@ -731,6 +770,29 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
       lastName,
       team: teamId,
       num: m.num || '',
+      stats: [],
+      hasStats: false,
+      hasMedia: false,
+    });
+  }
+
+  // Canonical roster injection — make sure every player the league
+  // commissioner has on this team appears in the roster, even if they
+  // don't have any stats yet (rookie, brand-new signing, position
+  // player who hasn't pitched). Without this, team rosters could come
+  // up short of the canonical seven.
+  for (const c of CANONICAL_ROSTER_2026) {
+    if (c.team !== teamId) continue;
+    const lastName = c.name.split(' ').pop();
+    const key = lastName.toUpperCase();
+    if (roster.has(key)) continue;
+    const firstName = c.name.split(' ').slice(0, -1).join(' ');
+    roster.set(key, {
+      name: c.name,
+      firstName,
+      lastName,
+      team: teamId,
+      num: '',
       stats: [],
       hasStats: false,
       hasMedia: false,
@@ -841,12 +903,19 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     return apiPlayer.team === teamId;
   };
 
+  // Player-page lookup intentionally does NOT enforce the canonical
+  // active-roster filter — a free agent or non-BLW player should still
+  // get their page if you click their name in the stats leaderboard.
+  // The team-affiliation (`belongsToThisTeam`) check is enough to keep
+  // the lookup scoped: if you visit /teams/LV/players/livingston you'll
+  // get whichever Livingston is on LV per canonical/override, not the
+  // DAL one.
   const battingAll = (_battingCache || BATTING_FALLBACK)
     .filter(p => matchLast(p.name))
-    .filter(p => isOnActiveRoster(p.name) && belongsToThisTeam(p));
+    .filter(belongsToThisTeam);
   const pitchingAll = (_pitchingCache || PITCHING_FALLBACK)
     .filter(p => matchLast(p.name))
-    .filter(p => isOnActiveRoster(p.name) && belongsToThisTeam(p));
+    .filter(belongsToThisTeam);
   const rosterCached = _rosterCache.get(teamId);
   const rosterAll = (rosterCached?.roster || []).filter(p => matchLast(p.name));
   const manualAll = manualPlayers.filter(p => p.team === teamId && matchLast(p.name || p.lastName));
