@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS } from '../data';
+import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, resolveCanonicalName } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
@@ -73,12 +73,21 @@ export default function TeamPage() {
     const entries = [];
 
     // API roster — use first-initial for identity so duplicates don't collide.
-    // Skip anyone who's been traded away via a manual override.
+    // Skip anyone who's been traded away via a manual override OR isn't on
+    // the canonical 2026 active roster (filters out FAs + dev-league
+    // residue that the API still surfaces).
     for (const p of apiRoster) {
       const fi = (p.firstName || '').charAt(0).toUpperCase();
       const key = identityKey(fi, p.lastName);
       const legacyKey = identityKey('', p.lastName);
       if (tradedAwayKeys.has(key) || tradedAwayKeys.has(legacyKey)) continue;
+      const fullName = p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim();
+      if (!isOnActiveRoster(fullName)) continue;
+      // If the canonical roster puts them on a DIFFERENT team than the
+      // API + no override exists, defer to canonical (skip here, the
+      // canonical-team holder will pick them up).
+      const canonTeam = canonicalTeamOf(fullName);
+      if (canonTeam && canonTeam !== team.id) continue;
       taken.add(key);
       entries.push({
         ...p,
@@ -87,6 +96,11 @@ export default function TeamPage() {
         source: 'api',
       });
     }
+
+    // Players the canonical roster places on THIS team but the API
+    // doesn't (e.g. Konnor Jaso → LV) come through via the manualList
+    // loop below — the trades preset creates manual_players rows for
+    // every override, so the canonical-team-mismatch case is covered.
 
     // Manual players not already represented in the API roster
     for (const p of manualList) {
@@ -111,12 +125,19 @@ export default function TeamPage() {
       });
     }
 
-    // Media-only players (not in API, not manually added)
+    // Media-only players (not in API, not manually added). Filtered against
+    // the canonical lastname set so a media file tagged for a free-agent
+    // doesn't conjure them onto the roster.
+    const canonicalLastNames = new Set();
+    for (const e of entries) canonicalLastNames.add(e.lastName.toUpperCase());
     for (const m of playerMedia) {
       if (!m.player || m.player === 'TEAM' || m.player === 'LEAGUE') continue;
       const fi = (m.firstInitial || '').toUpperCase();
       const key = identityKey(fi, m.player);
       if (taken.has(key)) continue;
+      // Drop media tagged for a lastname that isn't on this team's
+      // already-built roster (which respects canonical + overrides).
+      if (!canonicalLastNames.has(String(m.player).toUpperCase())) continue;
       // Don't create a media-only player if the same lastname already exists
       // via API under a *different* initial — that's likely the same person
       // whose file was tagged before the initial convention existed.

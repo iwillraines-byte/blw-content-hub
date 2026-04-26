@@ -43,11 +43,12 @@
 import { requireUser, requireAdmin } from './_supabase.js';
 
 // Canonical BLW team mapping — matches src/data.js TEAMS. Values are the
-// set of strings a sheet might contain for each team_id.
+// set of strings a sheet might contain for each team_id. Both 'LV' and
+// the legacy 'LVS' resolve to LV after the rename.
 const TEAM_ALIASES = {
   LAN: ['lan', 'la', 'la naturals', 'los angeles naturals', 'naturals'],
   AZS: ['azs', 'az', 'az saguaros', 'arizona saguaros', 'saguaros'],
-  LVS: ['lvs', 'lv', 'lv scorpions', 'las vegas scorpions', 'scorpions'],
+  LV:  ['lv', 'lvs', 'lv scorpions', 'las vegas scorpions', 'scorpions'],
   NYG: ['nyg', 'ny', 'ny greenapples', 'ny green apples', 'new york green apples', 'green apples', 'greenapples'],
   DAL: ['dal', 'dal pandas', 'dallas pandas', 'pandas'],
   BOS: ['bos', 'bos harborhawks', 'bos harbor hawks', 'boston harbor hawks', 'harbor hawks', 'harborhawks'],
@@ -56,6 +57,22 @@ const TEAM_ALIASES = {
   MIA: ['mia', 'mia mirage', 'miami mirage', 'mirage'],
   SDO: ['sdo', 'sd', 'sd orcas', 'san diego orcas', 'orcas'],
 };
+
+// Name aliases — same set as src/data.js NAME_ALIASES. Server-side
+// duplicate so the bio importer can normalize before lookup. Keys are
+// normalized; values are the canonical display name.
+const NAME_ALIASES = {
+  'mychal witty jr.': 'Myc Witty',
+  'mychal witty jr':  'Myc Witty',
+  'mychal witty':     'Myc Witty',
+  'nick martinez':    'Edward Martinez',
+  'eddie martinez':   'Edward Martinez',
+  'ed martinez':      'Edward Martinez',
+};
+const _normName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+function resolveCanonicalName(name) {
+  return NAME_ALIASES[_normName(name)] || name;
+}
 
 // Header normaliser — used by the PII deny-list and the column matcher.
 // Defined here (above any caller) so module load order never trips us up.
@@ -491,6 +508,16 @@ export default async function handler(req, res) {
       summary.skipped++;
       resultRows.push({ row: r + 1, status: 'skipped', reason: 'No last name', record: raw });
       continue;
+    }
+    // Canonical-name resolution — "Mychal Witty Jr." in the sheet should
+    // resolve to "Myc Witty" so it merges with his existing manual_players
+    // row + the API stats keyed under the canonical name.
+    const fullNameRaw = `${firstName} ${lastName}`.trim();
+    const canonicalFull = resolveCanonicalName(fullNameRaw);
+    if (canonicalFull !== fullNameRaw) {
+      const parts = canonicalFull.split(/\s+/);
+      lastName = parts[parts.length - 1];
+      firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
     }
     const firstInitial = firstName.charAt(0).toUpperCase();
 

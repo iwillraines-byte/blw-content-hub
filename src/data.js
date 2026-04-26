@@ -24,7 +24,7 @@ function mapTeamAbbr(apiAbbr) {
 export const TEAMS = [
   { id:"LAN", apiAbbr:"LA", apiTeamId:45, slug:"la-naturals", name:"Los Angeles Naturals", city:"Los Angeles", color:"#0972CE", accent:"#C1CFD4", dark:"#054A8A", record:"17-1", rank:1, owner:"Kevin Costner", pct:".944", diff:"+49", logo:"/team-logos/la-naturals.png" },
   { id:"AZS", apiAbbr:"AZ", apiTeamId:42, slug:"az-saguaros", name:"Arizona Saguaros", city:"Arizona", color:"#163E35", accent:"#6AA338", dark:"#0D2820", record:"11-5", rank:2, owner:"", pct:".688", diff:"+44", logo:"/team-logos/az-saguaros.png" },
-  { id:"LVS", apiAbbr:"LV", apiTeamId:49, slug:"lv-scorpions", name:"Las Vegas Scorpions", city:"Las Vegas", color:"#1A1A1A", accent:"#A3ABB1", dark:"#0D0D0D", record:"7-4", rank:3, owner:"Marc Lasry", pct:".636", diff:"+11", logo:"/team-logos/lv-scorpions.png" },
+  { id:"LV",  apiAbbr:"LV", apiTeamId:49, slug:"lv-scorpions", name:"Las Vegas Scorpions", city:"Las Vegas", color:"#1A1A1A", accent:"#A3ABB1", dark:"#0D0D0D", record:"7-4", rank:3, owner:"Marc Lasry", pct:".636", diff:"+11", logo:"/team-logos/lv-scorpions.png" },
   { id:"NYG", apiAbbr:"NY", apiTeamId:43, slug:"ny-greenapples", name:"New York Green Apples", city:"New York", color:"#538D41", accent:"#F5B8C5", dark:"#3A6A2D", record:"7-5", rank:4, owner:"Gary Vaynerchuk", pct:".583", diff:"-4", logo:"/team-logos/ny-greenapples.png" },
   { id:"DAL", apiAbbr:"DAL", apiTeamId:44, slug:"dal-pandas", name:"Dallas Pandas", city:"Dallas", color:"#1A1A1A", accent:"#A37812", dark:"#0D0D0D", record:"6-6", rank:5, owner:"Dude Perfect", pct:".500", diff:"0", logo:"/team-logos/dal-pandas.png" },
   { id:"BOS", apiAbbr:"BOS", apiTeamId:48, slug:"bos-harborhawks", name:"Boston Harbor Hawks", city:"Boston", color:"#06205B", accent:"#F9F2D8", dark:"#041640", record:"5-6", rank:6, owner:"", pct:".455", diff:"-4", logo:"/team-logos/bos-harborhawks.png" },
@@ -49,7 +49,7 @@ const BATTING_FALLBACK = [
   { rank:3, name:"Andrew Ledet", num:"2", team:"AZS", ops_plus:200, avg:".462", obp:".521", slg:".812", hr:7 },
   { rank:4, name:"Josh Wheeler", num:"40", team:"PHI", ops_plus:194, avg:".310", obp:".465", slg:".692", hr:0 },
   { rank:5, name:"Logan Rose", num:"26", team:"DAL", ops_plus:192, avg:".357", obp:".438", slg:".654", hr:0 },
-  { rank:6, name:"Dustin Staggs", num:"28", team:"LVS", ops_plus:192, avg:".294", obp:".421", slg:".628", hr:0 },
+  { rank:6, name:"Dustin Staggs", num:"28", team:"LV", ops_plus:192, avg:".294", obp:".421", slg:".628", hr:0 },
   { rank:7, name:"Brice Clark", num:"22", team:"AZS", ops_plus:177, avg:".292", obp:".452", slg:".681", hr:0 },
   { rank:8, name:"Nick Martinez", num:"10", team:"AZS", ops_plus:174, avg:".292", obp:".412", slg:".602", hr:2 },
   { rank:9, name:"Konnor Jaso", num:"3", team:"LAN", ops_plus:171, avg:".194", obp:".398", slg:".585", hr:2 },
@@ -64,7 +64,7 @@ const PITCHING_FALLBACK = [
   { rank:5, name:"Konnor Jaso", num:"3", team:"LAN", fip:-0.31, era:"0.00", ip:"31.0", k4:"9.81", w:5, l:1 },
   { rank:6, name:"Randy Dalbey", num:"13", team:"BOS", fip:-0.18, era:"0.00", ip:"36.0", k4:"9.44", w:5, l:4 },
   { rank:7, name:"Steve Trzpis", num:"4", team:"LAN", fip:-0.02, era:"0.00", ip:"36.0", k4:"9.22", w:8, l:0 },
-  { rank:8, name:"Preston Kolm", num:"21", team:"LVS", fip:0.26, era:"0.00", ip:"17.0", k4:"10.82", w:3, l:0 },
+  { rank:8, name:"Preston Kolm", num:"21", team:"LV",  fip:0.26, era:"0.00", ip:"17.0", k4:"10.82", w:3, l:0 },
 ];
 
 // ─── DATA CACHE ─────────────────────────────────────────────────────────────
@@ -408,6 +408,141 @@ export function getAllPlayers() {
 }
 
 // URL-safe slug for player last names
+// ─── Canonical 2026 BLW active roster ───────────────────────────────────────
+// 70 players, 7 per team. The Grand Slam Systems API returns historical /
+// dev-league / cross-league players that aren't on a current BLW roster;
+// this list is the league commissioner's authoritative cut. The roster
+// filter in getTeamRoster + rebuildRoster drops anyone not in it.
+//
+// `name` is the player's CANONICAL name as it should display in the UI.
+// If the API uses a different name, add an entry to NAME_ALIASES so we
+// can look up their stats (e.g. API has "Mychal Witty Jr." but the
+// canonical name is "Myc Witty"; aliases the other direction so a CSV
+// or API lookup finds the same person).
+export const CANONICAL_ROSTER_2026 = [
+  // Arizona Saguaros
+  { team: 'AZS', name: 'Andrew Ledet' },
+  { team: 'AZS', name: 'Paul Marshall' },
+  { team: 'AZS', name: 'Will Marshall' },
+  { team: 'AZS', name: 'Edward Martinez' },
+  { team: 'AZS', name: 'Brice Clark' },
+  { team: 'AZS', name: 'Cooper Ruckel' },
+  { team: 'AZS', name: 'Jackson Richardson' },
+  // Boston Harbor Hawks
+  { team: 'BOS', name: 'Randy Dalbey' },
+  { team: 'BOS', name: 'Jake Sullivan' },
+  { team: 'BOS', name: 'Ethan Winer' },
+  { team: 'BOS', name: 'Jonathan Dalbey' },
+  { team: 'BOS', name: 'Jim Balian' },
+  { team: 'BOS', name: 'Tom Gannon' },
+  { team: 'BOS', name: 'Kyle Vonschleusingen' },
+  // Chicago Bats
+  { team: 'CHI', name: 'Keaton Kimmel' },
+  { team: 'CHI', name: 'Justin Hall' },
+  { team: 'CHI', name: 'Bryson Livingston' },
+  { team: 'CHI', name: "Ryan O'Rear" },
+  { team: 'CHI', name: 'Drew Balmaan' },
+  { team: 'CHI', name: 'Jeff Lopes' },
+  { team: 'CHI', name: 'Grant Miller' },
+  // Dallas Pandas
+  { team: 'DAL', name: 'Jaxson Blum' },
+  { team: 'DAL', name: 'Carson Rose' },
+  { team: 'DAL', name: 'Logan Rose' },
+  { team: 'DAL', name: 'Luke Rose' },
+  { team: 'DAL', name: 'Joey Jankowski' },
+  { team: 'DAL', name: 'Caleb Jeter' },
+  { team: 'DAL', name: 'Ben Dulin' },
+  // Las Vegas Scorpions (id LV)
+  { team: 'LV',  name: 'Dustin Staggs' },
+  { team: 'LV',  name: 'Jaxen Pearson' },
+  { team: 'LV',  name: 'Konnor Jaso' },         // traded from LAN
+  { team: 'LV',  name: 'Steven Hayden' },
+  { team: 'LV',  name: 'Sawyer Behen' },
+  { team: 'LV',  name: 'James Lee' },
+  { team: 'LV',  name: 'Justin Lee' },
+  // Los Angeles Naturals
+  { team: 'LAN', name: 'Jordan Robles' },
+  { team: 'LAN', name: 'Preston Kolm' },         // traded from LV
+  { team: 'LAN', name: 'Vincent Lea' },
+  { team: 'LAN', name: 'Myc Witty' },            // CSV says "Mychal Witty Jr." — alias below
+  { team: 'LAN', name: 'Joaquin Jimenez' },
+  { team: 'LAN', name: 'Bryan Owens' },
+  { team: 'LAN', name: 'Dallas Allen' },
+  // Miami Mirage
+  { team: 'MIA', name: 'Tommy Hernandez' },
+  { team: 'MIA', name: 'Cam Smith' },
+  { team: 'MIA', name: 'Jeremy Adams' },
+  { team: 'MIA', name: 'Jackson Albers' },
+  { team: 'MIA', name: 'John Paul Gunn' },
+  { team: 'MIA', name: 'Mike Stiles' },
+  { team: 'MIA', name: 'Sean Hornberger' },
+  // New York Green Apples
+  { team: 'NYG', name: 'Will Smithey' },
+  { team: 'NYG', name: 'Gus Skibbe' },
+  { team: 'NYG', name: 'Brendan Dudas' },
+  { team: 'NYG', name: 'Reid Werner' },
+  { team: 'NYG', name: 'Tyler Flakne' },
+  { team: 'NYG', name: 'Sam Skibbe' },
+  { team: 'NYG', name: 'James Kline' },
+  // Philadelphia Wiffle Club
+  { team: 'PHI', name: 'Josh Wheeler' },
+  { team: 'PHI', name: 'Dominic Citrowske' },
+  { team: 'PHI', name: 'Chandler Melton' },
+  { team: 'PHI', name: 'Kaiden Rice' },
+  { team: 'PHI', name: 'Spencer Foss' },
+  { team: 'PHI', name: 'Brody Livingston' },
+  { team: 'PHI', name: 'Jimmy Cole' },
+  // San Diego Orcas
+  { team: 'SDO', name: 'Brett Caladie' },
+  { team: 'SDO', name: 'Torin Roth' },
+  { team: 'SDO', name: 'Jack Roth' },
+  { team: 'SDO', name: 'Brandon Crone' },
+  { team: 'SDO', name: 'Trevor Bauer' },
+  { team: 'SDO', name: 'Cael Foreman' },
+  { team: 'SDO', name: 'Connor Smith' },
+];
+
+// Name aliases — maps any-known-form-of-a-player's-name to their canonical
+// name. Used to merge same-person variants from the API, the bio CSV, and
+// the canonical roster. Keys are normalized (lowercase + collapsed spaces);
+// values are the canonical display name.
+const NAME_ALIASES_RAW = {
+  // Mychal Witty Jr. is referred to as "Myc Witty" in the API + UI
+  'mychal witty jr.': 'Myc Witty',
+  'mychal witty jr':  'Myc Witty',
+  'mychal witty':     'Myc Witty',
+  // Edward Martinez also goes by Nick / Eddie
+  'nick martinez':    'Edward Martinez',
+  'eddie martinez':   'Edward Martinez',
+  'ed martinez':      'Edward Martinez',
+};
+const _normName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+export const NAME_ALIASES = Object.fromEntries(
+  Object.entries(NAME_ALIASES_RAW).map(([k, v]) => [_normName(k), v])
+);
+
+// Resolve any name (alias or canonical) to its canonical form. Falls
+// through unchanged if not aliased.
+export function resolveCanonicalName(name) {
+  return NAME_ALIASES[_normName(name)] || name;
+}
+
+// Quick membership test against the canonical roster — accepts aliases
+// transparently so callers don't have to normalize first.
+const _canonicalNameSet = new Set(CANONICAL_ROSTER_2026.map(p => _normName(p.name)));
+export function isOnActiveRoster(name) {
+  if (!name) return false;
+  const canonical = resolveCanonicalName(name);
+  return _canonicalNameSet.has(_normName(canonical));
+}
+
+// What team is this player on per the canonical roster? Honors aliases.
+const _canonicalTeamByName = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p.name), p.team]));
+export function canonicalTeamOf(name) {
+  const canonical = resolveCanonicalName(name);
+  return _canonicalTeamByName.get(_normName(canonical)) || null;
+}
+
 export function slugify(str) {
   return String(str || '')
     .toLowerCase()
@@ -520,25 +655,36 @@ export async function getAllPlayersDirectory(mediaList = [], manualPlayers = [])
 }
 
 export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
-  const roster = new Map(); // key: lastName (uppercase) → player object
+  const roster = new Map(); // key: canonicalName (uppercased) → player object
 
-  // Build the override index — name (lowercased) → manual_players.team.
-  // A player with an override is on the team the override says, regardless
-  // of where the API has them.
+  // Build the override index — canonical name → manual_players.team.
+  // Aliases are folded so "Mychal Witty Jr." override on LAN matches
+  // the API's "Myc Witty" record.
   const overrideByName = new Map();
   for (const p of manualPlayers) {
     if (!p?.team) continue;
-    const key = (p.name || `${p.firstName || ''} ${p.lastName || ''}`).trim().toLowerCase();
-    if (key) overrideByName.set(key, p.team);
+    const raw = (p.name || `${p.firstName || ''} ${p.lastName || ''}`).trim();
+    if (!raw) continue;
+    const canonical = resolveCanonicalName(raw);
+    overrideByName.set(_normName(canonical), p.team);
   }
 
-  // Player belongs on this team if (a) override puts them here, or
-  // (b) no override and the API has them here.
+  // Player belongs on this team if (a) the canonical roster says so, OR
+  // (b) an override puts them here, OR (c) no canonical/override info
+  // and the API matches. Combined with the active-roster filter below,
+  // this naturally drops free agents and dev-league residue.
   const belongsHere = (apiPlayer) => {
-    const key = String(apiPlayer.name || '').trim().toLowerCase();
+    const canonical = resolveCanonicalName(apiPlayer.name);
+    const key = _normName(canonical);
     if (overrideByName.has(key)) return overrideByName.get(key) === teamId;
+    const canonicalTeam = canonicalTeamOf(canonical);
+    if (canonicalTeam) return canonicalTeam === teamId;
     return apiPlayer.team === teamId;
   };
+
+  // Active-roster filter — anyone not in the canonical 70 is hidden
+  // (free agents, retired, dev-league, cross-league residue).
+  const activeOnly = (apiPlayer) => isOnActiveRoster(apiPlayer.name);
 
   const addStatPlayer = (p, statType) => {
     const lastName = p.name.split(' ').pop();
@@ -561,11 +707,13 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     }
   };
 
-  // Players with stats — honoring overrides
+  // Players with stats — honoring overrides + active-roster filter
   (_battingCache || BATTING_FALLBACK)
+    .filter(activeOnly)
     .filter(belongsHere)
     .forEach(p => addStatPlayer(p, 'batting'));
   (_pitchingCache || PITCHING_FALLBACK)
+    .filter(activeOnly)
     .filter(belongsHere)
     .forEach(p => addStatPlayer(p, 'pitching'));
 
@@ -673,31 +821,32 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   const overrideByName = new Map();
   for (const p of manualPlayers) {
     if (!p?.team) continue;
-    const key = (p.name || `${p.firstName || ''} ${p.lastName || ''}`).trim().toLowerCase();
-    if (key) overrideByName.set(key, p.team);
+    const raw = (p.name || `${p.firstName || ''} ${p.lastName || ''}`).trim();
+    if (!raw) continue;
+    const canonical = resolveCanonicalName(raw);
+    overrideByName.set(_normName(canonical), p.team);
   }
-  const isOnDifferentTeamViaOverride = (apiName) => {
-    const key = String(apiName || '').trim().toLowerCase();
-    if (!overrideByName.has(key)) return false;
-    return overrideByName.get(key) !== teamId;
+  // Effective team for any API name: canonical-roster team beats API
+  // team, override beats canonical-roster team. Returns null if the
+  // player is unknown to us (free agent, dev league, etc).
+  const effectiveTeamFor = (apiName) => {
+    const canonical = resolveCanonicalName(apiName);
+    const key = _normName(canonical);
+    if (overrideByName.has(key)) return overrideByName.get(key);
+    return canonicalTeamOf(canonical);
+  };
+  const belongsToThisTeam = (apiPlayer) => {
+    const eff = effectiveTeamFor(apiPlayer.name);
+    if (eff) return eff === teamId;
+    return apiPlayer.team === teamId;
   };
 
   const battingAll = (_battingCache || BATTING_FALLBACK)
-    .filter(p => matchLast(p.name) && !isOnDifferentTeamViaOverride(p.name))
-    .filter(p => {
-      // Player belongs to teamId either because (a) the API agrees, or
-      // (b) the manual override puts them here.
-      const overrideTeam = overrideByName.get(String(p.name).toLowerCase());
-      if (overrideTeam) return overrideTeam === teamId;
-      return p.team === teamId;
-    });
+    .filter(p => matchLast(p.name))
+    .filter(p => isOnActiveRoster(p.name) && belongsToThisTeam(p));
   const pitchingAll = (_pitchingCache || PITCHING_FALLBACK)
-    .filter(p => matchLast(p.name) && !isOnDifferentTeamViaOverride(p.name))
-    .filter(p => {
-      const overrideTeam = overrideByName.get(String(p.name).toLowerCase());
-      if (overrideTeam) return overrideTeam === teamId;
-      return p.team === teamId;
-    });
+    .filter(p => matchLast(p.name))
+    .filter(p => isOnActiveRoster(p.name) && belongsToThisTeam(p));
   const rosterCached = _rosterCache.get(teamId);
   const rosterAll = (rosterCached?.roster || []).filter(p => matchLast(p.name));
   const manualAll = manualPlayers.filter(p => p.team === teamId && matchLast(p.name || p.lastName));

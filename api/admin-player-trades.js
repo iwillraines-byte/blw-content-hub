@@ -21,27 +21,31 @@ import { requireUser, requireAdmin } from './_supabase.js';
 // One-click apply via the admin tool. Idempotent — re-running just
 // re-asserts the assignment (no dupes thanks to the upsert logic).
 const PRESET_TRADES_2026 = [
-  { name: 'Cael Foreman',         team: 'SDO' },
-  { name: 'Jeff Lopes',           team: 'CHI' },
-  { name: 'Brody Livingston',     team: 'PHI' },
-  { name: 'Mike Stiles',          team: 'MIA' },
-  { name: 'Caleb Jeter',          team: 'DAL' },
-  { name: 'Ben Dulin',            team: 'DAL' },
-  { name: 'Jackson Richardson',   team: 'AZS' },
-  { name: 'Kyle Vonschlesingen',  team: 'BOS' },
-  { name: 'Connor Smith',         team: 'SDO' },
-  { name: 'Grant Miller',         team: 'CHI' },
-  { name: 'Jimmy Cole',           team: 'PHI' },
-  { name: 'Sean Hornberger',      team: 'MIA' },
-  { name: 'Dallas Allen',         team: 'LAN' },
-  { name: 'James Lee',            team: 'LVS' },
-  { name: 'Justin Lee',           team: 'LVS' },
-  { name: 'James Kline',          team: 'NYG' },
-  { name: 'Konnor Jaso',          team: 'LVS' },
-  { name: 'Preston Kolm',         team: 'LAN' },
+  { name: 'Cael Foreman',          team: 'SDO' },
+  { name: 'Jeff Lopes',            team: 'CHI' },
+  { name: 'Brody Livingston',      team: 'PHI' },
+  { name: 'Mike Stiles',           team: 'MIA' },
+  { name: 'Caleb Jeter',           team: 'DAL' },
+  { name: 'Ben Dulin',             team: 'DAL' },
+  { name: 'Jackson Richardson',    team: 'AZS' },
+  { name: 'Kyle Vonschleusingen',  team: 'BOS' },     // canonical spelling
+  { name: 'Connor Smith',          team: 'SDO' },
+  { name: 'Grant Miller',          team: 'CHI' },
+  { name: 'Jimmy Cole',            team: 'PHI' },
+  { name: 'Sean Hornberger',       team: 'MIA' },
+  { name: 'Dallas Allen',          team: 'LAN' },
+  { name: 'James Lee',             team: 'LV' },      // LVS → LV
+  { name: 'Justin Lee',            team: 'LV' },
+  { name: 'James Kline',           team: 'NYG' },
+  { name: 'Konnor Jaso',           team: 'LV' },      // traded LAN → LV
+  { name: 'Preston Kolm',          team: 'LAN' },     // traded LV → LAN
 ];
 
-const VALID_TEAMS = new Set(['LAN', 'AZS', 'LVS', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO']);
+// Accept either LV (canonical) or the legacy LVS while we migrate any
+// out-of-band callers. The DB migration 008 has already converted any
+// existing rows; this just protects against stale clients.
+const VALID_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO']);
+const LEGACY_TEAM_ALIAS = { LVS: 'LV' };
 
 // Split "First Last" or "First Middle Last" into { firstName, lastName }.
 // Single-token names go into lastName so the existing player-lookup logic
@@ -77,6 +81,8 @@ async function resolveByName(sb, firstName, lastName) {
 // Upsert a team override. Creates a fresh manual_players row when no
 // match exists; otherwise updates the existing one in place.
 async function assignTeam(sb, { name, team, num }) {
+  // Forgive legacy team ids the caller might still be sending.
+  if (LEGACY_TEAM_ALIAS[team]) team = LEGACY_TEAM_ALIAS[team];
   if (!VALID_TEAMS.has(team)) throw new Error(`Unknown team id: ${team}`);
   const { firstName, lastName } = splitName(name);
   if (!lastName) throw new Error('Player name is required');
