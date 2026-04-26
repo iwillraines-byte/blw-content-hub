@@ -1,15 +1,25 @@
-// Admin-only card in Settings for ingesting player bios from a published
-// Google Sheet (or any CSV URL). Flow:
-//   1. Admin pastes the published CSV URL
-//   2. Clicks "Preview" — calls /api/players-sheet-sync with dryRun=true,
-//      sees auto-detected column mapping + row-by-row summary
-//   3. If anything looks wrong, expand mapping editor + override columns
-//   4. Clicks "Apply" — same endpoint with dryRun=false, writes to Supabase
+// Admin-only card in Settings for ingesting player bios. Three input
+// modes, all routed through the same /api/players-sheet-sync endpoint:
 //
-// The CSV URL + column overrides persist per-browser (localStorage) so
-// the next import reuses the same config without retyping.
+//   📁 Upload   — pick a CSV file from disk; client reads it and sends
+//                 contents in the request body. Most private path —
+//                 nothing is publicly hosted.
+//   📋 Paste    — paste CSV text into a textarea. Same privacy as Upload.
+//   🔗 URL      — server fetches a published Google Sheet CSV URL.
+//                 CONVENIENT but the URL is a permanent shared secret;
+//                 anyone who learns it can read the whole sheet.
+//
+// Flow regardless of mode:
+//   1. Admin chooses input + provides CSV
+//   2. Clicks "Preview" — server runs dryRun=true, returns mapping +
+//      privacy triage + per-row outcomes
+//   3. Optionally edit column mapping
+//   4. Clicks "Apply" — server runs dryRun=false, writes to Supabase
+//
+// Column overrides persist per-browser. CSV text is NEVER persisted to
+// localStorage so closing the tab discards it.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { authedJson } from '../authed-fetch';
@@ -17,6 +27,7 @@ import { useToast } from '../toast';
 
 const LS_URL = 'blw_bio_sheet_url_v1';
 const LS_MAP = 'blw_bio_sheet_map_v1';
+const LS_MODE = 'blw_bio_sheet_mode_v1';
 
 // Target fields in the order we display them in the mapping editor.
 // Labels match Supabase column-ish names so admins can match their
@@ -39,7 +50,16 @@ const FIELDS = [
 
 export default function PlayerBioImportCard() {
   const toast = useToast();
+  // Default mode = upload (most private). Persisted so a returning admin
+  // sees the same UI shape they last used.
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem(LS_MODE) || 'upload'; } catch { return 'upload'; }
+  });
   const [csvUrl, setCsvUrl] = useState(() => { try { return localStorage.getItem(LS_URL) || ''; } catch { return ''; } });
+  // CSV body — populated either by file upload or by direct paste. Never
+  // persisted to localStorage so the data evaporates with the tab close.
+  const [csvText, setCsvText] = useState('');
+  const [csvFileName, setCsvFileName] = useState('');
   const [overrideMap, setOverrideMap] = useState(() => {
     try { return JSON.parse(localStorage.getItem(LS_MAP) || '{}'); } catch { return {}; }
   });
@@ -48,25 +68,69 @@ export default function PlayerBioImportCard() {
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
+  const fileInputRef = useRef(null);
 
   const persistUrl = (v) => { try { localStorage.setItem(LS_URL, v); } catch {} };
   const persistMap = (m) => { try { localStorage.setItem(LS_MAP, JSON.stringify(m)); } catch {} };
+  const setModeAndPersist = (m) => {
+    setMode(m);
+    try { localStorage.setItem(LS_MODE, m); } catch {}
+    setPreview(null);
+    setApplied(null);
+  };
+
+  const onFilePicked = async (file) => {
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error('CSV is over 4MB — strip non-bio columns and try again');
+      return;
+    }
+    try {
+      const text = await file.text();
+      setCsvText(text);
+      setCsvFileName(file.name);
+      setPreview(null);
+      setApplied(null);
+    } catch (err) {
+      toast.error('Could not read file', { detail: err.message });
+    }
+  };
 
   const headers = preview?.headers || [];
   const detectedMap = preview?.detectedMap || {};
   const effectiveMap = useMemo(() => ({ ...detectedMap, ...overrideMap }), [detectedMap, overrideMap]);
 
+  // Build the request body once based on the active input mode. csvText
+  // wins on the server side — for url mode we omit it and only send the
+  // url. Always trims whitespace.
+  const buildBody = (dryRun) => {
+    const base = { columnMap: overrideMap, dryRun };
+    if (mode === 'url') return { ...base, csvUrl: csvUrl.trim() };
+    // If the user pasted from Sheets (tab-separated by default) and there
+    // are no commas at all, convert tabs to commas so our parser sees CSV.
+    let body = csvText;
+    if (mode === 'paste' && body.includes('\t') && !body.includes(',')) {
+      body = body.replace(/\t/g, ',');
+    }
+    return { ...base, csvText: body };
+  };
+
+  const inputReady = () => {
+    if (mode === 'url') return csvUrl.trim().length > 0;
+    return csvText.trim().length > 0;
+  };
+
   const runPreview = async () => {
-    if (!csvUrl.trim()) { toast.error('Add a CSV URL first'); return; }
+    if (!inputReady()) {
+      toast.error(mode === 'url' ? 'Add a CSV URL first' : 'Add a CSV first');
+      return;
+    }
     setLoading(true);
     setApplied(null);
     try {
-      const res = await authedJson('/api/players-sheet-sync', {
-        method: 'POST',
-        body: { csvUrl: csvUrl.trim(), columnMap: overrideMap, dryRun: true },
-      });
+      const res = await authedJson('/api/players-sheet-sync', { method: 'POST', body: buildBody(true) });
       setPreview(res);
-      persistUrl(csvUrl.trim());
+      if (mode === 'url') persistUrl(csvUrl.trim());
       const s = res.summary || {};
       toast.success(
         `Preview: ${s.created || 0} new · ${s.updated || 0} updated · ${s.skipped || 0} skipped`,
@@ -84,13 +148,11 @@ export default function PlayerBioImportCard() {
 
   const runApply = async () => {
     if (!preview) { toast.error('Run Preview first'); return; }
+    if (!inputReady()) { toast.error('CSV is no longer in memory — re-upload'); return; }
     if (!confirm(`Apply ${preview.summary.created + preview.summary.updated} changes to manual_players? This writes to the cloud.`)) return;
     setApplying(true);
     try {
-      const res = await authedJson('/api/players-sheet-sync', {
-        method: 'POST',
-        body: { csvUrl: csvUrl.trim(), columnMap: overrideMap, dryRun: false },
-      });
+      const res = await authedJson('/api/players-sheet-sync', { method: 'POST', body: buildBody(false) });
       setApplied(res);
       const s = res.summary || {};
       toast.success(`Applied: ${s.created || 0} created · ${s.updated || 0} updated`);
@@ -132,42 +194,115 @@ export default function PlayerBioImportCard() {
         Pulls a published Google Sheet (or any CSV) into <code>manual_players</code> — height/weight/birthdate/bats/throws/birthplace/nickname — so player pages show vitals. Matches existing rows by team + last name (disambiguated by first initial). <strong>Preview</strong> shows what would change without writing; <strong>Apply</strong> commits.
       </p>
 
-      {/* Privacy reassurance — shown above the form so it's the first thing
-          a security-minded admin reads. */}
+      {/* Privacy banner — recommends private modes, warns about URL mode. */}
       <div style={{
         padding: 10, marginBottom: 12, borderRadius: radius.base,
         background: colors.infoBg, border: `1px solid ${colors.infoBorder}`,
         fontSize: 12, color: colors.text, lineHeight: 1.5,
       }}>
-        <strong>🛡 Privacy:</strong> The app is gated by login — only invited users can view player pages, nothing is "public on the web." Even so, this importer <strong>refuses to write</strong> any column whose header looks like PII (email, phone, address, social handles, emergency contact). Run a Preview first to see exactly what gets through.
+        <strong>🛡 Privacy:</strong> The app is gated by login — only invited users see player pages. <strong>Upload</strong> and <strong>Paste</strong> never expose your sheet to anyone — the CSV travels straight from your browser to our database. <strong>URL mode</strong> requires you to publish the sheet, which makes it readable by anyone who learns the URL — only use it if your sheet has no PII. Email / phone / address columns are <strong>refused server-side</strong> regardless of mode.
       </div>
 
-      <details style={{ marginBottom: 12, fontSize: 12, color: colors.textSecondary }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 700, color: colors.text }}>
-          How to publish your sheet as CSV (with a private-subset trick) →
-        </summary>
-        <ol style={{ margin: '8px 0 0 20px', padding: 0, lineHeight: 1.6 }}>
-          <li>In Google Sheets: <strong>File → Share → Publish to web</strong></li>
-          <li>Content: pick the tab with responses. Format: <strong>Comma-separated values (.csv)</strong></li>
-          <li>Click <strong>Publish</strong>, copy the generated URL (ends in <code>output=csv</code>)</li>
-          <li>Paste it below and hit Preview</li>
-        </ol>
-        <div style={{ marginTop: 10, padding: 10, background: colors.bg, borderRadius: radius.base, border: `1px solid ${colors.borderLight}` }}>
-          <strong>Even safer:</strong> create a <em>second</em> sheet (new file or new tab) with only the columns you want public-ish. Use <code>=IMPORTRANGE(...)</code> or <code>=ARRAYFORMULA(Responses!B:B)</code> to pull just team / name / height / weight / birthplace / etc. — leave email + emergency contact behind. Publish that filtered sheet instead. The published-CSV URL itself is reachable by anyone who knows it, so the less PII it contains, the better.
+      {/* Mode picker — segmented control */}
+      <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: colors.bg,
+        border: `1px solid ${colors.borderLight}`, borderRadius: radius.full, marginBottom: 12 }}>
+        {[
+          { id: 'upload', icon: '📁', label: 'Upload CSV' },
+          { id: 'paste',  icon: '📋', label: 'Paste CSV' },
+          { id: 'url',    icon: '🔗', label: 'Publish URL' },
+        ].map(m => {
+          const active = mode === m.id;
+          return (
+            <button key={m.id} onClick={() => setModeAndPersist(m.id)} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: radius.full,
+              background: active ? colors.white : 'transparent',
+              color: active ? colors.text : colors.textSecondary,
+              border: `1px solid ${active ? colors.border : 'transparent'}`,
+              cursor: 'pointer',
+              fontFamily: fonts.body, fontSize: 12, fontWeight: active ? 700 : 500,
+              boxShadow: active ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+              transition: 'all 0.12s',
+            }}>
+              <span>{m.icon}</span>{m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Mode-specific input panels */}
+      {mode === 'upload' && (
+        <div>
+          <Label>CSV file</Label>
+          <div style={{
+            padding: 14, border: `2px dashed ${colors.border}`, borderRadius: radius.base,
+            background: colors.bg, textAlign: 'center',
+          }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={e => onFilePicked(e.target.files?.[0])}
+              style={{ display: 'none' }}
+            />
+            <button onClick={() => fileInputRef.current?.click()} style={{
+              padding: '8px 16px', background: colors.white, border: `1px solid ${colors.border}`,
+              borderRadius: radius.base, cursor: 'pointer',
+              fontFamily: fonts.body, fontSize: 13, fontWeight: 600, color: colors.text,
+            }}>📁 Choose CSV file</button>
+            <div style={{ marginTop: 8, fontSize: 11, color: colors.textSecondary }}>
+              {csvFileName ? <>Loaded: <strong>{csvFileName}</strong> ({csvText.length.toLocaleString()} chars)</> : <>In Google Sheets: <strong>File → Download → Comma-separated values (.csv)</strong></>}
+            </div>
+          </div>
         </div>
-      </details>
+      )}
 
-      <Label>Published CSV URL</Label>
-      <input
-        type="url"
-        placeholder="https://docs.google.com/spreadsheets/d/…/pub?output=csv"
-        value={csvUrl}
-        onChange={e => setCsvUrl(e.target.value)}
-        style={{ ...inputStyle, fontSize: 12 }}
-      />
+      {mode === 'paste' && (
+        <div>
+          <Label>Paste CSV (with headers in row 1)</Label>
+          <textarea
+            placeholder={`Team,First Name,Last Name,Height,Weight,Bats,Throws,Birthplace\nLAN,Konnor,Jaso,73,195,L,R,Long Beach CA\n...`}
+            value={csvText}
+            onChange={e => { setCsvText(e.target.value); setCsvFileName(''); setPreview(null); setApplied(null); }}
+            rows={8}
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: 10,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11,
+              background: colors.white, color: colors.text,
+              border: `1px solid ${colors.border}`, borderRadius: radius.base, resize: 'vertical',
+            }}
+          />
+          <div style={{ marginTop: 4, fontSize: 11, color: colors.textSecondary }}>
+            In Sheets: select all rows including the header → <strong>Cmd/Ctrl + C</strong> → paste here. We'll convert tabs to commas automatically if needed.
+          </div>
+        </div>
+      )}
 
+      {mode === 'url' && (
+        <div>
+          <div style={{
+            padding: 10, marginBottom: 8, borderRadius: radius.base,
+            background: 'rgba(245, 158, 11, 0.10)', border: `1px solid rgba(245, 158, 11, 0.35)`,
+            fontSize: 12, color: '#92400E', lineHeight: 1.5,
+          }}>
+            <strong>⚠ Heads up:</strong> Publishing a sheet to the web creates a permanent URL anyone with the link can read. Once leaked, the only way to revoke it is to manually unpublish in Google Sheets. <strong>Only use this mode for a sheet that contains no PII</strong> (consider building a filtered second sheet via <code>=IMPORTRANGE(...)</code>).
+          </div>
+          <Label>Published CSV URL</Label>
+          <input
+            type="url"
+            placeholder="https://docs.google.com/spreadsheets/d/…/pub?output=csv"
+            value={csvUrl}
+            onChange={e => setCsvUrl(e.target.value)}
+            style={{ ...inputStyle, fontSize: 12 }}
+          />
+        </div>
+      )}
+
+      {/* If user pasted with tabs (Sheets default copy format), auto-convert
+          to commas before sending. Cheap, idempotent — only affects the
+          send, not the textarea contents. */}
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-        <OutlineButton onClick={runPreview} disabled={loading || !csvUrl.trim()} style={{ flex: '1 1 140px' }}>
+        <OutlineButton onClick={runPreview} disabled={loading || !inputReady()} style={{ flex: '1 1 140px' }}>
           {loading ? 'Fetching…' : '👁 Preview'}
         </OutlineButton>
         <RedButton onClick={runApply} disabled={!preview || applying} style={{ flex: '1 1 140px' }}>

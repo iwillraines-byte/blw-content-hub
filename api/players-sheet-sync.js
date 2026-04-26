@@ -1,12 +1,23 @@
-// Admin endpoint for ingesting player bios from a published Google Sheet
-// (File → Share → Publish to web → CSV). Fetches the CSV server-side,
-// parses it, fuzzy-matches headers to our manual_players columns, and
-// upserts records into Supabase.
+// Admin endpoint for ingesting player bios from a CSV. Three input modes,
+// in order of privacy:
+//
+//   1. csvText  — admin paste-CSV directly into the request body (most
+//                 private, the data never sits on a public URL)
+//   2. csvFile  — admin uploads a CSV file in the browser; the client
+//                 reads it and sends contents as csvText
+//   3. csvUrl   — server fetches a published Google Sheet CSV URL
+//                 (CONVENIENT but the URL is a shared secret — anyone
+//                 who learns it can read the whole sheet forever)
+//
+// Whichever path the admin uses, the server applies the same column
+// auto-detect + PII deny-list + dry-run preview before any writes hit
+// `manual_players`.
 //
 // Request body:
 //   {
-//     csvUrl:      string,          // required — the published CSV URL
-//     columnMap?:  Record<string, string>,  // optional — override auto-detection
+//     csvText?:    string,          // raw CSV — preferred input mode
+//     csvUrl?:     string,          // public CSV URL — used only if csvText absent
+//     columnMap?:  Record<string, string>,  // optional override of auto-detection
 //     dryRun?:     boolean,         // preview only, no writes (default false)
 //   }
 //
@@ -301,27 +312,35 @@ export default async function handler(req, res) {
   }
 
   const body = req.body || {};
-  const { csvUrl, columnMap: overrideMap, dryRun = false } = body;
-  if (!csvUrl || typeof csvUrl !== 'string') {
-    return res.status(400).json({ error: 'csvUrl is required' });
-  }
-  if (!/^https?:\/\//i.test(csvUrl)) {
-    return res.status(400).json({ error: 'csvUrl must be an http(s) URL' });
-  }
+  const { csvText: bodyCsv, csvUrl, columnMap: overrideMap, dryRun = false } = body;
 
-  // Fetch the sheet
-  let csvText;
-  try {
-    const upstream = await fetch(csvUrl, {
-      headers: { 'Accept': 'text/csv,*/*' },
-      redirect: 'follow',
-    });
-    if (!upstream.ok) {
-      return res.status(502).json({ error: `Sheet fetch failed: ${upstream.status} ${upstream.statusText}` });
+  // Pick the input mode. Direct text wins — it's the most private path
+  // and the admin literally just sent us the data, so there's no reason
+  // to also fetch a URL.
+  let csvText = null;
+  let inputMode = null;
+  if (bodyCsv && typeof bodyCsv === 'string' && bodyCsv.trim().length > 0) {
+    csvText = bodyCsv;
+    inputMode = 'text';
+  } else if (csvUrl && typeof csvUrl === 'string') {
+    if (!/^https?:\/\//i.test(csvUrl)) {
+      return res.status(400).json({ error: 'csvUrl must be an http(s) URL' });
     }
-    csvText = await upstream.text();
-  } catch (err) {
-    return res.status(502).json({ error: 'Sheet fetch failed', detail: err.message });
+    inputMode = 'url';
+    try {
+      const upstream = await fetch(csvUrl, {
+        headers: { 'Accept': 'text/csv,*/*' },
+        redirect: 'follow',
+      });
+      if (!upstream.ok) {
+        return res.status(502).json({ error: `Sheet fetch failed: ${upstream.status} ${upstream.statusText}` });
+      }
+      csvText = await upstream.text();
+    } catch (err) {
+      return res.status(502).json({ error: 'Sheet fetch failed', detail: err.message });
+    }
+  } else {
+    return res.status(400).json({ error: 'Provide either csvText (preferred) or csvUrl' });
   }
 
   // Parse + detect columns
@@ -474,6 +493,7 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({
+    inputMode,                  // 'text' or 'url' — for the UI to confirm what got used
     detectedMap,
     headers,
     headerCategories,           // { mapped: [...], piiBlocked: [...], unmapped: [...] }
@@ -484,3 +504,9 @@ export default async function handler(req, res) {
     dryRun,
   });
 }
+
+// Allow larger request bodies — pasted CSVs for ~250 players can run
+// 50–80 KB, well under Vercel's defaults but worth being explicit.
+export const config = {
+  api: { bodyParser: { sizeLimit: '4mb' } },
+};
