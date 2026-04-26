@@ -63,12 +63,21 @@ export default function PlayerBioImportCard() {
   const [overrideMap, setOverrideMap] = useState(() => {
     try { return JSON.parse(localStorage.getItem(LS_MAP) || '{}'); } catch { return {}; }
   });
+  // PII override allow-list — headers the master_admin has explicitly
+  // OK'd despite matching the deny-list. Intentionally NOT persisted —
+  // each session has to re-confirm so a stale "yes" can't drift into
+  // production-data territory.
+  const [piiAllow, setPiiAllow] = useState(() => new Set());
   const [preview, setPreview] = useState(null);      // last preview response
   const [applied, setApplied] = useState(null);      // last apply response
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Whether the current user can override PII protection. Server returns
+  // role on every preview; we trust that over anything client-side.
+  const canOverridePii = preview?.requesterRole === 'master_admin';
 
   const persistUrl = (v) => { try { localStorage.setItem(LS_URL, v); } catch {} };
   const persistMap = (m) => { try { localStorage.setItem(LS_MAP, JSON.stringify(m)); } catch {} };
@@ -104,7 +113,11 @@ export default function PlayerBioImportCard() {
   // wins on the server side — for url mode we omit it and only send the
   // url. Always trims whitespace.
   const buildBody = (dryRun) => {
-    const base = { columnMap: overrideMap, dryRun };
+    const base = {
+      columnMap: overrideMap,
+      piiOverrideAllow: [...piiAllow],
+      dryRun,
+    };
     if (mode === 'url') return { ...base, csvUrl: csvUrl.trim() };
     // If the user pasted from Sheets (tab-separated by default) and there
     // are no commas at all, convert tabs to commas so our parser sees CSV.
@@ -171,10 +184,42 @@ export default function PlayerBioImportCard() {
     persistMap(next);
   };
 
+  // Explicitly UNMAP a field — sentinel value '' tells the server "ignore
+  // this even if auto-detect found it." Stored alongside other overrides.
+  const ignoreField = (field) => {
+    const next = { ...overrideMap, [field]: '' };
+    setOverrideMap(next);
+    persistMap(next);
+  };
+
+  // Master-admin only — toggle a header in/out of the PII allow-list.
+  const allowPii = (header) => setPiiAllow(prev => {
+    const next = new Set(prev);
+    next.add(header);
+    return next;
+  });
+  const revokePii = (header) => setPiiAllow(prev => {
+    const next = new Set(prev);
+    next.delete(header);
+    return next;
+  });
+
   const resetOverrides = () => {
     setOverrideMap({});
     persistMap({});
+    setPiiAllow(new Set());
   };
+
+  // Re-run the preview after any chip-level mutation so the categorization
+  // reflects the new state immediately. Debounced lightly so a quick
+  // sequence of clicks doesn't fire multiple requests. Only runs if a
+  // preview already exists — first preview must be triggered manually.
+  useEffect(() => {
+    if (!preview) return;  // wait for first manual preview
+    const t = setTimeout(() => { runPreview(); }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideMap, piiAllow]);
 
   const summary = preview?.summary;
 
@@ -330,47 +375,137 @@ export default function PlayerBioImportCard() {
           </div>
 
           {/* Privacy / column triage panel — shows what got through and
-              what's being intentionally ignored. Most important visual
-              for an admin worried about PII. */}
+              what's being intentionally ignored. Master_admin can move
+              columns between buckets via per-chip controls. Other admin
+              roles see read-only status. */}
           {preview.headerCategories && (
             <div style={{
               padding: 10, marginBottom: 10, borderRadius: radius.base,
               background: colors.bg, border: `1px solid ${colors.borderLight}`,
             }}>
               <div style={{
-                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 marginBottom: 8,
-              }}>What's getting through</div>
-              <HeaderRow
+              }}>
+                <div style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                  color: colors.textSecondary, letterSpacing: 1, textTransform: 'uppercase',
+                }}>What's getting through</div>
+                {canOverridePii && (
+                  <span style={{
+                    fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                    color: colors.red, textTransform: 'uppercase',
+                    padding: '2px 8px', borderRadius: radius.full,
+                    background: colors.redLight, border: `1px solid ${colors.redBorder}`,
+                  }}>Master admin overrides enabled</span>
+                )}
+              </div>
+
+              <ChipRow
                 icon="✓"
                 color={colors.success}
                 label="Imported"
                 items={preview.headerCategories.mapped}
                 emptyText="(none yet — adjust the mapping below)"
+                renderAction={(h) => {
+                  const field = headerToField(preview.detectedMap, overrideMap, h);
+                  return field ? (
+                    <ChipButton
+                      title={`Stop importing this column (currently → ${field})`}
+                      onClick={() => ignoreField(field)}
+                    >✕</ChipButton>
+                  ) : null;
+                }}
               />
-              <HeaderRow
+
+              <ChipRow
                 icon="🛡"
                 color={colors.red}
                 label="Refused (PII)"
                 items={preview.headerCategories.piiBlocked}
                 emptyText="(no PII columns detected — good)"
                 bold
+                renderAction={(h) => canOverridePii ? (
+                  <ChipButton
+                    danger
+                    title="Allow this column despite PII match (master_admin only)"
+                    onClick={() => allowPii(h)}
+                  >↪ allow</ChipButton>
+                ) : null}
               />
-              <HeaderRow
+
+              {preview.headerCategories.piiAllowed?.length > 0 && (
+                <ChipRow
+                  icon="⚠"
+                  color={colors.warning}
+                  label="Allowed by override"
+                  items={preview.headerCategories.piiAllowed}
+                  emptyText=""
+                  bold
+                  renderAction={(h) => (
+                    <>
+                      <select
+                        value={headerToField(preview.detectedMap, overrideMap, h) || ''}
+                        onChange={e => {
+                          if (!e.target.value) return;
+                          updateOverride(e.target.value, h);
+                        }}
+                        style={{
+                          fontSize: 10, padding: '1px 4px', border: `1px solid ${colors.border}`,
+                          borderRadius: radius.sm, background: colors.white, color: colors.text,
+                        }}
+                      >
+                        <option value="">→ map to…</option>
+                        {FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      </select>
+                      <ChipButton
+                        title="Re-block this column"
+                        onClick={() => revokePii(h)}
+                      >↶</ChipButton>
+                    </>
+                  )}
+                />
+              )}
+
+              <ChipRow
                 icon="○"
                 color={colors.textMuted}
                 label="Ignored"
                 items={preview.headerCategories.unmapped}
                 emptyText="(every column was mapped or refused)"
+                renderAction={(h) => (
+                  <select
+                    value=""
+                    onChange={e => { if (e.target.value) updateOverride(e.target.value, h); }}
+                    style={{
+                      fontSize: 10, padding: '1px 4px', border: `1px solid ${colors.border}`,
+                      borderRadius: radius.sm, background: colors.white, color: colors.text,
+                    }}
+                  >
+                    <option value="">+ import as…</option>
+                    {FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                  </select>
+                )}
               />
+
               {preview.blockedOverrides && preview.blockedOverrides.length > 0 && (
                 <div style={{
                   marginTop: 8, padding: 8, borderRadius: radius.sm,
                   background: 'rgba(221,60,60,0.08)', border: `1px solid ${colors.redBorder}`,
                   fontSize: 11, color: '#991B1B',
                 }}>
-                  <strong>Refused {preview.blockedOverrides.length} mapping override(s)</strong> — these tried to point at a PII header so we dropped them: {preview.blockedOverrides.map(o => `${o.field}→${o.header}`).join(', ')}.
+                  <strong>Refused {preview.blockedOverrides.length} mapping override(s)</strong> — pointed at PII headers that aren't in the allow-list: {preview.blockedOverrides.map(o => `${o.field}→${o.header}`).join(', ')}.
+                </div>
+              )}
+
+              {(piiAllow.size > 0 || Object.keys(overrideMap).length > 0) && (
+                <div style={{ marginTop: 8, fontSize: 11, color: colors.textSecondary }}>
+                  <strong>{piiAllow.size}</strong> PII override(s) · <strong>{Object.keys(overrideMap).length}</strong> mapping override(s) active.
+                  {' '}
+                  <button onClick={resetOverrides} style={{
+                    background: 'none', border: 'none', color: colors.red,
+                    cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: 0, textDecoration: 'underline',
+                  }}>Reset all</button>
                 </div>
               )}
             </div>
@@ -489,35 +624,74 @@ export default function PlayerBioImportCard() {
   );
 }
 
+// Reverse-lookup: given a header name, what target field is it mapped
+// to? Override map wins over auto-detect. Returns null if no mapping.
+function headerToField(detectedMap, overrideMap, header) {
+  // Override map first
+  for (const [field, h] of Object.entries(overrideMap || {})) {
+    if (h === header) return field;
+  }
+  // Auto-detect map fallback (skip fields the user explicitly unmapped)
+  for (const [field, h] of Object.entries(detectedMap || {})) {
+    if (h !== header) continue;
+    if (Object.prototype.hasOwnProperty.call(overrideMap || {}, field)
+        && (overrideMap[field] === '' || overrideMap[field] == null)) continue;
+    return field;
+  }
+  return null;
+}
+
 // One row in the privacy/triage panel — icon + colored label + a wrap of
-// header chips. `bold=true` makes the label visually heavier so the
-// "Refused (PII)" row reads as the safety-net it is.
-function HeaderRow({ icon, color, label, items, emptyText, bold }) {
+// header chips. Each chip can render an action button via renderAction(h).
+function ChipRow({ icon, color, label, items, emptyText, bold, renderAction }) {
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '4px 0' }}>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '5px 0' }}>
       <div style={{
-        flexShrink: 0, width: 110, display: 'flex', alignItems: 'center', gap: 6,
+        flexShrink: 0, width: 130, display: 'flex', alignItems: 'center', gap: 6,
         fontFamily: fonts.condensed, fontSize: 10, fontWeight: bold ? 800 : 700,
         color, letterSpacing: 0.5, textTransform: 'uppercase',
+        paddingTop: 4,
       }}>
         <span style={{ fontSize: 12 }}>{icon}</span>
         {label} ({items.length})
       </div>
       <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        {items.length === 0
+        {items.length === 0 && emptyText
           ? <span style={{ fontSize: 11, color: colors.textMuted, fontStyle: 'italic' }}>{emptyText}</span>
           : items.map(h => (
               <span key={h} style={{
-                padding: '2px 8px', borderRadius: radius.full,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 6px 3px 10px', borderRadius: radius.full,
                 background: colors.white, color: colors.text,
                 border: `1px solid ${colors.borderLight}`,
                 fontSize: 10, fontFamily: fonts.body,
-                whiteSpace: 'nowrap', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis',
-              }} title={h}>{h}</span>
+                maxWidth: 320,
+              }}>
+                <span title={h} style={{
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  maxWidth: 180,
+                }}>{h}</span>
+                {renderAction?.(h)}
+              </span>
             ))
         }
       </div>
     </div>
+  );
+}
+
+// Tiny chip-action button. `danger=true` paints it red for "allow PII".
+function ChipButton({ children, onClick, title, danger }) {
+  return (
+    <button onClick={onClick} title={title} style={{
+      background: danger ? colors.redLight : 'transparent',
+      border: `1px solid ${danger ? colors.redBorder : colors.borderLight}`,
+      color: danger ? colors.red : colors.textSecondary,
+      padding: '1px 6px', borderRadius: radius.full,
+      cursor: 'pointer', fontSize: 9, fontWeight: 700, letterSpacing: 0.3,
+      fontFamily: fonts.condensed, textTransform: 'uppercase',
+      lineHeight: 1.2,
+    }}>{children}</button>
   );
 }
 

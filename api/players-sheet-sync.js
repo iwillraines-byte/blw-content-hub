@@ -151,13 +151,13 @@ function parseCsv(text) {
 
 // Fuzzy-match every header to a known field. Returns
 // { heightIn: 'Height (in inches)', team: 'Team', ... }
-// PII headers (email, phone, address, social handles, etc.) are excluded
-// from consideration — even if their normalized form coincidentally
-// matches one of our aliases, we won't map them.
-function autoDetectColumns(headers) {
+// PII headers are excluded from consideration via the `piiCheck` predicate
+// passed in (the handler wires this up so master_admin's allow-list can
+// unblock specific columns).
+function autoDetectColumns(headers, piiCheck = isPiiHeader) {
   const map = {};
   const used = new Set();
-  const eligible = headers.map(h => ({ raw: h, n: norm(h), pii: isPiiHeader(h) }))
+  const eligible = headers.map(h => ({ raw: h, n: norm(h), pii: piiCheck(h) }))
     .filter(h => !h.pii);
   // Greedy: for each field, try its aliases in order; first unused match wins.
   for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
@@ -186,16 +186,28 @@ function autoDetectColumns(headers) {
   return map;
 }
 
-// Categorize every header into mapped / pii-blocked / unmapped so the UI
-// can show admins exactly what's getting through and what isn't. Used
-// for transparency in the response, NOT for any write logic.
-function categorizeHeaders(headers, finalMap) {
+// Categorize every header into one of four buckets. Used for transparency
+// in the response — never the source of truth for write logic.
+//   - mapped:     getting written to a target field this run
+//   - piiBlocked: PII pattern matched, NOT in master-admin allow-list, refused
+//   - piiAllowed: PII pattern matched but master-admin explicitly allowed
+//                 (may be mapped or not — the override + mapping are
+//                 independent so an allowed col can still sit unmapped)
+//   - unmapped:   non-PII, not auto-detected, not manually mapped
+function categorizeHeaders(headers, finalMap, allowSet) {
   const mappedRawSet = new Set(Object.values(finalMap));
-  const out = { mapped: [], piiBlocked: [], unmapped: [] };
+  const out = { mapped: [], piiBlocked: [], piiAllowed: [], unmapped: [] };
   for (const h of headers) {
-    if (isPiiHeader(h)) out.piiBlocked.push(h);
-    else if (mappedRawSet.has(h)) out.mapped.push(h);
-    else out.unmapped.push(h);
+    const pii = isPiiHeader(h);
+    const isMapped = mappedRawSet.has(h);
+    // Mapped headers always show as "mapped" (including allowed-PII that
+    // got pointed at a target field). Unmapped allowed-PII sits in its
+    // own bucket so the admin sees "this is unblocked but you still need
+    // to map it to a field." Unallowed PII stays refused.
+    if (isMapped)                out.mapped.push(h);
+    else if (pii && allowSet.has(h)) out.piiAllowed.push(h);
+    else if (pii)                out.piiBlocked.push(h);
+    else                          out.unmapped.push(h);
   }
   return out;
 }
@@ -312,7 +324,24 @@ export default async function handler(req, res) {
   }
 
   const body = req.body || {};
-  const { csvText: bodyCsv, csvUrl, columnMap: overrideMap, dryRun = false } = body;
+  const {
+    csvText: bodyCsv,
+    csvUrl,
+    columnMap: overrideMap,
+    dryRun = false,
+    // Headers the admin has explicitly allowed despite matching the PII
+    // deny-list. ONLY honored when the requester is master_admin — admin
+    // and content roles can't bypass the deny-list.
+    piiOverrideAllow,
+  } = body;
+  const isMasterAdmin = ctx.profile?.role === 'master_admin';
+  const allowSet = new Set(
+    (isMasterAdmin && Array.isArray(piiOverrideAllow))
+      ? piiOverrideAllow.filter(h => typeof h === 'string')
+      : []
+  );
+  // The "is this header off-limits" test now factors in the allow-list.
+  const piiBlocked = (header) => isPiiHeader(header) && !allowSet.has(header);
 
   // Pick the input mode. Direct text wins — it's the most private path
   // and the admin literally just sent us the data, so there's no reason
@@ -349,22 +378,30 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Sheet has fewer than 2 rows (need header + at least one data row)' });
   }
   const headers = rows[0].map(h => String(h || '').trim());
-  const detectedMap = autoDetectColumns(headers);
+  const detectedMap = autoDetectColumns(headers, piiBlocked);
 
-  // Strip any override-map entries that point at a PII-blocked header.
-  // Even if the admin tried to manually map "Email Address" to firstName
-  // or birthplace, we refuse — better to drop the row than to write PII.
+  // Strip any override-map entries that point at a still-blocked PII header.
+  // Headers in the master_admin allow-list are no longer "blocked" so they
+  // can be mapped freely. Empty-string overrides explicitly UNMAP a field
+  // even when auto-detect found it.
   const cleanOverride = {};
   const blockedOverrides = [];
+  const explicitlyUnmappedFields = new Set();
   for (const [field, header] of Object.entries(overrideMap || {})) {
-    if (header && isPiiHeader(header)) {
+    if (header === '' || header == null) {
+      explicitlyUnmappedFields.add(field);
+    } else if (piiBlocked(header)) {
       blockedOverrides.push({ field, header });
-    } else if (header) {
+    } else {
       cleanOverride[field] = header;
     }
   }
+  // Build the final map: auto-detect + cleaned overrides, minus any
+  // fields the admin has explicitly chosen to ignore.
   const map = { ...detectedMap, ...cleanOverride };
-  const headerCategories = categorizeHeaders(headers, map);
+  for (const f of explicitlyUnmappedFields) delete map[f];
+
+  const headerCategories = categorizeHeaders(headers, map, allowSet);
 
   // Column → index lookup for fast access
   const colIdx = {};
@@ -494,10 +531,12 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     inputMode,                  // 'text' or 'url' — for the UI to confirm what got used
+    requesterRole: ctx.profile?.role || null, // so UI can show master-admin overrides
     detectedMap,
     headers,
-    headerCategories,           // { mapped: [...], piiBlocked: [...], unmapped: [...] }
+    headerCategories,           // { mapped, piiBlocked, piiAllowed, unmapped }
     blockedOverrides,           // entries the admin tried to map but were refused
+    piiAllowApplied: [...allowSet], // which headers the admin allowed for THIS run
     rowsInSheet: rows.length - 1,
     summary,
     rows: resultRows.slice(0, 200),  // cap response size
