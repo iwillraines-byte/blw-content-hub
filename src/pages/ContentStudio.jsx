@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG } from '../data';
+import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
@@ -52,9 +52,15 @@ export default function ContentStudio() {
 
   useEffect(() => {
     fetchAllData().then(({ batting: b, pitching: p, rankings: r }) => {
-      setSuggestions(generateContentSuggestions(b, p, r));
-      setBatting(b || []);
-      setPitching(p || []);
+      // Overlay canonical team + name on every stat so post-trade
+      // players (Konnor Jaso → LV, Preston Kolm → LAN) show their real
+      // current team chip in the dashboard's stat tables, not the API
+      // team they had stats under previously.
+      const bCanon = applyCanonicalToStats(b || []);
+      const pCanon = applyCanonicalToStats(p || []);
+      setSuggestions(generateContentSuggestions(bCanon, pCanon, r));
+      setBatting(bCanon);
+      setPitching(pCanon);
       setRankings(r || []);
       setDataLoaded(true);
     });

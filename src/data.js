@@ -715,7 +715,11 @@ export async function getAllPlayersDirectory(mediaList = [], manualPlayers = [])
 }
 
 export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
-  const roster = new Map(); // key: canonicalName (uppercased) → player object
+  // Roster keyed by `FI|LASTNAME` so same-lastname teammates (Lees,
+  // Roses, Marshalls, Skibbes, Dalbeys) all get their own entry instead
+  // of merging into one.
+  const identityKey = (fi, ln) => `${String(fi || '').toUpperCase()}|${String(ln || '').toUpperCase()}`;
+  const roster = new Map();
 
   // Build the override index — canonical name → manual_players.team.
   // Aliases are folded so "Mychal Witty Jr." override on LAN matches
@@ -748,7 +752,9 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
 
   const addStatPlayer = (p, statType) => {
     const lastName = p.name.split(' ').pop();
-    const key = lastName.toUpperCase();
+    const firstName = p.name.split(' ').slice(0, -1).join(' ');
+    const fi = firstName.charAt(0).toUpperCase();
+    const key = identityKey(fi, lastName);
     const existing = roster.get(key);
     if (existing) {
       existing.stats.push(statType);
@@ -756,7 +762,8 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     } else {
       roster.set(key, {
         name: p.name,
-        firstName: p.name.split(' ').slice(0, -1).join(' '),
+        firstName,
+        firstInitial: fi,
         lastName,
         team: teamId,
         num: p.num || '',
@@ -777,17 +784,18 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     .filter(belongsHere)
     .forEach(p => addStatPlayer(p, 'pitching'));
 
-  // Manual players assigned to this team but with no API stats yet
-  // (e.g. a brand-new FA signing).
+  // Manual players assigned to this team but with no API stats yet.
   for (const m of manualPlayers) {
     if (m.team !== teamId) continue;
     const lastName = m.lastName || (m.name || '').split(' ').pop();
     if (!lastName) continue;
-    const key = lastName.toUpperCase();
+    const fi = (m.firstName || '').charAt(0).toUpperCase();
+    const key = identityKey(fi, lastName);
     if (roster.has(key)) continue;
     roster.set(key, {
       name: m.name || `${m.firstName || ''} ${lastName}`.trim(),
       firstName: m.firstName || '',
+      firstInitial: fi,
       lastName,
       team: teamId,
       num: m.num || '',
@@ -797,20 +805,22 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     });
   }
 
-  // Canonical roster injection — make sure every player the league
-  // commissioner has on this team appears in the roster, even if they
-  // don't have any stats yet (rookie, brand-new signing, position
-  // player who hasn't pitched). Without this, team rosters could come
-  // up short of the canonical seven.
+  // Canonical roster injection — make sure every league-confirmed
+  // player on this team appears, even if no API stats / no media yet.
+  // Dedup by (firstInitial + lastName) so cousins on the same team
+  // (Justin Lee + James Lee on LV, Sam + Gus Skibbe, the three Roses,
+  // the Marshalls, the Dalbeys) all surface independently.
   for (const c of CANONICAL_ROSTER_2026) {
     if (c.team !== teamId) continue;
     const lastName = c.name.split(' ').pop();
-    const key = lastName.toUpperCase();
-    if (roster.has(key)) continue;
     const firstName = c.name.split(' ').slice(0, -1).join(' ');
+    const fi = firstName.charAt(0).toUpperCase();
+    const key = identityKey(fi, lastName);
+    if (roster.has(key)) continue;
     roster.set(key, {
       name: c.name,
       firstName,
+      firstInitial: fi,
       lastName,
       team: teamId,
       num: '',
@@ -820,38 +830,33 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     });
   }
 
-  // Add players referenced only by media
+  // Annotate roster with media availability. Media files might tag a
+  // firstInitial (good — keys exactly to one entry) or might not (legacy —
+  // attach to any matching lastname). Either way, we don't synthesize new
+  // roster entries from media-only matches anymore: with the canonical
+  // injection above, every active player is already present, and a media
+  // file for someone NOT on the canonical roster would just be a tag for
+  // an inactive / FA / mistakenly-tagged file.
   mediaList
     .filter(m => m.team === teamId && m.player && m.player !== 'TEAM' && m.player !== 'LEAGUE')
     .forEach(m => {
-      const key = m.player.toUpperCase();
-      const existing = roster.get(key);
-      if (existing) {
-        existing.hasMedia = true;
-        if (!existing.num && m.num) existing.num = m.num;
-      } else {
-        // Title case last name for display
-        const lastName = m.player.charAt(0) + m.player.slice(1).toLowerCase();
-        roster.set(key, {
-          name: lastName,
-          firstName: '',
-          lastName,
-          team: teamId,
-          num: m.num || '',
-          stats: [],
-          hasStats: false,
-          hasMedia: true,
-        });
+      const fi = (m.firstInitial || '').toUpperCase();
+      const lnUpper = String(m.player).toUpperCase();
+      const exactKey = identityKey(fi, m.player);
+      const exact = fi ? roster.get(exactKey) : null;
+      if (exact) {
+        exact.hasMedia = true;
+        if (!exact.num && m.num) exact.num = m.num;
+        return;
       }
-    });
-
-  // Mark hasMedia on stat players based on media matches
-  mediaList
-    .filter(m => m.team === teamId && m.player)
-    .forEach(m => {
-      const key = m.player.toUpperCase();
-      const existing = roster.get(key);
-      if (existing) existing.hasMedia = true;
+      // No initial OR no exact match: find any roster entry whose
+      // lastName matches.
+      for (const v of roster.values()) {
+        if (v.lastName.toUpperCase() === lnUpper) {
+          v.hasMedia = true;
+          if (!v.num && m.num) v.num = m.num;
+        }
+      }
     });
 
   return Array.from(roster.values()).sort((a, b) => a.lastName.localeCompare(b.lastName));

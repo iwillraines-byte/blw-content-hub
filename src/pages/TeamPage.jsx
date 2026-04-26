@@ -161,18 +161,22 @@ export default function TeamPage() {
 
     // Canonical roster injection — guarantee every league-confirmed
     // player on this team appears, even if no API stats / no media yet.
-    // Without this, freshly drafted rookies + position players who
-    // haven't appeared in a stat line would silently drop off the
-    // roster grid. We match by lastName-uppercase so existing entries
-    // (e.g. via the API or media) aren't double-listed.
-    const lastnamesSeen = new Set(entries.map(e => e.lastName.toUpperCase()));
+    // Dedup by `firstInitial + lastName` so cousins on the same team
+    // (Justin Lee + James Lee on LV, Sam + Gus Skibbe on NYG, the
+    // three Roses on DAL, Marshalls on AZS, Dalbeys on BOS) BOTH get
+    // added — lastname alone would skip the second one.
+    const seenIdentity = new Set(entries.map(e => identityKey(e.firstInitial, e.lastName)));
     for (const c of CANONICAL_ROSTER_2026) {
       if (c.team !== team.id) continue;
       const lastName = c.name.split(' ').pop();
-      if (lastnamesSeen.has(lastName.toUpperCase())) continue;
       const firstName = c.name.split(' ').slice(0, -1).join(' ');
       const fi = firstName.charAt(0).toUpperCase();
-      lastnamesSeen.add(lastName.toUpperCase());
+      const id = identityKey(fi, lastName);
+      // Skip if a record with the same initial+lastname already exists,
+      // OR if a legacy record without an initial covers this lastname
+      // (no way to know it's the wrong person, so don't double-add).
+      if (seenIdentity.has(id)) continue;
+      seenIdentity.add(id);
       entries.push({
         playerId: null,
         name: c.name,

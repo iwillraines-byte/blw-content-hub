@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026 } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, inputStyle, selectStyle } from '../components';
+import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, FreeAgentChip, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
 import { getAllManualPlayers } from '../player-store';
@@ -324,6 +324,11 @@ export default function GameCenter() {
   const [pitchingSort, setPitchingSort] = useState({ key: 'fip', dir: 'asc' });
   const [rankingsSort, setRankingsSort] = useState({ key: 'compositePoints', dir: 'desc' });
   const [playersSort, setPlayersSort] = useState({ key: 'team', dir: 'asc' });
+  // How many ranking rows to show. Bumps by RANKINGS_PAGE_SIZE on
+  // "Load more" — keeps the initial render fast on the rare ranking
+  // dump with hundreds of cross-league entries.
+  const [rankingsVisible, setRankingsVisible] = useState(50);
+  const RANKINGS_PAGE_SIZE = 50;
 
   useEffect(() => {
     Promise.all([fetchAllData(), fetchAllRosters()]).then(([{ batting: b, pitching: p, rankings: r }, allRosters]) => {
@@ -655,20 +660,26 @@ export default function GameCenter() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRankings.slice(0, 50).map((p, i) => {
+                {filteredRankings.slice(0, rankingsVisible).map((p, i) => {
                   const team = p.team ? getTeam(p.team) : null;
                   return (
                   <tr key={p.playerId} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
                     <td style={{ ...cellFor(rankingsSort, 'currentRank'), textAlign: 'center' }}>{p.currentRank}</td>
                     <td style={{ ...cellFor(rankingsSort, 'name'), textAlign: 'left', fontWeight: 700 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {team ? <TeamLogo teamId={team.id} size={22} rounded="square" /> : <span style={{ width: 22, display: 'inline-block' }} />}
+                        {/* Logo on the left if we know the team; otherwise
+                            show a small FA chip in the same slot so the
+                            row stays aligned and the FA status is obvious. */}
+                        {team
+                          ? <TeamLogo teamId={team.id} size={22} rounded="square" />
+                          : <FreeAgentChip small />
+                        }
                         {team ? (
                           <Link to={`/teams/${team.slug}/players/${playerSlug({ name: p.name })}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
                             {p.name}
                           </Link>
                         ) : (
-                          <span>{p.name}</span>
+                          <span style={{ color: colors.textSecondary }}>{p.name}</span>
                         )}
                       </div>
                     </td>
@@ -682,6 +693,18 @@ export default function GameCenter() {
                 })}
                 {filteredRankings.length === 0 && (
                   <tr><td colSpan={5} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{rankingsSearch}"</td></tr>
+                )}
+                {filteredRankings.length > rankingsVisible && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 14, textAlign: 'center', borderTop: `1px solid ${colors.border}` }}>
+                      <OutlineButton
+                        onClick={() => setRankingsVisible(v => v + RANKINGS_PAGE_SIZE)}
+                        style={{ padding: '6px 16px', fontSize: 12 }}
+                      >
+                        Load next {Math.min(RANKINGS_PAGE_SIZE, filteredRankings.length - rankingsVisible)} · {rankingsVisible} of {filteredRankings.length} shown
+                      </OutlineButton>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
