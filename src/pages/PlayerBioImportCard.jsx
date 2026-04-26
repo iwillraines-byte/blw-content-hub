@@ -46,6 +46,9 @@ const FIELDS = [
   { key: 'throws',     label: 'Throws',        required: false, desc: 'R / L' },
   { key: 'birthplace', label: 'Birthplace',    required: false },
   { key: 'nickname',   label: 'Nickname',      required: false },
+  { key: 'instagramHandle', label: 'Instagram', required: false, desc: 'Without the @ — surfaces in player extras dropdown' },
+  { key: 'funFacts',        label: 'Fun Facts', required: false, desc: 'Free-form blurb — shows in player extras dropdown' },
+  { key: 'isRookie',        label: 'Rookie?',   required: false, desc: 'Y/N, true/false, 1/0' },
 ];
 
 export default function PlayerBioImportCard() {

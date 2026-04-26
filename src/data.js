@@ -702,6 +702,11 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
       status:     manual.status ?? 'active',
       nickname:   manual.nickname ?? null,
     } : null,
+    // Player-facing extras (db/006) — top-level so the PlayerHero can
+    // grab them without poking through `vitals`.
+    instagramHandle: manual?.instagram_handle ?? manual?.instagramHandle ?? null,
+    funFacts:        manual?.fun_facts ?? manual?.funFacts ?? null,
+    isRookie:        Boolean(manual?.is_rookie ?? manual?.isRookie ?? false),
     ambiguous,
     candidateCount: candidateNames.size,
   };

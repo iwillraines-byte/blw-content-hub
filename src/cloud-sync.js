@@ -154,6 +154,11 @@ function mapPlayerToRow(p) {
     // Profile-pic override (db/005). NULL keeps the default headshot
     // heuristic; a media.id points at a specific uploaded asset.
     profile_media_id: p.profileMediaId ?? p.profile_media_id ?? null,
+    // Player-facing extras (db/006). Surfaced as a dropdown badge + a
+    // ROOKIE chip on the PlayerHero.
+    instagram_handle: p.instagramHandle ?? p.instagram_handle ?? null,
+    fun_facts:        p.funFacts ?? p.fun_facts ?? null,
+    is_rookie:        p.isRookie ?? p.is_rookie ?? null,
   };
 }
 

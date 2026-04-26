@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo } from '../components';
@@ -368,6 +368,112 @@ function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, s
   );
 }
 
+// Compact "More info" badge that expands a small popover with the
+// player's Instagram handle (linked) and fun-facts blurb. Returns null
+// when neither piece of data is present so the chip never shows up
+// for players with empty bios.
+function ExtrasDropdown({ instagramHandle, funFacts }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  // Close on outside click + ESC, same pattern as the profile menu in App.jsx
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (!instagramHandle && !funFacts) return null;
+
+  return (
+    <div ref={rootRef} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title="Player extras"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '7px 12px', borderRadius: radius.full,
+          background: open ? colors.bg : 'transparent',
+          color: colors.textSecondary,
+          border: `1px solid ${colors.border}`,
+          cursor: 'pointer',
+          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+          letterSpacing: 0.4, textTransform: 'uppercase',
+          transition: 'background 0.12s',
+        }}
+      >
+        <span style={{ fontSize: 12 }}>ⓘ</span>
+        More
+        <span style={{
+          fontSize: 9, opacity: 0.6,
+          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.12s',
+        }}>▾</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+          minWidth: 240, maxWidth: 320,
+          background: colors.white,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.base,
+          boxShadow: '0 10px 28px rgba(17,24,39,0.14), 0 2px 6px rgba(17,24,39,0.06)',
+          zIndex: 30,
+          padding: 12,
+          display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          {instagramHandle && (
+            <div>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+                marginBottom: 4,
+              }}>Instagram</div>
+              <a
+                href={`https://instagram.com/${instagramHandle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
+                  color: colors.red, textDecoration: 'none',
+                }}
+              >
+                <span style={{ fontSize: 14 }}>📷</span>
+                @{instagramHandle}
+                <span style={{ fontSize: 10, opacity: 0.6 }}>↗</span>
+              </a>
+            </div>
+          )}
+          {funFacts && (
+            <div>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+                marginBottom: 4,
+              }}>Fun facts</div>
+              <div style={{
+                fontFamily: fonts.body, fontSize: 12, color: colors.text,
+                lineHeight: 1.5, whiteSpace: 'pre-wrap',
+              }}>{funFacts}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref, canEditPhoto, onEditPhoto }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
@@ -495,12 +601,33 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
               }}>{firstName}</div>
             )}
             <div style={{
-              fontFamily: fonts.heading,
-              fontSize: 38, lineHeight: 0.9,
-              color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
-              textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
               marginTop: firstName ? 2 : 0,
-            }}>{lastNameDisplay}</div>
+            }}>
+              <div style={{
+                fontFamily: fonts.heading,
+                fontSize: 38, lineHeight: 0.9,
+                color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
+                textTransform: 'uppercase',
+              }}>{lastNameDisplay}</div>
+              {/* Rookie chip — only renders when player.isRookie. Sits
+                  inline with the lastName so it's the first thing the
+                  eye lands on after the player's identity. */}
+              {player.isRookie && (
+                <span title="Rookie season" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: radius.full,
+                  background: 'linear-gradient(135deg, #FCD34D, #F59E0B)',
+                  color: '#451A03', fontFamily: fonts.condensed,
+                  fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  boxShadow: '0 1px 3px rgba(245, 158, 11, 0.4)',
+                  border: '1px solid rgba(245, 158, 11, 0.6)',
+                }}>
+                  <span style={{ fontSize: 10 }}>★</span> Rookie
+                </span>
+              )}
+            </div>
 
             {/* Team + jersey + position row */}
             <div style={{
@@ -546,13 +673,17 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
               )}
             </div>
 
-            {/* Generate CTA */}
-            <div style={{ marginTop: 12 }}>
+            {/* Generate CTA + extras dropdown badge */}
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Link to={generateHref} style={{ textDecoration: 'none' }}>
                 <RedButton style={{ padding: '8px 16px', fontSize: 12 }}>
                   ✦ Generate Stat Post
                 </RedButton>
               </Link>
+              <ExtrasDropdown
+                instagramHandle={player.instagramHandle}
+                funFacts={player.funFacts}
+              />
             </div>
           </div>
         </div>

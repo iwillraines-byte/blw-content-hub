@@ -85,7 +85,9 @@ const PII_DENY = [
   'dl',          // driver's license
   'driverlicense',
   'passport',
-  'instagram',
+  // Instagram intentionally NOT in this list — it's an explicit
+  // opt-in field (instagramHandle). Other socials stay blocked unless
+  // a master_admin allow-lists them via the override flow.
   'twitter',
   'tiktok',
   'snapchat',
@@ -119,6 +121,11 @@ const FIELD_ALIASES = {
   throws:     ['throws', 'throwinghand', 'throwside', 't'],
   birthplace: ['birthplace', 'hometown', 'home', 'from', 'bornin'],
   nickname:   ['nickname', 'alias', 'nickname(s)'],
+  // Player-facing extras — surfaced on the PlayerHero. Intentional
+  // opt-in fields, not PII.
+  instagramHandle: ['instagram', 'instagramhandle', 'ighandle', 'iginsta', 'ig', 'insta', 'igusername'],
+  funFacts:        ['funfacts', 'funfact', 'aboutme', 'bio', 'tellusaboutyou', 'tellusaboutyourself', 'aboutyou', 'tellusabout'],
+  isRookie:        ['rookie', 'isrookie', 'firstyear', 'firstseason', 'rookieyear', 'rookieseason'],
 };
 
 // Minimal RFC-4180 CSV parser. Handles quoted fields, "" escapes, \r\n.
@@ -291,6 +298,34 @@ function parseBirthdate(raw) {
       return `${y}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     }
   }
+  return null;
+}
+
+// Strip leading @, URL prefix, trailing slashes, etc. Returns the bare
+// handle. Refuses anything with whitespace inside (likely a paragraph
+// of text rather than a real handle).
+function parseInstagramHandle(raw) {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+  // Strip URL forms
+  s = s.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '');
+  s = s.replace(/\/+$/, '');
+  s = s.replace(/^@+/, '');
+  // Reject if there's whitespace inside or it's empty after stripping
+  if (!s || /\s/.test(s)) return null;
+  // Cap length — IG handles are <= 30 chars
+  if (s.length > 30) s = s.slice(0, 30);
+  return s;
+}
+
+// Boolean parser — accepts Y/N, yes/no, true/false, 1/0. Empty → null
+// (so we don't overwrite an existing row's value with a blank).
+function parseBoolean(raw) {
+  if (raw == null || raw === '') return null;
+  const n = String(raw).trim().toLowerCase();
+  if (['y', 'yes', 'true', '1', 't', 'rookie'].includes(n)) return true;
+  if (['n', 'no', 'false', '0', 'f', 'veteran', 'returning'].includes(n)) return false;
   return null;
 }
 
@@ -501,6 +536,18 @@ export default async function handler(req, res) {
     if (colIdx.nickname != null) {
       const nn = String(raw.nickname || '').trim();
       if (nn) updates.nickname = nn;
+    }
+    if (colIdx.instagramHandle != null) {
+      const ig = parseInstagramHandle(raw.instagramHandle);
+      if (ig) updates.instagram_handle = ig;
+    }
+    if (colIdx.funFacts != null) {
+      const ff = String(raw.funFacts || '').trim();
+      if (ff) updates.fun_facts = ff;
+    }
+    if (colIdx.isRookie != null) {
+      const r = parseBoolean(raw.isRookie);
+      if (r != null) updates.is_rookie = r;
     }
 
     // Upsert
