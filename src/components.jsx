@@ -126,9 +126,29 @@ export const TeamLogo = ({ teamId, size = 40, rounded = 'rounded', background, s
 
 // TeamChip — colored pill showing a team's ID abbreviation.
 // Pass `withLogo` to prepend a tiny logo image (falls back gracefully if logo missing).
+// FA chip — shown when a player has no team affiliation OR isn't on the
+// canonical 70 active roster. Gray pill, conveys "free agent / not on
+// a current BLW roster" without spreading misinformation about a team.
+export const FreeAgentChip = ({ small }) => (
+  <span title="Not currently on a BLW team roster" style={{
+    display: 'inline-flex', alignItems: 'center',
+    background: '#E5E7EB', color: '#374151',
+    padding: small ? '2px 7px' : '3px 10px',
+    borderRadius: radius.sm,
+    fontSize: small ? 9 : 11,
+    fontFamily: fonts.condensed,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    border: '1px solid #D1D5DB',
+  }}>FA</span>
+);
+
 export const TeamChip = ({ teamId, small, withLogo }) => {
+  // Render the FA chip when there's no team OR no matching team in our
+  // TEAMS list (e.g. cross-league residue from the API).
+  if (!teamId) return <FreeAgentChip small={small} />;
   const t = getTeam(teamId);
-  if (!t) return null;
+  if (!t) return <FreeAgentChip small={small} />;
   const logoSize = small ? 11 : 14;
   return (
     <span style={{

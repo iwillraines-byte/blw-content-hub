@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026 } from '../data';
+import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
@@ -302,8 +302,18 @@ export default function TeamPage() {
     );
   }
 
-  const teamBatters = BATTING_LEADERS.filter(p => p.team === team.id);
-  const teamPitchers = PITCHING_LEADERS.filter(p => p.team === team.id);
+  // Prefer live batting/pitching when it's loaded; fall back to the
+  // static leaders list pre-fetch. Apply canonical-team overlay so a
+  // traded player like Jaso (API still says LAN, canonical says LV)
+  // is excluded from LAN's filter and shows up under LV instead.
+  const liveBatting = (batting && batting.length > 0) ? batting : BATTING_LEADERS;
+  const livePitching = (pitching && pitching.length > 0) ? pitching : PITCHING_LEADERS;
+  const teamBatters = applyCanonicalToStats(liveBatting)
+    .filter(p => p.team === team.id)
+    .sort((a, b) => (b.ops_plus || 0) - (a.ops_plus || 0));
+  const teamPitchers = applyCanonicalToStats(livePitching)
+    .filter(p => p.team === team.id)
+    .sort((a, b) => (a.fip || 0) - (b.fip || 0)); // lower FIP is better
   const topBatter = teamBatters[0];
   const topPitcher = teamPitchers[0];
   const hrLeader = [...teamBatters].sort((a, b) => (b.hr || 0) - (a.hr || 0))[0];
@@ -312,8 +322,10 @@ export default function TeamPage() {
   // update as the season progresses. Weighted where it matters (AVG by AB,
   // ERA / K-rates by innings pitched) so they reflect real team performance.
   const teamAggregates = useMemo(() => {
-    const teamBat = batting.filter(p => p.team === team.id);
-    const teamPit = pitching.filter(p => p.team === team.id);
+    // Apply canonical-team overlay before filtering so traded players
+    // count toward the right team's aggregates (Jaso → LV, Brody → PHI).
+    const teamBat = applyCanonicalToStats(batting).filter(p => p.team === team.id);
+    const teamPit = applyCanonicalToStats(pitching).filter(p => p.team === team.id);
     if (teamBat.length === 0 && teamPit.length === 0) return null;
 
     const sumAb = teamBat.reduce((s, p) => s + (p.ab || 0), 0);
@@ -745,25 +757,38 @@ export default function TeamPage() {
           all stay consistent. Percentiles are still computed against the full
           league population, so these cells show each player's standing across
           BLW, not just within the team. */}
-      {batting.some(p => p.team === team.id) && (
-        <BattingTable
-          rows={batting.filter(p => p.team === team.id)}
-          populationRows={batting}
-          title={`${team.name} — Batting`}
-          showSearch={false}
-          emptyMessage="No batting data for this team yet."
-        />
-      )}
-      {pitching.some(p => p.team === team.id) && (
-        <PitchingTable
-          rows={pitching.filter(p => p.team === team.id)}
-          populationRows={pitching}
-          title={`${team.name} — Pitching`}
-          showSearch={false}
-          showLegend={false}
-          emptyMessage="No pitching data for this team yet."
-        />
-      )}
+      {/* Team stat tables — apply canonical team overlay so traded
+          players (Jaso → LV) appear under their actual current team
+          and the original team no longer claims them. */}
+      {(() => {
+        const battingCanonical = applyCanonicalToStats(batting);
+        const pitchingCanonical = applyCanonicalToStats(pitching);
+        const teamBat = battingCanonical.filter(p => p.team === team.id);
+        const teamPit = pitchingCanonical.filter(p => p.team === team.id);
+        return (
+          <>
+            {teamBat.length > 0 && (
+              <BattingTable
+                rows={teamBat}
+                populationRows={battingCanonical}
+                title={`${team.name} — Batting`}
+                showSearch={false}
+                emptyMessage="No batting data for this team yet."
+              />
+            )}
+            {teamPit.length > 0 && (
+              <PitchingTable
+                rows={teamPit}
+                populationRows={pitchingCanonical}
+                title={`${team.name} — Pitching`}
+                showSearch={false}
+                showLegend={false}
+                emptyMessage="No pitching data for this team yet."
+              />
+            )}
+          </>
+        );
+      })()}
 
       {/* Recently Uploaded Player Media */}
       <Card>

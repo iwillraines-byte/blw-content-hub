@@ -249,37 +249,45 @@ export async function findPlayerMedia(team, lastName, optsOrJersey = null) {
   // Exclude team-scoped records from player matches.
   const playerRecords = all.filter(f => f.scope !== 'team');
 
-  // Match TEAM + LASTNAME (via stored fields OR filename tokens, for legacy)
-  let matches = playerRecords.filter(f => {
-    if ((f.team || '').toUpperCase() !== T) return false;
+  // Lastname-match across ALL teams. Players who get traded keep their
+  // existing media (the file is tagged with the team they were on at
+  // upload time); we want it to follow them.
+  const matchesByLastName = (f) => {
     if ((f.player || '').toUpperCase() === LN) return true;
-    // Fallback: scan tokens for legacy records that might not have populated
-    // the player field correctly.
     const parts = String(f.name || '').replace(/\.[^.]+$/, '').split('_');
     return parts.some(p => p.toUpperCase() === LN);
-  });
+  };
+  const allByName = playerRecords.filter(matchesByLastName);
 
-  // Optional jersey filter — jersey # is unique per team, strongest signal.
+  // Disambiguate by first-initial when the caller provides one.
+  // If any record carries a firstInitial we restrict to matches; if
+  // none of the matches have an initial we keep the lastname set
+  // (legacy records, no way to disambiguate).
+  let matches = allByName;
+  if (wantInitial) {
+    const withInitial = matches.filter(f => (f.firstInitial || '').toUpperCase() === wantInitial);
+    const anyHaveInitial = matches.some(f => f.firstInitial);
+    if (withInitial.length) matches = withInitial;
+    else if (anyHaveInitial) matches = [];
+  }
+
+  // Disambiguate by jersey number when supplied. Strongest signal so
+  // it overrides all else.
   if (wantNum != null && wantNum !== '') {
     const padded = String(wantNum).padStart(2, '0');
     const byNum = matches.filter(f => f.num === padded || f.num === String(wantNum));
     if (byNum.length) matches = byNum;
   }
 
-  // Optional first-initial filter — used when two players share a lastname.
-  // If any records have a firstInitial set, restrict to matching ones; if
-  // none do (all legacy), leave the set alone so records still surface.
-  if (wantInitial) {
-    const withInitial = matches.filter(f => (f.firstInitial || '').toUpperCase() === wantInitial);
-    const anyHaveInitial = matches.some(f => f.firstInitial);
-    if (withInitial.length) {
-      matches = withInitial;
-    } else if (anyHaveInitial) {
-      // Records exist with initials, but none match ours → no hits.
-      matches = [];
-    }
-    // else: all legacy, keep everything (unambiguous fallback)
-  }
+  // Sort: prefer media tagged for the requested team first (typical case
+  // — player still on their original team), then everything else (the
+  // traded-player fallback). Same-team-first keeps the historical
+  // ordering stable.
+  matches.sort((a, b) => {
+    const aOnTeam = (a.team || '').toUpperCase() === T ? 0 : 1;
+    const bOnTeam = (b.team || '').toUpperCase() === T ? 0 : 1;
+    return aOnTeam - bOnTeam;
+  });
 
   return matches;
 }

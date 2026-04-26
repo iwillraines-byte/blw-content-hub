@@ -167,14 +167,14 @@ function transformPitching(apiData) {
   }));
 }
 
-// Transform rankings data
+// Transform rankings data. Per the user's note, the rankings table is
+// allowed to include all ranked players (not just BLW) so free-agent
+// rankings stay visible for context — those entries surface with a gray
+// FA chip via the canonical-team overlay in GameCenter. Skipping the
+// BLW filter also fixes the "rankings skip numbers" complaint.
 function transformRankings(apiData) {
   if (!Array.isArray(apiData)) return [];
-  // Filter to players in BLW (league id 3)
-  const blwPlayers = apiData.filter(p =>
-    p.leagues?.some(l => l.id === BLW_LEAGUE_ID)
-  );
-  return blwPlayers.map(p => ({
+  return apiData.map(p => ({
     playerId: p.id,
     name: `${p.firstName} ${p.lastName}`,
     firstName: p.firstName,
@@ -541,6 +541,27 @@ const _canonicalTeamByName = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p
 export function canonicalTeamOf(name) {
   const canonical = resolveCanonicalName(name);
   return _canonicalTeamByName.get(_normName(canonical)) || null;
+}
+
+// Overlay the canonical team + canonical name on a stat row. Called
+// consistently by every consumer (TeamPage stat tables, top-batter
+// highlights, GameCenter leaderboards) so a traded player like Konnor
+// Jaso always reads as LV instead of his lingering API team. Free
+// agents / non-canonical players keep their original team — the
+// rendering layer puts a gray FA chip on them via isOnActiveRoster.
+export function applyCanonicalToStat(p) {
+  if (!p) return p;
+  const canonical = resolveCanonicalName(p.name || '');
+  const canonTeam = canonicalTeamOf(canonical);
+  return {
+    ...p,
+    name: canonical || p.name,
+    team: canonTeam || p.team,
+  };
+}
+// Bulk variant for arrays.
+export function applyCanonicalToStats(list) {
+  return Array.isArray(list) ? list.map(applyCanonicalToStat) : list;
 }
 
 export function slugify(str) {

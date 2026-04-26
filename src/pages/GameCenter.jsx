@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName } from '../data';
+import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026 } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
@@ -358,8 +358,36 @@ export default function GameCenter() {
             || null,
         };
       });
-      setBatting(b.map(overlayCanonical));
-      setPitching(p.map(overlayCanonical));
+
+      // Pad batting + pitching with canonical roster players who haven't
+      // recorded stats yet — they appear at the bottom of the leaderboard
+      // with em-dashes so the user can confirm "every BLW player is
+      // accounted for, here's who hasn't logged a hit / inning yet."
+      const batCanonical = b.map(overlayCanonical);
+      const pitCanonical = p.map(overlayCanonical);
+      const presentBatNames = new Set(batCanonical.map(x => (x.name || '').toLowerCase()));
+      const presentPitNames = new Set(pitCanonical.map(x => (x.name || '').toLowerCase()));
+      const noStatsBatting = CANONICAL_ROSTER_2026
+        .filter(c => !presentBatNames.has(c.name.toLowerCase()))
+        .map(c => ({
+          name: c.name,
+          team: c.team,
+          ab: 0, hits: 0, hr: 0, rbi: 0,
+          avg: '—', obp: '—', slg: '—', ops_plus: null,
+          noStats: true,
+        }));
+      const noStatsPitching = CANONICAL_ROSTER_2026
+        .filter(c => !presentPitNames.has(c.name.toLowerCase()))
+        .map(c => ({
+          name: c.name,
+          team: c.team,
+          ip: 0, w: 0, l: 0,
+          era: '—', whip: '—', fip: null, k4: '—', bb4: '—',
+          noStats: true,
+        }));
+
+      setBatting([...batCanonical, ...noStatsBatting]);
+      setPitching([...pitCanonical, ...noStatsPitching]);
       setRankings(rWithTeam);
       setLoading(false);
     });
