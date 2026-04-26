@@ -18,6 +18,7 @@ import { colors, fonts, radius } from '../theme';
 import { TEAMS, fetchAllData, fetchTeamRosterFromApi } from '../data';
 import { authedJson } from '../authed-fetch';
 import { useToast } from '../toast';
+import { refreshFromCloud } from '../cloud-reader';
 
 export default function PlayerTradesCard() {
   const toast = useToast();
@@ -113,6 +114,15 @@ export default function PlayerTradesCard() {
     return { team: player.apiTeam, source: 'api' };
   };
 
+  // After ANY mutation we need to (a) re-fetch the override list for the
+  // UI, and (b) force a cloud-hydrate so the new manual_players rows
+  // land in local IDB — otherwise team rosters and player pages won't
+  // see the change until the next 10-min throttled auto-hydrate.
+  const refreshAfterMutation = async () => {
+    await reload();
+    try { await refreshFromCloud({ force: true }); } catch {}
+  };
+
   const assign = async (name, team) => {
     setBusy(true);
     try {
@@ -121,7 +131,7 @@ export default function PlayerTradesCard() {
         body: { action: 'assign', name, team },
       });
       toast.success(`${name} → ${team}`);
-      await reload();
+      await refreshAfterMutation();
     } catch (err) {
       toast.error('Assign failed', { detail: err.message });
     } finally {
@@ -138,7 +148,7 @@ export default function PlayerTradesCard() {
         body: { action: 'revoke', name },
       });
       toast.success(`Override removed for ${name}`);
-      await reload();
+      await refreshAfterMutation();
     } catch (err) {
       toast.error('Revoke failed', { detail: err.message });
     } finally {
@@ -158,7 +168,7 @@ export default function PlayerTradesCard() {
       const ec = res.errorCount ?? 0;
       if (ec === 0) toast.success(`Preset applied — ${sc} trades`);
       else toast.warn(`Preset finished with ${ec} errors`, { detail: res.errors?.map(e => e.name).join(', ') });
-      await reload();
+      await refreshAfterMutation();
     } catch (err) {
       toast.error('Preset failed', { detail: err.message });
     } finally {

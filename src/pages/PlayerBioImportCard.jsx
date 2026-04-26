@@ -24,6 +24,7 @@ import { Card, SectionHeading, Label, RedButton, OutlineButton, inputStyle, sele
 import { colors, fonts, radius } from '../theme';
 import { authedJson } from '../authed-fetch';
 import { useToast } from '../toast';
+import { refreshFromCloud } from '../cloud-reader';
 
 const LS_URL = 'blw_bio_sheet_url_v1';
 const LS_MAP = 'blw_bio_sheet_map_v1';
@@ -172,6 +173,10 @@ export default function PlayerBioImportCard() {
       setApplied(res);
       const s = res.summary || {};
       toast.success(`Applied: ${s.created || 0} created · ${s.updated || 0} updated`);
+      // Force a fresh hydrate so the new bios land in IndexedDB immediately
+      // — otherwise the next visit to a player page reads stale cached
+      // rows for up to 10 minutes (the throttled auto-hydrate window).
+      try { await refreshFromCloud({ force: true }); } catch {}
     } catch (err) {
       toast.error('Apply failed', { detail: err.message?.slice(0, 120) });
     } finally {

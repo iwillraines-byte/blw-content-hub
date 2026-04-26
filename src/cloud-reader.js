@@ -115,6 +115,23 @@ function rowToPlayer(r) {
     num: r.num || '',
     position: r.position || '',
     notes: r.notes || '',
+    // Vitals (db/004) — without these, the bio importer's data wouldn't
+    // survive a round-trip from Supabase back into local IDB cache,
+    // making the PlayerPage show "—" for everything imported.
+    height_in:   r.height_in ?? null,
+    weight_lbs:  r.weight_lbs ?? null,
+    birthdate:   r.birthdate ?? null,
+    bats:        r.bats ?? null,
+    throws:      r.throws ?? null,
+    birthplace:  r.birthplace ?? null,
+    status:      r.status ?? null,
+    nickname:    r.nickname ?? null,
+    // Profile-pic override (db/005)
+    profile_media_id: r.profile_media_id ?? null,
+    // Player-facing extras (db/006)
+    instagram_handle: r.instagram_handle ?? null,
+    fun_facts:        r.fun_facts ?? null,
+    is_rookie:        Boolean(r.is_rookie ?? false),
     manual: true,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
   };
