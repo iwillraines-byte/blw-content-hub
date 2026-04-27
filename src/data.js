@@ -98,8 +98,12 @@ export function invalidateLeagueCaches() {
 function transformBatting(apiData) {
   if (!apiData?.statistics) return BATTING_FALLBACK;
 
-  const blwOnly = apiData.statistics.filter(p => BLW_TEAM_ABBRS.has(p.team?.abbreviation));
-  const sorted = blwOnly.sort((a, b) => (b.opsPlus || 0) - (a.opsPlus || 0));
+  // Don't filter by API team here — players like Jackson Richardson have
+  // their stat row tagged to a non-BLW team (Gamecocks/COK) but ARE in
+  // our canonical BLW roster. The canonical overlay (_bakeCanonical) will
+  // reassign them to the correct BLW team, and _filterToBlwRoster below
+  // drops anyone who isn't a BLW player after that overlay runs.
+  const sorted = apiData.statistics.slice().sort((a, b) => (b.opsPlus || 0) - (a.opsPlus || 0));
 
   return sorted.map((p, i) => ({
     rank: i + 1,
@@ -142,8 +146,11 @@ function transformBatting(apiData) {
 function transformPitching(apiData) {
   if (!apiData?.statistics) return PITCHING_FALLBACK;
 
-  const blwOnly = apiData.statistics.filter(p => BLW_TEAM_ABBRS.has(p.team?.abbreviation));
-  const sorted = blwOnly.sort((a, b) => (a.fip || 999) - (b.fip || 999));
+  // Same logic as transformBatting — don't pre-filter on API team. A BLW
+  // pitcher's stats can be tagged to a non-BLW team in the leaderboard
+  // payload; the canonical overlay reassigns them, then _filterToBlwRoster
+  // drops anyone who isn't on our canonical roster.
+  const sorted = apiData.statistics.slice().sort((a, b) => (a.fip || 999) - (b.fip || 999));
 
   return sorted.map((p, i) => ({
     rank: i + 1,
@@ -295,6 +302,33 @@ async function fetchAllRostersOnce() {
 // Edward Martinez 3+ times. Keeps the first entry seen — base rows
 // (league endpoint) come before enrichments (roster endpoint), so the
 // richer row with OPS+ etc. wins over the roster-only fallback.
+// Re-number rank after filtering so the leaderboard reads 1..N without
+// gaps (the original rank was assigned over the unfiltered 131-row global
+// pool, so post-filter it'd jump around). Preserves whatever sort order
+// the caller has already applied.
+function _renumberRank(rows) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.map((p, i) => ({ ...p, rank: i + 1 }));
+}
+
+// Drop rows that aren't BLW players AFTER the canonical overlay has run.
+// A row qualifies if either:
+//   (1) the canonical overlay reassigned the row to a BLW team — i.e. the
+//       player's normalized name is in our 70-player canonical roster; or
+//   (2) the row's team (post-overlay) is one of our 10 BLW team IDs.
+// This is the line that lets Jackson Richardson (API-tagged as Gamecocks)
+// stay in the dataset while genuine non-BLW players get dropped.
+const _BLW_TEAM_IDS = new Set(TEAMS.map(t => t.id));
+function _filterToBlwRoster(rows) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.filter(p => {
+    if (!p) return false;
+    const norm = _normName(p.name || '');
+    if (_canonicalNameByNorm.has(norm)) return true;
+    return _BLW_TEAM_IDS.has(p.team);
+  });
+}
+
 function _dedupByCanonical(rows) {
   const out = [];
   const seen = new Set();
@@ -326,7 +360,11 @@ export async function fetchBattingLeaders() {
         .map(rosterToBatting)
     );
 
-    _battingCache = _dedupByCanonical([...baseRows, ...enrichments]);
+    _battingCache = _renumberRank(
+      _filterToBlwRoster(
+        _dedupByCanonical([...baseRows, ...enrichments])
+      )
+    );
     _lastFetch = Date.now();
     return _battingCache;
   } catch (e) {
@@ -352,7 +390,11 @@ export async function fetchPitchingLeaders() {
         .map(rosterToPitching)
     );
 
-    _pitchingCache = _dedupByCanonical([...baseRows, ...enrichments]);
+    _pitchingCache = _renumberRank(
+      _filterToBlwRoster(
+        _dedupByCanonical([...baseRows, ...enrichments])
+      )
+    );
     _lastFetch = Date.now();
     return _pitchingCache;
   } catch (e) {
