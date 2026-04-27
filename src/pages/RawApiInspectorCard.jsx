@@ -98,21 +98,49 @@ export default function RawApiInspectorCard() {
         ...teamRosterCalls,
       ]);
 
+      // Inspect the payload shape so we can see what the API actually
+      // returned even when there are 0 matches. Shows top-level keys, the
+      // path that extractRows used, and a preview of the first row.
+      const inspectShape = (body) => {
+        if (body == null) return { type: 'null' };
+        if (Array.isArray(body)) {
+          return { type: 'array', length: body.length, firstRow: body[0] || null, topLevelKeys: null };
+        }
+        if (typeof body !== 'object') return { type: typeof body, value: body };
+        const keys = Object.keys(body);
+        const arrayKeys = keys.filter(k => Array.isArray(body[k])).map(k => `${k}[${body[k].length}]`);
+        const objectKeys = keys.filter(k => body[k] && typeof body[k] === 'object' && !Array.isArray(body[k]));
+        const rows = extractRows(body);
+        return {
+          type: 'object',
+          topLevelKeys: keys,
+          arrayKeys,
+          objectKeys,
+          extractedRowCount: rows.length,
+          firstRow: rows[0] || null,
+        };
+      };
+
       const filterMatches = (resp) => {
         const rows = extractRows(resp.body);
         return rows.filter(r => looseMatch(nameOf(r), query));
       };
 
+      const buildBlock = (resp) => ({
+        meta: { url: resp.url, status: resp.status, totalRows: extractRows(resp.body).length },
+        shape: inspectShape(resp.body),
+        matches: filterMatches(resp),
+      });
+
       const out = {
         query,
-        batting: { meta: { url: batting.url, status: batting.status, totalRows: extractRows(batting.body).length }, matches: filterMatches(batting) },
-        pitching: { meta: { url: pitching.url, status: pitching.status, totalRows: extractRows(pitching.body).length }, matches: filterMatches(pitching) },
-        rankings: { meta: { url: rankings.url, status: rankings.status, totalRows: extractRows(rankings.body).length }, matches: filterMatches(rankings) },
+        batting: buildBlock(batting),
+        pitching: buildBlock(pitching),
+        rankings: buildBlock(rankings),
         rosters: rosters.map(r => ({
           team: r._team.id,
           teamName: r._team.name,
-          meta: { url: r.url, status: r.status, totalRows: extractRows(r.body).length },
-          matches: filterMatches(r),
+          ...buildBlock(r),
         })),
       };
       setResults(out);
@@ -204,7 +232,11 @@ function SummaryBar({ results }) {
 
 function EndpointBlock({ title, payload, hideEmpty }) {
   const [expanded, setExpanded] = useState(payload.matches.length > 0);
-  if (hideEmpty && payload.matches.length === 0) return null;
+  // Hide team rosters with no matches AND a healthy row count (so empty
+  // is "Jackson is just not on this team" rather than "endpoint broke").
+  // If the endpoint returned 0 rows total, keep it visible — the shape
+  // info is exactly what we need to debug.
+  if (hideEmpty && payload.matches.length === 0 && payload.meta.totalRows > 0) return null;
 
   const statusColor = payload.meta.status >= 200 && payload.meta.status < 300 ? colors.text : '#B91C1C';
 
@@ -225,9 +257,36 @@ function EndpointBlock({ title, payload, hideEmpty }) {
           <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8, fontFamily: 'ui-monospace, Menlo, monospace' }}>
             GET {payload.meta.url}
           </div>
+          {payload.shape && (
+            <div style={{
+              padding: 10, marginBottom: 10, background: colors.bg, borderRadius: radius.sm,
+              border: `1px solid ${colors.borderLight}`, fontSize: 11,
+              fontFamily: 'ui-monospace, Menlo, monospace', color: colors.textSecondary,
+            }}>
+              <div><strong style={{ color: colors.text }}>Payload shape:</strong> {payload.shape.type}</div>
+              {payload.shape.topLevelKeys && (
+                <div>top-level keys: [{payload.shape.topLevelKeys.join(', ')}]</div>
+              )}
+              {payload.shape.arrayKeys && payload.shape.arrayKeys.length > 0 && (
+                <div>array fields: [{payload.shape.arrayKeys.join(', ')}]</div>
+              )}
+              {payload.shape.objectKeys && payload.shape.objectKeys.length > 0 && (
+                <div>nested object fields: [{payload.shape.objectKeys.join(', ')}]</div>
+              )}
+              <div>extractRows() returned: <strong style={{ color: colors.text }}>{payload.shape.extractedRowCount ?? payload.shape.length ?? 0}</strong> row(s)</div>
+              {payload.shape.firstRow && (
+                <details style={{ marginTop: 6 }}>
+                  <summary style={{ cursor: 'pointer', color: colors.text }}>First-row preview</summary>
+                  <pre style={{ margin: '6px 0 0', maxHeight: 240, overflowX: 'auto', fontSize: 10 }}>
+                    {JSON.stringify(payload.shape.firstRow, null, 2)}
+                  </pre>
+                </details>
+              )}
+            </div>
+          )}
           {payload.matches.length === 0 ? (
             <div style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic' }}>
-              No matching rows. {payload.meta.totalRows === 0 ? 'Endpoint returned 0 rows total — likely a payload-shape issue, not a data issue.' : `Endpoint returned ${payload.meta.totalRows} rows but none matched the query.`}
+              No matching rows. {payload.meta.totalRows === 0 ? 'Endpoint returned 0 rows total — likely a payload-shape issue (see above). Look at the top-level keys to find where the rows actually live.' : `Endpoint returned ${payload.meta.totalRows} rows but none matched the query.`}
             </div>
           ) : (
             <pre style={{
