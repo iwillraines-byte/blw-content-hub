@@ -191,18 +191,35 @@ function transformRankings(apiData) {
   }));
 }
 
+// Apply canonical name + team overlay to API stat rows. Forward-declared
+// helper used by fetchers to bake in resolution at the cache layer so
+// every downstream reader (PlayerPage, GameCenter, TeamPage,
+// getTeamRoster, getPlayerByTeamLastName, getAllPlayersDirectory) sees
+// the same canonicalized data without each having to remember to call
+// applyCanonicalToStats. Critical for "Mychal Witty Jr." → "Myc Witty"
+// — without this the lastname-extraction picks "Jr." and the player
+// vanishes from rosters and lookups.
+function _bakeCanonical(rows) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.map(p => {
+    const canonical = (NAME_ALIASES[_normName(p.name || '')] || p.name);
+    const canonTeam = _canonicalTeamByName.get(_normName(canonical));
+    return { ...p, name: canonical, team: canonTeam || p.team };
+  });
+}
+
 export async function fetchBattingLeaders() {
   if (!isCacheStale() && _battingCache) return _battingCache;
   try {
     const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    _battingCache = transformBatting(data);
+    _battingCache = _bakeCanonical(transformBatting(data));
     _lastFetch = Date.now();
     return _battingCache;
   } catch (e) {
     console.warn('Batting API failed, using fallback:', e);
-    return _battingCache || BATTING_FALLBACK;
+    return _battingCache || _bakeCanonical(BATTING_FALLBACK);
   }
 }
 
@@ -212,12 +229,12 @@ export async function fetchPitchingLeaders() {
     const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    _pitchingCache = transformPitching(data);
+    _pitchingCache = _bakeCanonical(transformPitching(data));
     _lastFetch = Date.now();
     return _pitchingCache;
   } catch (e) {
     console.warn('Pitching API failed, using fallback:', e);
-    return _pitchingCache || PITCHING_FALLBACK;
+    return _pitchingCache || _bakeCanonical(PITCHING_FALLBACK);
   }
 }
 
@@ -715,10 +732,13 @@ export async function getAllPlayersDirectory(mediaList = [], manualPlayers = [])
 }
 
 export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
-  // Roster keyed by `FI|LASTNAME` so same-lastname teammates (Lees,
-  // Roses, Marshalls, Skibbes, Dalbeys) all get their own entry instead
-  // of merging into one.
-  const identityKey = (fi, ln) => `${String(fi || '').toUpperCase()}|${String(ln || '').toUpperCase()}`;
+  // Roster keyed by FULL NAME so even same-FI cousins (Justin Lee +
+  // James Lee on LV — both 'J|LEE' under the FI scheme) get their own
+  // entry. Media-only entries (lastname-only filenames) get a special
+  // `__media__|LASTNAME` key so they don't accidentally collide with
+  // a real player and don't try to claim a canonical roster spot.
+  const fullNameKey = (firstName, lastName) =>
+    `${String(firstName || '').toLowerCase()}|${String(lastName || '').toLowerCase()}`;
   const roster = new Map();
 
   // Build the override index — canonical name → manual_players.team.
@@ -751,17 +771,21 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
   const activeOnly = (apiPlayer) => isOnActiveRoster(apiPlayer.name);
 
   const addStatPlayer = (p, statType) => {
-    const lastName = p.name.split(' ').pop();
-    const firstName = p.name.split(' ').slice(0, -1).join(' ');
+    // Resolve canonical name first so "Mychal Witty Jr." → "Myc Witty"
+    // before splitting (otherwise `split(' ').pop()` returns "Jr." not
+    // "Witty" and the player vanishes from rosters and lookups).
+    const canonical = resolveCanonicalName(p.name || '');
+    const lastName = canonical.split(' ').pop();
+    const firstName = canonical.split(' ').slice(0, -1).join(' ');
     const fi = firstName.charAt(0).toUpperCase();
-    const key = identityKey(fi, lastName);
+    const key = fullNameKey(firstName, lastName);
     const existing = roster.get(key);
     if (existing) {
       existing.stats.push(statType);
       if (!existing.num && p.num) existing.num = p.num;
     } else {
       roster.set(key, {
-        name: p.name,
+        name: canonical,
         firstName,
         firstInitial: fi,
         lastName,
@@ -790,7 +814,7 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     const lastName = m.lastName || (m.name || '').split(' ').pop();
     if (!lastName) continue;
     const fi = (m.firstName || '').charAt(0).toUpperCase();
-    const key = identityKey(fi, lastName);
+    const key = fullNameKey(m.firstName, lastName);
     if (roster.has(key)) continue;
     roster.set(key, {
       name: m.name || `${m.firstName || ''} ${lastName}`.trim(),
@@ -807,15 +831,14 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
 
   // Canonical roster injection — make sure every league-confirmed
   // player on this team appears, even if no API stats / no media yet.
-  // Dedup by (firstInitial + lastName) so cousins on the same team
-  // (Justin Lee + James Lee on LV, Sam + Gus Skibbe, the three Roses,
-  // the Marshalls, the Dalbeys) all surface independently.
+  // Full-name key means same-FI cousins (Justin + James Lee on LV)
+  // BOTH get added — composite-init key would collide.
   for (const c of CANONICAL_ROSTER_2026) {
     if (c.team !== teamId) continue;
     const lastName = c.name.split(' ').pop();
     const firstName = c.name.split(' ').slice(0, -1).join(' ');
     const fi = firstName.charAt(0).toUpperCase();
-    const key = identityKey(fi, lastName);
+    const key = fullNameKey(firstName, lastName);
     if (roster.has(key)) continue;
     roster.set(key, {
       name: c.name,

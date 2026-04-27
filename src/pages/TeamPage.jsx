@@ -161,22 +161,21 @@ export default function TeamPage() {
 
     // Canonical roster injection — guarantee every league-confirmed
     // player on this team appears, even if no API stats / no media yet.
-    // Dedup by `firstInitial + lastName` so cousins on the same team
-    // (Justin Lee + James Lee on LV, Sam + Gus Skibbe on NYG, the
-    // three Roses on DAL, Marshalls on AZS, Dalbeys on BOS) BOTH get
-    // added — lastname alone would skip the second one.
-    const seenIdentity = new Set(entries.map(e => identityKey(e.firstInitial, e.lastName)));
+    // Dedup by FULL NAME (not FI + lastname) — same-FI cousins
+    // (Justin + James Lee on LV both have FI 'J', the three Roses
+    // on DAL, all Skibbes / Dalbeys / Marshalls etc.) need their own
+    // entry. Composite-key dedup misses these.
+    const fullNameSeen = new Set(
+      entries.map(e => `${e.firstName || ''} ${e.lastName || ''}`.trim().toLowerCase())
+    );
     for (const c of CANONICAL_ROSTER_2026) {
       if (c.team !== team.id) continue;
       const lastName = c.name.split(' ').pop();
       const firstName = c.name.split(' ').slice(0, -1).join(' ');
       const fi = firstName.charAt(0).toUpperCase();
-      const id = identityKey(fi, lastName);
-      // Skip if a record with the same initial+lastname already exists,
-      // OR if a legacy record without an initial covers this lastname
-      // (no way to know it's the wrong person, so don't double-add).
-      if (seenIdentity.has(id)) continue;
-      seenIdentity.add(id);
+      const fullKey = c.name.toLowerCase();
+      if (fullNameSeen.has(fullKey)) continue;
+      fullNameSeen.add(fullKey);
       entries.push({
         playerId: null,
         name: c.name,
@@ -192,10 +191,15 @@ export default function TeamPage() {
       });
     }
 
-    // Defensive dedup by identity key — belt-and-braces in case sources overlap
+    // Defensive dedup — belt-and-braces in case sources overlap. Use
+    // full-name match (firstName + lastName) so two players sharing
+    // BOTH first initial and last name (Justin Lee + James Lee) don't
+    // collapse into one. Falls back to FI + lastName when firstName
+    // is missing (legacy media-only entries).
     const seen = new Set();
     const deduped = entries.filter(p => {
-      const key = identityKey(p.firstInitial, p.lastName);
+      const fullName = `${p.firstName || ''} ${p.lastName || ''}`.trim().toLowerCase();
+      const key = fullName || identityKey(p.firstInitial, p.lastName);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

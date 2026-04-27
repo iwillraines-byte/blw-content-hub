@@ -365,31 +365,30 @@ export default function GameCenter() {
       });
 
       // Pad batting + pitching with canonical roster players who haven't
-      // recorded stats yet — they appear at the bottom of the leaderboard
-      // with em-dashes so the user can confirm "every BLW player is
-      // accounted for, here's who hasn't logged a hit / inning yet."
+      // recorded stats anywhere yet (no batting AND no pitching). A
+      // pitcher who appears in the pitching table shouldn't be padded
+      // into the batting table just because he doesn't bat — that
+      // surfaces him as "no stats" when he actually has stats elsewhere.
       const batCanonical = b.map(overlayCanonical);
       const pitCanonical = p.map(overlayCanonical);
       const presentBatNames = new Set(batCanonical.map(x => (x.name || '').toLowerCase()));
       const presentPitNames = new Set(pitCanonical.map(x => (x.name || '').toLowerCase()));
-      const noStatsBatting = CANONICAL_ROSTER_2026
-        .filter(c => !presentBatNames.has(c.name.toLowerCase()))
-        .map(c => ({
-          name: c.name,
-          team: c.team,
-          ab: 0, hits: 0, hr: 0, rbi: 0,
-          avg: '—', obp: '—', slg: '—', ops_plus: null,
-          noStats: true,
-        }));
-      const noStatsPitching = CANONICAL_ROSTER_2026
-        .filter(c => !presentPitNames.has(c.name.toLowerCase()))
-        .map(c => ({
-          name: c.name,
-          team: c.team,
-          ip: 0, w: 0, l: 0,
-          era: '—', whip: '—', fip: null, k4: '—', bb4: '—',
-          noStats: true,
-        }));
+      const presentAnywhere = new Set([...presentBatNames, ...presentPitNames]);
+      const noStatsCanon = CANONICAL_ROSTER_2026.filter(c => !presentAnywhere.has(c.name.toLowerCase()));
+      const noStatsBatting = noStatsCanon.map(c => ({
+        name: c.name,
+        team: c.team,
+        ab: 0, hits: 0, hr: 0, rbi: 0,
+        avg: '—', obp: '—', slg: '—', ops_plus: null,
+        noStats: true,
+      }));
+      const noStatsPitching = noStatsCanon.map(c => ({
+        name: c.name,
+        team: c.team,
+        ip: 0, w: 0, l: 0,
+        era: '—', whip: '—', fip: null, k4: '—', bb4: '—',
+        noStats: true,
+      }));
 
       setBatting([...batCanonical, ...noStatsBatting]);
       setPitching([...pitCanonical, ...noStatsPitching]);
