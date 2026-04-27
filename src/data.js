@@ -204,8 +204,16 @@ function transformRankings(apiData) {
 function _bakeCanonical(rows) {
   if (!Array.isArray(rows)) return rows;
   return rows.map(p => {
-    const canonical = (NAME_ALIASES[_normName(p.name || '')] || p.name);
-    const canonTeam = _canonicalTeamByName.get(_normName(canonical));
+    // 1) Pre-resolve any explicit alias (Mychal Witty Jr → Myc Witty,
+    //    Nick/Eddie/Ed Martinez → Edward Martinez).
+    const aliased = NAME_ALIASES[_normName(p.name || '')] || p.name;
+    // 2) Look the normalized form up in the canonical roster — this is
+    //    what catches "Edward C. Martinez" vs "Edward Martinez", extra
+    //    spaces, capitalization differences. Returns the canonical
+    //    display name verbatim so all variants collapse.
+    const norm = _normName(aliased);
+    const canonical = _canonicalNameByNorm.get(norm) || aliased;
+    const canonTeam = _canonicalTeamByName.get(norm);
     return { ...p, name: canonical, team: canonTeam || p.team };
   });
 }
@@ -267,6 +275,27 @@ async function fetchAllRostersOnce() {
   }
 }
 
+// Collapse duplicates by (canonical-name + team). Fixes the case where:
+//   - The league batting endpoint has "Nick Martinez" → aliased to
+//     "Edward Martinez" by canonical
+//   - The team roster has "Eddie Martinez"  → aliased the same way
+//   - The team roster has "Edward Martinez" → already canonical
+// Without dedup all three slip through and the leaderboard shows
+// Edward Martinez 3+ times. Keeps the first entry seen — base rows
+// (league endpoint) come before enrichments (roster endpoint), so the
+// richer row with OPS+ etc. wins over the roster-only fallback.
+function _dedupByCanonical(rows) {
+  const out = [];
+  const seen = new Set();
+  for (const p of rows) {
+    const key = `${_normName(p?.name || '')}|${(p?.team || '').toUpperCase()}`;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
 export async function fetchBattingLeaders() {
   if (!isCacheStale() && _battingCache) return _battingCache;
   try {
@@ -279,14 +308,14 @@ export async function fetchBattingLeaders() {
     const baseRows = _bakeCanonical(transformBatting(data));
 
     // Enrich with team-roster players who have at-bats but didn't make
-    // the league leaderboard. Match on canonical name to avoid double-
-    // counting (e.g. Mychal Witty Jr. vs Myc Witty).
-    const present = new Set(baseRows.map(p => _normName(p.name)));
-    const enrichments = allRosters
-      .filter(r => (r.atBats || 0) > 0 && !present.has(_normName(r.name)))
-      .map(rosterToBatting);
+    // the league leaderboard.
+    const enrichments = _bakeCanonical(
+      allRosters
+        .filter(r => (r.atBats || 0) > 0)
+        .map(rosterToBatting)
+    );
 
-    _battingCache = [...baseRows, ..._bakeCanonical(enrichments)];
+    _battingCache = _dedupByCanonical([...baseRows, ...enrichments]);
     _lastFetch = Date.now();
     return _battingCache;
   } catch (e) {
@@ -306,12 +335,13 @@ export async function fetchPitchingLeaders() {
     const data = await res.json();
     const baseRows = _bakeCanonical(transformPitching(data));
 
-    const present = new Set(baseRows.map(p => _normName(p.name)));
-    const enrichments = allRosters
-      .filter(r => (r.isPitcher || (parseFloat(r.ip || 0) > 0)) && !present.has(_normName(r.name)))
-      .map(rosterToPitching);
+    const enrichments = _bakeCanonical(
+      allRosters
+        .filter(r => r.isPitcher || (parseFloat(r.ip || 0) > 0))
+        .map(rosterToPitching)
+    );
 
-    _pitchingCache = [...baseRows, ..._bakeCanonical(enrichments)];
+    _pitchingCache = _dedupByCanonical([...baseRows, ...enrichments]);
     _lastFetch = Date.now();
     return _pitchingCache;
   } catch (e) {
@@ -669,6 +699,12 @@ export function isOnActiveRoster(name) {
 
 // What team is this player on per the canonical roster? Honors aliases.
 const _canonicalTeamByName = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p.name), p.team]));
+// Norm-keyed lookup back to the canonical DISPLAY name. Used by
+// _bakeCanonical so any API name that normalizes to a canonical entry
+// gets standardized — "Edward C. Martinez" → "Edward Martinez",
+// "JACKSON  RICHARDSON" → "Jackson Richardson" — preventing the
+// "looks like the same player but the strings don't match" duplication.
+const _canonicalNameByNorm = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p.name), p.name]));
 export function canonicalTeamOf(name) {
   const canonical = resolveCanonicalName(name);
   return _canonicalTeamByName.get(_normName(canonical)) || null;
