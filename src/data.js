@@ -6,9 +6,11 @@
 const GSS_BASE = '/api/gss';
 const BLW_LEAGUE_ID = 3;
 
-// API team abbreviations → our internal codes
+// API team abbreviations → our internal codes. After the LVS → LV
+// rename the API's 'LV' must resolve to 'LV' (not the legacy 'LVS')
+// so stat rows land on the right team and canonical overlays match.
 const TEAM_MAP = {
-  'LA': 'LAN', 'AZ': 'AZS', 'SD': 'SDO', 'LV': 'LVS',
+  'LA': 'LAN', 'AZ': 'AZS', 'SD': 'SDO', 'LV': 'LV',
   'NY': 'NYG', 'BOS': 'BOS', 'DAL': 'DAL', 'PHI': 'PHI',
   'CHI': 'CHI', 'MIA': 'MIA',
 };

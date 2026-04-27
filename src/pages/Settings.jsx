@@ -11,6 +11,7 @@ import TypographyCard from './TypographyCard';
 import ThemeModeCard from './ThemeModeCard';
 import PlayerBioImportCard from './PlayerBioImportCard';
 import PlayerTradesCard from './PlayerTradesCard';
+import RosterDiagnosticCard from './RosterDiagnosticCard';
 
 export default function Settings() {
   const { role } = useAuth();
@@ -54,6 +55,11 @@ export default function Settings() {
       {/* Player team overrides — admin-only. Trades, FA signings,
           retirements that the source-of-truth API doesn't know about. */}
       {isAdminRole(role) && <PlayerTradesCard />}
+
+      {/* Roster diagnostic — admin-only. Shows which canonical players
+          are or aren't matching against the API and surfaces likely
+          name mismatches so we can add aliases. */}
+      {isAdminRole(role) && <RosterDiagnosticCard />}
 
       {/* Appearance + Typography — personal preferences, visible to everyone */}
       <ThemeModeCard />
