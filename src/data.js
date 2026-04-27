@@ -311,21 +311,18 @@ function _renumberRank(rows) {
   return rows.map((p, i) => ({ ...p, rank: i + 1 }));
 }
 
-// Drop rows that aren't BLW players AFTER the canonical overlay has run.
-// A row qualifies if either:
-//   (1) the canonical overlay reassigned the row to a BLW team — i.e. the
-//       player's normalized name is in our 70-player canonical roster; or
-//   (2) the row's team (post-overlay) is one of our 10 BLW team IDs.
-// This is the line that lets Jackson Richardson (API-tagged as Gamecocks)
-// stay in the dataset while genuine non-BLW players get dropped.
-const _BLW_TEAM_IDS = new Set(TEAMS.map(t => t.id));
+// Drop rows that aren't on the canonical 2026 active roster. The
+// canonical roster is the single source of truth — anyone API-tagged
+// to a BLW team but NOT on canonical (cut players, dev-league residue,
+// pre-season trade targets that didn't make the cut) gets stripped.
+// Jackson Richardson stays because he IS canonical; Braden Eberhardt
+// drops because he isn't.
 function _filterToBlwRoster(rows) {
   if (!Array.isArray(rows)) return rows;
   return rows.filter(p => {
     if (!p) return false;
     const norm = _normName(p.name || '');
-    if (_canonicalNameByNorm.has(norm)) return true;
-    return _BLW_TEAM_IDS.has(p.team);
+    return _canonicalNameByNorm.has(norm);
   });
 }
 

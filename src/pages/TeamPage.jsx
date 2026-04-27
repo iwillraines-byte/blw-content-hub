@@ -102,11 +102,19 @@ export default function TeamPage() {
     // loop below — the trades preset creates manual_players rows for
     // every override, so the canonical-team-mismatch case is covered.
 
-    // Manual players not already represented in the API roster
+    // Manual players not already represented in the API roster.
+    // Strictly canonical-only: a manual_players row for someone who
+    // ISN'T on the canonical active roster (e.g. cut player whose
+    // Supabase row never got removed, leftover bio-CSV import) must
+    // not surface on a team page. This is what filters out Braden
+    // Eberhardt + Gabriel Carr (MIA), Dan Whitener (LV), and any
+    // similar stragglers that pre-date the canonical authority model.
     for (const p of manualList) {
       const fi = (p.firstName || '').charAt(0).toUpperCase();
       const key = identityKey(fi, p.lastName);
       if (taken.has(key)) continue;
+      const fullName = p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim();
+      if (!isOnActiveRoster(fullName)) continue;
       taken.add(key);
       entries.push({
         manualId: p.id,

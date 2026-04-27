@@ -304,6 +304,35 @@ function TeamLink({ teamId }) {
   );
 }
 
+// Footer toggle for the batting + pitching tables. Lets the user opt
+// into seeing canonical-roster players who have no API stats yet (true
+// rookies) without the heatmap colors getting flattened by their zeros.
+function NoStatsToggle({ count, expanded, onToggle, kind }) {
+  return (
+    <div style={{
+      padding: '10px 18px', borderTop: `1px solid ${colors.borderLight}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap: 12, fontSize: 12, color: colors.textSecondary,
+      background: colors.bg,
+    }}>
+      <span>
+        <strong style={{ color: colors.text }}>{count}</strong> roster {count === 1 ? 'player' : 'players'} with no {kind} stats yet
+        <span style={{ color: colors.textMuted, marginLeft: 6 }}>
+          (true rookies — they'll populate once games begin)
+        </span>
+      </span>
+      <button onClick={onToggle} style={{
+        padding: '5px 10px', borderRadius: radius.sm, fontSize: 11, fontWeight: 700,
+        letterSpacing: 0.4, fontFamily: fonts.condensed, textTransform: 'uppercase',
+        background: 'transparent', color: colors.textSecondary,
+        border: `1px solid ${colors.border}`, cursor: 'pointer',
+      }}>
+        {expanded ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  );
+}
+
 export default function GameCenter() {
   const [tab, setTab] = useState('batting');
   const [batting, setBatting] = useState([]);
@@ -328,6 +357,13 @@ export default function GameCenter() {
   // "Load more" — keeps the initial render fast on the rare ranking
   // dump with hundreds of cross-league entries.
   const [rankingsVisible, setRankingsVisible] = useState(50);
+  // No-stats players (true rookies with no API rows anywhere) — hidden by
+  // default so the leaderboard's conditional formatting heatmap isn't
+  // anchored to zeros. Click the footer link to expand them inline.
+  const [showNoStatsBatting, setShowNoStatsBatting] = useState(false);
+  const [showNoStatsPitching, setShowNoStatsPitching] = useState(false);
+  const [noStatsBatting, setNoStatsBatting] = useState([]);
+  const [noStatsPitching, setNoStatsPitching] = useState([]);
   const RANKINGS_PAGE_SIZE = 50;
 
   useEffect(() => {
@@ -375,14 +411,14 @@ export default function GameCenter() {
       const presentPitNames = new Set(pitCanonical.map(x => (x.name || '').toLowerCase()));
       const presentAnywhere = new Set([...presentBatNames, ...presentPitNames]);
       const noStatsCanon = CANONICAL_ROSTER_2026.filter(c => !presentAnywhere.has(c.name.toLowerCase()));
-      const noStatsBatting = noStatsCanon.map(c => ({
+      const noStatsBattingRows = noStatsCanon.map(c => ({
         name: c.name,
         team: c.team,
         ab: 0, hits: 0, hr: 0, rbi: 0,
         avg: '—', obp: '—', slg: '—', ops_plus: null,
         noStats: true,
       }));
-      const noStatsPitching = noStatsCanon.map(c => ({
+      const noStatsPitchingRows = noStatsCanon.map(c => ({
         name: c.name,
         team: c.team,
         ip: 0, w: 0, l: 0,
@@ -390,8 +426,13 @@ export default function GameCenter() {
         noStats: true,
       }));
 
-      setBatting([...batCanonical, ...noStatsBatting]);
-      setPitching([...pitCanonical, ...noStatsPitching]);
+      // Store stat-bearing rows and no-stats rows separately so the table
+      // can default to a clean heatmap and let the user opt in to seeing
+      // the full canonical roster via the footer toggle.
+      setBatting(batCanonical);
+      setPitching(pitCanonical);
+      setNoStatsBatting(noStatsBattingRows);
+      setNoStatsPitching(noStatsPitchingRows);
       setRankings(rWithTeam);
       setLoading(false);
     });
@@ -426,21 +467,27 @@ export default function GameCenter() {
   });
 
   const filteredBatting = useMemo(() => {
+    // No-stats rookies appended only when the user opts in. Sort still
+    // runs on the combined list so the heatmap colors stay consistent
+    // with whatever is on screen.
+    const base = showNoStatsBatting ? [...batting, ...noStatsBatting] : batting;
     const q = battingSearch.trim().toLowerCase();
-    const filtered = q ? batting.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)) : batting;
+    const filtered = q ? base.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)) : base;
     return applySort(filtered, battingSort);
-  }, [batting, battingSearch, battingSort]);
+  }, [batting, noStatsBatting, showNoStatsBatting, battingSearch, battingSort]);
 
-  // Percentile coloring — computed from the FULL population so filtering/sorting
-  // doesn't shift a player's percentile. Memoized on the raw lists only.
+  // Percentile coloring — computed from the stat-bearing population only
+  // (never from the no-stats rookies, whose zeros would crush the gradient
+  // even when the toggle is on). Memoized on `batting`/`pitching` only.
   const battingPercentiles = useMemo(() => computePercentiles(batting, BATTING_COLOR_COLS), [batting]);
   const pitchingPercentiles = useMemo(() => computePercentiles(pitching, PITCHING_COLOR_COLS), [pitching]);
 
   const filteredPitching = useMemo(() => {
+    const base = showNoStatsPitching ? [...pitching, ...noStatsPitching] : pitching;
     const q = pitchingSearch.trim().toLowerCase();
-    const filtered = q ? pitching.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)) : pitching;
+    const filtered = q ? base.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)) : base;
     return applySort(filtered, pitchingSort);
-  }, [pitching, pitchingSearch, pitchingSort]);
+  }, [pitching, noStatsPitching, showNoStatsPitching, pitchingSearch, pitchingSort]);
 
   const filteredRankings = useMemo(() => {
     const q = rankingsSearch.trim().toLowerCase();
@@ -557,6 +604,14 @@ export default function GameCenter() {
               </tbody>
             </table>
           </div>
+          {noStatsBatting.length > 0 && (
+            <NoStatsToggle
+              count={noStatsBatting.length}
+              expanded={showNoStatsBatting}
+              onToggle={() => setShowNoStatsBatting(v => !v)}
+              kind="batting"
+            />
+          )}
         </Card>
       )}
 
@@ -631,6 +686,14 @@ export default function GameCenter() {
               </tbody>
             </table>
           </div>
+          {noStatsPitching.length > 0 && (
+            <NoStatsToggle
+              count={noStatsPitching.length}
+              expanded={showNoStatsPitching}
+              onToggle={() => setShowNoStatsPitching(v => !v)}
+              kind="pitching"
+            />
+          )}
         </Card>
       )}
 
