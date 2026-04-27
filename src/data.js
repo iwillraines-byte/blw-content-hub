@@ -81,6 +81,17 @@ function isCacheStale() {
   return !_lastFetch || (Date.now() - _lastFetch > CACHE_TTL);
 }
 
+// Bust every cache (batting, pitching, rankings, rosters) so the next
+// fetch goes back to the API. Used by the admin Refresh buttons so an
+// operator can pull fresh data without waiting out the 5-minute TTL.
+export function invalidateLeagueCaches() {
+  _battingCache = null;
+  _pitchingCache = null;
+  _rankingsCache = null;
+  _rosterCache.clear();
+  _lastFetch = 0;
+}
+
 // ─── LIVE API FETCH FUNCTIONS ───────────────────────────────────────────────
 
 // Transform API batting data → our internal format

@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { Card, SectionHeading } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { CANONICAL_ROSTER_2026, fetchAllData, fetchAllRosters } from '../data';
+import { CANONICAL_ROSTER_2026, fetchAllData, fetchAllRosters, invalidateLeagueCaches } from '../data';
 
 // Loose lastname matcher — "Jackson Richardson" should hit any API row
 // whose lastname is "Richardson" regardless of middle initials, suffixes,
@@ -27,9 +27,13 @@ export default function RosterDiagnosticCard() {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('all'); // all | missing | name-mismatch
 
-  const run = async () => {
+  const run = async ({ force = false } = {}) => {
     setLoading(true);
     try {
+      // The Refresh button always forces a fresh API pull — otherwise
+      // the 5-minute TTL means we'd keep showing the same cached state
+      // and the user couldn't verify whether new code changed anything.
+      if (force) invalidateLeagueCaches();
       const [{ batting, pitching, rankings }, allRosters] = await Promise.all([
         fetchAllData(),
         fetchAllRosters(),
@@ -113,12 +117,12 @@ export default function RosterDiagnosticCard() {
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <SectionHeading style={{ marginBottom: 0 }}>Roster diagnostic</SectionHeading>
-        <button onClick={run} disabled={loading} style={{
+        <button onClick={() => run({ force: true })} disabled={loading} style={{
           padding: '6px 12px', borderRadius: radius.sm, fontSize: 11, fontWeight: 700,
           letterSpacing: 0.4, fontFamily: fonts.condensed, textTransform: 'uppercase',
           background: 'transparent', color: colors.textSecondary,
           border: `1px solid ${colors.border}`, cursor: 'pointer',
-        }}>{loading ? 'Loading…' : '↻ Refresh'}</button>
+        }}>{loading ? 'Loading…' : '↻ Force refresh'}</button>
       </div>
       <p style={{ fontSize: 12, color: colors.textSecondary, margin: '0 0 12px', lineHeight: 1.5 }}>
         Cross-references every canonical player against the Grand Slam API. Use this to figure out why a specific player isn't matching — wrong name format (look at <strong>Loose hits</strong>), absent from the API entirely, or wrong team.
