@@ -49,20 +49,29 @@ async function safeFetchJson(url) {
   }
 }
 
-// Pull the array off whatever shape the endpoint returned. GSS is
-// inconsistent — sometimes the rows are at the top level, sometimes
-// nested under .data, .players, .roster, .leaders, etc.
-function extractRows(payload) {
+// Pull row arrays off whatever shape the endpoint returned. GSS payloads
+// often have MULTIPLE row arrays at the top level (e.g. batting-stats has
+// battingAverageLeaders[1], homerunLeaders[1], hitLeaders[1], rbiLeaders[1],
+// statistics[131]). We need to search them all so a player who's in
+// statistics doesn't get missed because the function returned early on a
+// 1-element leaders array. Returns [{ key, rows }] so callers can show
+// matches grouped by which array they came from.
+function extractAllArrays(payload) {
   if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  for (const key of ['data', 'players', 'roster', 'leaders', 'rankings', 'results', 'rows']) {
-    if (Array.isArray(payload[key])) return payload[key];
+  if (Array.isArray(payload)) return [{ key: '(root)', rows: payload }];
+  if (typeof payload !== 'object') return [];
+  const out = [];
+  for (const [k, v] of Object.entries(payload)) {
+    if (Array.isArray(v) && v.length && typeof v[0] === 'object') {
+      out.push({ key: k, rows: v });
+    }
   }
-  // Last resort: find the first array-valued property.
-  for (const v of Object.values(payload)) {
-    if (Array.isArray(v) && v.length && typeof v[0] === 'object') return v;
-  }
-  return [];
+  return out;
+}
+
+// Total row count across every top-level array in the payload.
+function totalRowCount(payload) {
+  return extractAllArrays(payload).reduce((acc, a) => acc + a.rows.length, 0);
 }
 
 // Try every name-ish key the API might use. Returns the first non-empty.
@@ -99,38 +108,53 @@ export default function RawApiInspectorCard() {
       ]);
 
       // Inspect the payload shape so we can see what the API actually
-      // returned even when there are 0 matches. Shows top-level keys, the
-      // path that extractRows used, and a preview of the first row.
+      // returned even when there are 0 matches. Shows top-level keys
+      // and the row count of every top-level array so we never miss a
+      // payload like batting-stats (5 separate row arrays at root).
       const inspectShape = (body) => {
         if (body == null) return { type: 'null' };
         if (Array.isArray(body)) {
-          return { type: 'array', length: body.length, firstRow: body[0] || null, topLevelKeys: null };
+          return { type: 'array', length: body.length, firstRow: body[0] || null, topLevelKeys: null, arrayKeys: [`(root)[${body.length}]`] };
         }
         if (typeof body !== 'object') return { type: typeof body, value: body };
         const keys = Object.keys(body);
-        const arrayKeys = keys.filter(k => Array.isArray(body[k])).map(k => `${k}[${body[k].length}]`);
+        const arrays = extractAllArrays(body);
+        const arrayKeys = arrays.map(a => `${a.key}[${a.rows.length}]`);
         const objectKeys = keys.filter(k => body[k] && typeof body[k] === 'object' && !Array.isArray(body[k]));
-        const rows = extractRows(body);
+        // Pick the largest array for first-row preview — most likely the
+        // canonical leaderboard, not a 1-element category leader.
+        const largest = arrays.sort((a, b) => b.rows.length - a.rows.length)[0];
         return {
           type: 'object',
           topLevelKeys: keys,
           arrayKeys,
           objectKeys,
-          extractedRowCount: rows.length,
-          firstRow: rows[0] || null,
+          extractedRowCount: largest?.rows.length || 0,
+          extractedFromKey: largest?.key || null,
+          firstRow: largest?.rows[0] || null,
         };
       };
 
-      const filterMatches = (resp) => {
-        const rows = extractRows(resp.body);
-        return rows.filter(r => looseMatch(nameOf(r), query));
+      // Search EVERY array in the payload and group matches by source key.
+      const filterMatchesGrouped = (resp) => {
+        const groups = [];
+        for (const { key, rows } of extractAllArrays(resp.body)) {
+          const hits = rows.filter(r => looseMatch(nameOf(r), query));
+          if (hits.length > 0) groups.push({ key, hits });
+        }
+        return groups;
       };
 
-      const buildBlock = (resp) => ({
-        meta: { url: resp.url, status: resp.status, totalRows: extractRows(resp.body).length },
-        shape: inspectShape(resp.body),
-        matches: filterMatches(resp),
-      });
+      const buildBlock = (resp) => {
+        const groups = filterMatchesGrouped(resp);
+        const flatMatches = groups.flatMap(g => g.hits);
+        return {
+          meta: { url: resp.url, status: resp.status, totalRows: totalRowCount(resp.body) },
+          shape: inspectShape(resp.body),
+          matchGroups: groups,
+          matches: flatMatches,
+        };
+      };
 
       const out = {
         query,
@@ -273,10 +297,12 @@ function EndpointBlock({ title, payload, hideEmpty }) {
               {payload.shape.objectKeys && payload.shape.objectKeys.length > 0 && (
                 <div>nested object fields: [{payload.shape.objectKeys.join(', ')}]</div>
               )}
-              <div>extractRows() returned: <strong style={{ color: colors.text }}>{payload.shape.extractedRowCount ?? payload.shape.length ?? 0}</strong> row(s)</div>
+              <div>
+                largest array: <strong style={{ color: colors.text }}>{payload.shape.extractedFromKey || '(root)'}</strong> ({payload.shape.extractedRowCount ?? payload.shape.length ?? 0} rows)
+              </div>
               {payload.shape.firstRow && (
                 <details style={{ marginTop: 6 }}>
-                  <summary style={{ cursor: 'pointer', color: colors.text }}>First-row preview</summary>
+                  <summary style={{ cursor: 'pointer', color: colors.text }}>First-row preview from {payload.shape.extractedFromKey || '(root)'}</summary>
                   <pre style={{ margin: '6px 0 0', maxHeight: 240, overflowX: 'auto', fontSize: 10 }}>
                     {JSON.stringify(payload.shape.firstRow, null, 2)}
                   </pre>
@@ -286,15 +312,25 @@ function EndpointBlock({ title, payload, hideEmpty }) {
           )}
           {payload.matches.length === 0 ? (
             <div style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic' }}>
-              No matching rows. {payload.meta.totalRows === 0 ? 'Endpoint returned 0 rows total — likely a payload-shape issue (see above). Look at the top-level keys to find where the rows actually live.' : `Endpoint returned ${payload.meta.totalRows} rows but none matched the query.`}
+              No matching rows across {payload.meta.totalRows} total rows in {payload.shape?.arrayKeys?.length || 0} array(s).
+              {payload.meta.totalRows === 0 && ' Endpoint returned 0 rows total — likely a payload-shape issue (see above).'}
             </div>
           ) : (
-            <pre style={{
-              margin: 0, padding: 10, background: colors.bg, borderRadius: radius.sm,
-              fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, lineHeight: 1.5,
-              color: colors.text, overflowX: 'auto', maxHeight: 400,
-              border: `1px solid ${colors.borderLight}`,
-            }}>{JSON.stringify(payload.matches, null, 2)}</pre>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {payload.matchGroups.map(g => (
+                <div key={g.key}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, marginBottom: 4, fontFamily: fonts.condensed, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                    Array: <span style={{ color: '#15803D' }}>{g.key}</span> · {g.hits.length} hit{g.hits.length === 1 ? '' : 's'}
+                  </div>
+                  <pre style={{
+                    margin: 0, padding: 10, background: colors.bg, borderRadius: radius.sm,
+                    fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, lineHeight: 1.5,
+                    color: colors.text, overflowX: 'auto', maxHeight: 360,
+                    border: `1px solid ${colors.borderLight}`,
+                  }}>{JSON.stringify(g.hits, null, 2)}</pre>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
