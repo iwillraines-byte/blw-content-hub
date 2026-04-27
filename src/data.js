@@ -645,7 +645,7 @@ export const CANONICAL_ROSTER_2026 = [
   // Los Angeles Naturals
   { team: 'LAN', name: 'Jordan Robles' },
   { team: 'LAN', name: 'Preston Kolm' },         // traded from LV
-  { team: 'LAN', name: 'Vincent Lea' },
+  { team: 'LAN', name: 'Vin Lea' },
   { team: 'LAN', name: 'Myc Witty' },            // CSV says "Mychal Witty Jr." — alias below
   { team: 'LAN', name: 'Joaquin Jimenez' },
   { team: 'LAN', name: 'Bryan Owens' },
@@ -655,7 +655,7 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'MIA', name: 'Cam Smith' },
   { team: 'MIA', name: 'Jeremy Adams' },
   { team: 'MIA', name: 'Jackson Albers' },
-  { team: 'MIA', name: 'John Paul Gunn' },
+  { team: 'MIA', name: 'Johnny Gunn' },
   { team: 'MIA', name: 'Mike Stiles' },
   { team: 'MIA', name: 'Sean Hornberger' },
   // New York Green Apples
@@ -698,6 +698,11 @@ const NAME_ALIASES_RAW = {
   'nick martinez':    'Edward Martinez',
   'eddie martinez':   'Edward Martinez',
   'ed martinez':      'Edward Martinez',
+  // LAN's outfielder is "Vin Lea" in BLW — old roster CSV had Vincent.
+  'vincent lea':      'Vin Lea',
+  // MIA's "Johnny Gunn" appears as "John Paul Gunn" in some sources.
+  'john paul gunn':   'Johnny Gunn',
+  'john gunn':        'Johnny Gunn',
 };
 
 // Normalize a player name for comparison. Strips:
