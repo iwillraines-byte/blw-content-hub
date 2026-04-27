@@ -781,20 +781,45 @@ export default function TeamPage() {
         const pitchingCanonical = applyCanonicalToStats(pitching);
         const teamBat = battingCanonical.filter(p => p.team === team.id);
         const teamPit = pitchingCanonical.filter(p => p.team === team.id);
+        // Pad both tables with the team's full canonical roster so every
+        // page reads as a 7-player roster view. Players with no stats yet
+        // (rookies, late signings) appear with em-dash cells; their zeros
+        // do not affect heatmap colors because percentile shading is
+        // computed from the full BLW population (populationRows), which
+        // only contains stat-bearing rows from the league endpoints.
+        const teamCanonical = CANONICAL_ROSTER_2026.filter(c => c.team === team.id);
+        const presentBat = new Set(teamBat.map(p => (p.name || '').toLowerCase()));
+        const presentPit = new Set(teamPit.map(p => (p.name || '').toLowerCase()));
+        const presentAnywhere = new Set([...presentBat, ...presentPit]);
+        const noStats = teamCanonical.filter(c => !presentAnywhere.has(c.name.toLowerCase()));
+        const noStatsBatRows = noStats.map(c => ({
+          name: c.name, team: c.team,
+          ab: 0, hits: 0, hr: 0, rbi: 0,
+          avg: '—', obp: '—', slg: '—', ops: '—', ops_plus: null,
+          noStats: true,
+        }));
+        const noStatsPitRows = noStats.map(c => ({
+          name: c.name, team: c.team,
+          ip: 0, w: 0, l: 0,
+          era: '—', whip: '—', fip: null, k4: '—', bb4: '—',
+          noStats: true,
+        }));
+        const teamBatFull = [...teamBat, ...noStatsBatRows];
+        const teamPitFull = [...teamPit, ...noStatsPitRows];
         return (
           <>
-            {teamBat.length > 0 && (
+            {teamBatFull.length > 0 && (
               <BattingTable
-                rows={teamBat}
+                rows={teamBatFull}
                 populationRows={battingCanonical}
                 title={`${team.name} — Batting`}
                 showSearch={false}
                 emptyMessage="No batting data for this team yet."
               />
             )}
-            {teamPit.length > 0 && (
+            {teamPitFull.length > 0 && (
               <PitchingTable
-                rows={teamPit}
+                rows={teamPitFull}
                 populationRows={pitchingCanonical}
                 title={`${team.name} — Pitching`}
                 showSearch={false}
