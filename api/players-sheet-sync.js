@@ -65,9 +65,9 @@ const NAME_ALIASES = {
   'mychal witty jr.': 'Myc Witty',
   'mychal witty jr':  'Myc Witty',
   'mychal witty':     'Myc Witty',
-  'nick martinez':    'Edward Martinez',
-  'eddie martinez':   'Edward Martinez',
-  'ed martinez':      'Edward Martinez',
+  'edward martinez':  'Nick Martinez',
+  'eddie martinez':   'Nick Martinez',
+  'ed martinez':      'Nick Martinez',
 };
 const _normName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 function resolveCanonicalName(name) {

@@ -223,7 +223,7 @@ function _bakeCanonical(rows) {
   if (!Array.isArray(rows)) return rows;
   return rows.map(p => {
     // 1) Pre-resolve any explicit alias (Mychal Witty Jr → Myc Witty,
-    //    Nick/Eddie/Ed Martinez → Edward Martinez).
+    //    Edward/Eddie/Ed Martinez → Nick Martinez).
     const aliased = NAME_ALIASES[_normName(p.name || '')] || p.name;
     // 2) Look the normalized form up in the canonical roster — this is
     //    what catches "Edward C. Martinez" vs "Edward Martinez", extra
@@ -294,12 +294,11 @@ async function fetchAllRostersOnce() {
 }
 
 // Collapse duplicates by (canonical-name + team). Fixes the case where:
-//   - The league batting endpoint has "Nick Martinez" → aliased to
-//     "Edward Martinez" by canonical
-//   - The team roster has "Eddie Martinez"  → aliased the same way
-//   - The team roster has "Edward Martinez" → already canonical
+//   - The league batting endpoint has "Nick Martinez" → already canonical
+//   - The team roster has "Eddie Martinez"  → aliased to "Nick Martinez"
+//   - The team roster has "Edward Martinez" → aliased to "Nick Martinez"
 // Without dedup all three slip through and the leaderboard shows
-// Edward Martinez 3+ times. Keeps the first entry seen — base rows
+// Nick Martinez 3+ times. Keeps the first entry seen — base rows
 // (league endpoint) come before enrichments (roster endpoint), so the
 // richer row with OPS+ etc. wins over the roster-only fallback.
 // Re-number rank after filtering so the leaderboard reads 1..N without
@@ -603,7 +602,7 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'AZS', name: 'Andrew Ledet' },
   { team: 'AZS', name: 'Paul Marshall' },
   { team: 'AZS', name: 'Will Marshall' },
-  { team: 'AZS', name: 'Edward Martinez' },
+  { team: 'AZS', name: 'Nick Martinez' },
   { team: 'AZS', name: 'Brice Clark' },
   { team: 'AZS', name: 'Cooper Ruckel' },
   { team: 'AZS', name: 'Jackson Richardson' },
@@ -691,10 +690,12 @@ const NAME_ALIASES_RAW = {
   // (Most Jr.-style variants are caught by _normName's suffix stripping
   // — Mychal vs Myc is a true short-name swap so we still need the alias.)
   'mychal witty':     'Myc Witty',
-  // Edward Martinez also goes by Nick / Eddie
-  'nick martinez':    'Edward Martinez',
-  'eddie martinez':   'Edward Martinez',
-  'ed martinez':      'Edward Martinez',
+  // AZS's Nick Martinez also appears in some sources as Edward / Eddie / Ed.
+  // Per the user, all his BLW media + stats live under "Nick" so that's
+  // the canonical display name; the rest are reverse-aliases.
+  'edward martinez':  'Nick Martinez',
+  'eddie martinez':   'Nick Martinez',
+  'ed martinez':      'Nick Martinez',
   // LAN's outfielder is "Vin Lea" in BLW — old roster CSV had Vincent.
   'vincent lea':      'Vin Lea',
   // MIA's "Johnny Gunn" appears as "John Paul Gunn" in some sources.
@@ -756,7 +757,7 @@ export function isOnActiveRoster(name) {
 const _canonicalTeamByName = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p.name), p.team]));
 // Norm-keyed lookup back to the canonical DISPLAY name. Used by
 // _bakeCanonical so any API name that normalizes to a canonical entry
-// gets standardized — "Edward C. Martinez" → "Edward Martinez",
+// gets standardized — "Edward C. Martinez" → "Nick Martinez",
 // "JACKSON  RICHARDSON" → "Jackson Richardson" — preventing the
 // "looks like the same player but the strings don't match" duplication.
 const _canonicalNameByNorm = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p.name), p.name]));
