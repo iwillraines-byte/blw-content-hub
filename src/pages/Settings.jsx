@@ -12,6 +12,7 @@ import ThemeModeCard from './ThemeModeCard';
 import PlayerBioImportCard from './PlayerBioImportCard';
 import PlayerTradesCard from './PlayerTradesCard';
 import RosterDiagnosticCard from './RosterDiagnosticCard';
+import RawApiInspectorCard from './RawApiInspectorCard';
 
 export default function Settings() {
   const { role } = useAuth();
@@ -60,6 +61,11 @@ export default function Settings() {
           are or aren't matching against the API and surfaces likely
           name mismatches so we can add aliases. */}
       {isAdminRole(role) && <RosterDiagnosticCard />}
+
+      {/* Raw API inspector — admin-only. Hits GSS endpoints directly with
+          no caching/normalization to verify what the API actually returns
+          for a given player. Use before adding any matching-code fixes. */}
+      {isAdminRole(role) && <RawApiInspectorCard />}
 
       {/* Appearance + Typography — personal preferences, visible to everyone */}
       <ThemeModeCard />
