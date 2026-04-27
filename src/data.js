@@ -210,13 +210,83 @@ function _bakeCanonical(rows) {
   });
 }
 
+// Build a synthesized batting row from a team-roster API entry. Used to
+// surface players who don't appear in /leagues/3/batting-stats but DO
+// have at-bats per their team roster (the league-wide endpoint sometimes
+// excludes low-AB players or new signings, while the team roster always
+// has the full picture).
+function rosterToBatting(r) {
+  return {
+    rank: null,
+    playerId: r.playerId || null,
+    name: r.name,
+    team: r.team,
+    ab: r.atBats || 0,
+    hits: r.hits || 0,
+    hr: r.hr || 0,
+    rbi: r.rbi || 0,
+    avg: r.avg || '.000',
+    obp: '—',     // not in roster API
+    slg: '—',
+    ops: r.ops || '.000',
+    ops_plus: null,
+    fromRoster: true,
+  };
+}
+function rosterToPitching(r) {
+  return {
+    rank: null,
+    playerId: r.playerId || null,
+    name: r.name,
+    team: r.team,
+    ip: r.ip || '0',
+    w: r.w || 0,
+    l: r.l || 0,
+    k: r.k || 0,
+    era: r.era || '0.00',
+    whip: r.whip || '0.00',
+    fip: null,
+    k4: '—',
+    bb4: '—',
+    fromRoster: true,
+  };
+}
+
+// Pull every team's roster, dedup by playerId then name, and return the
+// flat list. Cached per-team via fetchTeamRosterFromApi so repeated
+// calls are cheap. We use this as a SECONDARY source for batting +
+// pitching stats — the league-wide endpoints don't always include every
+// active player (rookies, low-PA hitters), but the team roster always
+// has the full team. See fetchBattingLeaders / fetchPitchingLeaders.
+async function fetchAllRostersOnce() {
+  try {
+    return await fetchAllRosters();
+  } catch (e) {
+    console.warn('fetchAllRosters failed for enrichment:', e);
+    return [];
+  }
+}
+
 export async function fetchBattingLeaders() {
   if (!isCacheStale() && _battingCache) return _battingCache;
   try {
-    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=true`);
+    const [res, allRosters] = await Promise.all([
+      fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=true`),
+      fetchAllRostersOnce(),
+    ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    _battingCache = _bakeCanonical(transformBatting(data));
+    const baseRows = _bakeCanonical(transformBatting(data));
+
+    // Enrich with team-roster players who have at-bats but didn't make
+    // the league leaderboard. Match on canonical name to avoid double-
+    // counting (e.g. Mychal Witty Jr. vs Myc Witty).
+    const present = new Set(baseRows.map(p => _normName(p.name)));
+    const enrichments = allRosters
+      .filter(r => (r.atBats || 0) > 0 && !present.has(_normName(r.name)))
+      .map(rosterToBatting);
+
+    _battingCache = [...baseRows, ..._bakeCanonical(enrichments)];
     _lastFetch = Date.now();
     return _battingCache;
   } catch (e) {
@@ -228,10 +298,20 @@ export async function fetchBattingLeaders() {
 export async function fetchPitchingLeaders() {
   if (!isCacheStale() && _pitchingCache) return _pitchingCache;
   try {
-    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=true`);
+    const [res, allRosters] = await Promise.all([
+      fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=true`),
+      fetchAllRostersOnce(),
+    ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    _pitchingCache = _bakeCanonical(transformPitching(data));
+    const baseRows = _bakeCanonical(transformPitching(data));
+
+    const present = new Set(baseRows.map(p => _normName(p.name)));
+    const enrichments = allRosters
+      .filter(r => (r.isPitcher || (parseFloat(r.ip || 0) > 0)) && !present.has(_normName(r.name)))
+      .map(rosterToPitching);
+
+    _pitchingCache = [...baseRows, ..._bakeCanonical(enrichments)];
     _lastFetch = Date.now();
     return _pitchingCache;
   } catch (e) {
