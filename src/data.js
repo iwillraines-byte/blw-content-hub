@@ -521,19 +521,51 @@ export const CANONICAL_ROSTER_2026 = [
 
 // Name aliases — maps any-known-form-of-a-player's-name to their canonical
 // name. Used to merge same-person variants from the API, the bio CSV, and
-// the canonical roster. Keys are normalized (lowercase + collapsed spaces);
-// values are the canonical display name.
+// the canonical roster. Keys are normalized (see _normName) so most
+// "Jackson C. Richardson" / "Jackson Richardson Jr." style variants
+// resolve automatically without an explicit alias.
 const NAME_ALIASES_RAW = {
-  // Mychal Witty Jr. is referred to as "Myc Witty" in the API + UI
-  'mychal witty jr.': 'Myc Witty',
-  'mychal witty jr':  'Myc Witty',
+  // Mychal Witty Jr. is referred to as "Myc Witty" in the API + UI.
+  // (Most Jr.-style variants are caught by _normName's suffix stripping
+  // — Mychal vs Myc is a true short-name swap so we still need the alias.)
   'mychal witty':     'Myc Witty',
   // Edward Martinez also goes by Nick / Eddie
   'nick martinez':    'Edward Martinez',
   'eddie martinez':   'Edward Martinez',
   'ed martinez':      'Edward Martinez',
 };
-const _normName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+// Normalize a player name for comparison. Strips:
+//   - diacritics (José → jose)
+//   - punctuation: dots, commas, apostrophes, quotes
+//   - generational suffixes (Jr / Sr / II / III / IV)
+//   - single-letter middle initials (between first and last)
+// Keeps multi-word middle names ("John Paul Gunn" → "john paul gunn").
+// This is the keystone match key — any change here should be tested
+// against every canonical roster entry to make sure nothing collapses.
+const _NAME_SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v']);
+const _normName = (s) => {
+  if (!s) return '';
+  // Strip diacritics, lowercase, drop punctuation, split into parts.
+  let parts = String(s)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip combining diacritics
+    .toLowerCase()
+    .replace(/[.,'"`]/g, '')
+    .split(/\s+/)
+    .filter(Boolean);
+  // Drop generational suffixes from the end.
+  while (parts.length > 1 && _NAME_SUFFIXES.has(parts[parts.length - 1])) {
+    parts = parts.slice(0, -1);
+  }
+  // Drop single-letter middle initials (anything that's a 1-char part
+  // sitting between first and last). Keep the first part even if it's a
+  // single letter — losing that would make "J Smith" vanish entirely.
+  if (parts.length > 2) {
+    parts = parts.filter((p, i) => i === 0 || i === parts.length - 1 || p.length > 1);
+  }
+  return parts.join(' ');
+};
+
 export const NAME_ALIASES = Object.fromEntries(
   Object.entries(NAME_ALIASES_RAW).map(([k, v]) => [_normName(k), v])
 );
