@@ -1093,20 +1093,30 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
   return Array.from(roster.values()).sort((a, b) => a.lastName.localeCompare(b.lastName));
 }
 
-// Parse a player slug. Supports two forms:
-//   "rose"     → { firstInitial: '', lastName: 'rose' }         (legacy)
-//   "c-rose"   → { firstInitial: 'C', lastName: 'rose' }        (disambiguated)
-// When a player's actual last name is hyphenated (e.g. "smith-jones"), the
-// legacy parse would swallow the first segment as an initial. We guard
-// against that by only treating the first segment as an initial when it's a
-// single letter.
+// Parse a player slug. Supports three forms:
+//   "rose"           → { firstName: '',      firstInitial: '',  lastName: 'rose' }   (legacy)
+//   "c-rose"         → { firstName: '',      firstInitial: 'C', lastName: 'rose' }   (FI-disambiguated)
+//   "logan-rose"     → { firstName: 'logan', firstInitial: 'L', lastName: 'rose' }   (full-firstname, default)
+// The full-firstname form is what playerSlug() emits now, so cousin pairs
+// like Logan Rose vs Luke Rose and James Lee vs Justin Lee get distinct
+// URLs. The first two forms are accepted for backwards compat with
+// existing bookmarks and any old in-app links.
 function parsePlayerSlug(slug) {
   const norm = slugify(slug);
   const parts = norm.split('-');
+  // Single-letter first segment → legacy FI-disambiguated slug.
   if (parts.length >= 2 && parts[0].length === 1 && /^[a-z]$/.test(parts[0])) {
-    return { firstInitial: parts[0].toUpperCase(), lastName: parts.slice(1).join('-') };
+    return { firstName: '', firstInitial: parts[0].toUpperCase(), lastName: parts.slice(1).join('-') };
   }
-  return { firstInitial: '', lastName: norm };
+  // Multi-segment slug → first segment is the firstname, rest is lastname.
+  if (parts.length >= 2) {
+    return {
+      firstName: parts[0],
+      firstInitial: parts[0].charAt(0).toUpperCase(),
+      lastName: parts.slice(1).join('-'),
+    };
+  }
+  return { firstName: '', firstInitial: '', lastName: norm };
 }
 export { parsePlayerSlug };
 
@@ -1117,15 +1127,9 @@ export { parsePlayerSlug };
 // if there are multiple, we return the first and flag `ambiguous: true` so
 // the UI can warn.
 export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []) {
-  const { firstInitial: WANT_FI, lastName: LN_NORM } = parsePlayerSlug(lastNameSlug);
+  const { firstName: WANT_FN, firstInitial: WANT_FI, lastName: LN_NORM } = parsePlayerSlug(lastNameSlug);
 
   const matchLast = (name) => slugify(String(name || '').split(' ').pop()) === LN_NORM;
-  const matchFullSlug = (name) => {
-    const n = String(name || '').trim();
-    const fi = n.charAt(0).toUpperCase();
-    const ln = slugify(n.split(' ').pop());
-    return WANT_FI ? (fi === WANT_FI && ln === LN_NORM) : (ln === LN_NORM);
-  };
 
   // Gather all candidates for this team/lastname across every source.
   //
@@ -1178,16 +1182,29 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   const manualAll = manualPlayers.filter(p => p.team === teamId && matchLast(p.name || p.lastName));
   const rankingAll = (_rankingsCache || []).filter(r => matchLast(r.name));
 
-  // Narrow by first-initial when requested.
-  const byInitial = (arr) => WANT_FI
-    ? arr.filter(p => String(p.name || p.lastName || '').trim().charAt(0).toUpperCase() === WANT_FI)
-    : arr;
+  // Narrow the candidates. WANT_FN (full firstname slug) is the most
+  // specific disambiguator and resolves cousins on the same team that
+  // share an initial (Logan vs Luke Rose, James vs Justin Lee). WANT_FI
+  // is the legacy form. Without either we return every match for the
+  // lastname and let the caller flag it as ambiguous.
+  const narrow = (arr) => {
+    if (WANT_FN) {
+      return arr.filter(p => {
+        const firstWord = String(p.name || p.firstName || '').trim().split(/\s+/)[0] || '';
+        return slugify(firstWord) === WANT_FN;
+      });
+    }
+    if (WANT_FI) {
+      return arr.filter(p => String(p.name || p.lastName || '').trim().charAt(0).toUpperCase() === WANT_FI);
+    }
+    return arr;
+  };
 
-  const battingMatches = byInitial(battingAll);
-  const pitchingMatches = byInitial(pitchingAll);
-  const rosterMatches = byInitial(rosterAll);
-  const manualMatches = byInitial(manualAll);
-  const rankingMatches = byInitial(rankingAll);
+  const battingMatches = narrow(battingAll);
+  const pitchingMatches = narrow(pitchingAll);
+  const rosterMatches = narrow(rosterAll);
+  const manualMatches = narrow(manualAll);
+  const rankingMatches = narrow(rankingAll);
 
   // Count unique candidates on this team by full-name — detects legacy slug
   // collisions so the UI can warn.
@@ -1195,7 +1212,7 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   for (const p of [...battingAll, ...pitchingAll, ...rosterAll, ...manualAll]) {
     if (p.name) candidateNames.add(p.name);
   }
-  const ambiguous = !WANT_FI && candidateNames.size > 1;
+  const ambiguous = !WANT_FN && !WANT_FI && candidateNames.size > 1;
 
   const batting = battingMatches[0] || battingAll[0] || null;
   const pitching = pitchingMatches[0] || pitchingAll[0] || null;
@@ -1260,14 +1277,21 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   };
 }
 
-// Build the canonical disambiguated slug for a player.
+// Build the canonical disambiguated slug for a player. Uses the full
+// first name as the prefix (e.g. "logan-rose", "luke-rose") so cousin
+// pairs that share both team AND first-initial — Logan/Luke Rose on DAL,
+// James/Justin Lee on LV — get distinct URLs. parsePlayerSlug accepts
+// the legacy "c-rose" form too so existing bookmarks still resolve.
 export function playerSlug(player) {
   if (!player) return '';
-  const fn = player.firstName || String(player.name || '').split(' ').slice(0, -1).join(' ');
+  const rawFn = player.firstName || String(player.name || '').split(' ').slice(0, -1).join(' ');
   const ln = player.lastName || String(player.name || '').split(' ').pop();
-  const fi = (fn || '').charAt(0).toLowerCase();
+  // Use only the first word of the firstname so middle names don't bloat
+  // the URL ("Mary Jane Smith" → "mary-smith", not "mary-jane-smith").
+  const fnFirstWord = String(rawFn || '').trim().split(/\s+/)[0] || '';
+  const fnSlug = slugify(fnFirstWord);
   const lnSlug = slugify(ln);
-  return fi ? `${fi}-${lnSlug}` : lnSlug;
+  return fnSlug ? `${fnSlug}-${lnSlug}` : lnSlug;
 }
 
 // ─── CONTENT SUGGESTIONS ENGINE ─────────────────────────────────────────────
