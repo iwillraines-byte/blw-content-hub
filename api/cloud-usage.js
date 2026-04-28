@@ -39,7 +39,24 @@ export default async function handler(req, res) {
   const sb = ctx.sb;
   if (!sb) return missingConfigResponse(res);
 
+  // Team-prefix parser. Filenames in the media bucket follow
+  //   "{TEAM}_{NUM}_{LASTNAME}_{ASSETTYPE}.png"   (player-scoped)
+  //   "{TEAM}_{ASSETTYPE}.png"                    (team-scoped)
+  // The team prefix is the first underscore-segment. We only count toward
+  // a team if the prefix matches one of our BLW codes; anything else
+  // (legacy, ad-hoc) lands in "OTHER" so the chart stays accurate.
+  const BLW_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO']);
+  const teamFromPath = (path) => {
+    if (!path) return 'OTHER';
+    // Strip leading folders like "userId/" so we read the filename itself.
+    const filename = path.split('/').pop() || path;
+    const prefix = filename.split('_')[0]?.toUpperCase();
+    return BLW_TEAMS.has(prefix) ? prefix : 'OTHER';
+  };
+
   const storage = { total: { bytes: 0, count: 0 } };
+  // Per-team rollup keyed by team code; each entry is { bytes, count }.
+  const byTeam = {};
   for (const bucket of BUCKETS) {
     try {
       // Supabase list returns pages; 1000 is the default max. Most setups
@@ -56,6 +73,15 @@ export default async function handler(req, res) {
           if (obj.metadata?.size != null) {
             bytes += obj.metadata.size;
             count += 1;
+            // Only the media bucket carries team-tagged filenames; the
+            // overlays/effects buckets are league-wide assets and roll
+            // up under the bucket label rather than a team.
+            if (bucket === 'media') {
+              const team = teamFromPath(obj.name);
+              if (!byTeam[team]) byTeam[team] = { bytes: 0, count: 0 };
+              byTeam[team].bytes += obj.metadata.size;
+              byTeam[team].count += 1;
+            }
           }
         }
         if (data.length < 1000) break;
@@ -83,6 +109,7 @@ export default async function handler(req, res) {
   res.status(200).json({
     configured: true,
     storage,
+    byTeam,
     tables,
     limits: { storageBytes: STORAGE_LIMIT_BYTES, plan: 'pro' },
   });

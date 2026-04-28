@@ -1,0 +1,518 @@
+// Bulk import modal — drag a folder (or click to pick one), watch the
+// app run filename heuristics on every file in it, fix up the few that
+// the heuristic isn't sure about, then commit the whole batch in one
+// shot. Compresses on the way in so a folder of print-resolution
+// originals doesn't blow through Supabase storage.
+//
+// The UX intent: turn "rename + drag-drop one file at a time" into
+// "drop a folder, eyeball a checklist, click Import" so loading the
+// league archive is an afternoon, not a week.
+
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { TEAMS } from '../data';
+import { Card, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
+import { colors, fonts, radius } from '../theme';
+import { saveMedia, buildPlayerFilename, buildTeamFilename, TEAM_SCOPE_TYPES, blobToObjectURL } from '../media-store';
+import { heuristicallyTag } from '../tag-heuristics';
+import { compressImageBlob, getCompressPreference, formatSavings } from '../image-compress';
+
+const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
+const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
+
+// Walk a DataTransferItemList and yield all files inside any folders the
+// user drops. Browsers expose this through the non-standard
+// `webkitGetAsEntry` API, but every modern browser implements it.
+async function readEntriesRecursive(entry) {
+  if (entry.isFile) {
+    return new Promise((resolve) => {
+      entry.file(file => resolve([file]), () => resolve([]));
+    });
+  }
+  if (entry.isDirectory) {
+    const reader = entry.createReader();
+    const all = [];
+    // readEntries returns up to 100 entries per call, so loop until empty.
+    while (true) {
+      const batch = await new Promise((resolve) => reader.readEntries(resolve, () => resolve([])));
+      if (!batch.length) break;
+      for (const e of batch) {
+        const files = await readEntriesRecursive(e);
+        all.push(...files);
+      }
+    }
+    return all;
+  }
+  return [];
+}
+
+async function filesFromDrop(dataTransfer) {
+  const items = Array.from(dataTransfer.items || []);
+  if (items.length === 0) return Array.from(dataTransfer.files || []);
+  const collected = [];
+  for (const item of items) {
+    const entry = item.webkitGetAsEntry?.();
+    if (entry) {
+      const files = await readEntriesRecursive(entry);
+      collected.push(...files);
+    } else if (item.kind === 'file') {
+      const f = item.getAsFile();
+      if (f) collected.push(f);
+    }
+  }
+  return collected;
+}
+
+// Per-file row state. status:
+//   'auto'   — heuristic confident; will use detected tags
+//   'review' — needs user attention (low confidence or ambiguous)
+//   'skip'   — user excluded this file
+function buildRow(file, roster) {
+  const guess = heuristicallyTag({ filename: file.name, roster });
+  // We treat anything below 'high' confidence as needing review unless
+  // the user has confirmed it. ambiguous always pushes to review.
+  const needsReview = guess.confidence === 'low' || guess.confidence === 'none' || guess.ambiguous;
+  return {
+    id: crypto.randomUUID(),
+    file,
+    scope: TEAM_SCOPE_TYPES.has(guess.assetType) ? 'team' : 'player',
+    team: guess.team || '',
+    num: guess.num || '',
+    firstInitial: guess.firstInitial || '',
+    lastName: guess.lastName || '',
+    assetType: guess.assetType || 'HEADSHOT',
+    variant: '',
+    confidence: guess.confidence,
+    reasons: guess.reasons || [],
+    status: needsReview ? 'review' : 'auto',
+  };
+}
+
+export default function BulkImportModal({ open, onClose, roster, onImported }) {
+  const [stage, setStage] = useState('idle'); // idle | analyzing | preview | importing | done
+  const [rows, setRows] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [results, setResults] = useState(null);
+  // Filter for the preview table.
+  const [filter, setFilter] = useState('all'); // all | review | auto | skip
+
+  // Reset modal state whenever it (re)opens. Keeps Cancel from leaving
+  // stale rows around for the next session.
+  useEffect(() => {
+    if (open) {
+      setStage('idle');
+      setRows([]);
+      setProgress({ done: 0, total: 0 });
+      setResults(null);
+      setFilter('all');
+    }
+  }, [open]);
+
+  const ingest = useCallback(async (files) => {
+    setStage('analyzing');
+    // Filter to images + videos. Fold async heuristic-tag (synchronous,
+    // but huge folders make us yield to the event loop).
+    const usable = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    const out = [];
+    for (let i = 0; i < usable.length; i++) {
+      out.push(buildRow(usable[i], roster));
+      // Yield every 50 so the UI thread isn't frozen for big folders.
+      if (i % 50 === 49) await new Promise(r => setTimeout(r, 0));
+    }
+    setRows(out);
+    setStage('preview');
+  }, [roster]);
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = await filesFromDrop(e.dataTransfer);
+    if (files.length) ingest(files);
+  }, [ingest]);
+
+  const handleFolderInput = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length) ingest(files);
+  }, [ingest]);
+
+  const updateRow = useCallback((id, patch) => {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  }, []);
+
+  const setRowStatus = useCallback((id, status) => updateRow(id, { status }), [updateRow]);
+
+  const counts = useMemo(() => {
+    const c = { all: rows.length, auto: 0, review: 0, skip: 0 };
+    for (const r of rows) c[r.status] = (c[r.status] || 0) + 1;
+    return c;
+  }, [rows]);
+
+  const importable = useMemo(() => rows.filter(r => r.status !== 'skip'), [rows]);
+
+  const visible = useMemo(() => {
+    if (filter === 'all') return rows;
+    return rows.filter(r => r.status === filter);
+  }, [rows, filter]);
+
+  // Build the canonical filename from the resolved tags so parseFilename
+  // (and every downstream lookup) treats the import as already-tagged.
+  const buildName = (r) => {
+    const ext = (r.file.name.match(/\.[^.]+$/) || ['.jpg'])[0].slice(1);
+    if (r.scope === 'team') {
+      return buildTeamFilename({ team: r.team, assetType: r.assetType, variant: r.variant, ext });
+    }
+    return buildPlayerFilename({
+      team: r.team, num: r.num, firstInitial: r.firstInitial,
+      lastName: r.lastName, assetType: r.assetType, ext,
+    });
+  };
+
+  const runImport = useCallback(async () => {
+    setStage('importing');
+    const compressOn = getCompressPreference();
+    const todo = importable;
+    setProgress({ done: 0, total: todo.length });
+    let ok = 0, fail = 0, savedBytes = 0;
+    const records = [];
+    for (let i = 0; i < todo.length; i++) {
+      const r = todo[i];
+      try {
+        // Skip if the row is missing required fields — the user picked
+        // 'auto' but the heuristic actually had nothing. Belt + braces.
+        if (!r.team) { fail++; continue; }
+        if (r.scope === 'player' && !r.lastName) { fail++; continue; }
+
+        let blob = r.file;
+        let width = 0, height = 0;
+        if (compressOn && r.file.type.startsWith('image/')) {
+          try {
+            const result = await compressImageBlob(r.file);
+            blob = result.blob;
+            width = result.width; height = result.height;
+            savedBytes += (result.originalBytes - result.finalBytes);
+          } catch {
+            blob = r.file;
+          }
+        }
+        const newName = buildName(r);
+        const rec = await saveMedia({ name: newName, blob, width, height });
+        records.push(rec);
+        ok++;
+      } catch (e) {
+        console.warn('bulk import row failed', r.file.name, e);
+        fail++;
+      }
+      setProgress({ done: i + 1, total: todo.length });
+    }
+    setResults({ ok, fail, skipped: rows.length - todo.length, savedBytes, records });
+    setStage('done');
+    if (onImported) onImported(records);
+  }, [importable, rows.length, onImported]);
+
+  if (!open) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 200, padding: 16,
+    }} onClick={(e) => { if (e.target === e.currentTarget && stage !== 'importing') onClose(); }}>
+      <Card style={{
+        width: '100%', maxWidth: 1100, maxHeight: '90vh',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        <div style={{
+          padding: '14px 18px', borderBottom: `1px solid ${colors.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <SectionHeading style={{ margin: 0 }}>Bulk import</SectionHeading>
+          <button onClick={onClose} disabled={stage === 'importing'} style={{
+            background: 'transparent', border: 'none', cursor: stage === 'importing' ? 'not-allowed' : 'pointer',
+            fontSize: 22, lineHeight: 1, color: colors.textMuted, padding: 4,
+          }}>×</button>
+        </div>
+
+        {stage === 'idle' && (
+          <DropZone
+            dragOver={dragOver}
+            onDragEnter={() => setDragOver(true)}
+            onDragLeave={() => setDragOver(false)}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDrop={handleDrop}
+            onFolderInput={handleFolderInput}
+          />
+        )}
+
+        {stage === 'analyzing' && (
+          <div style={{ padding: 40, textAlign: 'center', color: colors.textSecondary, fontSize: 13 }}>
+            Reading folder + analyzing filenames…
+          </div>
+        )}
+
+        {stage === 'preview' && (
+          <PreviewBody
+            rows={visible}
+            counts={counts}
+            filter={filter}
+            setFilter={setFilter}
+            updateRow={updateRow}
+            setRowStatus={setRowStatus}
+          />
+        )}
+
+        {stage === 'importing' && (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontFamily: fonts.condensed, color: colors.textSecondary, marginBottom: 12, letterSpacing: 0.5 }}>
+              Uploading {progress.done} / {progress.total}
+            </div>
+            <div style={{ width: '100%', height: 8, background: colors.bg, borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{
+                width: `${(progress.done / Math.max(1, progress.total)) * 100}%`,
+                height: '100%', background: colors.red, transition: 'width 0.2s ease',
+              }} />
+            </div>
+          </div>
+        )}
+
+        {stage === 'done' && results && (
+          <ResultsBody results={results} onClose={onClose} />
+        )}
+
+        {stage === 'preview' && (
+          <div style={{
+            padding: '12px 18px', borderTop: `1px solid ${colors.border}`,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ fontSize: 11, color: colors.textSecondary, fontFamily: fonts.condensed, letterSpacing: 0.4 }}>
+              {importable.length} ready to import · {counts.review} need review · {counts.skip} skipped
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <OutlineButton onClick={onClose}>Cancel</OutlineButton>
+              <RedButton onClick={runImport} disabled={importable.length === 0}>
+                Import {importable.length} {importable.length === 1 ? 'file' : 'files'}
+              </RedButton>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function DropZone({ dragOver, onDragEnter, onDragLeave, onDragOver, onDrop, onFolderInput }) {
+  return (
+    <div
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      style={{
+        margin: 18,
+        padding: 40,
+        textAlign: 'center',
+        border: `2px dashed ${dragOver ? colors.red : colors.border}`,
+        background: dragOver ? 'rgba(220,38,38,0.05)' : colors.bg,
+        borderRadius: radius.base,
+        transition: 'all 0.15s',
+      }}
+    >
+      <div style={{ fontSize: 32, marginBottom: 8 }}>📁</div>
+      <div style={{ fontFamily: fonts.heading, fontSize: 18, marginBottom: 6 }}>
+        Drop a folder here
+      </div>
+      <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 16, lineHeight: 1.5 }}>
+        We'll read every image and video inside (and any sub-folders), run the filename heuristic,<br />
+        and let you eyeball + fix anything before committing the batch.
+      </div>
+      <label style={{
+        display: 'inline-block',
+        padding: '8px 16px',
+        background: colors.red, color: '#fff',
+        borderRadius: radius.sm, cursor: 'pointer',
+        fontFamily: fonts.condensed, fontSize: 12, fontWeight: 700,
+        letterSpacing: 0.5, textTransform: 'uppercase',
+      }}>
+        Or pick a folder…
+        <input
+          type="file"
+          // webkitdirectory is non-standard but all major browsers support it.
+          // eslint-disable-next-line react/no-unknown-property
+          webkitdirectory=""
+          // eslint-disable-next-line react/no-unknown-property
+          directory=""
+          multiple
+          accept="image/*,video/*"
+          onChange={onFolderInput}
+          style={{ display: 'none' }}
+        />
+      </label>
+    </div>
+  );
+}
+
+function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+      <div style={{
+        padding: '10px 18px', borderBottom: `1px solid ${colors.borderLight}`,
+        display: 'flex', gap: 6, alignItems: 'center',
+      }}>
+        {[
+          { id: 'all',    label: `All (${counts.all})` },
+          { id: 'review', label: `Needs review (${counts.review})` },
+          { id: 'auto',   label: `Auto-tagged (${counts.auto})` },
+          { id: 'skip',   label: `Skipped (${counts.skip})` },
+        ].map(t => (
+          <button key={t.id} onClick={() => setFilter(t.id)} style={{
+            padding: '5px 10px', borderRadius: radius.sm,
+            fontSize: 11, fontWeight: 700, fontFamily: fonts.condensed, letterSpacing: 0.4, textTransform: 'uppercase',
+            background: filter === t.id ? colors.red : 'transparent',
+            color: filter === t.id ? '#fff' : colors.textSecondary,
+            border: `1px solid ${filter === t.id ? colors.red : colors.border}`,
+            cursor: 'pointer',
+          }}>{t.label}</button>
+        ))}
+      </div>
+      <div style={{ overflow: 'auto', flex: 1 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead style={{ position: 'sticky', top: 0, background: colors.bg, zIndex: 1 }}>
+            <tr>
+              <Th style={{ width: 80 }}>Status</Th>
+              <Th>Original filename</Th>
+              <Th style={{ width: 100 }}>Team</Th>
+              <Th style={{ width: 80 }}>Scope</Th>
+              <Th style={{ width: 80 }}>Number</Th>
+              <Th style={{ width: 120 }}>Last name</Th>
+              <Th style={{ width: 150 }}>Asset type</Th>
+              <Th style={{ width: 90 }}></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id} style={{
+                borderTop: `1px solid ${colors.divider}`,
+                opacity: r.status === 'skip' ? 0.5 : 1,
+                background: r.status === 'review' ? 'rgba(245,158,11,0.06)' : 'transparent',
+              }}>
+                <Td>
+                  <StatusChip status={r.status} confidence={r.confidence} />
+                </Td>
+                <Td><div title={r.reasons.join(' · ')} style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11 }}>{r.file.name}</div></Td>
+                <Td>
+                  <select value={r.team} onChange={e => updateRow(r.id, { team: e.target.value })} style={{ ...selectStyle, fontSize: 11, padding: '3px 6px' }}>
+                    <option value="">—</option>
+                    {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+                  </select>
+                </Td>
+                <Td>
+                  <select value={r.scope} onChange={e => {
+                    const next = e.target.value;
+                    updateRow(r.id, {
+                      scope: next,
+                      assetType: next === 'team' ? 'TEAMPHOTO' : 'HEADSHOT',
+                    });
+                  }} style={{ ...selectStyle, fontSize: 11, padding: '3px 6px' }}>
+                    <option value="player">player</option>
+                    <option value="team">team</option>
+                  </select>
+                </Td>
+                <Td>
+                  {r.scope === 'player' ? (
+                    <input value={r.num} onChange={e => updateRow(r.id, { num: e.target.value })} style={{ ...inputStyle, fontSize: 11, padding: '3px 6px', width: 60 }} />
+                  ) : <span style={{ color: colors.textMuted }}>—</span>}
+                </Td>
+                <Td>
+                  {r.scope === 'player' ? (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <input value={r.firstInitial} onChange={e => updateRow(r.id, { firstInitial: e.target.value.toUpperCase().slice(0, 1) })}
+                        placeholder="FI" style={{ ...inputStyle, fontSize: 11, padding: '3px 6px', width: 32, textAlign: 'center' }} />
+                      <input value={r.lastName} onChange={e => updateRow(r.id, { lastName: e.target.value.toUpperCase() })}
+                        placeholder="Last" style={{ ...inputStyle, fontSize: 11, padding: '3px 6px', width: 80 }} />
+                    </div>
+                  ) : <span style={{ color: colors.textMuted }}>—</span>}
+                </Td>
+                <Td>
+                  <select value={r.assetType} onChange={e => updateRow(r.id, { assetType: e.target.value })} style={{ ...selectStyle, fontSize: 11, padding: '3px 6px', maxWidth: 140 }}>
+                    {(r.scope === 'team' ? TEAM_ASSET_TYPES : PLAYER_ASSET_TYPES).map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </Td>
+                <Td>
+                  {r.status === 'skip' ? (
+                    <button onClick={() => setRowStatus(r.id, 'review')} style={miniBtn(colors.text)}>Restore</button>
+                  ) : (
+                    <button onClick={() => setRowStatus(r.id, 'skip')} style={miniBtn(colors.textMuted)}>Skip</button>
+                  )}
+                </Td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: colors.textMuted, fontStyle: 'italic' }}>
+                No rows in this filter.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function StatusChip({ status, confidence }) {
+  const palette = {
+    auto:   { bg: 'rgba(34,197,94,0.12)', fg: '#15803D', label: confidence === 'high' ? 'Auto · high' : 'Auto' },
+    review: { bg: 'rgba(245,158,11,0.12)', fg: '#92400E', label: 'Review' },
+    skip:   { bg: 'rgba(107,114,128,0.12)', fg: '#374151', label: 'Skip' },
+  }[status] || { bg: colors.bg, fg: colors.textSecondary, label: status };
+  return (
+    <span style={{
+      padding: '2px 6px', borderRadius: radius.full,
+      background: palette.bg, color: palette.fg,
+      fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
+    }}>{palette.label}</span>
+  );
+}
+
+function ResultsBody({ results, onClose }) {
+  const fmt = (n) => n < 1024 ? `${n} B`
+    : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB`
+    : n < 1024 ** 3 ? `${(n / (1024 ** 2)).toFixed(1)} MB`
+    : `${(n / (1024 ** 3)).toFixed(2)} GB`;
+  return (
+    <div style={{ padding: 30, textAlign: 'center' }}>
+      <div style={{ fontSize: 38, marginBottom: 8 }}>{results.fail === 0 ? '✓' : '⚠'}</div>
+      <div style={{ fontFamily: fonts.heading, fontSize: 18, marginBottom: 6 }}>
+        Imported {results.ok} {results.ok === 1 ? 'file' : 'files'}
+      </div>
+      <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.6 }}>
+        {results.fail > 0 && <div style={{ color: '#92400E' }}>{results.fail} failed (missing team/lastname tags)</div>}
+        {results.skipped > 0 && <div>{results.skipped} skipped by you</div>}
+        {results.savedBytes > 0 && <div>Compression saved <strong>{fmt(results.savedBytes)}</strong> of storage</div>}
+      </div>
+      <div style={{ marginTop: 20 }}>
+        <RedButton onClick={onClose}>Done</RedButton>
+      </div>
+    </div>
+  );
+}
+
+const Th = ({ children, style }) => (
+  <th style={{
+    padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap',
+    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+    color: colors.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase',
+    ...style,
+  }}>{children}</th>
+);
+const Td = ({ children, style }) => (
+  <td style={{ padding: '6px 10px', verticalAlign: 'middle', ...style }}>{children}</td>
+);
+const miniBtn = (color) => ({
+  padding: '3px 8px', borderRadius: radius.sm,
+  background: 'transparent', color,
+  border: `1px solid ${color}33`,
+  fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
+  cursor: 'pointer',
+});

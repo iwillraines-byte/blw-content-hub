@@ -16,6 +16,8 @@ import { backupLibraryToCloud } from '../cloud-backup';
 import { refreshFromCloud } from '../cloud-reader';
 import { useToast } from '../toast';
 import { authedFetch } from '../authed-fetch';
+import { compressImageBlob, getCompressPreference, setCompressPreference, formatSavings } from '../image-compress';
+import BulkImportModal from './BulkImportModal';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -550,6 +552,7 @@ export default function Files() {
   const [storedMedia, setStoredMedia] = useState([]);
   const [thumbUrls, setThumbUrls] = useState({});
   const [dragging, setDragging] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [showTagger, setShowTagger] = useState(true);
   const [previewFile, setPreviewFile] = useState(null); // open preview modal
 
@@ -695,14 +698,42 @@ export default function Files() {
   });
 
   const handleFiles = useCallback(async (fileList) => {
+    const compressOn = getCompressPreference();
+    let totalOriginal = 0, totalFinal = 0, savedFiles = 0;
     for (const file of fileList) {
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
-      const record = await saveMedia({ name: file.name, blob: file, width: 0, height: 0 });
-      const url = blobToObjectURL(file);
+      // Compress images on the way in. Videos and pass-through types
+      // (SVG, GIF) come back unchanged — see image-compress.js for the
+      // skip rules. The user can flip the preference off in Settings if
+      // they want to archive originals.
+      let blobToSave = file;
+      let width = 0, height = 0;
+      if (compressOn && file.type.startsWith('image/')) {
+        try {
+          const result = await compressImageBlob(file);
+          blobToSave = result.blob;
+          width = result.width;
+          height = result.height;
+          totalOriginal += result.originalBytes;
+          totalFinal += result.finalBytes;
+          if (result.finalBytes < result.originalBytes) savedFiles++;
+        } catch {
+          // Compression failed — fall back to the original so upload still succeeds.
+          blobToSave = file;
+        }
+      }
+      const record = await saveMedia({ name: file.name, blob: blobToSave, width, height });
+      const url = blobToObjectURL(blobToSave);
       setStoredMedia(prev => [record, ...prev]);
       setThumbUrls(prev => ({ ...prev, [record.id]: url }));
     }
-  }, []);
+    if (savedFiles > 0) {
+      const saved = totalOriginal - totalFinal;
+      const fmt = (n) => n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB` : `${(n / (1024 ** 2)).toFixed(1)} MB`;
+      const pct = Math.round((1 - totalFinal / totalOriginal) * 100);
+      toast.success(`Compressed ${savedFiles} file${savedFiles === 1 ? '' : 's'} — saved ${fmt(saved)} (${pct}%)`);
+    }
+  }, [toast]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault(); setDragging(false);
@@ -1012,6 +1043,10 @@ export default function Files() {
                 </div>
               );
             })()}
+            {usage?.byTeam && Object.keys(usage.byTeam).length > 0 && (
+              <PerTeamBreakdown byTeam={usage.byTeam} />
+            )}
+            <CompressionToggle />
             {usage?.error && (
               <div style={{ marginTop: 8, fontSize: 11, color: '#991B1B' }}>
                 Couldn't load usage meter: {usage.error}
@@ -1101,22 +1136,56 @@ export default function Files() {
       )}
 
       {/* Upload Zone */}
-      <label style={{ cursor: 'pointer' }}>
-        <input type="file" multiple accept="image/*,video/*" onChange={handleFileInput} style={{ display: 'none' }} />
-        <div onDrop={handleDrop} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} style={{
-          border: `2px dashed ${dragging ? colors.red : colors.border}`,
-          borderRadius: radius.lg, padding: 32, textAlign: 'center',
-          background: dragging ? colors.redLight : colors.white, transition: 'all 0.2s',
-        }}>
-          <div style={{ fontSize: 32, marginBottom: 6, opacity: 0.4 }}>📂</div>
-          <div style={{ fontFamily: fonts.body, fontSize: 16, fontWeight: 700, color: colors.text }}>
-            {dragging ? 'Drop files here' : 'Drag & drop files'}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'stretch' }}>
+        <label style={{ cursor: 'pointer' }}>
+          <input type="file" multiple accept="image/*,video/*" onChange={handleFileInput} style={{ display: 'none' }} />
+          <div onDrop={handleDrop} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} style={{
+            border: `2px dashed ${dragging ? colors.red : colors.border}`,
+            borderRadius: radius.lg, padding: 32, textAlign: 'center',
+            background: dragging ? colors.redLight : colors.white, transition: 'all 0.2s',
+            height: '100%',
+          }}>
+            <div style={{ fontSize: 32, marginBottom: 6, opacity: 0.4 }}>📂</div>
+            <div style={{ fontFamily: fonts.body, fontSize: 16, fontWeight: 700, color: colors.text }}>
+              {dragging ? 'Drop files here' : 'Drag & drop files'}
+            </div>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+              or click to browse · Upload with any filename — tag and rename below
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
-            or click to browse · Upload with any filename — tag and rename below
+        </label>
+        {/* Bulk import — drag a folder, eyeball a checklist, commit. */}
+        <button onClick={() => setBulkOpen(true)} style={{
+          padding: '24px 20px', borderRadius: radius.lg,
+          background: colors.white, color: colors.text,
+          border: `2px solid ${colors.border}`, cursor: 'pointer',
+          textAlign: 'center', minWidth: 180,
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = colors.red; e.currentTarget.style.color = colors.red; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.text; }}
+        >
+          <div style={{ fontSize: 28, marginBottom: 6, opacity: 0.4 }}>📁</div>
+          <div style={{ fontFamily: fonts.body, fontSize: 14, fontWeight: 700 }}>Bulk import folder</div>
+          <div style={{ fontSize: 10, marginTop: 4, fontFamily: fonts.condensed, letterSpacing: 0.4, textTransform: 'uppercase', opacity: 0.7 }}>
+            Pre-flight check + batch commit
           </div>
-        </div>
-      </label>
+        </button>
+      </div>
+      <BulkImportModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        roster={roster}
+        onImported={(records) => {
+          // Mirror handleFiles' state update so the freshly imported
+          // files appear immediately without waiting for a re-mount.
+          if (!records?.length) return;
+          setStoredMedia(prev => [...records, ...prev]);
+          const urls = {};
+          records.forEach(r => { if (r.blob) urls[r.id] = blobToObjectURL(r.blob); });
+          setThumbUrls(prev => ({ ...prev, ...urls }));
+        }}
+      />
 
       {/* UNTAGGED FILES — Bulk Tagger */}
       {untagged.length > 0 && (
@@ -1517,6 +1586,98 @@ export default function Files() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Per-team storage chart for the Files page. Shows each BLW team as a
+// row with its file count, used bytes, and a horizontal bar normalized
+// to whichever team is using the most space. Helps spot which team's
+// archive is bloated (oversized originals, duplicates) at a glance.
+function PerTeamBreakdown({ byTeam }) {
+  const fmt = (n) => n < 1024 ? `${n} B`
+    : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB`
+    : n < 1024 ** 3 ? `${(n / (1024 ** 2)).toFixed(1)} MB`
+    : `${(n / (1024 ** 3)).toFixed(2)} GB`;
+  // Sort by bytes descending, drop the OTHER bucket to the bottom.
+  const entries = Object.entries(byTeam).sort((a, b) => {
+    if (a[0] === 'OTHER') return 1;
+    if (b[0] === 'OTHER') return -1;
+    return b[1].bytes - a[1].bytes;
+  });
+  const max = Math.max(1, ...entries.map(([, v]) => v.bytes));
+  return (
+    <div style={{
+      marginTop: 12, padding: 10,
+      background: 'rgba(14,165,233,0.06)',
+      border: '1px solid rgba(14,165,233,0.18)',
+      borderRadius: radius.sm, fontSize: 11, fontFamily: fonts.condensed, color: '#075985',
+    }}>
+      <div style={{ fontWeight: 700, letterSpacing: 0.5, marginBottom: 6 }}>
+        BREAKDOWN BY TEAM · MEDIA BUCKET
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {entries.map(([team, v]) => {
+          const t = getTeam(team);
+          const pct = (v.bytes / max) * 100;
+          const label = t ? t.name : (team === 'OTHER' ? 'Unparsed / legacy' : team);
+          return (
+            <div key={team} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px 60px', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, color: t?.color || colors.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {team}
+              </span>
+              <div style={{ height: 6, background: 'rgba(14,165,233,0.10)', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${Math.max(pct, 2)}%`, height: '100%',
+                  background: t?.color || '#0EA5E9',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+              <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(v.bytes)}</span>
+              <span style={{ textAlign: 'right', opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>{v.count} {v.count === 1 ? 'file' : 'files'}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Compression preference toggle. ON by default (recommended for almost
+// everyone). Surfaces in the storage card so it's discoverable right
+// where the consequences (used bytes) are visible.
+function CompressionToggle() {
+  const [on, setOn] = useState(getCompressPreference());
+  const flip = () => {
+    const next = !on;
+    setOn(next);
+    setCompressPreference(next);
+  };
+  return (
+    <div style={{
+      marginTop: 10, padding: '8px 10px',
+      background: on ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.10)',
+      border: `1px solid ${on ? 'rgba(34,197,94,0.30)' : 'rgba(245,158,11,0.35)'}`,
+      borderRadius: radius.sm,
+      fontSize: 11, fontFamily: fonts.condensed,
+      color: on ? '#15803D' : '#92400E',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+    }}>
+      <span>
+        <strong style={{ letterSpacing: 0.5 }}>AUTO-COMPRESSION</strong>{' '}
+        {on
+          ? 'on · resizing images to ≤1920 px and re-encoding @ 85% on upload'
+          : 'OFF · uploading originals — fine for archival, will eat storage'}
+      </span>
+      <button onClick={flip} style={{
+        padding: '4px 10px', borderRadius: radius.sm,
+        background: 'transparent', color: 'inherit',
+        border: '1px solid currentColor', cursor: 'pointer',
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
+        fontFamily: 'inherit',
+      }}>
+        Turn {on ? 'off' : 'on'}
+      </button>
     </div>
   );
 }
