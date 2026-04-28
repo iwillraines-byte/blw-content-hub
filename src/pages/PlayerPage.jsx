@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { findPlayerMedia, findTeamMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
+import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
 import { useAuth, isAdminRole } from '../auth';
@@ -978,6 +978,15 @@ export default function PlayerPage() {
   // Full team media (all players + team-scoped assets) for the photo picker.
   // Lazy-loaded the first time the picker opens, then kept in state.
   const [teamMedia, setTeamMedia] = useState([]);
+  // ENTIRE local media store — fed to resolvePlayerAvatar so this page
+  // sees the same pool TeamPage's roster card sees. Without this, the
+  // avatar resolver only had the strict findPlayerMedia() result + the
+  // (lazy) teamMedia, which meant the player-page hero would miss photos
+  // that the team-page roster successfully matched. (Repro: Cooper Ruckel
+  // showed on the AZS roster card but not on his player page; opening
+  // the photo picker fetched team media and "fixed" it temporarily, but
+  // a refresh wiped teamMedia and the avatar disappeared again.)
+  const [allMediaPool, setAllMediaPool] = useState([]);
   const [battingLeaders, setBattingLeaders] = useState([]);
   const [pitchingLeaders, setPitchingLeaders] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -992,11 +1001,14 @@ export default function PlayerPage() {
     // Load stats AND team roster AND ALL manual players in parallel.
     // We pass the FULL manual_players list (not just this team's) so
     // cross-team trade overrides resolve correctly.
-    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getAllManualPlayers()])
-      .then(async ([allData, , manualList]) => {
+    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getAllManualPlayers(), getAllMedia()])
+      .then(async ([allData, , manualList, all]) => {
         if (cancel) return;
         setBattingLeaders(allData.batting || []);
         setPitchingLeaders(allData.pitching || []);
+        // Cache the entire local media pool so the avatar resolver has the
+        // same visibility TeamPage gives it. See allMediaPool comment above.
+        setAllMediaPool(all || []);
         const p = getPlayerByTeamLastName(team.id, lastName, manualList);
         if (p) {
           // Media match uses team + lastName, disambiguated by first initial
@@ -1021,9 +1033,11 @@ export default function PlayerPage() {
     return () => { cancel = true; };
   }, [team?.id, lastName]);
 
-  // Blob URLs for BOTH player-scoped media AND any team media that was
-  // loaded for the photo picker. Dedup by id so a single url cache
-  // serves every render (profile circle, gallery, picker tile).
+  // Blob URLs for player-scoped media, team media, AND the full local
+  // media pool. Deduped by id so a single url cache serves every render
+  // (profile circle, gallery, picker tile). The `allMediaPool` inclusion
+  // is what lets the avatar resolver pick a legacy / cross-team record
+  // and have its URL actually resolve here.
   const mediaUrls = useMemo(() => {
     const urls = {};
     const seen = new Set();
@@ -1036,8 +1050,9 @@ export default function PlayerPage() {
     };
     addAll(media);
     addAll(teamMedia);
+    addAll(allMediaPool);
     return urls;
-  }, [media, teamMedia]);
+  }, [media, teamMedia, allMediaPool]);
 
   // ─── Photo-picker callbacks ────────────────────────────────────────────
   // IMPORTANT: these useCallbacks MUST live above every conditional return
@@ -1184,10 +1199,13 @@ export default function PlayerPage() {
 
   // Avatar resolution — delegate to the canonical resolver in
   // media-store.js so the player hero and team-page roster card always
-  // pick the same photo. Lastname uniqueness is irrelevant here (the
-  // lookup is already scoped by FI + num to this specific player), so
-  // we leave lastnameUnique at its default of true.
-  const headshot = resolvePlayerAvatar(player, [...media, ...teamMedia], {
+  // pick the same photo. Feeds the FULL local media pool (not just the
+  // strict findPlayerMedia result + lazy teamMedia) so this page sees
+  // the same records TeamPage sees. Lastname uniqueness is irrelevant
+  // here — the lookup is already scoped by FI + num to this specific
+  // player — so we leave lastnameUnique at its default of true.
+  const avatarPool = allMediaPool.length > 0 ? allMediaPool : [...media, ...teamMedia];
+  const headshot = resolvePlayerAvatar(player, avatarPool, {
     profileMediaId: player.profileMediaId,
   });
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
