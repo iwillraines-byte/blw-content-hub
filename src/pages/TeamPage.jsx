@@ -6,7 +6,7 @@ import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { findTeamMedia, blobToObjectURL } from '../media-store';
+import { findTeamMedia, getAllMedia, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
 
 export default function TeamPage() {
@@ -244,7 +244,12 @@ export default function TeamPage() {
       // to be EXCLUDED from DAL's roster while still in batting cache).
       getAllManualPlayers(),
       fetchGames(),
-    ]).then(([liveData, apiRoster, teamMedia, allManual, gameList]) => {
+      // Pull every media record so an admin-picked profile pic can be
+      // used as the roster avatar even when the chosen photo lives in
+      // another team's bucket (e.g. a HEADSHOT carried over from a
+      // previous team after a trade).
+      getAllMedia(),
+    ]).then(([liveData, apiRoster, teamMedia, allManual, gameList, allMedia]) => {
       if (cancel) return;
       // Filter the manual list to just this team for the existing
       // rebuildRoster signature (it expects per-team rows). The cross-
@@ -260,19 +265,41 @@ export default function TeamPage() {
       const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList, allManual);
       setRoster(fullRoster);
 
-      // Avatar lookup — prefer a headshot whose firstInitial matches the
-      // roster entry. Fall back to any lastname match for legacy records
-      // that pre-date the initial convention.
+      // Avatar lookup — three-tier resolution per roster entry:
+      //   1. Admin-picked override: if the player's manual_players row
+      //      has profile_media_id, use that exact media blob (from any
+      //      team's bucket — `allMedia` is the global pool). This is
+      //      the same source PlayerPage uses for its hero, so the team
+      //      page roster card and the player page agree on the photo.
+      //   2. Same-FI HEADSHOT/PORTRAIT/ACTION on this team — covers
+      //      the typical case where a player has standard team-tagged
+      //      media but no admin override.
+      //   3. Legacy (no first-initial) lastname match — for media
+      //      uploaded before the FI convention existed.
       const urls = {};
       const playerOnly = teamMedia.filter(m => (m.scope || 'player') === 'player');
+      const mediaById = new Map(allMedia.map(m => [m.id, m]));
+      // Build a name → manual_players row lookup so we can read
+      // profile_media_id per roster entry. Keyed by full name lowercase
+      // because that's the only field guaranteed to be unique even
+      // among same-FI cousins.
+      const manualByFullName = new Map();
+      for (const m of manualList) {
+        const fullName = (m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim()).toLowerCase();
+        if (fullName) manualByFullName.set(fullName, m);
+      }
       for (const p of fullRoster) {
         const LN = p.lastName.toUpperCase();
         const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
+        const fullName = (p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim()).toLowerCase();
+        const manualRow = manualByFullName.get(fullName);
+        const overrideId = manualRow?.profile_media_id || manualRow?.profileMediaId || null;
+        const overrideMedia = overrideId ? mediaById.get(overrideId) : null;
         const isHeadshotLike = (m) =>
           m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION';
         const exact = playerOnly.find(m => m.player === LN && (m.firstInitial || '').toUpperCase() === FI && isHeadshotLike(m));
         const legacy = playerOnly.find(m => m.player === LN && !m.firstInitial && isHeadshotLike(m));
-        const headshot = exact || legacy;
+        const headshot = overrideMedia || exact || legacy;
         if (headshot?.blob) urls[`${FI}|${LN}`] = blobToObjectURL(headshot.blob);
       }
       setRosterAvatars(urls);
