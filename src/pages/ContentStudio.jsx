@@ -76,7 +76,12 @@ export default function ContentStudio() {
   // Kick off an ideas request. `seedIdea` is optional — passed through to the
   // API as the "more like this" seed. Results PREpend to aiIdeas so newer
   // batches bubble to the top of the list.
-  const requestIdeas = async (seedIdea = null, count = 6) => {
+  // Cap on visible cards. Generation calls request this same number, and the
+  // render also slices to it — so even if "More like this" prepends extras,
+  // only the freshest MAX_VISIBLE_IDEAS render. Keeps the surface focused.
+  const MAX_VISIBLE_IDEAS = 4;
+
+  const requestIdeas = async (seedIdea = null, count = MAX_VISIBLE_IDEAS) => {
     setIdeasLoading(true);
     setIdeasError(null);
     try {
@@ -257,7 +262,7 @@ export default function ContentStudio() {
                   </span>
                 )}
                 <button
-                  onClick={() => requestIdeas(null, 6)}
+                  onClick={() => requestIdeas(null)}
                   disabled={ideasLoading || !dataLoaded}
                   title="Generate a fresh batch of AI-powered content ideas using the current BLW state"
                   style={{
@@ -291,7 +296,7 @@ export default function ContentStudio() {
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {(aiIdeas.length > 0 ? aiIdeas : suggestions).map(s => (
+              {(aiIdeas.length > 0 ? aiIdeas : suggestions).slice(0, MAX_VISIBLE_IDEAS).map(s => (
                 <IdeaCard
                   key={s.id}
                   idea={s}
@@ -319,7 +324,7 @@ export default function ContentStudio() {
                     Generate a fresh AI batch, or wait for live stats to seed this list once games start.
                   </div>
                   <button
-                    onClick={() => requestIdeas(null, 6)}
+                    onClick={() => requestIdeas(null)}
                     className="btn-primary"
                     style={{
                       border: 'none', borderRadius: radius.base,
