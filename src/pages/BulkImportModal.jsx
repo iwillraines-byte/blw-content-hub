@@ -15,6 +15,7 @@ import { colors, fonts, radius } from '../theme';
 import { saveMedia, buildPlayerFilename, buildTeamFilename, TEAM_SCOPE_TYPES, blobToObjectURL } from '../media-store';
 import { heuristicallyTag } from '../tag-heuristics';
 import { compressImageBlob, getCompressPreference, formatSavings } from '../image-compress';
+import { PreviewLightbox } from '../preview-lightbox';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -324,9 +325,8 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
       </Card>
 
       {/* Lightbox — full-size preview of whichever row the user clicked.
-          Sits inside the modal's outer wrapper so its own stacking context
-          covers the table. Edits made here flow back into the row state
-          so the user can fix tags while looking at the photo. */}
+          Edits made here flow back into the row state so the user can
+          fix tags while looking at the photo. */}
       {lightboxRowId && (() => {
         const idx = visible.findIndex(r => r.id === lightboxRowId);
         const row = idx >= 0 ? visible[idx] : null;
@@ -334,14 +334,22 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
         const goPrev = () => setLightboxRowId(visible[(idx - 1 + visible.length) % visible.length].id);
         const goNext = () => setLightboxRowId(visible[(idx + 1) % visible.length].id);
         return (
-          <Lightbox
-            row={row}
+          <PreviewLightbox
+            open={true}
+            url={row.previewUrl}
+            blob={!row.previewUrl ? row.file : null}
+            isVideo={row.isVideo}
             position={`${idx + 1} / ${visible.length}`}
             onClose={() => setLightboxRowId(null)}
             onPrev={visible.length > 1 ? goPrev : null}
             onNext={visible.length > 1 ? goNext : null}
-            updateRow={updateRow}
-            setRowStatus={setRowStatus}
+            sidebar={
+              <LightboxEditPanel
+                row={row}
+                updateRow={updateRow}
+                setRowStatus={setRowStatus}
+              />
+            }
           />
         );
       })()}
@@ -543,147 +551,77 @@ function StatusChip({ status, confidence }) {
   );
 }
 
-// Full-size preview overlay. Stays inside the bulk modal's wrapper so
-// the table behind it is visually present (and the user can dismiss
-// the lightbox without losing scroll position). Mirrors the row's
-// edit fields so retagging while looking at the actual photo doesn't
-// require closing → editing → reopening.
-function Lightbox({ row, position, onClose, onPrev, onNext, updateRow, setRowStatus }) {
-  // Keyboard navigation: ←/→ to flip, Esc to close.
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowLeft' && onPrev) onPrev();
-      else if (e.key === 'ArrowRight' && onNext) onNext();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, onPrev, onNext]);
-
+// Edit panel rendered as the lightbox sidebar — same fields as the
+// row in the table, but visible while the photo is on screen so
+// retagging from sight doesn't require closing → editing → reopening.
+function LightboxEditPanel({ row, updateRow, setRowStatus }) {
   return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 300, padding: 24, gap: 16, flexDirection: 'column',
-      }}
-    >
+    <div style={{
+      width: '100%', maxWidth: 920,
+      background: 'rgba(255,255,255,0.96)',
+      borderRadius: radius.base, padding: 12,
+      display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+      fontFamily: fonts.body, fontSize: 12, color: colors.text,
+      boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+    }}>
       <div style={{
-        position: 'absolute', top: 12, right: 16,
-        display: 'flex', gap: 12, alignItems: 'center',
-        color: 'rgba(255,255,255,0.85)',
-        fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 0.5,
-      }}>
-        <span>{position}</span>
-        <button onClick={onClose} style={{
-          background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,0.4)',
-          borderRadius: radius.sm, padding: '4px 10px',
-          fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase',
-          cursor: 'pointer', fontFamily: 'inherit',
-        }}>Close (Esc)</button>
+        fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11,
+        flexBasis: '100%', color: colors.textSecondary,
+      }} title={row.reasons.join(' · ')}>
+        {row.file.name}
       </div>
-
-      {onPrev && (
-        <button onClick={onPrev} style={navBtn('left')} aria-label="Previous">‹</button>
+      <LightboxField label="Team">
+        <select value={row.team} onChange={e => updateRow(row.id, { team: e.target.value })}
+          style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
+          <option value="">—</option>
+          {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+        </select>
+      </LightboxField>
+      <LightboxField label="Scope">
+        <select value={row.scope} onChange={e => {
+          const next = e.target.value;
+          updateRow(row.id, {
+            scope: next,
+            assetType: next === 'team' ? 'TEAMPHOTO' : 'HEADSHOT',
+          });
+        }} style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
+          <option value="player">player</option>
+          <option value="team">team</option>
+        </select>
+      </LightboxField>
+      {row.scope === 'player' && (
+        <>
+          <LightboxField label="#">
+            <input value={row.num} onChange={e => updateRow(row.id, { num: e.target.value })}
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 60 }} />
+          </LightboxField>
+          <LightboxField label="FI">
+            <input value={row.firstInitial} onChange={e => updateRow(row.id, { firstInitial: e.target.value.toUpperCase().slice(0, 1) })}
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 40, textAlign: 'center' }} />
+          </LightboxField>
+          <LightboxField label="Last name">
+            <input value={row.lastName} onChange={e => updateRow(row.id, { lastName: e.target.value.toUpperCase() })}
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 120 }} />
+          </LightboxField>
+        </>
       )}
-      {onNext && (
-        <button onClick={onNext} style={navBtn('right')} aria-label="Next">›</button>
-      )}
-
-      <div style={{
-        flex: 1, width: '100%', maxHeight: '70vh',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden',
-      }}>
-        {row.previewUrl && !row.isVideo && (
-          <img src={row.previewUrl} alt={row.file.name} style={{
-            maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
-            borderRadius: radius.sm,
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-          }} />
+      <LightboxField label="Asset type">
+        <select value={row.assetType} onChange={e => updateRow(row.id, { assetType: e.target.value })}
+          style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
+          {(row.scope === 'team' ? TEAM_ASSET_TYPES : PLAYER_ASSET_TYPES).map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </LightboxField>
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        {row.status === 'skip' ? (
+          <button onClick={() => setRowStatus(row.id, 'review')} style={miniBtn(colors.text)}>Restore</button>
+        ) : (
+          <button onClick={() => setRowStatus(row.id, 'skip')} style={miniBtn(colors.textMuted)}>Skip</button>
         )}
-        {row.isVideo && (
-          <video src={URL.createObjectURL(row.file)} controls style={{
-            maxWidth: '100%', maxHeight: '100%', borderRadius: radius.sm,
-          }} />
-        )}
-        {!row.previewUrl && !row.isVideo && (
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontFamily: fonts.condensed, fontSize: 14 }}>
-            Preview not available for this file type.
-          </div>
-        )}
-      </div>
-
-      {/* Inline edit panel: same fields as the table row, but visible
-          while the photo is on screen so the user can tag from sight. */}
-      <div style={{
-        width: '100%', maxWidth: 920,
-        background: 'rgba(255,255,255,0.96)',
-        borderRadius: radius.base, padding: 12,
-        display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
-        fontFamily: fonts.body, fontSize: 12, color: colors.text,
-        boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
-      }}>
-        <div style={{
-          fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11,
-          flexBasis: '100%', color: colors.textSecondary,
-        }} title={row.reasons.join(' · ')}>
-          {row.file.name}
-        </div>
-        <LightboxField label="Team">
-          <select value={row.team} onChange={e => updateRow(row.id, { team: e.target.value })}
-            style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-            <option value="">—</option>
-            {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
-          </select>
-        </LightboxField>
-        <LightboxField label="Scope">
-          <select value={row.scope} onChange={e => {
-            const next = e.target.value;
-            updateRow(row.id, {
-              scope: next,
-              assetType: next === 'team' ? 'TEAMPHOTO' : 'HEADSHOT',
-            });
-          }} style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-            <option value="player">player</option>
-            <option value="team">team</option>
-          </select>
-        </LightboxField>
-        {row.scope === 'player' && (
-          <>
-            <LightboxField label="#">
-              <input value={row.num} onChange={e => updateRow(row.id, { num: e.target.value })}
-                style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 60 }} />
-            </LightboxField>
-            <LightboxField label="FI">
-              <input value={row.firstInitial} onChange={e => updateRow(row.id, { firstInitial: e.target.value.toUpperCase().slice(0, 1) })}
-                style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 40, textAlign: 'center' }} />
-            </LightboxField>
-            <LightboxField label="Last name">
-              <input value={row.lastName} onChange={e => updateRow(row.id, { lastName: e.target.value.toUpperCase() })}
-                style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 120 }} />
-            </LightboxField>
-          </>
-        )}
-        <LightboxField label="Asset type">
-          <select value={row.assetType} onChange={e => updateRow(row.id, { assetType: e.target.value })}
-            style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-            {(row.scope === 'team' ? TEAM_ASSET_TYPES : PLAYER_ASSET_TYPES).map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </LightboxField>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          {row.status === 'skip' ? (
-            <button onClick={() => setRowStatus(row.id, 'review')} style={miniBtn(colors.text)}>Restore</button>
-          ) : (
-            <button onClick={() => setRowStatus(row.id, 'skip')} style={miniBtn(colors.textMuted)}>Skip</button>
-          )}
-          <button onClick={() => setRowStatus(row.id, 'auto')} style={miniBtn('#15803D')} title="Mark this row as confirmed/auto">
-            ✓ Confirm
-          </button>
-        </div>
+        <button onClick={() => setRowStatus(row.id, 'auto')} style={miniBtn('#15803D')} title="Mark this row as confirmed/auto">
+          ✓ Confirm
+        </button>
       </div>
     </div>
   );
@@ -698,17 +636,6 @@ const LightboxField = ({ label, children }) => (
     {children}
   </label>
 );
-
-const navBtn = (side) => ({
-  position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-  [side]: 16,
-  width: 44, height: 44, borderRadius: '50%',
-  background: 'rgba(255,255,255,0.18)',
-  color: '#fff', border: '1px solid rgba(255,255,255,0.35)',
-  fontSize: 28, lineHeight: 1, cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  zIndex: 1,
-});
 
 function ResultsBody({ results, onClose }) {
   const fmt = (n) => n < 1024 ? `${n} B`

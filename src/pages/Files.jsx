@@ -18,6 +18,7 @@ import { useToast } from '../toast';
 import { authedFetch } from '../authed-fetch';
 import { compressImageBlob, getCompressPreference, setCompressPreference, formatSavings } from '../image-compress';
 import BulkImportModal from './BulkImportModal';
+import { PreviewLightbox } from '../preview-lightbox';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -38,7 +39,7 @@ function isProperlyNamed(name) {
 //   - Layer 2 AI auto-tag button (vision AI via /api/auto-tag, costs pennies)
 //   - Manual dropdown overrides so user can correct AI guesses before Apply
 // The parent may also push an AI result via `tagHint` prop (used for bulk runs).
-function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy }) {
+function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy, onPreview }) {
   const [tagScope, setTagScope] = useState('player'); // 'player' | 'team'
   const [tagTeam, setTagTeam] = useState('');
   const [tagNum, setTagNum] = useState('');
@@ -151,12 +152,19 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
       background: colors.white, border: `1px solid ${hintSource ? confidenceColor + '40' : colors.border}`,
       borderRadius: radius.base, marginBottom: 6,
     }}>
-      {/* Thumbnail */}
-      <div style={{
-        width: 48, height: 48, borderRadius: radius.sm, flexShrink: 0,
-        background: thumbUrl ? `url(${thumbUrl}) center/cover` : colors.bg,
-        border: `1px solid ${colors.borderLight}`,
-      }} />
+      {/* Thumbnail — click to open at full size so you can identify
+          who's in the photo before tagging. */}
+      <button
+        type="button"
+        onClick={() => onPreview && thumbUrl && onPreview(file.id)}
+        title={thumbUrl ? 'Click to view at full size' : ''}
+        style={{
+          width: 48, height: 48, borderRadius: radius.sm, flexShrink: 0,
+          background: thumbUrl ? `url(${thumbUrl}) center/cover` : colors.bg,
+          border: `1px solid ${colors.borderLight}`,
+          padding: 0, cursor: thumbUrl && onPreview ? 'zoom-in' : 'default',
+        }}
+      />
 
       {/* Original name + hint badge */}
       <div style={{ minWidth: 120, maxWidth: 180, flexShrink: 0 }}>
@@ -553,6 +561,11 @@ export default function Files() {
   const [thumbUrls, setThumbUrls] = useState({});
   const [dragging, setDragging] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  // Lightbox preview for the post-upload Tag & rename list. Stores the
+  // media id of the row whose thumbnail was clicked; null when closed.
+  // Shared with the tagged-files grid as a unified preview surface so
+  // both views feel the same.
+  const [untaggedPreviewId, setUntaggedPreviewId] = useState(null);
   const [showTagger, setShowTagger] = useState(true);
   const [previewFile, setPreviewFile] = useState(null); // open preview modal
 
@@ -1255,6 +1268,7 @@ export default function Files() {
                     onUpdate={handleRename}
                     onDelete={handleDelete}
                     onRequestAiTag={runAiForFile}
+                    onPreview={setUntaggedPreviewId}
                   />
                 );
               })}
@@ -1498,6 +1512,31 @@ export default function Files() {
           >✕</button>
         </div>
       )}
+
+      {/* Lightbox preview for the Tag & rename list. Untagged rows are
+          ordered as `untagged` (a derived view of storedMedia); we navigate
+          within that same array so prev/next stay scoped to what's visible. */}
+      {untaggedPreviewId && (() => {
+        const idx = untagged.findIndex(m => m.id === untaggedPreviewId);
+        const item = idx >= 0 ? untagged[idx] : null;
+        if (!item) return null;
+        const goPrev = () => setUntaggedPreviewId(untagged[(idx - 1 + untagged.length) % untagged.length].id);
+        const goNext = () => setUntaggedPreviewId(untagged[(idx + 1) % untagged.length].id);
+        const isVideo = /\.(mp4|webm|mov)$/i.test(item.name || '');
+        return (
+          <PreviewLightbox
+            open={true}
+            url={thumbUrls[item.id]}
+            blob={!thumbUrls[item.id] ? item.blob : null}
+            isVideo={isVideo}
+            caption={item.name}
+            position={`${idx + 1} / ${untagged.length}`}
+            onClose={() => setUntaggedPreviewId(null)}
+            onPrev={untagged.length > 1 ? goPrev : null}
+            onNext={untagged.length > 1 ? goNext : null}
+          />
+        );
+      })()}
 
       {/* Preview Modal */}
       {previewFile && (
