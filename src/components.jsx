@@ -78,6 +78,45 @@ export const Label = ({ children, style }) => (
   }}>{children}</div>
 );
 
+// Skeleton — loading-state placeholder. Renders a softly-shimmering block
+// at the dimensions you give it. Use one Skeleton per "thing" the user
+// will eventually see; size each one to roughly match the final content
+// so the layout doesn't shift on hydration.
+//
+// Examples:
+//   <Skeleton width="100%" height={48} />        // a row
+//   <Skeleton width={200} height={20} />         // a label
+//   <Skeleton width="100%" height={120} radius={12} />  // a card
+//
+// The shimmer animation lives in src/global-styles.jsx (.skeleton class).
+// Honors prefers-reduced-motion.
+export const Skeleton = ({ width = '100%', height = 16, radius: r = 6, style }) => (
+  <span
+    className="skeleton"
+    aria-hidden="true"
+    style={{
+      width: typeof width === 'number' ? `${width}px` : width,
+      height: typeof height === 'number' ? `${height}px` : height,
+      borderRadius: r,
+      ...style,
+    }}
+  />
+);
+
+// SkeletonText — multi-line text-shaped skeleton. Convenience for the
+// common "loading some prose" case. Each line gets a slight width
+// variation so it doesn't read as a perfect grid.
+export const SkeletonText = ({ lines = 3, height = 12, gap = 8, style }) => {
+  const widths = ['100%', '92%', '85%', '78%', '95%']; // varied so it doesn't look like a barcode
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap, ...style }}>
+      {Array.from({ length: lines }).map((_, i) => (
+        <Skeleton key={i} width={widths[i % widths.length]} height={height} />
+      ))}
+    </div>
+  );
+};
+
 // CollapsibleCard — Card variant with an expand/collapse chevron and an
 // optional summary line that surfaces when collapsed. Used on Generate
 // to keep the left-column form from growing into a 7-card scroll.

@@ -301,7 +301,7 @@ export function BattingTable({
         </div>
       )}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: colors.bg }}>
               <SortHeader label="#"      sortKey={null}        currentSort={sort} setSort={setSort} align="center" />
@@ -409,7 +409,7 @@ export function PitchingTable({
         </div>
       )}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: colors.bg }}>
               <SortHeader label="#"      sortKey={null}        currentSort={sort} setSort={setSort} align="center" />

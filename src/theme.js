@@ -68,9 +68,13 @@ export const colors = {
 // pre-bootstrap renders and any component that bypasses applyFont()
 // still get a sensible default.
 export const fonts = {
-  heading:   'var(--font-heading, "Bebas Neue", sans-serif)',
-  body:      'var(--font-body, "Barlow", sans-serif)',
-  condensed: 'var(--font-condensed, "Barlow Condensed", sans-serif)',
+  // Default fallbacks match the new MVP theme (Space Grotesk + Inter).
+  // Pre-bootstrap renders and any static SSR path read these directly;
+  // applyFont() overrides via --font-* once the runtime theme picker
+  // bootstraps. Old "blw-classic" stack still selectable from Settings.
+  heading:   'var(--font-heading, "Space Grotesk", system-ui, sans-serif)',
+  body:      'var(--font-body, "Inter", system-ui, sans-serif)',
+  condensed: 'var(--font-condensed, "Inter", system-ui, sans-serif)',
 };
 
 export const radius = {

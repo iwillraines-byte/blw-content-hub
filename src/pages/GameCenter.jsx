@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026 } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, FreeAgentChip, OutlineButton, inputStyle, selectStyle } from '../components';
+import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, FreeAgentChip, OutlineButton, Skeleton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
 import { getAllManualPlayers } from '../player-store';
@@ -525,7 +525,24 @@ export default function GameCenter() {
         <button onClick={() => setTab('standings')} style={tabStyle(tab === 'standings')}>Standings</button>
       </div>
 
-      {loading && <Card style={{ textAlign: 'center', color: colors.textMuted, padding: 40 }}>Loading stats…</Card>}
+      {loading && (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}` }}>
+            <Skeleton width={180} height={20} />
+          </div>
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Mimic the table layout — name col + 8 stat cells. Eight rows
+                roughly matches the average roster's stat-line count so the
+                page doesn't reflow when data hydrates. */}
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.5fr repeat(8, 1fr)', gap: 12, alignItems: 'center' }}>
+                <Skeleton height={14} width="80%" />
+                {Array.from({ length: 8 }).map((__, j) => <Skeleton key={j} height={14} width="60%" />)}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Batting */}
       {!loading && tab === 'batting' && (
@@ -544,7 +561,7 @@ export default function GameCenter() {
             <PercentileLegend />
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#"      sortKey={null}        currentSort={battingSort} setSort={setBattingSort} align="center" />
@@ -632,7 +649,7 @@ export default function GameCenter() {
             <PercentileLegend />
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#"      sortKey={null}        currentSort={pitchingSort} setSort={setPitchingSort} align="center" />
@@ -711,7 +728,7 @@ export default function GameCenter() {
             />
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#"         sortKey="currentRank"     currentSort={rankingsSort} setSort={setRankingsSort} align="center" />
@@ -801,7 +818,7 @@ export default function GameCenter() {
             </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="Player" sortKey="name" currentSort={playersSort} setSort={setPlayersSort} align="left" />
@@ -886,7 +903,7 @@ export default function GameCenter() {
             <SectionHeading style={{ margin: 0 }}>2025-26 BLW standings</SectionHeading>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#" sortKey={null} currentSort={{}} setSort={() => {}} align="center" />

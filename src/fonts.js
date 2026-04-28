@@ -16,6 +16,20 @@
 
 export const FONT_OPTIONS = [
   {
+    // Default — Space Grotesk display + Inter body. Reads modern and
+    // editorial without leaning sports-cliche or SaaS-bland. Inter
+    // brings tabular figures and outstanding small-size legibility for
+    // the dense stats tables; Space Grotesk's geometric grotesque shape
+    // gives display titles real character. Drops the structural pressure
+    // to ALL-CAPS everything (which Bebas was forcing).
+    id: 'mvp',
+    name: 'BLW MVP',
+    description: 'Space Grotesk display over Inter body — modern, editorial, readable',
+    heading:   { stack: '"Space Grotesk", sans-serif',    googleFamily: 'Space+Grotesk:wght@400;500;600;700',     tracking: 0.2 },
+    body:      { stack: '"Inter", sans-serif',            googleFamily: 'Inter:wght@400;500;600;700;800' },
+    condensed: { stack: '"Inter", sans-serif',            googleFamily: 'Inter:wght@400;500;600;700;800' },
+  },
+  {
     id: 'blw-classic',
     name: 'BLW Classic',
     description: 'The original — Bebas Neue over Barlow. Hard to beat.',
@@ -121,8 +135,8 @@ export function getStoredFontId() {
     // Migrate from the old heading-only picker if present.
     const legacy = localStorage.getItem(LEGACY_LS_KEY);
     if (legacy && LEGACY_MAP[legacy]) return LEGACY_MAP[legacy];
-    return 'blw-classic';
-  } catch { return 'blw-classic'; }
+    return 'mvp';
+  } catch { return 'mvp'; }
 }
 
 export function getFontById(id) {

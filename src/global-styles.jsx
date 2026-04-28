@@ -143,6 +143,63 @@ input[type="range"]:active::-webkit-slider-thumb {
   transform: scale(1.18);
 }
 
+/* ─── Skeleton shimmer ────────────────────────────────────────────────── */
+/* Used by <Skeleton /> to indicate content is loading. The animation slides
+   a soft highlight across a low-contrast block. Layered on top of any
+   background, so it works on cards (white) and the page bg (warm neutral)
+   alike. */
+@keyframes blw-shimmer {
+  0%   { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+.skeleton {
+  background-color: var(--color-muted, #EDF3F3);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  background-size: 200px 100%;
+  background-repeat: no-repeat;
+  animation: blw-shimmer 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  border-radius: 6px;
+  display: block;
+}
+[data-theme="dark"] .skeleton,
+[data-theme="system"] .skeleton {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 100%
+  );
+}
+
+/* ─── Route transitions ──────────────────────────────────────────────── */
+/* Fade-up on route change. The route wrapper in App.jsx is keyed on
+   pathname, so React unmounts/remounts the subtree on navigation, which
+   triggers the keyframe afresh. 120ms is short enough to not delay the
+   power user, long enough to feel like continuity. */
+@keyframes blw-route-in {
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.route-enter {
+  animation: blw-route-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ─── Tabular figures on stats data ──────────────────────────────────── */
+/* Numbers in stats columns align rigidly so .341 / .298 / .287 read as
+   a column instead of a smear. Applied at the table level so cells with
+   non-numeric text aren't affected. */
+.tnum,
+.tnum td,
+.tnum th {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
 /* ─── Reduced motion ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .btn-primary,
@@ -162,6 +219,10 @@ input[type="range"]:active::-webkit-slider-thumb {
   .card-clickable:active,
   input[type="range"]:active::-webkit-slider-thumb {
     transform: none !important;
+  }
+  .skeleton,
+  .route-enter {
+    animation: none !important;
   }
 }
 `;

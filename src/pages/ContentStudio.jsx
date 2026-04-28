@@ -391,8 +391,32 @@ export default function ContentStudio() {
                 );
               })}
               {dataLoaded && suggestions.length === 0 && aiIdeas.length === 0 && (
-                <div style={{ fontSize: 13, color: colors.textMuted, padding: 20, textAlign: 'center' }}>
-                  No content ideas yet. Hit "Generate Ideas" for a fresh AI batch, or stats will populate this list.
+                /* Empty state — gives the user one clear next action plus
+                   context about what populates this list automatically. */
+                <div style={{
+                  padding: '32px 20px', textAlign: 'center',
+                  background: colors.bg, borderRadius: radius.base,
+                  border: `1px dashed ${colors.borderLight}`,
+                }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>✨</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+                    No content ideas yet
+                  </div>
+                  <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 280, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+                    Generate a fresh AI batch, or wait for live stats to seed this list once games start.
+                  </div>
+                  <button
+                    onClick={() => requestIdeas(null, 6)}
+                    className="btn-primary"
+                    style={{
+                      border: 'none', borderRadius: radius.base,
+                      padding: '8px 20px', fontFamily: fonts.body,
+                      fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Generate ideas
+                  </button>
                 </div>
               )}
             </div>

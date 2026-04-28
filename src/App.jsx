@@ -56,6 +56,21 @@ function useCurrentTeamFromUrl() {
   return TEAMS.find(t => t.slug === m[1]) || null;
 }
 
+// RouteAnimator — wraps the route subtree in a div whose `key` changes on
+// every pathname change, so React unmounts + remounts the children on nav.
+// The .route-enter class then runs its keyframe afresh, producing the
+// 180ms fade-up between pages. We don't unmount the <Routes /> itself —
+// only this wrapper — so the transition is purely visual; route matching
+// stays normal.
+function RouteAnimator({ children }) {
+  const location = useLocation();
+  return (
+    <div key={location.pathname} className="route-enter" style={{ minHeight: 0 }}>
+      {children}
+    </div>
+  );
+}
+
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < MOBILE_BREAKPOINT);
   useEffect(() => {
@@ -766,8 +781,15 @@ function AppShell() {
               Scope is contained to <main>, so the sidebar and any
               cross-team chrome stay brand-consistent. Generate.jsx
               wraps a nested scope keyed off its own state-selected
-              team — nested scopes override outer cleanly. */}
+              team — nested scopes override outer cleanly.
+
+              The `key={location.pathname}` on the next div forces React
+              to remount the subtree on every navigation, which retriggers
+              the .route-enter keyframe (defined in global-styles.jsx).
+              Net effect: a 180ms fade-up between pages instead of a hard
+              cut. Cheap perceived-quality win. */}
           <TeamThemeScope team={currentTeam}>
+          <RouteAnimator>
           <Routes>
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/dashboard" element={
@@ -796,6 +818,7 @@ function AppShell() {
             <Route path="/stats" element={<Navigate to="/game-center" replace />} />
             <Route path="/assets" element={<Navigate to="/files" replace />} />
           </Routes>
+          </RouteAnimator>
           </TeamThemeScope>
         </main>
       </div>

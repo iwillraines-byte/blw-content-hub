@@ -4,7 +4,7 @@ import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromA
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
-import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, inputStyle } from '../components';
+import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, Skeleton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
@@ -528,8 +528,8 @@ export default function TeamPage() {
                 {team.owner && (
                   <span style={{ fontFamily: fonts.body, fontSize: 12, color: colors.textSecondary }}>
                     <span style={{
-                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                      color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase',
+                      fontFamily: fonts.body, fontSize: 11, fontWeight: 500,
+                      color: colors.textMuted, letterSpacing: 0,
                       marginRight: 4,
                     }}>Owner</span>
                     {team.owner}
@@ -704,7 +704,26 @@ export default function TeamPage() {
           </div>
         )}
 
-        {!loaded && <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted }}>Loading roster…</div>}
+        {!loaded && (
+          // Roster grid skeleton — 8 placeholder cards arranged the same way
+          // the real roster will render, so the page doesn't reflow when
+          // data lands.
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} style={{
+                background: colors.bg,
+                border: `1px solid ${colors.borderLight}`,
+                borderRadius: radius.base,
+                padding: 12,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+              }}>
+                <Skeleton width={64} height={64} radius={999} />
+                <Skeleton width="80%" height={12} />
+                <Skeleton width="60%" height={10} />
+              </div>
+            ))}
+          </div>
+        )}
         {loaded && roster.length === 0 && (
           <div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
             No roster data yet. Upload media files or click "+ Add Player" to start.
@@ -808,8 +827,39 @@ export default function TeamPage() {
           </Link>
         </div>
         {teamScopedMedia.length === 0 && (
-          <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
-            No team-wide photos yet. Upload a group shot, venue pic, or logo in Files. Tag it as <strong>TEAMPHOTO</strong>, <strong>VENUE</strong>, <strong>LOGO</strong>, or <strong>WORDMARK</strong>.
+          /* Empty state — instead of one dense paragraph, surface the four
+             accepted asset types as a small visual ladder so the user can
+             scan the taxonomy in 2 seconds. */
+          <div style={{
+            padding: 28, textAlign: 'center',
+            background: colors.bg, borderRadius: radius.base,
+            border: `1px dashed ${colors.borderLight}`,
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>📷</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+              No team photos yet
+            </div>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+              Upload a group shot, venue pic, or logo in Files. Tag with one of:
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+              {['TEAMPHOTO', 'VENUE', 'LOGO', 'WORDMARK'].map(tag => (
+                <span key={tag} style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+                  padding: '3px 10px', borderRadius: radius.sm,
+                  background: colors.white, border: `1px solid ${colors.borderLight}`,
+                  color: colors.textSecondary,
+                }}>{tag}</span>
+              ))}
+            </div>
+            <Link to="/files" style={{
+              display: 'inline-block',
+              fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
+              color: colors.accent, textDecoration: 'none',
+              padding: '6px 14px', borderRadius: radius.base,
+              border: `1px solid ${colors.accentBorder}`,
+              background: colors.accentSoft,
+            }}>Open Files →</Link>
           </div>
         )}
         {teamScopedMedia.length > 0 && (

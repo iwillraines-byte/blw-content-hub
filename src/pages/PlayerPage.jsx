@@ -104,10 +104,10 @@ function LeagueRankRow({ ranking }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', borderBottom: `1px solid ${colors.divider}` }}>
       <div style={{
-        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-        color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+        fontFamily: fonts.body, fontSize: 11, fontWeight: 600,
+        color: colors.textMuted, letterSpacing: 0.2,
         width: 76, flexShrink: 0,
-      }}>League Rank</div>
+      }}>League rank</div>
       <div style={{
         fontFamily: fonts.body, fontSize: 13, color: colors.text, fontWeight: 600,
         display: 'flex', alignItems: 'center', gap: 8,
@@ -143,8 +143,13 @@ function VitalRow({ label, value, dot }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', borderBottom: `1px solid ${colors.divider}` }}>
       <div style={{
-        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-        color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+        // Sentence-case for vital labels — "Height" reads cleaner than
+        // "HEIGHT" at this size, especially in Inter where lowercase is
+        // a first-class citizen rather than an afterthought (which is
+        // why the codebase had to ALL CAPS everything when it was set
+        // in Bebas).
+        fontFamily: fonts.body, fontSize: 11, fontWeight: 600,
+        color: colors.textMuted, letterSpacing: 0.2,
         width: 76, flexShrink: 0,
       }}>{label}</div>
       <div style={{
@@ -1323,17 +1328,31 @@ export default function PlayerPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <SectionHeading style={{ margin: 0 }}>Media</SectionHeading>
-          <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted }}>
-            {media.length} ASSET{media.length !== 1 ? 'S' : ''}
+          <span style={{ fontFamily: fonts.body, fontSize: 11, color: colors.textMuted, fontWeight: 500 }}>
+            {media.length} {media.length === 1 ? 'asset' : 'assets'}
           </span>
         </div>
         {media.length === 0 && (
-          <div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
-            No media uploaded for {player.name} yet.
-            <br />
-            <Link to="/files" style={{ color: colors.accent, textDecoration: 'none', fontWeight: 700 }}>
-              Upload in Files →
-            </Link>
+          <div style={{
+            padding: 28, textAlign: 'center',
+            background: colors.bg, borderRadius: radius.base,
+            border: `1px dashed ${colors.borderLight}`,
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>📸</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+              No photos for {player.name.split(' ')[0]} yet
+            </div>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 280, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+              Add a HEADSHOT, ACTION shot, or PORTRAIT in Files; tag the file with the player's last name to wire it through.
+            </div>
+            <Link to="/files" style={{
+              display: 'inline-block',
+              fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
+              color: colors.accent, textDecoration: 'none',
+              padding: '6px 14px', borderRadius: radius.base,
+              border: `1px solid ${colors.accentBorder}`,
+              background: colors.accentSoft,
+            }}>Upload in Files →</Link>
           </div>
         )}
         {media.length > 0 && Object.entries(grouped).map(([type, items]) => (
