@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { TEAMS, API_CONFIG } from './data';
 import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './theme';
+import { TeamThemeScope } from './team-theme';
 import ContentStudio from './pages/ContentStudio';
 import Generate from './pages/Generate';
 import Requests from './pages/Requests';
@@ -707,6 +708,10 @@ function ProfileSetupBanner() {
 function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
+  // URL-derived team context — drives the accent color drift on team
+  // and player routes. Other routes get null and the brand red baseline
+  // wins through the theme.js fallbacks.
+  const currentTeam = useCurrentTeamFromUrl();
 
   // Phase 4: on app mount, pull latest records from Supabase into the local
   // IDB / localStorage cache. Throttled to once per 10 min so navigation
@@ -743,6 +748,13 @@ function AppShell() {
           width: '100%',
           boxSizing: 'border-box',
         }}>
+          {/* Route content drifts to the active team's accent palette
+              when on /teams/:slug or /teams/:slug/players/:lastName.
+              Scope is contained to <main>, so the sidebar and any
+              cross-team chrome stay brand-consistent. Generate.jsx
+              wraps a nested scope keyed off its own state-selected
+              team — nested scopes override outer cleanly. */}
+          <TeamThemeScope team={currentTeam}>
           <Routes>
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/dashboard" element={
@@ -771,6 +783,7 @@ function AppShell() {
             <Route path="/stats" element={<Navigate to="/game-center" replace />} />
             <Route path="/assets" element={<Navigate to="/files" replace />} />
           </Routes>
+          </TeamThemeScope>
         </main>
       </div>
     </div>

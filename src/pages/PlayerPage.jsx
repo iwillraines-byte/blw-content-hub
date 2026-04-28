@@ -215,7 +215,7 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
             }}>{t.label}</div>
             <div style={{
               fontFamily: fonts.heading, fontSize: 34,
-              color: t.highlight ? colors.red : colors.text,
+              color: t.highlight ? colors.accent : colors.text,
               lineHeight: 1, letterSpacing: 0.5,
             }}>{t.value ?? '—'}</div>
             <div style={{
@@ -392,7 +392,7 @@ function PositionEditor({ team, src, initial, onClose, onSave, saving }) {
               <div key={s.key} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <span style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textSecondary, fontWeight: 600 }}>{s.label}</span>
-                  <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.red, fontWeight: 700 }}>
+                  <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.accent, fontWeight: 700 }}>
                     {s.fmt(s.value)}
                   </span>
                 </div>
@@ -400,7 +400,7 @@ function PositionEditor({ team, src, initial, onClose, onSave, saving }) {
                   type="range" min={s.min} max={s.max} step={s.step}
                   value={s.value}
                   onChange={e => s.set(parseFloat(e.target.value))}
-                  style={{ width: '100%', accentColor: colors.red }}
+                  style={{ width: '100%', accentColor: colors.accent }}
                 />
               </div>
             ))}
@@ -513,10 +513,10 @@ function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, s
                       title={m.name}
                       style={{
                         display: 'flex', flexDirection: 'column',
-                        padding: 0, border: `2px solid ${active ? colors.red : colors.borderLight}`,
+                        padding: 0, border: `2px solid ${active ? colors.accent : colors.borderLight}`,
                         borderRadius: radius.base, overflow: 'hidden',
                         background: colors.white, cursor: saving ? 'wait' : 'pointer',
-                        boxShadow: active ? `0 0 0 2px ${colors.redBorder}` : 'none',
+                        boxShadow: active ? `0 0 0 2px ${colors.accentBorder}` : 'none',
                         transition: 'all 0.12s',
                       }}
                     >
@@ -634,7 +634,7 @@ function ExtrasDropdown({ instagramHandle, funFacts }) {
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                   fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
-                  color: colors.red, textDecoration: 'none',
+                  color: colors.accent, textDecoration: 'none',
                 }}
               >
                 <span style={{ fontSize: 14 }}>📷</span>
@@ -946,12 +946,12 @@ function StatTile({ label, value, rank, total, highlight }) {
       padding: '12px 10px',
       background: colors.bg,
       borderRadius: radius.sm,
-      border: highlight ? `1px solid ${colors.redBorder}` : `1px solid ${colors.borderLight}`,
+      border: highlight ? `1px solid ${colors.accentBorder}` : `1px solid ${colors.borderLight}`,
       display: 'flex', flexDirection: 'column', gap: 4,
     }}>
       <div style={{
         fontFamily: fonts.heading, fontSize: 26, letterSpacing: 0.5,
-        color: highlight ? colors.red : colors.text, lineHeight: 1,
+        color: highlight ? colors.accent : colors.text, lineHeight: 1,
       }}>{value ?? '—'}</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
         <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8 }}>{label}</span>
@@ -1125,7 +1125,7 @@ export default function PlayerPage() {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
         <SectionHeading>Team not found</SectionHeading>
-        <Link to="/studio" style={{ color: colors.red, textDecoration: 'none' }}>← Back to Dashboard</Link>
+        <Link to="/studio" style={{ color: colors.accent, textDecoration: 'none' }}>← Back to Dashboard</Link>
       </Card>
     );
   }
@@ -1141,7 +1141,7 @@ export default function PlayerPage() {
         <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
           No stats or roster data for "{lastName}" on {team.name}.
         </div>
-        <Link to={`/teams/${team.slug}`} style={{ color: colors.red, textDecoration: 'none' }}>
+        <Link to={`/teams/${team.slug}`} style={{ color: colors.accent, textDecoration: 'none' }}>
           ← Back to {team.name}
         </Link>
       </Card>
@@ -1216,7 +1216,7 @@ export default function PlayerPage() {
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontFamily: fonts.condensed }}>
         <Link to={`/teams/${team.slug}`} style={{
-          color: colors.red, textDecoration: 'none', fontWeight: 700,
+          color: colors.accent, textDecoration: 'none', fontWeight: 700,
           display: 'inline-flex', alignItems: 'center', gap: 8,
         }}>
           <span>←</span>
@@ -1331,7 +1331,7 @@ export default function PlayerPage() {
           <div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
             No media uploaded for {player.name} yet.
             <br />
-            <Link to="/files" style={{ color: colors.red, textDecoration: 'none', fontWeight: 700 }}>
+            <Link to="/files" style={{ color: colors.accent, textDecoration: 'none', fontWeight: 700 }}>
               Upload in Files →
             </Link>
           </div>

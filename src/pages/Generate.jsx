@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPlayers, fetchAllData } from '../data';
 import { Card, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
+import { TeamThemeScope } from '../team-theme';
 import { TEMPLATE_TYPES, FONT_MAP, getFieldConfig } from '../template-config';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
@@ -824,7 +825,14 @@ export default function Generate() {
 
   const labelStyle = { fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 };
 
+  // Drift the page's accent palette to the selected team. Falls back
+  // to brand red when nothing's selected. /generate doesn't live under
+  // /teams/:slug so the App-level URL scope doesn't cover it — Generate
+  // owns its own scope keyed off the form's team state.
+  const customTeamObjForScope = customTeam ? getTeam(customTeam) : null;
+
   return (
+    <TeamThemeScope team={customTeamObjForScope}>
     <div>
       <PageHeader title="GENERATE" subtitle="Create downloadable graphics for any team. Download and schedule via Metricool." />
 
@@ -910,9 +918,9 @@ export default function Generate() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Label style={{ marginBottom: 0 }}>Select Media</Label>
                   <label style={{
-                    background: customTeam ? colors.redLight : colors.bg,
-                    border: `1px solid ${customTeam ? colors.redBorder : colors.border}`,
-                    color: customTeam ? colors.red : colors.textMuted,
+                    background: customTeam ? colors.accentSoft : colors.bg,
+                    border: `1px solid ${customTeam ? colors.accentBorder : colors.border}`,
+                    color: customTeam ? colors.accent : colors.textMuted,
                     borderRadius: radius.sm, padding: '3px 10px',
                     fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
                     cursor: customTeam ? 'pointer' : 'not-allowed',
@@ -943,7 +951,7 @@ export default function Generate() {
                           border: `1px solid ${colors.border}`,
                         }} />
                         <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
-                          background: 'none', border: 'none', color: colors.red, fontSize: 11,
+                          background: 'none', border: 'none', color: colors.accent, fontSize: 11,
                           fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer', marginTop: 4,
                         }}>✕ Clear selection</button>
                       </div>
@@ -964,7 +972,7 @@ export default function Generate() {
                               style={{
                                 width: '100%', aspectRatio: '1 / 1', borderRadius: radius.base, cursor: 'pointer',
                                 background: `url(${m.url}) center/cover`,
-                                border: bgUrl === m.url ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
+                                border: bgUrl === m.url ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
                                 position: 'relative',
                               }}
                             >
@@ -1006,9 +1014,9 @@ export default function Generate() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Label style={{ marginBottom: 0 }}>Overlay Template</Label>
                   <button onClick={() => setShowUploadModal(true)} disabled={!customTeam} style={{
-                    background: customTeam ? colors.redLight : colors.bg,
-                    border: `1px solid ${customTeam ? colors.redBorder : colors.border}`,
-                    color: customTeam ? colors.red : colors.textMuted,
+                    background: customTeam ? colors.accentSoft : colors.bg,
+                    border: `1px solid ${customTeam ? colors.accentBorder : colors.border}`,
+                    color: customTeam ? colors.accent : colors.textMuted,
                     borderRadius: radius.sm, padding: '3px 10px',
                     fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
                     cursor: customTeam ? 'pointer' : 'not-allowed',
@@ -1040,7 +1048,7 @@ export default function Generate() {
                               style={{
                                 width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
                                 background: `#1A1A22 url(${p.url}) center/cover`,
-                                border: selectedOverlayId === p.id ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
+                                border: selectedOverlayId === p.id ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
                                 position: 'relative',
                               }}
                             >
@@ -1080,7 +1088,7 @@ export default function Generate() {
                             <div key={o.id} style={{ position: 'relative' }}>
                               <div onClick={() => setSelectedOverlayId(o.id === selectedOverlayId ? null : o.id)} style={{
                                 width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
-                                background: '#1A1A22', border: selectedOverlayId === o.id ? `2px solid ${colors.red}` : `1px solid ${colors.border}`,
+                                background: '#1A1A22', border: selectedOverlayId === o.id ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: 9, fontFamily: fonts.condensed, color: colors.textMuted, textAlign: 'center', padding: 4,
                               }}>
@@ -1126,9 +1134,9 @@ export default function Generate() {
                       onClick={() => setShowLayoutEditor(v => !v)}
                       title={showLayoutEditor ? 'Hide per-field layout controls' : 'Show per-field layout controls (position + font)'}
                       style={{
-                        background: showLayoutEditor ? colors.redLight : colors.bg,
-                        border: `1px solid ${showLayoutEditor ? colors.redBorder : colors.border}`,
-                        color: showLayoutEditor ? colors.red : colors.textSecondary,
+                        background: showLayoutEditor ? colors.accentSoft : colors.bg,
+                        border: `1px solid ${showLayoutEditor ? colors.accentBorder : colors.border}`,
+                        color: showLayoutEditor ? colors.accent : colors.textSecondary,
                         borderRadius: radius.sm, padding: '3px 10px',
                         fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
                         cursor: 'pointer',
@@ -1169,7 +1177,7 @@ export default function Generate() {
                           {isOverridden && (
                             <span title="This field has layout overrides applied" style={{
                               display: 'inline-block', marginLeft: 6,
-                              width: 6, height: 6, borderRadius: '50%', background: colors.red,
+                              width: 6, height: 6, borderRadius: '50%', background: colors.accent,
                               verticalAlign: 'middle',
                             }} />
                           )}
@@ -1275,9 +1283,9 @@ export default function Generate() {
                                 onClick={() => setCustomFields(prev => ({ ...prev, [f.key]: rec.value }))}
                                 title={`Insert: ${rec.value}`}
                                 style={{
-                                  background: customFields[f.key] === rec.value ? colors.redLight : colors.bg,
-                                  border: `1px solid ${customFields[f.key] === rec.value ? colors.redBorder : colors.border}`,
-                                  color: customFields[f.key] === rec.value ? colors.red : colors.textSecondary,
+                                  background: customFields[f.key] === rec.value ? colors.accentSoft : colors.bg,
+                                  border: `1px solid ${customFields[f.key] === rec.value ? colors.accentBorder : colors.border}`,
+                                  color: customFields[f.key] === rec.value ? colors.accent : colors.textSecondary,
                                   borderRadius: radius.sm,
                                   padding: '4px 8px',
                                   cursor: 'pointer',
@@ -1332,9 +1340,9 @@ export default function Generate() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
                 <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
-                  background: customType === key ? colors.redLight : colors.white,
-                  border: customType === key ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
-                  color: customType === key ? colors.red : colors.textSecondary,
+                  background: customType === key ? colors.accentSoft : colors.white,
+                  border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                  color: customType === key ? colors.accent : colors.textSecondary,
                   borderRadius: radius.base, padding: 6, cursor: 'pointer',
                   fontFamily: fonts.body, fontSize: 10, fontWeight: 700, textAlign: 'center',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
@@ -1354,7 +1362,7 @@ export default function Generate() {
               ))}
             </div>
           </Card>
-          <Label>Live Preview {showLayoutEditor && <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.red, letterSpacing: 0.5, marginLeft: 6 }}>· DRAG FIELDS TO REPOSITION</span>}</Label>
+          <Label>Live Preview {showLayoutEditor && <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, letterSpacing: 0.5, marginLeft: 6 }}>· DRAG FIELDS TO REPOSITION</span>}</Label>
           <div style={{
             background: '#1A1A22', borderRadius: radius.lg, padding: 16,
             border: `1px solid ${colors.border}`,
@@ -1426,7 +1434,7 @@ export default function Generate() {
                 <div key={s.key} style={{ marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                     <span style={{ ...labelStyle, textTransform: 'none', fontWeight: 700 }}>{s.label}</span>
-                    <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.red, fontWeight: 700 }}>
+                    <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, fontWeight: 700 }}>
                       {s.fmt(bgTransform[s.key])}
                     </span>
                   </div>
@@ -1434,7 +1442,7 @@ export default function Generate() {
                     type="range" min={s.min} max={s.max} step={s.step}
                     value={bgTransform[s.key]}
                     onChange={e => patchBgTransform({ [s.key]: parseFloat(e.target.value) })}
-                    style={{ width: '100%', accentColor: colors.red }}
+                    style={{ width: '100%', accentColor: colors.accent }}
                   />
                 </div>
               ))}
@@ -1446,8 +1454,8 @@ export default function Generate() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <Label style={{ marginBottom: 0 }}>Effects</Label>
               <button onClick={() => setShowEffectUpload(true)} style={{
-                background: colors.redLight, border: `1px solid ${colors.redBorder}`,
-                color: colors.red, borderRadius: radius.sm, padding: '3px 10px',
+                background: colors.accentSoft, border: `1px solid ${colors.accentBorder}`,
+                color: colors.accent, borderRadius: radius.sm, padding: '3px 10px',
                 fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
               }}>+ Upload Effect</button>
             </div>
@@ -1458,11 +1466,11 @@ export default function Generate() {
                 const active = isEffectActive('builtin', fx.id);
                 return (
                   <button key={fx.id} onClick={() => toggleBuiltInEffect(fx.id)} style={{
-                    background: active ? colors.redLight : colors.bg,
-                    border: active ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
+                    background: active ? colors.accentSoft : colors.bg,
+                    border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
                     borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
                     fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
-                    color: active ? colors.red : colors.textSecondary,
+                    color: active ? colors.accent : colors.textSecondary,
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                     minWidth: 62,
                   }}>
@@ -1481,11 +1489,11 @@ export default function Generate() {
                   return (
                     <div key={fx.id} style={{ position: 'relative' }}>
                       <button onClick={() => toggleUploadedEffect(fx)} style={{
-                        background: active ? colors.redLight : colors.bg,
-                        border: active ? `1px solid ${colors.red}` : `1px solid ${colors.border}`,
+                        background: active ? colors.accentSoft : colors.bg,
+                        border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
                         borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
                         fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
-                        color: active ? colors.red : colors.textSecondary,
+                        color: active ? colors.accent : colors.textSecondary,
                         minWidth: 62, maxWidth: 100,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
@@ -1512,7 +1520,7 @@ export default function Generate() {
                     <div key={`${fx.type}-${fx.id}`} style={{ marginBottom: 8 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                         <span style={{ ...labelStyle, textTransform: 'none', fontWeight: 700 }}>{label}</span>
-                        <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.red, fontWeight: 700 }}>
+                        <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, fontWeight: 700 }}>
                           {Math.round(fx.opacity * 100)}%
                         </span>
                       </div>
@@ -1520,7 +1528,7 @@ export default function Generate() {
                         type="range" min={0} max={1} step={0.01}
                         value={fx.opacity}
                         onChange={e => setEffectOpacity({ type: fx.type, id: fx.id }, parseFloat(e.target.value))}
-                        style={{ width: '100%', accentColor: colors.red }}
+                        style={{ width: '100%', accentColor: colors.accent }}
                       />
                     </div>
                   );
@@ -1640,5 +1648,6 @@ export default function Generate() {
         </div>
       )}
     </div>
+    </TeamThemeScope>
   );
 }

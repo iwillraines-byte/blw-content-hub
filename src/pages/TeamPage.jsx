@@ -369,7 +369,7 @@ export default function TeamPage() {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
         <SectionHeading>Team not found</SectionHeading>
-        <Link to="/studio" style={{ color: colors.red, textDecoration: 'none' }}>← Back to Dashboard</Link>
+        <Link to="/studio" style={{ color: colors.accent, textDecoration: 'none' }}>← Back to Dashboard</Link>
       </Card>
     );
   }
@@ -625,7 +625,7 @@ export default function TeamPage() {
             <Card style={{ border: `1px solid ${team.color}33` }}>
               <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>TOP BATTER · OPS+</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{topBatter.name}</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.red, letterSpacing: 1 }}>{topBatter.ops_plus}</div>
+              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.accent, letterSpacing: 1 }}>{topBatter.ops_plus}</div>
               <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
                 {topBatter.avg} AVG · {topBatter.hr} HR · {topBatter.obp} OBP
               </div>
@@ -635,7 +635,7 @@ export default function TeamPage() {
             <Card style={{ border: `1px solid ${team.color}33` }}>
               <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>TOP PITCHER · FIP</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{topPitcher.name}</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.red, letterSpacing: 1 }}>
+              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.accent, letterSpacing: 1 }}>
                 {typeof topPitcher.fip === 'number' ? topPitcher.fip.toFixed(2) : topPitcher.fip}
               </div>
               <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
@@ -647,7 +647,7 @@ export default function TeamPage() {
             <Card style={{ border: `1px solid ${team.color}33` }}>
               <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>HR LEADER</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{hrLeader.name}</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.red, letterSpacing: 1 }}>{hrLeader.hr}</div>
+              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.accent, letterSpacing: 1 }}>{hrLeader.hr}</div>
               <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
                 {hrLeader.avg} AVG · {hrLeader.slg} SLG
               </div>
@@ -665,9 +665,9 @@ export default function TeamPage() {
               {roster.length} PLAYER{roster.length !== 1 ? 'S' : ''}
             </span>
             <button onClick={() => setShowAddPlayer(!showAddPlayer)} style={{
-              background: showAddPlayer ? colors.bg : colors.redLight,
-              border: `1px solid ${showAddPlayer ? colors.border : colors.redBorder}`,
-              color: showAddPlayer ? colors.textSecondary : colors.red,
+              background: showAddPlayer ? colors.bg : colors.accentSoft,
+              border: `1px solid ${showAddPlayer ? colors.border : colors.accentBorder}`,
+              color: showAddPlayer ? colors.textSecondary : colors.accent,
               borderRadius: radius.sm, padding: '4px 10px',
               fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, cursor: 'pointer',
             }}>{showAddPlayer ? '✕ Cancel' : '+ Add Player'}</button>
@@ -803,7 +803,7 @@ export default function TeamPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <SectionHeading style={{ margin: 0 }}>Team photos</SectionHeading>
-          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>
+          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
             Go to Files →
           </Link>
         </div>
@@ -904,14 +904,14 @@ export default function TeamPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <SectionHeading style={{ margin: 0 }}>Recent player media</SectionHeading>
-          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>
+          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
             Go to Files →
           </Link>
         </div>
         {playerScopedMedia.length === 0 && (
           <div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
             No player media uploaded for this team yet.{' '}
-            <Link to="/files" style={{ color: colors.red }}>Upload in Files</Link>
+            <Link to="/files" style={{ color: colors.accent }}>Upload in Files</Link>
           </div>
         )}
         {playerScopedMedia.length > 0 && (

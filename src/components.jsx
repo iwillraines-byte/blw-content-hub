@@ -202,10 +202,14 @@ export const PriorityDot = ({ p }) => (
 
 // ─── Buttons ────────────────────────────────────────────────────────────────
 
+// RedButton — primary CTA. Reads the `accent` token, so on team/player
+// pages it drifts to the team's color; on neutral routes (Files, Settings,
+// Dashboard) it stays brand red. Override the team-color text-on-accent
+// contrast via `accentText` (computed from the team color's luminance).
 export const RedButton = ({ children, onClick, disabled, style }) => (
   <button onClick={onClick} disabled={disabled} style={{
-    background: disabled ? '#E5E7EB' : colors.red,
-    color: disabled ? '#9CA3AF' : '#FFFFFF',
+    background: disabled ? '#E5E7EB' : colors.accent,
+    color: disabled ? '#9CA3AF' : colors.accentText,
     border: 'none',
     borderRadius: radius.base,
     padding: '10px 22px',

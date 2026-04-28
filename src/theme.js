@@ -20,6 +20,18 @@ export const colors = {
   redLight:        'var(--color-redLight, rgba(221, 60, 60, 0.08))',
   redBorder:       'var(--color-redBorder, rgba(221, 60, 60, 0.2))',
 
+  // Accent tokens — drift to the active team's color when wrapped in a
+  // <TeamThemeScope team={team}>. Outside any scope they fall back to
+  // the brand red. Use these in place of `red` for surfaces that should
+  // honor team context (CTAs, active states, focus rings, content rows).
+  // Use plain `red` for chrome that should stay brand-consistent
+  // regardless of which team is in view (sidebar, app-level nav, etc).
+  accent:          'var(--accent, #DD3C3C)',
+  accentHover:     'var(--accent-hover, #C73535)',
+  accentText:      'var(--accent-text, #FFFFFF)',
+  accentSoft:      'var(--accent-soft, rgba(221, 60, 60, 0.10))',
+  accentBorder:    'var(--accent-border, rgba(221, 60, 60, 0.30))',
+
   // Backgrounds
   white:           'var(--color-white, #FFFFFF)',
   bg:              'var(--color-bg, #F6F7F9)',
