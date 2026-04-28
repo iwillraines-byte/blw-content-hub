@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
+import { findPlayerMedia, findTeamMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
 import { useAuth, isAdminRole } from '../auth';
@@ -915,14 +915,14 @@ export default function PlayerPage() {
   const statLine = buildStatLine(player);
   if (statLine) generateParams.set('statLine', statLine);
 
-  // Avatar resolution: admin-picked override wins (player.profileMediaId
-  // points at a specific media.id from THIS or ANY team asset). Fall
-  // back to the first HEADSHOT/PORTRAIT in this player's media set.
-  const overrideMedia = player.profileMediaId
-    ? ([...media, ...teamMedia].find(m => m.id === player.profileMediaId) || null)
-    : null;
-  const headshot = overrideMedia
-    || media.find(m => m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT');
+  // Avatar resolution — delegate to the canonical resolver in
+  // media-store.js so the player hero and team-page roster card always
+  // pick the same photo. Lastname uniqueness is irrelevant here (the
+  // lookup is already scoped by FI + num to this specific player), so
+  // we leave lastnameUnique at its default of true.
+  const headshot = resolvePlayerAvatar(player, [...media, ...teamMedia], {
+    profileMediaId: player.profileMediaId,
+  });
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
 
   // ─── Per-stat league-rank lookups ────────────────────────────────────────

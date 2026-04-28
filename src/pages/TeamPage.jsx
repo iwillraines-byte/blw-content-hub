@@ -6,7 +6,7 @@ import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { findTeamMedia, getAllMedia, blobToObjectURL } from '../media-store';
+import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
 
 export default function TeamPage() {
@@ -265,7 +265,10 @@ export default function TeamPage() {
       const fullRoster = rebuildRoster(apiRoster, teamMedia, manualList, allManual);
       setRoster(fullRoster);
 
-      // Avatar lookup — four-tier resolution per roster entry:
+      // Avatar lookup — delegated to resolvePlayerAvatar in
+      // media-store.js so the team-page roster card and player-page
+      // hero always pick the same photo. The resolver handles the
+      // four-tier priority (override → FI+num+type → FI+type → legacy):
       //   1. Admin-picked override (manual_players.profile_media_id) —
       //      always wins, looked up against the global media pool so
       //      overrides pointing at media in another team's bucket
@@ -282,10 +285,8 @@ export default function TeamPage() {
       //      same legacy file, which is why Will Marshall was
       //      ending up with Paul's photo.
       const urls = {};
-      const playerOnly = teamMedia.filter(m => (m.scope || 'player') === 'player');
-      const mediaById = new Map(allMedia.map(m => [m.id, m]));
-      // Build a name → manual_players row lookup so we can read
-      // profile_media_id per roster entry. Keyed by full name lowercase
+      // Build a name → manual_players row lookup so we can pass the
+      // profile_media_id override per entry. Keyed by full name lowercase
       // because that's the only field guaranteed to be unique even
       // among same-FI cousins.
       const manualByFullName = new Map();
@@ -293,50 +294,24 @@ export default function TeamPage() {
         const fullName = (m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim()).toLowerCase();
         if (fullName) manualByFullName.set(fullName, m);
       }
-      // Count how many roster entries share each lastname so we know
-      // whether the legacy fallback is safe (only one player on the
-      // team carries that surname).
+      // Count how many roster entries share each lastname so the
+      // resolver knows whether the legacy lastname-only fallback is
+      // safe (only one player on the team carries that surname).
       const lastnameCount = new Map();
       for (const p of fullRoster) {
         const ln = p.lastName.toUpperCase();
         lastnameCount.set(ln, (lastnameCount.get(ln) || 0) + 1);
       }
-      const padNum = (n) => String(n || '').padStart(2, '0');
-      const isHeadshotLike = (m) =>
-        m.assetType === 'HEADSHOT' || m.assetType === 'PORTRAIT' || m.assetType === 'ACTION';
       for (const p of fullRoster) {
         const LN = p.lastName.toUpperCase();
         const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
-        const NUM = padNum(p.num);
         const fullName = (p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim()).toLowerCase();
         const manualRow = manualByFullName.get(fullName);
         const overrideId = manualRow?.profile_media_id || manualRow?.profileMediaId || null;
-        const overrideMedia = overrideId ? mediaById.get(overrideId) : null;
-
-        // Tier 2: FI + jersey number match. The jersey is the only
-        // signal that separates Paul (#02) and Will (#22) Marshall
-        // when their files don't carry a first initial.
-        const byNum = NUM
-          ? playerOnly.find(m =>
-              m.player === LN
-              && padNum(m.num) === NUM
-              && isHeadshotLike(m))
-          : null;
-        // Tier 3: FI only (no num required). Skipped if jersey
-        // disambiguation already won.
-        const byFI = playerOnly.find(m =>
-          m.player === LN
-          && (m.firstInitial || '').toUpperCase() === FI
-          && isHeadshotLike(m));
-        // Tier 4: legacy (no FI on the file). Only safe when this
-        // lastname is unique to a single roster entry — otherwise
-        // we'd hand the same file to multiple cousins.
-        const lonelyLastname = lastnameCount.get(LN) === 1;
-        const legacy = lonelyLastname
-          ? playerOnly.find(m => m.player === LN && !m.firstInitial && isHeadshotLike(m))
-          : null;
-
-        const headshot = overrideMedia || byNum || byFI || legacy;
+        const headshot = resolvePlayerAvatar(p, allMedia, {
+          profileMediaId: overrideId,
+          lastnameUnique: lastnameCount.get(LN) === 1,
+        });
         if (headshot?.blob) urls[`${FI}|${LN}`] = blobToObjectURL(headshot.blob);
       }
       setRosterAvatars(urls);

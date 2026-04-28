@@ -378,6 +378,93 @@ export async function findLeagueMedia(opts = {}) {
   return filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
+// ─── Avatar resolution — single source of truth ─────────────────────────────
+//
+// Used by PlayerPage hero, TeamPage roster cards, and anywhere else we
+// render a player's "face" thumbnail. Before this lived in two separate
+// implementations with different inclusion lists (PlayerPage took only
+// HEADSHOT/PORTRAIT; TeamPage took HEADSHOT/PORTRAIT/ACTION) and different
+// ordering rules, so the same player would surface different photos in
+// different surfaces. This function is the canonical resolver — call it
+// from every avatar consumer.
+//
+// Resolution order (highest priority first):
+//   1. profile_media_id override — admin's explicit pick.
+//   2. Same FI + jersey number HEADSHOT — strongest auto signal,
+//      disambiguates cousins (Paul #02 vs Will #22 Marshall).
+//   3. Same FI + jersey number PORTRAIT.
+//   4. Same FI + jersey number ACTION (back of jersey is better than nothing).
+//   5. Same FI HEADSHOT.
+//   6. Same FI PORTRAIT.
+//   7. Same FI ACTION.
+//   8. Lastname-only legacy match HEADSHOT, PORTRAIT, then ACTION —
+//      ONLY when the lastname is unique among the candidate roster
+//      (otherwise we'd hand the same file to multiple cousins).
+//
+// Inputs:
+//   player:     { team, lastName, firstInitial, num }   — required
+//   allMedia:   array of media records (typically getAllMedia() result)
+//   opts.profileMediaId    — admin override (manual_players.profile_media_id)
+//   opts.lastnameUnique    — bool: true if no other roster entry shares
+//                            this lastname on this team. Defaults to true
+//                            for safety on single-player calls.
+//
+// Returns the media record (or null). Caller is responsible for
+// generating an object URL from .blob if it needs a string URL.
+export const AVATAR_ASSET_TYPES_PRIORITY = ['HEADSHOT', 'PORTRAIT', 'ACTION'];
+
+export function resolvePlayerAvatar(player, allMedia, opts = {}) {
+  if (!player || !Array.isArray(allMedia)) return null;
+  const LN = String(player.lastName || '').toUpperCase();
+  const FI = String(player.firstInitial || (player.firstName || '').charAt(0)).toUpperCase();
+  const NUM = String(player.num || '').padStart(2, '0');
+  const lastnameUnique = opts.lastnameUnique !== false;
+
+  // 1. Admin-picked override — wins everything else.
+  if (opts.profileMediaId) {
+    const override = allMedia.find(m => m.id === opts.profileMediaId);
+    if (override) return override;
+  }
+
+  // Player-scoped only — team logos, league branding, etc. don't qualify
+  // as a player avatar even if their filename happens to match.
+  const playerOnly = allMedia.filter(m =>
+    (m.scope || inferScope(m.assetType, m.team)) === 'player'
+  );
+  const lastnameMatches = playerOnly.filter(m => (m.player || '').toUpperCase() === LN);
+
+  const padNum = (n) => String(n || '').padStart(2, '0');
+  const matchesFI = (m) => (m.firstInitial || '').toUpperCase() === FI;
+  const matchesNum = (m) => NUM && padNum(m.num) === NUM;
+  const isType = (m, t) => (m.assetType || '').toUpperCase() === t;
+
+  // 2-4. Same FI + jersey number, in priority order.
+  if (FI && NUM) {
+    for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
+      const hit = lastnameMatches.find(m => matchesFI(m) && matchesNum(m) && isType(m, t));
+      if (hit) return hit;
+    }
+  }
+  // 5-7. Same FI alone, in priority order.
+  if (FI) {
+    for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
+      const hit = lastnameMatches.find(m => matchesFI(m) && isType(m, t));
+      if (hit) return hit;
+    }
+  }
+  // 8. Legacy lastname-only — but only when the lastname doesn't
+  //    overlap with another roster entry. Marshall on AZS has Paul
+  //    AND Will, so neither cousin should fall back to a generic
+  //    Marshall file (that's how Will ended up with Paul's photo).
+  if (lastnameUnique) {
+    for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
+      const hit = lastnameMatches.find(m => !m.firstInitial && isType(m, t));
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 export function blobToObjectURL(blob) {
   return URL.createObjectURL(blob);
 }
