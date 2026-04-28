@@ -325,6 +325,28 @@ export async function fetchRecentGenerates(limit = 10) {
   }
 }
 
+// Lightweight cloud-side existence check. Returns a Set of IDs that
+// already have a storage_path (i.e. the blob is fully uploaded). Used
+// by the backup runner to skip media/overlays/effects that are already
+// in the cloud, so re-running backup is incremental instead of redoing
+// every record.
+export async function fetchUploadedIds(kind) {
+  if (!supabaseConfigured) return new Set();
+  try {
+    const pathCol = kind === 'generate-log' ? 'thumbnail_storage_path' : 'storage_path';
+    const res = await authedFetch(`/api/cloud-sync?kind=${kind}&fields=id,${pathCol}`);
+    if (!res.ok) return new Set();
+    const data = await res.json();
+    const ids = new Set();
+    for (const r of (data.records || [])) {
+      if (r && r.id && r[pathCol]) ids.add(r.id);
+    }
+    return ids;
+  } catch {
+    return new Set();
+  }
+}
+
 // Awaitable versions — Phase 3's migration tool uses these so it can count
 // successes and surface progress.
 export const cloudAwait = {

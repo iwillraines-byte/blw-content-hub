@@ -1146,8 +1146,21 @@ export default function Files() {
             )}
             {backupProgress?.stage === 'done' && backupProgress.results && (() => {
               const r = backupProgress.results;
-              const totalOk = Object.values(r).reduce((s, k) => s + (k.ok || 0), 0);
               const totalFail = Object.values(r).reduce((s, k) => s + (k.fail || 0), 0);
+              const totalSkipped = (r.media.skipped || 0) + (r.overlays.skipped || 0) + (r.effects.skipped || 0);
+              // Per-kind summary helper. For blob kinds we include the
+              // "skipped because already uploaded" count so it's clear that
+              // a "0/0" reading means "everything was already in the cloud",
+              // not "nothing happened".
+              const blobSummary = (kind, label) => {
+                const k = r[kind];
+                const totalAttempted = (k.ok || 0) + (k.fail || 0);
+                const skipped = k.skipped || 0;
+                const totalSeen = totalAttempted + skipped;
+                if (totalSeen === 0) return `${label}: —`;
+                const skipPart = skipped > 0 ? ` (+${skipped} already in cloud)` : '';
+                return `${label}: ${k.ok}/${totalAttempted}${skipPart}`;
+              };
               return (
                 <div style={{
                   marginTop: 8, padding: 10,
@@ -1158,10 +1171,15 @@ export default function Files() {
                 }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>
                     {totalFail === 0 ? '✓ Backup complete' : '⚠ Backup finished with some failures'}
+                    {totalSkipped > 0 && (
+                      <span style={{ fontWeight: 400, fontFamily: fonts.condensed, marginLeft: 8, opacity: 0.85 }}>
+                        · {totalSkipped} already in cloud, skipped
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 0.3 }}>
-                    Media: {r.media.ok}/{r.media.ok + r.media.fail} · Overlays: {r.overlays.ok}/{r.overlays.ok + r.overlays.fail} ·
-                    Effects: {r.effects.ok}/{r.effects.ok + r.effects.fail} · Requests: {r.requests.ok}/{r.requests.ok + r.requests.fail} ·
+                    {blobSummary('media', 'Media')} · {blobSummary('overlays', 'Overlays')} ·
+                    {' '}{blobSummary('effects', 'Effects')} · Requests: {r.requests.ok}/{r.requests.ok + r.requests.fail} ·
                     Comments: {r.comments.ok}/{r.comments.ok + r.comments.fail} · Players: {r.manualPlayers.ok}/{r.manualPlayers.ok + r.manualPlayers.fail} ·
                     Layout: {r.fieldOverrides.ok}/{r.fieldOverrides.ok + r.fieldOverrides.fail}
                   </div>
@@ -1171,6 +1189,9 @@ export default function Files() {
             {backupProgress && backupProgress.stage !== 'done' && backupProgress.stage !== 'starting' && (
               <div style={{ marginTop: 8, fontFamily: fonts.condensed, fontSize: 11, color: '#075985' }}>
                 Uploading {backupProgress.stage}… {backupProgress.done || 0}/{backupProgress.total || 0}
+                {backupProgress.skipped > 0 && (
+                  <span style={{ opacity: 0.7 }}> ({backupProgress.skipped} already in cloud, skipped)</span>
+                )}
                 {backupProgress.record && <span style={{ opacity: 0.7 }}> — {backupProgress.record}</span>}
               </div>
             )}

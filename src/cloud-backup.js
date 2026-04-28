@@ -13,7 +13,7 @@
 // We keep going on failures — the caller decides whether to surface
 // per-item errors or just show a final summary.
 
-import { cloudAwait } from './cloud-sync';
+import { cloudAwait, fetchUploadedIds } from './cloud-sync';
 import { getAllMedia } from './media-store';
 import { getOverlays, getEffects } from './overlay-store';
 import { getAllManualPlayers } from './player-store';
@@ -39,14 +39,17 @@ function readAllAiUsage() {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-export async function backupLibraryToCloud({ onProgress } = {}) {
+// `skipExisting` (default true): for blob kinds (media/overlays/effects),
+// fetch the cloud's already-uploaded ID set first and skip records that
+// are already there. Set false to force a full re-upload.
+export async function backupLibraryToCloud({ onProgress, skipExisting = true } = {}) {
   const report = (stage, extra = {}) => {
     try { onProgress?.({ stage, ...extra }); } catch {}
   };
   const results = {
-    media: { ok: 0, fail: 0, errors: [] },
-    overlays: { ok: 0, fail: 0, errors: [] },
-    effects: { ok: 0, fail: 0, errors: [] },
+    media: { ok: 0, fail: 0, skipped: 0, errors: [] },
+    overlays: { ok: 0, fail: 0, skipped: 0, errors: [] },
+    effects: { ok: 0, fail: 0, skipped: 0, errors: [] },
     requests: { ok: 0, fail: 0, errors: [] },
     comments: { ok: 0, fail: 0, errors: [] },
     manualPlayers: { ok: 0, fail: 0, errors: [] },
@@ -59,13 +62,19 @@ export async function backupLibraryToCloud({ onProgress } = {}) {
   // ── MEDIA ────────────────────────────────────────────────────────────────
   try {
     const media = await getAllMedia();
-    report('media', { done: 0, total: media.length });
-    for (let i = 0; i < media.length; i++) {
-      const r = media[i];
+    // Incremental backup: fetch the cloud's uploaded-ID set once and skip
+    // anything already there. The check costs ~1 round-trip + a small JSON
+    // payload, but saves N base64-encoded multi-MB uploads on subsequent runs.
+    const existing = skipExisting ? await fetchUploadedIds('media') : new Set();
+    const pending = media.filter(r => !existing.has(r.id));
+    results.media.skipped = media.length - pending.length;
+    report('media', { done: 0, total: pending.length, skipped: results.media.skipped });
+    for (let i = 0; i < pending.length; i++) {
+      const r = pending[i];
       const res = await cloudAwait.syncMedia(r);
       if (res.ok) results.media.ok++;
       else { results.media.fail++; results.media.errors.push({ name: r.name, error: res.error || res.status }); }
-      report('media', { done: i + 1, total: media.length, record: r.name });
+      report('media', { done: i + 1, total: pending.length, skipped: results.media.skipped, record: r.name });
     }
   } catch (err) {
     results.media.errors.push({ error: err.message });
@@ -74,13 +83,16 @@ export async function backupLibraryToCloud({ onProgress } = {}) {
   // ── OVERLAYS ─────────────────────────────────────────────────────────────
   try {
     const overlays = await getOverlays();
-    report('overlays', { done: 0, total: overlays.length });
-    for (let i = 0; i < overlays.length; i++) {
-      const r = overlays[i];
+    const existing = skipExisting ? await fetchUploadedIds('overlay') : new Set();
+    const pending = overlays.filter(r => !existing.has(r.id));
+    results.overlays.skipped = overlays.length - pending.length;
+    report('overlays', { done: 0, total: pending.length, skipped: results.overlays.skipped });
+    for (let i = 0; i < pending.length; i++) {
+      const r = pending[i];
       const res = await cloudAwait.syncOverlay(r);
       if (res.ok) results.overlays.ok++;
       else { results.overlays.fail++; results.overlays.errors.push({ name: r.name, error: res.error || res.status }); }
-      report('overlays', { done: i + 1, total: overlays.length, record: r.name });
+      report('overlays', { done: i + 1, total: pending.length, skipped: results.overlays.skipped, record: r.name });
     }
   } catch (err) {
     results.overlays.errors.push({ error: err.message });
@@ -89,13 +101,16 @@ export async function backupLibraryToCloud({ onProgress } = {}) {
   // ── EFFECTS ──────────────────────────────────────────────────────────────
   try {
     const effects = await getEffects();
-    report('effects', { done: 0, total: effects.length });
-    for (let i = 0; i < effects.length; i++) {
-      const r = effects[i];
+    const existing = skipExisting ? await fetchUploadedIds('effect') : new Set();
+    const pending = effects.filter(r => !existing.has(r.id));
+    results.effects.skipped = effects.length - pending.length;
+    report('effects', { done: 0, total: pending.length, skipped: results.effects.skipped });
+    for (let i = 0; i < pending.length; i++) {
+      const r = pending[i];
       const res = await cloudAwait.syncEffect(r);
       if (res.ok) results.effects.ok++;
       else { results.effects.fail++; results.effects.errors.push({ name: r.name, error: res.error || res.status }); }
-      report('effects', { done: i + 1, total: effects.length, record: r.name });
+      report('effects', { done: i + 1, total: pending.length, skipped: results.effects.skipped, record: r.name });
     }
   } catch (err) {
     results.effects.errors.push({ error: err.message });

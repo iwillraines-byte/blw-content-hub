@@ -92,6 +92,24 @@ export default async function handler(req, res) {
       return;
     }
     try {
+      // ?fields=id,storage_path — a lightweight projection used by the
+      // backup runner to figure out which IDs are already fully uploaded.
+      // Skips signed-URL generation entirely so a 10k-row library can be
+      // checked in one fast query instead of N storage signing calls.
+      const fieldsParam = (req.query.fields || '').trim();
+      if (fieldsParam) {
+        const allowed = new Set(['id', 'storage_path', 'thumbnail_storage_path']);
+        const cols = fieldsParam.split(',').map(s => s.trim()).filter(c => allowed.has(c));
+        if (cols.length === 0) {
+          res.status(400).json({ error: 'fields must be one of: id, storage_path, thumbnail_storage_path' });
+          return;
+        }
+        const { data, error } = await sb.from(table).select(cols.join(','));
+        if (error) throw error;
+        res.status(200).json({ records: data || [] });
+        return;
+      }
+
       // Generate-log reads default to newest-first, limited to 100 so the
       // dashboard doesn't over-fetch; extend via ?limit= if a caller needs
       // the full history.
