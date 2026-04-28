@@ -620,16 +620,18 @@ function PreviewBody({
         ))}
       </div>
 
-      {/* Bulk-apply bar — only fields you fill in get stamped onto the
-          selected rows, so partial apply ("just set the player, leave
-          asset-type alone") is one click. Hidden until at least one
-          row is selected to keep the panel quiet otherwise. */}
+      {/* Bulk-apply bar — fill values any time, then pick the rows
+          (or use "Select all visible" right inside the bar). Empty
+          fields are skipped on apply, so partial apply works. */}
       <BulkApplyBar
         bulkPatch={bulkPatch}
         setBulkPatch={setBulkPatch}
         selectedCount={selectedIds.size}
         applyBulkToSelected={applyBulkToSelected}
         clearSelection={clearSelection}
+        selectAllVisible={selectAllVisible}
+        allVisibleSelected={allVisibleSelected}
+        visibleCount={rows.length}
       />
 
       <div style={{ overflow: 'auto', flex: 1 }}>
@@ -792,8 +794,17 @@ function PreviewBody({
 // Bulk apply bar — one-shot way to stamp the same player onto a whole
 // batch of selected rows. Empty fields are no-ops, so partial apply
 // works ("just set Konnor Jaso, leave asset types as auto-detected").
-function BulkApplyBar({ bulkPatch, setBulkPatch, selectedCount, applyBulkToSelected, clearSelection }) {
-  const dim = selectedCount === 0;
+//
+// Form fields are always editable so you can fill them out FIRST and
+// THEN pick rows; only the Apply button gates on having a selection.
+// "Select all visible" lives in the bar so the typical flow (fill →
+// select all → apply) is two clicks plus typing.
+function BulkApplyBar({
+  bulkPatch, setBulkPatch,
+  selectedCount, applyBulkToSelected, clearSelection,
+  selectAllVisible, allVisibleSelected, visibleCount,
+}) {
+  const noSelection = selectedCount === 0;
   const set = (patch) => setBulkPatch(prev => ({ ...prev, ...patch }));
   // Choose asset-type list based on the chosen scope (defaults to player
   // when scope is left blank — the most common case).
@@ -805,19 +816,36 @@ function BulkApplyBar({ bulkPatch, setBulkPatch, selectedCount, applyBulkToSelec
     <div style={{
       padding: '10px 18px',
       borderBottom: `1px solid ${colors.borderLight}`,
-      background: dim ? colors.bg : 'rgba(220,38,38,0.04)',
+      background: 'rgba(220,38,38,0.04)',
       display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end',
       transition: 'background 0.15s',
     }}>
       <div style={{
         fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
         letterSpacing: 0.5, textTransform: 'uppercase',
-        color: dim ? colors.textMuted : colors.red,
+        color: colors.red,
         flexBasis: '100%',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        Bulk apply{dim
-          ? ' · select rows below to enable'
-          : ` · ${selectedCount} row${selectedCount === 1 ? '' : 's'} selected`}
+        <span>
+          Bulk apply{noSelection
+            ? ` · fill values then pick rows (or use "Select all" below)`
+            : ` · ${selectedCount} row${selectedCount === 1 ? '' : 's'} selected`}
+        </span>
+        <button
+          onClick={() => allVisibleSelected ? clearSelection() : selectAllVisible()}
+          style={{
+            padding: '3px 10px', borderRadius: radius.sm,
+            background: 'transparent', color: colors.red,
+            border: `1px solid ${colors.red}55`,
+            fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700,
+            letterSpacing: 0.4, textTransform: 'uppercase',
+            cursor: 'pointer',
+          }}
+        >{allVisibleSelected
+          ? `Clear selection (${selectedCount})`
+          : `Select all visible (${visibleCount})`}
+        </button>
       </div>
       <BulkField label="Scope">
         <select value={bulkPatch.scope} onChange={e => {
@@ -829,7 +857,7 @@ function BulkApplyBar({ bulkPatch, setBulkPatch, selectedCount, applyBulkToSelec
             ? { team: '', num: '', firstInitial: '', lastName: '' }
             : {};
           set({ scope: next, ...reset });
-        }} style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }} disabled={dim}>
+        }} style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
           <option value="">— don't change</option>
           <option value="player">player</option>
           <option value="team">team</option>
@@ -846,7 +874,7 @@ function BulkApplyBar({ bulkPatch, setBulkPatch, selectedCount, applyBulkToSelec
           }}>BLW</span>
         ) : (
           <select value={bulkPatch.team} onChange={e => set({ team: e.target.value })}
-            style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }} disabled={dim}>
+            style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
             <option value="">— don't change</option>
             {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
           </select>
@@ -858,45 +886,45 @@ function BulkApplyBar({ bulkPatch, setBulkPatch, selectedCount, applyBulkToSelec
             <input value={bulkPatch.num}
               onChange={e => set({ num: e.target.value.replace(/\D/g, '').slice(0, 2) })}
               placeholder="##"
-              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 50, textAlign: 'center' }} disabled={dim} />
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 50, textAlign: 'center' }} />
           </BulkField>
           <BulkField label="FI">
             <input value={bulkPatch.firstInitial}
               onChange={e => set({ firstInitial: e.target.value.toUpperCase().slice(0, 1) })}
               placeholder="F"
-              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 38, textAlign: 'center' }} disabled={dim} />
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 38, textAlign: 'center' }} />
           </BulkField>
           <BulkField label="Last name">
             <input value={bulkPatch.lastName}
               onChange={e => set({ lastName: e.target.value.toUpperCase() })}
               placeholder="LASTNAME"
-              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 130 }} disabled={dim} />
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 130 }} />
           </BulkField>
         </>
       )}
       <BulkField label="Asset type">
         <select value={bulkPatch.assetType} onChange={e => set({ assetType: e.target.value })}
-          style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }} disabled={dim}>
+          style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
           <option value="">— don't change</option>
           {types.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </BulkField>
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-        <button onClick={clearSelection} disabled={dim} style={{
+        <button onClick={clearSelection} disabled={noSelection} style={{
           padding: '6px 12px', borderRadius: radius.sm,
-          background: 'transparent', color: dim ? colors.textMuted : colors.textSecondary,
+          background: 'transparent', color: noSelection ? colors.textMuted : colors.textSecondary,
           border: `1px solid ${colors.border}`,
           fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
           letterSpacing: 0.4, textTransform: 'uppercase',
-          cursor: dim ? 'not-allowed' : 'pointer',
-        }}>Clear</button>
-        <button onClick={applyBulkToSelected} disabled={dim} style={{
+          cursor: noSelection ? 'not-allowed' : 'pointer',
+        }}>Clear sel.</button>
+        <button onClick={applyBulkToSelected} disabled={noSelection} style={{
           padding: '6px 14px', borderRadius: radius.sm,
-          background: dim ? colors.border : colors.red,
+          background: noSelection ? colors.border : colors.red,
           color: '#fff', border: 'none',
           fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
           letterSpacing: 0.5, textTransform: 'uppercase',
-          cursor: dim ? 'not-allowed' : 'pointer',
+          cursor: noSelection ? 'not-allowed' : 'pointer',
         }}>Apply to {selectedCount} row{selectedCount === 1 ? '' : 's'}</button>
       </div>
     </div>
