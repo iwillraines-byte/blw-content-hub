@@ -221,29 +221,79 @@ const FIELD_PLACEHOLDERS = {
   venue:       'VENUE',
 };
 
+// Default photo transform — identity (cover crop, no exposure adjustments).
+// Persisted shape so all consumers (render, exports, history) read the same fields.
+export const DEFAULT_BG_TRANSFORM = Object.freeze({
+  offsetX: 0,    // -1 to 1, fraction of available pan range in source pixels
+  offsetY: 0,    // -1 to 1
+  zoom: 1,       // 1 to 4 — multiplier on the cover-crop window
+  brightness: 1, // 0.4 to 1.6 — exposure
+  contrast: 1,   // 0.4 to 1.6
+  saturation: 1, // 0 to 2
+});
+
+// Resolve the source-rect crop for the background image given pan/zoom.
+// Returns { sx, sy, sw, sh, maxPanXSource, maxPanYSource } so drag handlers
+// can translate canvas-pixel deltas back into offset units.
+function computeBgCrop(bgImg, w, h, transform) {
+  const t = transform || DEFAULT_BG_TRANSFORM;
+  const imgRatio = bgImg.width / bgImg.height;
+  const canvasRatio = w / h;
+  // Cover-crop base — what the canvas would show at zoom=1, offset=0
+  let baseSw = bgImg.width;
+  let baseSh = bgImg.height;
+  if (imgRatio > canvasRatio) baseSw = bgImg.height * canvasRatio;
+  else baseSh = bgImg.width / canvasRatio;
+  // Apply zoom (>1 shrinks source rect → image appears larger)
+  const effSw = baseSw / Math.max(0.01, t.zoom);
+  const effSh = baseSh / Math.max(0.01, t.zoom);
+  // Maximum pan in source pixels — the "extra" room outside the effective crop.
+  // At zoom=1 with a wider-than-canvas image, this = half the cropped-off margin.
+  const maxPanXSource = Math.max(0, (bgImg.width - effSw) / 2);
+  const maxPanYSource = Math.max(0, (bgImg.height - effSh) / 2);
+  const centerX = bgImg.width / 2 + (t.offsetX || 0) * maxPanXSource;
+  const centerY = bgImg.height / 2 + (t.offsetY || 0) * maxPanYSource;
+  return {
+    sx: centerX - effSw / 2,
+    sy: centerY - effSh / 2,
+    sw: effSw,
+    sh: effSh,
+    maxPanXSource,
+    maxPanYSource,
+  };
+}
+
 // ─── 4-Layer Custom Compositor ──────────────────────────────────────────────
-// options: { hiddenFields: Set<string>, forExport: boolean }
+// options: { hiddenFields: Set<string>, forExport: boolean, bgTransform }
 // - hiddenFields: field keys the user has explicitly toggled off → skip entirely
 // - forExport: true on the final download render → skip empty fields so preview
 //   placeholders don't bake into the exported PNG
+// - bgTransform: { offsetX, offsetY, zoom, brightness, contrast, saturation } —
+//   exposure adjustments are applied via ctx.filter ONLY for the background draw
+//   so overlays + text remain unaffected.
 function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
-  const { hiddenFields, forExport } = options;
+  const { hiddenFields, forExport, bgTransform } = options;
   ctx.clearRect(0, 0, w, h);
   const teamColor = team?.color;
 
-  // Layer 1: Background photo (cover crop), or team-colored gradient fallback
+  // Layer 1: Background photo (cover crop with pan/zoom + exposure), or team-colored gradient fallback
   if (bgImg) {
-    const imgRatio = bgImg.width / bgImg.height;
-    const canvasRatio = w / h;
-    let sx = 0, sy = 0, sw = bgImg.width, sh = bgImg.height;
-    if (imgRatio > canvasRatio) {
-      sw = bgImg.height * canvasRatio;
-      sx = (bgImg.width - sw) / 2;
-    } else {
-      sh = bgImg.width / canvasRatio;
-      sy = (bgImg.height - sh) / 2;
+    const { sx, sy, sw, sh } = computeBgCrop(bgImg, w, h, bgTransform);
+    const t = bgTransform || DEFAULT_BG_TRANSFORM;
+    const filterParts = [];
+    if (Math.abs(t.brightness - 1) > 0.001) filterParts.push(`brightness(${t.brightness})`);
+    if (Math.abs(t.contrast - 1) > 0.001)   filterParts.push(`contrast(${t.contrast})`);
+    if (Math.abs(t.saturation - 1) > 0.001) filterParts.push(`saturate(${t.saturation})`);
+    const hasFilter = filterParts.length > 0;
+    if (hasFilter) {
+      ctx.save();
+      ctx.filter = filterParts.join(' ');
     }
     ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, w, h);
+    if (hasFilter) {
+      ctx.filter = 'none';
+      ctx.restore();
+    }
   } else if (team) {
     // Team-colored gradient empty state (replaces dark gray "Upload a photo" placeholder)
     const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -311,6 +361,7 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
 export default function Generate() {
   const toast = useToast();
   const canvasRef = useRef(null);
+  const canvasWrapRef = useRef(null);
   const [searchParams] = useSearchParams();
 
   // Phase 5b: athletes are pinned to their own team. If the role is 'athlete'
@@ -350,6 +401,9 @@ export default function Generate() {
   const [overlayImg, setOverlayImg] = useState(null);
   const [bgImg, setBgImg] = useState(null);
   const [bgUrl, setBgUrl] = useState(null);
+  // Pan/zoom + exposure adjustments — applied to the background image only.
+  // Reset whenever a new bgImg loads so each photo starts from identity.
+  const [bgTransform, setBgTransform] = useState(DEFAULT_BG_TRANSFORM);
   const [playerMedia, setPlayerMedia] = useState([]);
   const [playerMediaUrls, setPlayerMediaUrls] = useState([]);
   const [selectedPlayer, setSelectedPlayer] = useState('');
@@ -502,8 +556,8 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields });
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, overridesVersion]);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform });
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion]);
 
   useEffect(() => { render(); }, [render]);
 
@@ -515,7 +569,7 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, forExport: true });
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, forExport: true, bgTransform });
     const link = document.createElement('a');
     link.download = `BLW_${customTeam}_${customType}_${customPlatform}.png`;
     link.href = canvas.toDataURL('image/png');
@@ -577,6 +631,7 @@ export default function Generate() {
     const img = new Image();
     img.onload = () => setBgImg(img);
     img.src = url;
+    setBgTransform(DEFAULT_BG_TRANSFORM);
   }, []);
 
   const handleBgFileInput = useCallback((e) => {
@@ -588,6 +643,7 @@ export default function Generate() {
     img.onload = () => setBgImg(img);
     img.src = url;
     e.target.value = '';
+    setBgTransform(DEFAULT_BG_TRANSFORM);
   }, []);
 
   const selectPlayerMediaAsBg = useCallback((mediaUrl) => {
@@ -595,7 +651,75 @@ export default function Generate() {
     const img = new Image();
     img.onload = () => setBgImg(img);
     img.src = mediaUrl;
+    setBgTransform(DEFAULT_BG_TRANSFORM);
   }, []);
+
+  // ── Photo pan/zoom interaction on the preview canvas ──
+  // Drag to pan, scroll to zoom. Both edit `bgTransform` in offset/zoom units —
+  // the renderer translates back to source pixels via computeBgCrop().
+  const bgDragRef = useRef(null); // { startX, startY, offsetX0, offsetY0 }
+  const onCanvasPointerDown = useCallback((e) => {
+    if (!bgImg || showLayoutEditor) return; // layout editor owns pointer when on
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    bgDragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX0: bgTransform.offsetX,
+      offsetY0: bgTransform.offsetY,
+    };
+  }, [bgImg, showLayoutEditor, bgTransform.offsetX, bgTransform.offsetY]);
+
+  const onCanvasPointerMove = useCallback((e) => {
+    const drag = bgDragRef.current;
+    if (!drag || !bgImg) return;
+    // dx/dy in canvas-display pixels → convert to offset units
+    const crop = computeBgCrop(bgImg, activeW, activeH, bgTransform);
+    if (crop.maxPanXSource <= 0 && crop.maxPanYSource <= 0) return;
+    const dxDisplay = e.clientX - drag.startX;
+    const dyDisplay = e.clientY - drag.startY;
+    // Drag right → image moves right → source rect moves left → offsetX decreases
+    const sxPerDisplayPx = (crop.sw / activeW) / scale;
+    const syPerDisplayPx = (crop.sh / activeH) / scale;
+    const dxOffset = crop.maxPanXSource > 0 ? -(dxDisplay * sxPerDisplayPx) / crop.maxPanXSource : 0;
+    const dyOffset = crop.maxPanYSource > 0 ? -(dyDisplay * syPerDisplayPx) / crop.maxPanYSource : 0;
+    const clamp = (v) => Math.max(-1, Math.min(1, v));
+    setBgTransform(t => ({
+      ...t,
+      offsetX: clamp(drag.offsetX0 + dxOffset),
+      offsetY: clamp(drag.offsetY0 + dyOffset),
+    }));
+  }, [bgImg, activeW, activeH, scale, bgTransform]);
+
+  const onCanvasPointerUp = useCallback((e) => {
+    if (bgDragRef.current) {
+      e.currentTarget.releasePointerCapture?.(bgDragRef.current.pointerId);
+      bgDragRef.current = null;
+    }
+  }, []);
+
+  const onCanvasWheel = useCallback((e) => {
+    if (!bgImg || showLayoutEditor) return;
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.0015); // smooth, scale-invariant zoom
+    setBgTransform(t => {
+      const z = Math.max(1, Math.min(4, t.zoom * factor));
+      return { ...t, zoom: z };
+    });
+  }, [bgImg, showLayoutEditor]);
+
+  const resetBgTransform = useCallback(() => setBgTransform(DEFAULT_BG_TRANSFORM), []);
+  const patchBgTransform = useCallback((partial) => setBgTransform(t => ({ ...t, ...partial })), []);
+
+  // React's onWheel is passive in some browsers, so attach manually with
+  // passive:false to allow preventDefault and avoid page scroll while zooming.
+  useEffect(() => {
+    const node = canvasWrapRef.current;
+    if (!node) return;
+    node.addEventListener('wheel', onCanvasWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onCanvasWheel);
+  }, [onCanvasWheel]);
 
   // Overlay upload
   const handleOverlayFile = (e) => {
@@ -1237,14 +1361,24 @@ export default function Generate() {
             display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%',
             boxSizing: 'border-box',
           }}>
-            <div style={{
-              position: 'relative',
-              width: activeW * scale, height: activeH * scale,
-            }}>
+            <div
+              ref={canvasWrapRef}
+              onPointerDown={onCanvasPointerDown}
+              onPointerMove={onCanvasPointerMove}
+              onPointerUp={onCanvasPointerUp}
+              onPointerCancel={onCanvasPointerUp}
+              style={{
+                position: 'relative',
+                width: activeW * scale, height: activeH * scale,
+                cursor: bgImg && !showLayoutEditor ? (bgDragRef.current ? 'grabbing' : 'grab') : 'default',
+                touchAction: 'none',
+              }}
+            >
               <canvas ref={canvasRef} style={{
                 width: activeW * scale, height: activeH * scale,
                 borderRadius: radius.base, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                 display: 'block',
+                pointerEvents: 'none', // wrapper owns pointer events
               }} />
               {/* Drag overlay — only visible when EDIT LAYOUT is on. Each
                   field becomes a small draggable handle pinned at its current
@@ -1266,6 +1400,46 @@ export default function Generate() {
           <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, textAlign: 'center' }}>
             {activeW}x{activeH}px — Click download for full resolution
           </div>
+
+          {/* Photo Adjust — pan/zoom + exposure. Affects ONLY the background photo;
+              overlay PNGs and text are untouched. Drag the preview to pan, scroll
+              to zoom; sliders below are duplicates for fine control. */}
+          {bgImg && (
+            <Card>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Label style={{ marginBottom: 0 }}>Photo Adjust</Label>
+                <button onClick={resetBgTransform} style={{
+                  background: colors.bg, border: `1px solid ${colors.border}`,
+                  color: colors.textSecondary, borderRadius: radius.sm, padding: '3px 10px',
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                }}>RESET</button>
+              </div>
+              <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginBottom: 10, fontStyle: 'italic' }}>
+                Drag preview to pan · Scroll to zoom · Sliders affect photo only
+              </div>
+              {[
+                { key: 'zoom',       label: 'Zoom',       min: 1,   max: 4,   step: 0.01, fmt: v => `${v.toFixed(2)}×` },
+                { key: 'brightness', label: 'Exposure',   min: 0.4, max: 1.6, step: 0.01, fmt: v => `${Math.round((v - 1) * 100)}%` },
+                { key: 'contrast',   label: 'Contrast',   min: 0.4, max: 1.6, step: 0.01, fmt: v => `${Math.round((v - 1) * 100)}%` },
+                { key: 'saturation', label: 'Saturation', min: 0,   max: 2,   step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
+              ].map(s => (
+                <div key={s.key} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                    <span style={{ ...labelStyle, textTransform: 'none', fontWeight: 700 }}>{s.label}</span>
+                    <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.red, fontWeight: 700 }}>
+                      {s.fmt(bgTransform[s.key])}
+                    </span>
+                  </div>
+                  <input
+                    type="range" min={s.min} max={s.max} step={s.step}
+                    value={bgTransform[s.key]}
+                    onChange={e => patchBgTransform({ [s.key]: parseFloat(e.target.value) })}
+                    style={{ width: '100%', accentColor: colors.red }}
+                  />
+                </div>
+              ))}
+            </Card>
+          )}
 
           {/* Effects Layer — lives under the preview so slider changes are visible live */}
           <Card>
