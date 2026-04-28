@@ -600,8 +600,8 @@ export function getAllPlayers() {
 export const CANONICAL_ROSTER_2026 = [
   // Arizona Saguaros
   { team: 'AZS', name: 'Andrew Ledet' },
-  { team: 'AZS', name: 'Paul Marshall' },
-  { team: 'AZS', name: 'Will Marshall' },
+  { team: 'AZS', name: 'Paul Marshall', num: '02' },
+  { team: 'AZS', name: 'Will Marshall', num: '22' },
   { team: 'AZS', name: 'Nick Martinez' },
   { team: 'AZS', name: 'Brice Clark' },
   { team: 'AZS', name: 'Cooper Ruckel' },
