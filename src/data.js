@@ -1232,10 +1232,19 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   }
   const ambiguous = !WANT_FN && !WANT_FI && candidateNames.size > 1;
 
-  const batting = battingMatches[0] || battingAll[0] || null;
-  const pitching = pitchingMatches[0] || pitchingAll[0] || null;
-  const rosterPlayer = rosterMatches[0] || rosterAll[0] || null;
-  const manual = manualMatches[0] || manualAll[0] || null;
+  // Source picks. The fallback to *All[0] exists for legacy slugs that
+  // don't carry a firstname/initial — without disambiguation we just
+  // grab the first matching row. But when the URL DOES disambiguate
+  // (logan-rose, c-rose), falling back to allMatches[0] is wrong: it
+  // would surface another cousin's record (e.g. Carson's bio CSV row
+  // showing up under Logan's player page when only Carson has a bio).
+  // Strict mode = WANT_FN or WANT_FI is set → no allMatches fallback.
+  const strict = Boolean(WANT_FN || WANT_FI);
+  const pickStrict = (narrow, all) => narrow[0] || (strict ? null : (all[0] || null));
+  const batting = pickStrict(battingMatches, battingAll);
+  const pitching = pickStrict(pitchingMatches, pitchingAll);
+  const rosterPlayer = pickStrict(rosterMatches, rosterAll);
+  const manual = pickStrict(manualMatches, manualAll);
 
   const source = batting || pitching || rosterPlayer || manual;
   if (!source && rankingMatches.length === 0 && rankingAll.length === 0) return null;
