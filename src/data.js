@@ -632,7 +632,7 @@ export const CANONICAL_ROSTER_2026 = [
   // Lee cousins on LV and any future same-FI-lastname collisions.
   { team: 'DAL', name: 'Carson Rose' },
   { team: 'DAL', name: 'Logan Rose', num: '08' },
-  { team: 'DAL', name: 'Luke Rose' /* TODO: jersey number */ },
+  { team: 'DAL', name: 'Luke Rose',  num: '05' },
   { team: 'DAL', name: 'Joey Jankowski' },
   { team: 'DAL', name: 'Caleb Jeter' },
   { team: 'DAL', name: 'Ben Dulin' },
@@ -642,8 +642,8 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'LV',  name: 'Konnor Jaso' },         // traded from LAN
   { team: 'LV',  name: 'Steven Hayden' },
   { team: 'LV',  name: 'Sawyer Behen' },
-  { team: 'LV',  name: 'James Lee'  /* TODO: jersey number */ },
-  { team: 'LV',  name: 'Justin Lee' /* TODO: jersey number */ },
+  { team: 'LV',  name: 'James Lee',  num: '05' },
+  { team: 'LV',  name: 'Justin Lee', num: '18' },
   // Los Angeles Naturals
   { team: 'LAN', name: 'Jordan Robles' },
   { team: 'LAN', name: 'Preston Kolm' },         // traded from LV
