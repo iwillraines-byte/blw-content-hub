@@ -8,16 +8,23 @@
 //     e.g.  LAN_03_ROSE_HEADSHOT.png
 //   Team-scoped:                {TEAM}_{TYPE}[_VARIANT].ext
 //     e.g.  LAN_TEAMPHOTO.jpg, LAN_VENUE_DUGOUT.jpg, LAN_LOGO_PRIMARY.png
+//   League-scoped:              BLW_{TYPE}[_VARIANT].ext
+//     e.g.  BLW_ALLSTAR_2026.jpg, BLW_TROPHY.png, BLW_LOGO_PRIMARY.png
 //
-// Team-scoped records set scope='team' and leave num/player empty. The scope
-// is inferred from assetType so existing records backfill on read without a
-// schema migration.
+// League-scoped records use the literal "BLW" prefix (the league code).
+// They have no team affiliation, so they show up across every team's
+// surfaces and live in a "League photos" bucket on the Files page.
 
 import { cloud } from './cloud-sync';
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Must match overlay-store.js
 const STORE_NAME = 'media';
+
+// Sentinel used in the team field for league-wide assets. NOT one of the
+// 10 BLW team codes — those are LAN, AZS, LV, NYG, DAL, BOS, PHI, CHI,
+// MIA, SDO. "BLW" denotes the league itself.
+export const LEAGUE_TEAM_CODE = 'BLW';
 
 // Asset types that belong to the team itself, not any one player.
 export const TEAM_SCOPE_TYPES = new Set([
@@ -26,8 +33,25 @@ export const TEAM_SCOPE_TYPES = new Set([
   'WORDMARK',
 ]);
 
-// Infer scope from asset type. Unknown types default to 'player'.
-export function inferScope(assetType) {
+// Asset types that belong to the league as a whole. ALLSTAR / EVENT /
+// MULTI_TEAM cover the typical league-wide photography use cases; the
+// LOGO_* + WORDMARK + BANNER + BRANDING bucket lets us store league
+// branding alongside team branding without name collisions.
+export const LEAGUE_SCOPE_TYPES = new Set([
+  'ALLSTAR', 'EVENT', 'MULTI_TEAM', 'TROPHY',
+  'BANNER', 'BRANDING',
+  'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON',
+  'WORDMARK',
+]);
+
+// Infer scope from team code + asset type.
+//   - team === 'BLW'        → league
+//   - assetType ∈ TEAM_SCOPE → team
+//   - else                   → player
+// Without the team-code peek a league-scoped LOGO_PRIMARY would collide
+// with the team-scoped LOGO_PRIMARY check below.
+export function inferScope(assetType, teamCode = '') {
+  if (String(teamCode || '').toUpperCase() === LEAGUE_TEAM_CODE) return 'league';
   return TEAM_SCOPE_TYPES.has(String(assetType || '').toUpperCase())
     ? 'team'
     : 'player';
@@ -40,6 +64,27 @@ export function parseFilename(name) {
   const base = String(name || '').replace(/\.[^.]+$/, '');
   const parts = base.split('_');
   const team = (parts[0] || '').toUpperCase();
+
+  // League-scoped form: BLW_{TYPE}[_VARIANT]
+  // Recognised when the prefix is the literal league code "BLW".
+  if (team === LEAGUE_TEAM_CODE) {
+    const maybeType = (parts[1] || '').toUpperCase();
+    const variant = (parts[2] || '').toUpperCase();
+    const combined = maybeType + (variant ? '_' + variant : '');
+    // Compound types like LOGO_PRIMARY span positions [1]+[2].
+    const isCompound = LEAGUE_SCOPE_TYPES.has(combined);
+    const assetType = isCompound ? combined : maybeType;
+    const extraVariant = isCompound ? (parts[3] || '').toUpperCase() : variant;
+    return {
+      team: LEAGUE_TEAM_CODE,
+      num: '',
+      firstInitial: '',
+      player: '',
+      assetType: assetType || 'EVENT',
+      variant: extraVariant,
+      scope: 'league',
+    };
+  }
 
   // Team-scoped form: {TEAM}_{TYPE}[_VARIANT]
   // Recognised when the second segment is a known team-scope asset type.
@@ -111,13 +156,23 @@ export function buildTeamFilename({ team, assetType, variant, ext }) {
   return V ? `${T}_${AT}_${V}.${E}` : `${T}_${AT}.${E}`;
 }
 
+// Build a league-scoped filename. Always prefixed with the literal
+// "BLW" so parseFilename routes the record to the league bucket.
+export function buildLeagueFilename({ assetType, variant, ext }) {
+  const AT = (assetType || 'EVENT').toUpperCase();
+  const V = (variant || '').toUpperCase();
+  const E = (ext || 'jpg').replace(/^\./, '');
+  return V ? `${LEAGUE_TEAM_CODE}_${AT}_${V}.${E}` : `${LEAGUE_TEAM_CODE}_${AT}.${E}`;
+}
+
 // Normalise a record — sets scope + fills firstInitial when missing.
 // Used to backfill legacy records on read (no IndexedDB migration needed).
 function normaliseRecord(r) {
   if (!r) return r;
   const out = { ...r };
-  // Backfill scope
-  if (!out.scope) out.scope = inferScope(out.assetType);
+  // Backfill scope — pass team so legacy BLW_* records get scope='league'
+  // even though their stored row predates the league-scope feature.
+  if (!out.scope) out.scope = inferScope(out.assetType, out.team);
   // Backfill firstInitial from the stored name if we can parse one
   if (out.firstInitial == null) {
     const parsed = parseFilename(out.name || '');
@@ -300,8 +355,22 @@ export async function findTeamMedia(team, opts = {}) {
   const T = String(team || '').toUpperCase();
   let filtered = all.filter(f => (f.team || '').toUpperCase() === T);
   if (opts.scope) {
-    filtered = filtered.filter(f => (f.scope || inferScope(f.assetType)) === opts.scope);
+    filtered = filtered.filter(f => (f.scope || inferScope(f.assetType, f.team)) === opts.scope);
   }
+  if (opts.assetType) {
+    const wantType = String(opts.assetType).toUpperCase();
+    filtered = filtered.filter(f => (f.assetType || '').toUpperCase() === wantType);
+  }
+  return filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+// All league-scoped media (BLW_*), sorted most-recent-first. Optional
+// assetType filter so consumers can ask for, say, only ALLSTAR photos.
+export async function findLeagueMedia(opts = {}) {
+  const all = await getAllMedia();
+  let filtered = all.filter(f =>
+    (f.scope || inferScope(f.assetType, f.team)) === 'league'
+  );
   if (opts.assetType) {
     const wantType = String(opts.assetType).toUpperCase();
     filtered = filtered.filter(f => (f.assetType || '').toUpperCase() === wantType);

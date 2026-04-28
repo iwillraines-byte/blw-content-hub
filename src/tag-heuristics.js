@@ -33,12 +33,28 @@ const ASSET_TYPE_KEYWORDS = {
   HIGHLIGHT:    ['highlight', 'highlights', 'reel', 'clip'],
   INTERVIEW:    ['interview', 'mic', 'presser', 'press', 'talk'],
   TEAMPHOTO:    ['team', 'teamphoto', 'group', 'roster'],
-  VENUE:        ['venue', 'stadium', 'field', 'ballpark', 'park'],
+  VENUE:        ['venue', 'stadium', 'ballpark', 'park'],
   LOGO_PRIMARY: ['logo', 'primary'],
   LOGO_DARK:    ['dark', 'logo-dark', 'logodark'],
   LOGO_LIGHT:   ['light', 'logo-light', 'logolight'],
   WORDMARK:     ['wordmark', 'text'],
+  // League-scoped types — only meaningful when the team prefix is BLW
+  // (or the filename otherwise indicates a multi-team / league event).
+  ALLSTAR:      ['allstar', 'all-star', 'asg'],
+  EVENT:        ['event', 'opening', 'closing', 'launch', 'gala', 'banquet'],
+  TROPHY:       ['trophy', 'championship', 'champion', 'award', 'mvp', 'final', 'finals'],
+  MULTI_TEAM:   ['multiteam', 'multi-team', 'mixed'],
+  BANNER:       ['banner', 'header', 'hero'],
+  BRANDING:     ['branding', 'brand'],
 };
+
+// Keywords that indicate the file is league-scoped regardless of any
+// team token also present (e.g. "blw-allstar-game01.png" mentions BLW
+// AND we want league scope, not Boston via "blw"→none collision).
+const LEAGUE_SCOPE_KEYWORDS = new Set([
+  'blw', 'allstar', 'all-star', 'asg', 'championship', 'finals',
+  'mvp', 'opening', 'banquet',
+]);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -257,24 +273,42 @@ export function heuristicallyTag({ filename, folderName = '', roster = [] }) {
   const assetTypeMatch = matchAssetType(allTokens);
   if (assetTypeMatch) reasons.push(`asset type "${assetTypeMatch.assetType}" matched "${assetTypeMatch.source}"`);
 
+  // League-scope detection. The first token being literally "blw" is the
+  // strongest signal (it's the prefix our buildLeagueFilename produces).
+  // Otherwise fall back to keyword hits — "all-star", "championship",
+  // "trophy", etc. — which can promote a no-team file to league scope
+  // even when the user's filename doesn't carry the BLW prefix yet.
+  const blwPrefix = filenameTokens[0] === 'blw';
+  const leagueKeywordHit = allTokens.some(t => LEAGUE_SCOPE_KEYWORDS.has(t));
+  const isLeague = blwPrefix || (leagueKeywordHit && !team);
+  if (isLeague) {
+    reasons.push(blwPrefix ? 'league scope from "BLW" prefix' : 'league scope inferred from keyword');
+  }
+
   // Confidence heuristic
   let confidence = 'none';
   const parts = [team, jersey, lastNameMatch, assetTypeMatch].filter(Boolean).length;
   if (parts >= 3) confidence = 'high';
   else if (parts === 2) confidence = 'medium';
   else if (parts === 1) confidence = 'low';
+  // League-scope hits are confident on their own — a "BLW_ALLSTAR.jpg"
+  // file shouldn't show as low-confidence just because no team or
+  // jersey could be parsed (there isn't one to parse).
+  if (isLeague && assetTypeMatch) confidence = 'high';
+  else if (isLeague) confidence = 'medium';
   // Knock down confidence when the lastname is ambiguous and we couldn't pick
   // an initial — the user needs to confirm which player this is.
   if (ambiguous && confidence === 'high') confidence = 'medium';
   else if (ambiguous && confidence === 'medium') confidence = 'low';
 
   return {
-    team: team?.team || null,
-    num: jersey?.num || null,
-    lastName: lastNameMatch?.lastName || null,
-    firstInitial: firstInitial || null,
-    ambiguous,
-    assetType: assetTypeMatch?.assetType || null,
+    team: isLeague ? null : (team?.team || null),
+    num: isLeague ? null : (jersey?.num || null),
+    lastName: isLeague ? null : (lastNameMatch?.lastName || null),
+    firstInitial: isLeague ? null : (firstInitial || null),
+    ambiguous: isLeague ? false : ambiguous,
+    assetType: assetTypeMatch?.assetType || (isLeague ? 'EVENT' : null),
+    scope: isLeague ? 'league' : null,
     confidence,
     reasons,
   };
@@ -292,11 +326,26 @@ const TEAM_SCOPE_PREFIXES = new Set([
   'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON',
   'LOGO',
 ]);
+// League-scoped types that round-trip a BLW_* filename through the parser.
+const LEAGUE_SCOPE_PREFIXES = new Set([
+  'ALLSTAR', 'EVENT', 'MULTI_TEAM', 'TROPHY', 'BANNER', 'BRANDING',
+  'TEAMPHOTO', 'VENUE', 'WORDMARK',
+  'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'LOGO',
+]);
 
 export function isAlreadyTagged(filename) {
   const parts = filename.replace(/\.[^.]+$/, '').split('_');
   if (parts.length < 2) return false;
-  const teamOk = TEAMS.some(t => t.id === parts[0].toUpperCase());
+  const prefix = parts[0].toUpperCase();
+
+  // League-scoped: BLW_{TYPE}[_VARIANT]
+  if (prefix === 'BLW') {
+    const t1 = (parts[1] || '').toUpperCase();
+    const t1t2 = (parts[2] || '').toUpperCase() ? `${t1}_${(parts[2] || '').toUpperCase()}` : t1;
+    return LEAGUE_SCOPE_PREFIXES.has(t1) || LEAGUE_SCOPE_PREFIXES.has(t1t2);
+  }
+
+  const teamOk = TEAMS.some(t => t.id === prefix);
   if (!teamOk) return false;
 
   // Team-scoped: TEAM_{TYPE}[_VARIANT]

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { TEAMS, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, TEAM_SCOPE_TYPES } from '../media-store';
+import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
 import {
   getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder,
   extractFolderId, listFolderFiles, downloadFileAsBlob,
@@ -22,8 +22,12 @@ import { PreviewLightbox } from '../preview-lightbox';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
-const ASSET_TYPES = [...PLAYER_ASSET_TYPES, ...TEAM_ASSET_TYPES];
-const typeIcons = { HEADSHOT: '👤', ACTION: '📸', ACTION2: '📸', HIGHLIGHT: '🎬', HIGHLIGHT2: '🎬', LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨', PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️', TEAMPHOTO: '👥', VENUE: '🏟️', FILE: '📄', LINK: '🔗' };
+// League-scoped asset types — for BLW-wide media that doesn't belong
+// to any one team (All-Star events, championships, multi-team photos,
+// league branding). Stored under the literal "BLW" team prefix.
+const LEAGUE_ASSET_TYPES = ['ALLSTAR', 'EVENT', 'MULTI_TEAM', 'TROPHY', 'BANNER', 'BRANDING', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
+const ASSET_TYPES = [...PLAYER_ASSET_TYPES, ...TEAM_ASSET_TYPES, ...LEAGUE_ASSET_TYPES];
+const typeIcons = { HEADSHOT: '👤', ACTION: '📸', ACTION2: '📸', HIGHLIGHT: '🎬', HIGHLIGHT2: '🎬', LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨', PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️', TEAMPHOTO: '👥', VENUE: '🏟️', ALLSTAR: '⭐', EVENT: '🎉', MULTI_TEAM: '🏟️', TROPHY: '🏆', BANNER: '🎌', BRANDING: '🎨', FILE: '📄', LINK: '🔗' };
 const sourceLabels = { local: 'Local', gdrive: 'Google Drive' };
 const sourceColors = { local: colors.red, gdrive: '#34A853' };
 
@@ -40,7 +44,7 @@ function isProperlyNamed(name) {
 //   - Manual dropdown overrides so user can correct AI guesses before Apply
 // The parent may also push an AI result via `tagHint` prop (used for bulk runs).
 function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy, onPreview }) {
-  const [tagScope, setTagScope] = useState('player'); // 'player' | 'team'
+  const [tagScope, setTagScope] = useState('player'); // 'player' | 'team' | 'league'
   const [tagTeam, setTagTeam] = useState('');
   const [tagNum, setTagNum] = useState('');
   const [tagInitial, setTagInitial] = useState('');
@@ -62,9 +66,14 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
       setTagNum(''); setTagInitial(''); setTagName('');
       // Default team-scoped type
       if (!TEAM_SCOPE_TYPES.has(tagType)) setTagType('TEAMPHOTO');
+    } else if (next === 'league') {
+      // League-scoped clears team + player fields entirely. The "team"
+      // is the league sentinel BLW; we set it implicitly at apply time.
+      setTagNum(''); setTagInitial(''); setTagName(''); setTagTeam('');
+      if (!LEAGUE_SCOPE_TYPES.has(tagType)) setTagType('EVENT');
     } else {
       setTagVariant('');
-      if (TEAM_SCOPE_TYPES.has(tagType)) setTagType('HEADSHOT');
+      if (TEAM_SCOPE_TYPES.has(tagType) || LEAGUE_SCOPE_TYPES.has(tagType)) setTagType('HEADSHOT');
     }
   };
 
@@ -74,11 +83,17 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
     if (hintSource === 'ai') return; // AI already provided tags; don't overwrite
     const guess = heuristicallyTag({ filename: file.name, roster });
     if (guess.confidence === 'none') return;
-    if (guess.team && !tagTeam) setTagTeam(guess.team);
+    // League-scope detection trumps team / player guesses entirely —
+    // a BLW_ALLSTAR.jpg shouldn't pull a team or jersey number along for the ride.
+    if (guess.scope === 'league') setTagScope('league');
+    if (guess.team && !tagTeam && guess.scope !== 'league') setTagTeam(guess.team);
     if (guess.assetType) {
       setTagType(guess.assetType);
-      // If heuristic says the type is team-scoped, switch modes.
-      if (TEAM_SCOPE_TYPES.has(guess.assetType)) setTagScope('team');
+      if (guess.scope === 'league') {
+        // Already set scope above; nothing more to do.
+      } else if (TEAM_SCOPE_TYPES.has(guess.assetType)) {
+        setTagScope('team');
+      }
     }
     if (guess.num && !tagNum) setTagNum(guess.num);
     if (guess.lastName && !tagName) setTagName(guess.lastName);
@@ -132,6 +147,10 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
     const FI = (tagInitial || '').toUpperCase().slice(0, 1);
     const nameSeg = FI ? `${FI}.${tagName.toUpperCase()}` : tagName.toUpperCase();
     preview = `${tagTeam}_${(tagNum || '00').padStart(2, '0')}_${nameSeg}_${tagType}.${ext}`;
+  } else if (tagScope === 'league') {
+    const type = LEAGUE_SCOPE_TYPES.has(tagType) ? tagType : 'EVENT';
+    const v = tagVariant.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    preview = buildLeagueFilename({ assetType: type, variant: v, ext });
   }
 
   const apply = async () => {
@@ -186,9 +205,10 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
         <div style={{ fontSize: 11, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</div>
       </div>
 
-      {/* Scope toggle — Player vs Team. Team mode hides jersey# and lastname. */}
+      {/* Scope toggle — Player / Team / League. Team & League hide
+          jersey# + lastname; League also hides the team picker. */}
       <div style={{ display: 'inline-flex', border: `1px solid ${colors.border}`, borderRadius: radius.sm, overflow: 'hidden', flexShrink: 0 }}>
-        {['player', 'team'].map(s => (
+        {['player', 'team', 'league'].map(s => (
           <button
             key={s}
             onClick={() => switchScope(s)}
@@ -199,16 +219,31 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
               fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
               letterSpacing: 0.5, cursor: 'pointer',
             }}
-            title={s === 'team' ? 'Team-wide asset (no player)' : 'Tagged to a specific player'}
+            title={
+              s === 'team'   ? 'Team-wide asset (no player)' :
+              s === 'league' ? 'BLW-wide asset — All-Star, championships, multi-team, league branding' :
+                               'Tagged to a specific player'
+            }
           >{s.toUpperCase()}</button>
         ))}
       </div>
 
-      {/* Tag inputs */}
-      <select value={tagTeam} onChange={e => { setTagTeam(e.target.value); setHintSource(''); }} style={{ ...selectStyle, ...compact, width: 80 }}>
-        <option value="">Team</option>
-        {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
-      </select>
+      {/* Tag inputs — team picker hidden for league scope, since
+          league assets carry the BLW prefix instead of any team code. */}
+      {tagScope !== 'league' && (
+        <select value={tagTeam} onChange={e => { setTagTeam(e.target.value); setHintSource(''); }} style={{ ...selectStyle, ...compact, width: 80 }}>
+          <option value="">Team</option>
+          {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+        </select>
+      )}
+      {tagScope === 'league' && (
+        <span style={{
+          padding: '4px 8px', borderRadius: radius.sm,
+          background: colors.redLight, color: colors.red,
+          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+          border: `1px solid ${colors.red}33`,
+        }} title="League-wide asset — visible across every team">BLW</span>
+      )}
 
       {tagScope === 'player' && (
         <>
@@ -235,16 +270,20 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
         </>
       )}
 
-      {tagScope === 'team' && (
+      {(tagScope === 'team' || tagScope === 'league') && (
         <input type="text" value={tagVariant}
           onChange={e => { setTagVariant(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')); setHintSource(''); }}
           placeholder="Variant (optional)"
-          title='Optional variant suffix, e.g. "DUGOUT", "FIELD", "01"'
+          title='Optional variant suffix, e.g. "DUGOUT", "FIELD", "2026", "GAME01"'
           style={{ ...inputStyle, ...compact, width: 178 }} />
       )}
 
       <select value={tagType} onChange={e => setTagType(e.target.value)} style={{ ...selectStyle, ...compact, width: 130 }}>
-        {(tagScope === 'team' ? TEAM_ASSET_TYPES : PLAYER_ASSET_TYPES).map(t => (
+        {(
+          tagScope === 'team' ? TEAM_ASSET_TYPES :
+          tagScope === 'league' ? LEAGUE_ASSET_TYPES :
+          PLAYER_ASSET_TYPES
+        ).map(t => (
           <option key={t} value={t}>{t}</option>
         ))}
       </select>
@@ -557,6 +596,10 @@ function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRenam
 export default function Files() {
   const toast = useToast();
   const [search, setSearch] = useState('');
+  // Scope filter for the tagged file grid. 'all' is the default;
+  // 'league' surfaces just BLW-wide assets so league-event content
+  // is one click away regardless of which team's archive you're in.
+  const [scopeFilter, setScopeFilter] = useState('all'); // all | player | team | league
   const [storedMedia, setStoredMedia] = useState([]);
   const [thumbUrls, setThumbUrls] = useState({});
   const [dragging, setDragging] = useState(false);
@@ -703,12 +746,25 @@ export default function Files() {
     source: m.source || 'local',
     size: m.blob ? `${(m.blob.size / 1024 / 1024).toFixed(1)} MB` : '',
     thumbUrl: thumbUrls[m.id],
+    // Scope inferred at read time so legacy records (no scope field
+    // before this feature shipped) bucket correctly. Reads the team
+    // code so BLW_* records land in 'league' even retroactively.
+    scope: m.scope || (m.team === LEAGUE_TEAM_CODE ? 'league'
+      : (TEAM_SCOPE_TYPES.has(m.assetType) ? 'team' : 'player')),
   }));
 
   const filtered = allDisplayFiles.filter(f => {
+    if (scopeFilter !== 'all' && f.scope !== scopeFilter) return false;
     if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const scopeCounts = {
+    all:     allDisplayFiles.length,
+    player:  allDisplayFiles.filter(f => f.scope === 'player').length,
+    team:    allDisplayFiles.filter(f => f.scope === 'team').length,
+    league:  allDisplayFiles.filter(f => f.scope === 'league').length,
+  };
 
   const handleFiles = useCallback(async (fileList) => {
     const compressOn = getCompressPreference();
@@ -1348,6 +1404,27 @@ export default function Files() {
 
       {/* Search + bulk-select toggle */}
       <Card style={{ padding: 14 }}>
+        {/* Scope filter — All / Player / Team / League. Lets users jump
+            straight to BLW-wide content (All-Star photos, championship
+            shots, league branding) without filename search gymnastics. */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+          {[
+            { id: 'all',    label: `All · ${scopeCounts.all}` },
+            { id: 'player', label: `Player · ${scopeCounts.player}` },
+            { id: 'team',   label: `Team · ${scopeCounts.team}` },
+            { id: 'league', label: `League · ${scopeCounts.league}`, accent: true },
+          ].map(t => (
+            <button key={t.id} onClick={() => setScopeFilter(t.id)} style={{
+              padding: '5px 12px', borderRadius: radius.sm,
+              fontSize: 11, fontWeight: 700, fontFamily: fonts.condensed,
+              letterSpacing: 0.4, textTransform: 'uppercase',
+              background: scopeFilter === t.id ? colors.red : (t.accent ? 'rgba(220,38,38,0.06)' : colors.white),
+              color: scopeFilter === t.id ? '#fff' : (t.accent ? colors.red : colors.textSecondary),
+              border: `1px solid ${scopeFilter === t.id ? colors.red : (t.accent ? `${colors.red}33` : colors.border)}`,
+              cursor: 'pointer',
+            }}>{t.label}</button>
+          ))}
+        </div>
         <input type="text" placeholder="Search by filename, team, or player..." value={search}
           onChange={e => setSearch(e.target.value)} style={inputStyle} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
@@ -1420,7 +1497,16 @@ export default function Files() {
               <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{f.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {t && <TeamChip teamId={t.id} small withLogo />}
+                  {f.scope === 'league' ? (
+                    <span style={{
+                      padding: '2px 7px', borderRadius: radius.full,
+                      background: colors.redLight, color: colors.red,
+                      fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                      border: `1px solid ${colors.red}33`,
+                    }} title="League-wide asset">BLW</span>
+                  ) : (
+                    t && <TeamChip teamId={t.id} small withLogo />
+                  )}
                   <span style={{ color: colors.textMuted, fontSize: 9, fontFamily: fonts.condensed, fontWeight: 600 }}>{f.type}</span>
                 </div>
                 {f.size && <span style={{ fontSize: 10, color: colors.textMuted }}>{f.size}</span>}
@@ -1639,7 +1725,11 @@ function PerTeamBreakdown({ byTeam }) {
     : n < 1024 ** 3 ? `${(n / (1024 ** 2)).toFixed(1)} MB`
     : `${(n / (1024 ** 3)).toFixed(2)} GB`;
   // Sort by bytes descending, drop the OTHER bucket to the bottom.
+  // Sort: BLW (league) first as the league-wide bucket, teams by bytes
+  // descending, then OTHER at the bottom for legacy/unparsed names.
   const entries = Object.entries(byTeam).sort((a, b) => {
+    if (a[0] === 'BLW') return -1;
+    if (b[0] === 'BLW') return 1;
     if (a[0] === 'OTHER') return 1;
     if (b[0] === 'OTHER') return -1;
     return b[1].bytes - a[1].bytes;
@@ -1659,16 +1749,21 @@ function PerTeamBreakdown({ byTeam }) {
         {entries.map(([team, v]) => {
           const t = getTeam(team);
           const pct = (v.bytes / max) * 100;
-          const label = t ? t.name : (team === 'OTHER' ? 'Unparsed / legacy' : team);
+          const isLeague = team === 'BLW';
+          const label = isLeague ? 'League-wide (BLW)'
+            : t ? t.name
+            : (team === 'OTHER' ? 'Unparsed / legacy' : team);
+          const barColor = isLeague ? colors.red
+            : t?.color || '#0EA5E9';
           return (
-            <div key={team} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px 60px', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontWeight: 700, color: t?.color || colors.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div key={team} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px 60px', gap: 8, alignItems: 'center' }} title={label}>
+              <span style={{ fontWeight: 700, color: barColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {team}
               </span>
               <div style={{ height: 6, background: 'rgba(14,165,233,0.10)', borderRadius: 999, overflow: 'hidden' }}>
                 <div style={{
                   width: `${Math.max(pct, 2)}%`, height: '100%',
-                  background: t?.color || '#0EA5E9',
+                  background: barColor,
                   transition: 'width 0.3s ease',
                 }} />
               </div>

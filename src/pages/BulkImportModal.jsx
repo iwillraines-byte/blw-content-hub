@@ -12,13 +12,14 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { TEAMS } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { saveMedia, buildPlayerFilename, buildTeamFilename, TEAM_SCOPE_TYPES, blobToObjectURL } from '../media-store';
+import { saveMedia, buildPlayerFilename, buildTeamFilename, buildLeagueFilename, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, blobToObjectURL } from '../media-store';
 import { heuristicallyTag } from '../tag-heuristics';
 import { compressImageBlob, getCompressPreference, formatSavings } from '../image-compress';
 import { PreviewLightbox } from '../preview-lightbox';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
+const LEAGUE_ASSET_TYPES = ['ALLSTAR', 'EVENT', 'MULTI_TEAM', 'TROPHY', 'BANNER', 'BRANDING', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
 
 // Walk a DataTransferItemList and yield all files inside any folders the
 // user drops. Browsers expose this through the non-standard
@@ -80,8 +81,13 @@ function buildRow(file, roster) {
     // which uses a <video> element for full playback.
     previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
     isVideo: file.type.startsWith('video/'),
-    scope: TEAM_SCOPE_TYPES.has(guess.assetType) ? 'team' : 'player',
-    team: guess.team || '',
+    // Initial scope follows the heuristic — league hits trump everything
+    // (a BLW_ALLSTAR.jpg shouldn't pull a team along), then team-scope
+    // assetTypes, otherwise default to player.
+    scope: guess.scope === 'league' ? 'league'
+      : TEAM_SCOPE_TYPES.has(guess.assetType) ? 'team'
+      : 'player',
+    team: guess.scope === 'league' ? '' : (guess.team || ''),
     num: guess.num || '',
     firstInitial: guess.firstInitial || '',
     lastName: guess.lastName || '',
@@ -185,6 +191,9 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
   // (and every downstream lookup) treats the import as already-tagged.
   const buildName = (r) => {
     const ext = (r.file.name.match(/\.[^.]+$/) || ['.jpg'])[0].slice(1);
+    if (r.scope === 'league') {
+      return buildLeagueFilename({ assetType: r.assetType, variant: r.variant, ext });
+    }
     if (r.scope === 'team') {
       return buildTeamFilename({ team: r.team, assetType: r.assetType, variant: r.variant, ext });
     }
@@ -206,8 +215,9 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
       try {
         // Skip if the row is missing required fields — the user picked
         // 'auto' but the heuristic actually had nothing. Belt + braces.
-        if (!r.team) { fail++; continue; }
+        if (r.scope !== 'league' && !r.team) { fail++; continue; }
         if (r.scope === 'player' && !r.lastName) { fail++; continue; }
+        if (r.scope === 'league' && !r.assetType) { fail++; continue; }
 
         let blob = r.file;
         let width = 0, height = 0;
@@ -476,21 +486,34 @@ function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus,
                 </Td>
                 <Td><div title={r.reasons.join(' · ')} style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11 }}>{r.file.name}</div></Td>
                 <Td>
-                  <select value={r.team} onChange={e => updateRow(r.id, { team: e.target.value })} style={{ ...selectStyle, fontSize: 11, padding: '3px 6px' }}>
-                    <option value="">—</option>
-                    {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
-                  </select>
+                  {r.scope === 'league' ? (
+                    <span style={{
+                      padding: '3px 8px', borderRadius: radius.sm,
+                      background: colors.redLight, color: colors.red,
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                      border: `1px solid ${colors.red}33`,
+                    }}>BLW</span>
+                  ) : (
+                    <select value={r.team} onChange={e => updateRow(r.id, { team: e.target.value })} style={{ ...selectStyle, fontSize: 11, padding: '3px 6px' }}>
+                      <option value="">—</option>
+                      {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+                    </select>
+                  )}
                 </Td>
                 <Td>
                   <select value={r.scope} onChange={e => {
                     const next = e.target.value;
-                    updateRow(r.id, {
-                      scope: next,
-                      assetType: next === 'team' ? 'TEAMPHOTO' : 'HEADSHOT',
-                    });
+                    const defaultType =
+                      next === 'team'   ? 'TEAMPHOTO' :
+                      next === 'league' ? 'EVENT'     :
+                                          'HEADSHOT';
+                    // Switching INTO league wipes team — there's no team for league assets.
+                    const teamPatch = next === 'league' ? { team: '' } : {};
+                    updateRow(r.id, { scope: next, assetType: defaultType, ...teamPatch });
                   }} style={{ ...selectStyle, fontSize: 11, padding: '3px 6px' }}>
                     <option value="player">player</option>
                     <option value="team">team</option>
+                    <option value="league">league</option>
                   </select>
                 </Td>
                 <Td>
@@ -510,7 +533,11 @@ function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus,
                 </Td>
                 <Td>
                   <select value={r.assetType} onChange={e => updateRow(r.id, { assetType: e.target.value })} style={{ ...selectStyle, fontSize: 11, padding: '3px 6px', maxWidth: 140 }}>
-                    {(r.scope === 'team' ? TEAM_ASSET_TYPES : PLAYER_ASSET_TYPES).map(t => (
+                    {(
+                      r.scope === 'team'   ? TEAM_ASSET_TYPES :
+                      r.scope === 'league' ? LEAGUE_ASSET_TYPES :
+                                             PLAYER_ASSET_TYPES
+                    ).map(t => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
@@ -571,22 +598,34 @@ function LightboxEditPanel({ row, updateRow, setRowStatus }) {
         {row.file.name}
       </div>
       <LightboxField label="Team">
-        <select value={row.team} onChange={e => updateRow(row.id, { team: e.target.value })}
-          style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-          <option value="">—</option>
-          {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
-        </select>
+        {row.scope === 'league' ? (
+          <span style={{
+            padding: '4px 10px', borderRadius: radius.sm,
+            background: colors.redLight, color: colors.red,
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+            border: `1px solid ${colors.red}33`, display: 'inline-block',
+          }}>BLW</span>
+        ) : (
+          <select value={row.team} onChange={e => updateRow(row.id, { team: e.target.value })}
+            style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
+            <option value="">—</option>
+            {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+          </select>
+        )}
       </LightboxField>
       <LightboxField label="Scope">
         <select value={row.scope} onChange={e => {
           const next = e.target.value;
-          updateRow(row.id, {
-            scope: next,
-            assetType: next === 'team' ? 'TEAMPHOTO' : 'HEADSHOT',
-          });
+          const defaultType =
+            next === 'team'   ? 'TEAMPHOTO' :
+            next === 'league' ? 'EVENT'     :
+                                'HEADSHOT';
+          const teamPatch = next === 'league' ? { team: '' } : {};
+          updateRow(row.id, { scope: next, assetType: defaultType, ...teamPatch });
         }} style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
           <option value="player">player</option>
           <option value="team">team</option>
+          <option value="league">league</option>
         </select>
       </LightboxField>
       {row.scope === 'player' && (
@@ -608,7 +647,11 @@ function LightboxEditPanel({ row, updateRow, setRowStatus }) {
       <LightboxField label="Asset type">
         <select value={row.assetType} onChange={e => updateRow(row.id, { assetType: e.target.value })}
           style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-          {(row.scope === 'team' ? TEAM_ASSET_TYPES : PLAYER_ASSET_TYPES).map(t => (
+          {(
+            row.scope === 'team'   ? TEAM_ASSET_TYPES :
+            row.scope === 'league' ? LEAGUE_ASSET_TYPES :
+                                     PLAYER_ASSET_TYPES
+          ).map(t => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>

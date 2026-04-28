@@ -46,11 +46,13 @@ export default async function handler(req, res) {
   // a team if the prefix matches one of our BLW codes; anything else
   // (legacy, ad-hoc) lands in "OTHER" so the chart stays accurate.
   const BLW_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO']);
+  // BLW prefix is the league sentinel — its own bucket, separate from
+  // any team's archive, so league-wide assets show up as their own row.
   const teamFromPath = (path) => {
     if (!path) return 'OTHER';
-    // Strip leading folders like "userId/" so we read the filename itself.
     const filename = path.split('/').pop() || path;
     const prefix = filename.split('_')[0]?.toUpperCase();
+    if (prefix === 'BLW') return 'BLW';
     return BLW_TEAMS.has(prefix) ? prefix : 'OTHER';
   };
 
