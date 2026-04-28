@@ -13,85 +13,97 @@
 
 const LS_KEY = 'blw_theme_mode_v1';
 
-// Light palette — matches the current static colors in theme.js exactly,
-// so "light" mode is indistinguishable from the pre-dark-mode app.
+// Palettes are written in OKLCH so neutrals can pull a whisper of warmth
+// toward the brand hue (red, ~26.5°) instead of the off-the-shelf cool
+// grays that scream "Tailwind defaults". Chroma values are kept low
+// (0.003-0.015) so the tint is barely perceptible — neutrals still read
+// as neutrals, just with a subtle family resemblance to the brand red.
+//
+// Brand hue anchor: oklch(0.59 0.21 26.5) = ~#DD3C3C.
+//
+// Status color hues are deliberately offset from their Tailwind defaults
+// (which the rest of the world uses verbatim) and dialed slightly warmer:
+//   success  hue 150 (more forest-leaning) instead of the generic 145
+//   warning  hue 70  (closer to amber than yellow) — fits a sports brand
+//   info     hue 245 (a touch more violet-blue) instead of generic 240
+//
+// Hex fallbacks live in src/theme.js for the rare pre-bootstrap render
+// path (the `var(--color-x, #hex)` pattern). The OKLCH values below are
+// what every active surface actually resolves to.
 const LIGHT = {
-  'navy':             '#151C28',
-  'navyDeep':         '#0F1624',
-  'navyLight':        '#1E2736',
+  'navy':             'oklch(0.20 0.015 26.5)',
+  'navyDeep':         'oklch(0.15 0.012 26.5)',
+  'navyLight':        'oklch(0.25 0.014 26.5)',
 
-  'red':              '#DD3C3C',
-  'redHover':         '#C73535',
-  'redLight':         'rgba(221, 60, 60, 0.08)',
-  'redBorder':        'rgba(221, 60, 60, 0.2)',
+  'red':              'oklch(0.59 0.21 26.5)',
+  'redHover':         'oklch(0.54 0.20 26.5)',
+  'redLight':         'oklch(0.59 0.21 26.5 / 0.08)',
+  'redBorder':        'oklch(0.59 0.21 26.5 / 0.20)',
 
-  'white':            '#FFFFFF',   // card background in light mode
-  'bg':               '#F6F7F9',   // page background
-  'muted':            '#EDF3F3',
-  'cardHover':        '#FAFBFC',
+  'white':            'oklch(0.995 0.001 26.5)',       // card background
+  'bg':               'oklch(0.975 0.003 26.5)',       // page background
+  'muted':            'oklch(0.955 0.005 26.5)',
+  'cardHover':        'oklch(0.985 0.002 26.5)',
 
-  'text':             '#151C28',
-  'textSecondary':    '#676F7E',
-  'textMuted':        '#9CA3AF',
-  'textOnDark':       '#FFFFFF',
-  'textOnDarkMuted':  'rgba(255, 255, 255, 0.6)',
+  'text':             'oklch(0.20 0.015 26.5)',
+  'textSecondary':    'oklch(0.50 0.012 26.5)',
+  'textMuted':        'oklch(0.70 0.008 26.5)',
+  'textOnDark':       'oklch(0.99 0.001 26.5)',
+  'textOnDarkMuted':  'oklch(0.99 0.001 26.5 / 0.6)',
 
-  'border':           '#DCDFE5',
-  'borderLight':      '#EBEDF0',
-  'divider':          '#F0F1F3',
+  'border':           'oklch(0.89 0.005 26.5)',
+  'borderLight':      'oklch(0.94 0.004 26.5)',
+  'divider':          'oklch(0.96 0.003 26.5)',
 
-  'success':          '#22C55E',
-  'successBg':        'rgba(34, 197, 94, 0.08)',
-  'successBorder':    'rgba(34, 197, 94, 0.2)',
-  'warning':          '#F59E0B',
-  'warningBg':        'rgba(245, 158, 11, 0.08)',
-  'warningBorder':    'rgba(245, 158, 11, 0.2)',
-  'info':             '#3B82F6',
-  'infoBg':           'rgba(59, 130, 246, 0.08)',
-  'infoBorder':       'rgba(59, 130, 246, 0.2)',
+  'success':          'oklch(0.65 0.16 150)',
+  'successBg':        'oklch(0.65 0.16 150 / 0.10)',
+  'successBorder':    'oklch(0.65 0.16 150 / 0.24)',
+  'warning':          'oklch(0.74 0.16 70)',
+  'warningBg':        'oklch(0.74 0.16 70 / 0.12)',
+  'warningBorder':    'oklch(0.74 0.16 70 / 0.26)',
+  'info':             'oklch(0.62 0.18 245)',
+  'infoBg':           'oklch(0.62 0.18 245 / 0.10)',
+  'infoBorder':       'oklch(0.62 0.18 245 / 0.24)',
 };
 
-// Dark palette — designed to keep the same semantic roles:
-//   - `white` still means "card surface" (but it's actually dark blue-gray here)
-//   - `bg` still means "page surface behind cards"
-//   - `navy` stays the sidebar — slightly DARKER than cards so it reads "below"
-//   - brand red is unchanged
-// Accent status colors (success/warning/info) brighten so they stay visible
-// on the dark surfaces; their tinted backgrounds get a stronger alpha too.
+// Dark palette — same warmth strategy. Surfaces drift slightly warm at
+// the same hue (26.5°) but very low chroma, so the dark world feels
+// related to the brand red instead of generic cool blue-gray. Status
+// colors brighten via lightness so they stay visible on dark surfaces.
 const DARK = {
-  'navy':             '#0B0D10',   // sidebar — slightly darker than surface
-  'navyDeep':         '#06080A',
-  'navyLight':        '#151C28',
+  'navy':             'oklch(0.13 0.008 26.5)',
+  'navyDeep':         'oklch(0.09 0.006 26.5)',
+  'navyLight':        'oklch(0.20 0.012 26.5)',
 
-  'red':              '#DD3C3C',   // brand, unchanged
-  'redHover':         '#EF4444',
-  'redLight':         'rgba(221, 60, 60, 0.15)',
-  'redBorder':        'rgba(221, 60, 60, 0.35)',
+  'red':              'oklch(0.62 0.21 26.5)',
+  'redHover':         'oklch(0.66 0.22 26.5)',
+  'redLight':         'oklch(0.62 0.21 26.5 / 0.16)',
+  'redBorder':        'oklch(0.62 0.21 26.5 / 0.36)',
 
-  'white':            '#1A2230',   // card surface
-  'bg':               '#0F1320',   // page background
-  'muted':            '#1F2736',
-  'cardHover':        '#1F2736',
+  'white':            'oklch(0.22 0.012 26.5)',        // card surface
+  'bg':               'oklch(0.16 0.010 26.5)',        // page background
+  'muted':            'oklch(0.26 0.012 26.5)',
+  'cardHover':        'oklch(0.26 0.012 26.5)',
 
-  'text':             '#F1F5F9',
-  'textSecondary':    '#94A3B8',
-  'textMuted':        '#64748B',
-  'textOnDark':       '#F9FAFB',
-  'textOnDarkMuted':  'rgba(255, 255, 255, 0.55)',
+  'text':             'oklch(0.96 0.005 26.5)',
+  'textSecondary':    'oklch(0.74 0.010 26.5)',
+  'textMuted':        'oklch(0.55 0.012 26.5)',
+  'textOnDark':       'oklch(0.98 0.003 26.5)',
+  'textOnDarkMuted':  'oklch(0.98 0.003 26.5 / 0.55)',
 
-  'border':           '#2A3340',
-  'borderLight':      '#1F2736',
-  'divider':          '#1A1F28',
+  'border':           'oklch(0.32 0.012 26.5)',
+  'borderLight':      'oklch(0.26 0.012 26.5)',
+  'divider':          'oklch(0.22 0.010 26.5)',
 
-  'success':          '#4ADE80',
-  'successBg':        'rgba(74, 222, 128, 0.15)',
-  'successBorder':    'rgba(74, 222, 128, 0.35)',
-  'warning':          '#FBBF24',
-  'warningBg':        'rgba(251, 191, 36, 0.15)',
-  'warningBorder':    'rgba(251, 191, 36, 0.35)',
-  'info':             '#60A5FA',
-  'infoBg':           'rgba(96, 165, 250, 0.15)',
-  'infoBorder':       'rgba(96, 165, 250, 0.35)',
+  'success':          'oklch(0.78 0.18 150)',
+  'successBg':        'oklch(0.78 0.18 150 / 0.16)',
+  'successBorder':    'oklch(0.78 0.18 150 / 0.36)',
+  'warning':          'oklch(0.82 0.17 70)',
+  'warningBg':        'oklch(0.82 0.17 70 / 0.16)',
+  'warningBorder':    'oklch(0.82 0.17 70 / 0.36)',
+  'info':             'oklch(0.72 0.17 245)',
+  'infoBg':           'oklch(0.72 0.17 245 / 0.16)',
+  'infoBorder':       'oklch(0.72 0.17 245 / 0.36)',
 };
 
 // Build a CSS string that declares both palettes keyed to the
