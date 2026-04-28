@@ -12,6 +12,7 @@ import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
 import IdeaCard from '../idea-card';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
+import { ViewAsPicker } from '../view-as';
 
 export default function ContentStudio() {
   const navigate = useNavigate();
@@ -247,6 +248,12 @@ export default function ContentStudio() {
           we can forward it to /api/ideas for ALL users (admins set the
           context; everyone benefits from grounded AI output). */}
       <LeagueContextCard ctx={leagueCtx} />
+
+      {/* View as — master admin only. Lets you preview the dashboard from
+          any athlete's seat (or as a content user). Returns null for
+          everyone else. Pairs with the ImpersonationBanner mounted at the
+          top of AppShell so the active impersonation is always visible. */}
+      <ViewAsPicker />
 
       {/* Recent posts — public feed of the last 10 downloads across the team.
           Click a thumbnail to re-open Generate with the same composition.

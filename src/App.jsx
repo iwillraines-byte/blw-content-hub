@@ -23,6 +23,7 @@ import { supabaseConfigured } from './supabase-client';
 import { ToastProvider } from './toast';
 import { QuickSwitcher } from './quick-switcher';
 import { AuthProvider, useAuth, ROLE_LABELS, isAthleteRole, isAdminRole } from './auth';
+import { ImpersonationBanner } from './view-as';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -784,6 +785,11 @@ function AppShell() {
       <Sidebar isMobile={isMobile} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Impersonation banner — sticky strip across the top whenever a
+            master admin is viewing the app as another role. Renders null
+            when not impersonating. Sits above TopBar so it doesn't fight
+            with the page chrome's z-index. */}
+        <ImpersonationBanner />
         <TopBar
           isMobile={isMobile}
           onMenuToggle={() => setSidebarOpen(prev => !prev)}

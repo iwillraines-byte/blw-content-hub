@@ -4,7 +4,8 @@
 // `supabase.auth.onAuthStateChange` and queries the `profiles` table.
 //
 // Phase 5b surface:
-//   useAuth()       → { user, session, profile, role, teamId, loading, profileLoading, signOut, isConfigured }
+//   useAuth()       → { user, session, profile, role, teamId, loading, profileLoading, signOut, isConfigured,
+//                       realRole, realTeamId, viewingAs, setViewAs }
 //   useCurrentUser() convenience alias — just the user object (nullable)
 //   useRole()        convenience — current role or null
 //
@@ -13,9 +14,39 @@
 //   admin        → ops; manages content/athlete users
 //   content      → internal content creator; full app access except People tab
 //   athlete      → player/coach; restricted to their team for content generation
+//
+// ─── View-as (impersonation) ──────────────────────────────────────────────
+// Master admins can preview the app as any role + team without signing out.
+// `useAuth()` returns the EFFECTIVE role/teamId (override if set, real
+// otherwise), so every existing gate (RequireRole, HomeRedirect, MyStats
+// scoping, sidebar nav filter) automatically respects it. The override is
+// stored in localStorage so refreshes preserve the impersonation, and is
+// CLIENT-SIDE ONLY — server-side endpoints still authorise against the
+// real JWT, so an athlete view can't, say, edit league context. Setting
+// the override is gated to real master_admin role on the client; this is
+// a UX feature for a trusted user, not a security boundary.
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, supabaseConfigured } from './supabase-client';
+
+const VIEW_AS_KEY = 'blw_view_as';
+
+function loadViewAs() {
+  try {
+    const raw = localStorage.getItem(VIEW_AS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.role) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function saveViewAs(value) {
+  try {
+    if (value) localStorage.setItem(VIEW_AS_KEY, JSON.stringify(value));
+    else localStorage.removeItem(VIEW_AS_KEY);
+  } catch {}
+}
 
 const AuthContext = createContext({
   user: null,
@@ -23,6 +54,10 @@ const AuthContext = createContext({
   profile: null,
   role: null,
   teamId: null,
+  realRole: null,
+  realTeamId: null,
+  viewingAs: null,
+  setViewAs: () => {},
   loading: true,
   profileLoading: false,
   signOut: async () => {},
@@ -115,12 +150,46 @@ export function AuthProvider({ children }) {
     setProfileLoading(false);
   }, [userId]);
 
+  // ─── View-as override state ─────────────────────────────────────────────
+  const [viewingAs, setViewingAsState] = useState(() => loadViewAs());
+
+  // If the real role drops below master_admin (e.g., the user got demoted
+  // mid-session), clear any stale impersonation so they don't keep seeing
+  // a privileged-feeling control they can't actually wield.
+  useEffect(() => {
+    const realRole = profile?.role || null;
+    if (viewingAs && realRole !== 'master_admin') {
+      setViewingAsState(null);
+      saveViewAs(null);
+    }
+  }, [profile?.role, viewingAs]);
+
+  const setViewAs = useCallback((next) => {
+    // Client-side guard. Server endpoints still gate on the real JWT.
+    if (next && profile?.role !== 'master_admin') return;
+    if (next && !next.role) return;
+    setViewingAsState(next || null);
+    saveViewAs(next || null);
+  }, [profile?.role]);
+
+  const realRole = profile?.role || null;
+  const realTeamId = profile?.team_id || null;
+  // EFFECTIVE values — what every gate / page should read. Override wins
+  // when present, real values otherwise. The override teamId may be null
+  // for non-athlete impersonation (e.g., view as content user).
+  const effectiveRole = viewingAs?.role || realRole;
+  const effectiveTeamId = viewingAs?.teamId ?? realTeamId;
+
   const value = {
     user: session?.user || null,
     session,
     profile,
-    role: profile?.role || null,
-    teamId: profile?.team_id || null,
+    role: effectiveRole,
+    teamId: effectiveTeamId,
+    realRole,
+    realTeamId,
+    viewingAs,
+    setViewAs,
     loading,
     profileLoading,
     signOut,
