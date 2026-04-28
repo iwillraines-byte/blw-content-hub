@@ -9,8 +9,23 @@
 
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, SectionHeading } from './components';
+import { SectionHeading } from './components';
 import { colors, fonts, radius } from './theme';
+
+// Heuristic for picking a readable text color on top of an arbitrary
+// hex background. Used by the GAME badge and team-colored day chips
+// so a dark team color (Boston navy, Vegas black) gets white text and
+// a light team color (LA blue, AZ green) gets dark text.
+function bestTextOn(hex) {
+  if (!hex) return '#fff';
+  const m = /^#?([a-f\d]{6})$/i.exec(String(hex).trim());
+  if (!m) return '#fff';
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+  // Standard luminance — higher = lighter background.
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#111827' : '#FFFFFF';
+}
 
 // ─── Date helpers (all local time) ──────────────────────────────────────────
 
@@ -142,120 +157,179 @@ export function ContentCalendar({ team, games }) {
   const hasAnyPosts = plan.some(d => d.posts.length > 0);
   const hasAnyGames = plan.some(d => d.dayGames.length > 0);
 
+  // Pre-compute color treatments. team.color is the hero shade, team.dark
+  // is a deeper version, team.accent is the "secondary" (often white-ish
+  // or a contrast color). Falls back to existing greys when a team has
+  // limited palette data so this component stays drop-in safe.
+  const teamColor  = team?.color  || colors.red;
+  const teamDark   = team?.dark   || teamColor;
+  const teamAccent = team?.accent || '#FFFFFF';
+  const onTeamText = bestTextOn(teamColor);
+  const todayBg = `${teamColor}1A`;          // ~10% alpha
+  const todayBorder = `${teamColor}66`;       // ~40% alpha
+  const gameBg = `${teamColor}14`;            // ~8% alpha — slightly darker than before
+  const gameBorder = teamColor;
+
   return (
-    <Card>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
-        <SectionHeading style={{ margin: 0 }}>Content calendar</SectionHeading>
-        <span style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.5 }}>
-          NEXT 4 WEEKS · {hasAnyGames ? 'GAMES SCHEDULED' : 'NO GAMES SCHEDULED'}
-        </span>
-      </div>
-
-      {/* Weekday header */}
+    <div style={{
+      background: colors.white,
+      borderRadius: radius.lg,
+      border: `1px solid ${colors.borderLight}`,
+      borderLeft: `4px solid ${teamColor}`,
+      boxShadow: '0 8px 24px rgba(17,24,39,0.06), 0 2px 6px rgba(17,24,39,0.04)',
+      overflow: 'hidden',
+      position: 'relative',
+    }}>
+      {/* Team-branded header band — gradient from the team color into a
+          softer wash, with the team logo + name. Mirrors the visual
+          language of PlayerHero so the team page reads as a unified
+          surface rather than a stack of disconnected cards. */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6,
-        marginBottom: 6, paddingBottom: 6, borderBottom: `1px solid ${colors.borderLight}`,
+        position: 'relative',
+        padding: '14px 18px 12px',
+        background: `linear-gradient(135deg, ${teamColor} 0%, ${teamDark} 100%)`,
+        color: onTeamText,
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
-        {['MON','TUE','WED','THU','FRI','SAT','SUN'].map(d => (
-          <div key={d} style={{
+        {team?.logo && (
+          <img
+            src={team.logo}
+            alt={team.name}
+            style={{
+              width: 36, height: 36, objectFit: 'contain',
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+              flexShrink: 0,
+            }}
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <SectionHeading style={{
+            margin: 0, color: onTeamText,
+            textShadow: onTeamText === '#FFFFFF' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+          }}>Content calendar</SectionHeading>
+          <div style={{
             fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-            color: colors.textMuted, letterSpacing: 0.8, textAlign: 'center',
-          }}>{d}</div>
-        ))}
-      </div>
-
-      {/* Week rows */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {weeks.map((week, wi) => (
-          <div key={wi} style={{
-            display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6,
+            letterSpacing: 0.6, opacity: 0.85, marginTop: 2,
           }}>
-            {week.map((d, di) => {
-              const isToday = isSameDay(d.date, today);
-              const isPast = d.date < today && !isToday;
-              const hasGame = d.dayGames.length > 0;
-              return (
-                <div key={di} style={{
-                  background: hasGame ? `${team.color}10` : (isToday ? colors.redLight : colors.bg),
-                  border: `1px solid ${isToday ? colors.redBorder : colors.borderLight}`,
-                  borderLeft: hasGame ? `3px solid ${team.color}` : `1px solid ${colors.borderLight}`,
-                  borderRadius: radius.sm,
-                  padding: 6,
-                  minHeight: 70,
-                  opacity: isPast ? 0.5 : 1,
-                  display: 'flex', flexDirection: 'column', gap: 3,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{
-                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                      color: isToday ? colors.red : colors.textSecondary,
-                    }}>
-                      {d.date.getDate()}
-                    </span>
-                    {hasGame && (
-                      <span title="Game scheduled" style={{
-                        fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
-                        background: team.color, color: team.accent,
-                        padding: '1px 4px', borderRadius: 2, letterSpacing: 0.5,
-                      }}>GAME</span>
-                    )}
-                  </div>
-                  {d.posts.map((post, pi) => (
-                    <Link
-                      key={pi}
-                      to={`/generate?template=${post.templateId}&team=${team.id}`}
-                      title={`${post.label} → open Generate`}
-                      style={{ textDecoration: 'none' }}
-                    >
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 4,
-                        fontFamily: fonts.condensed, fontSize: 9, fontWeight: 600,
-                        color: colors.textSecondary, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                      }}>
-                        <span style={{
-                          width: 6, height: 6, borderRadius: '50%',
-                          background: colorForPostType(post.type, team.color),
-                          flexShrink: 0,
-                        }} />
-                        {post.label}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              );
-            })}
+            {(team?.name || 'TEAM').toUpperCase()} · NEXT 4 WEEKS · {hasAnyGames ? 'GAMES SCHEDULED' : 'NO GAMES YET'}
           </div>
-        ))}
-      </div>
-
-      {/* Legend */}
-      <div style={{
-        display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 12, paddingTop: 10,
-        borderTop: `1px solid ${colors.borderLight}`,
-      }}>
-        {[
-          { type: 'preview',   label: 'Matchup hype' },
-          { type: 'highlight', label: 'Live / recap' },
-          { type: 'score',     label: 'Final score' },
-          { type: 'leader',    label: 'Stat leader' },
-          { type: 'standings', label: 'Standings' },
-          { type: 'idea',      label: 'Idea / prep' },
-        ].map(l => (
-          <span key={l.type} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted,
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: colorForPostType(l.type, team.color) }} />
-            {l.label}
-          </span>
-        ))}
-      </div>
-
-      {!hasAnyPosts && (
-        <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 10, fontStyle: 'italic' }}>
-          Default M/W/F cadence shown. Add games via Grand Slam Systems and this calendar bumps to game-week cadence automatically.
         </div>
-      )}
-    </Card>
+      </div>
+
+      {/* Calendar body */}
+      <div style={{ padding: 14 }}>
+        {/* Weekday header */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6,
+          marginBottom: 6, paddingBottom: 6,
+          borderBottom: `1px solid ${teamColor}22`,
+        }}>
+          {['MON','TUE','WED','THU','FRI','SAT','SUN'].map(d => (
+            <div key={d} style={{
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+              color: teamDark, letterSpacing: 0.9, textAlign: 'center',
+              opacity: 0.65,
+            }}>{d}</div>
+          ))}
+        </div>
+
+        {/* Week rows */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {weeks.map((week, wi) => (
+            <div key={wi} style={{
+              display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6,
+            }}>
+              {week.map((d, di) => {
+                const isToday = isSameDay(d.date, today);
+                const isPast = d.date < today && !isToday;
+                const hasGame = d.dayGames.length > 0;
+                return (
+                  <div key={di} style={{
+                    background: hasGame ? gameBg : (isToday ? todayBg : colors.bg),
+                    border: `1px solid ${
+                      isToday ? todayBorder : (hasGame ? `${teamColor}33` : colors.borderLight)
+                    }`,
+                    borderLeft: hasGame ? `3px solid ${gameBorder}` : `1px solid ${colors.borderLight}`,
+                    borderRadius: radius.sm,
+                    padding: 6,
+                    minHeight: 72,
+                    opacity: isPast ? 0.5 : 1,
+                    display: 'flex', flexDirection: 'column', gap: 3,
+                    transition: 'background 0.15s',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{
+                        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                        color: isToday ? teamDark : colors.textSecondary,
+                      }}>
+                        {d.date.getDate()}
+                      </span>
+                      {hasGame && (
+                        <span title="Game scheduled" style={{
+                          fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
+                          background: teamColor, color: onTeamText,
+                          padding: '1px 5px', borderRadius: 2, letterSpacing: 0.6,
+                        }}>GAME</span>
+                      )}
+                    </div>
+                    {d.posts.map((post, pi) => (
+                      <Link
+                        key={pi}
+                        to={`/generate?template=${post.templateId}&team=${team.id}`}
+                        title={`${post.label} → open Generate`}
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 600,
+                          color: colors.textSecondary, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                        }}>
+                          <span style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: colorForPostType(post.type, teamColor),
+                            flexShrink: 0,
+                          }} />
+                          {post.label}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 12, paddingTop: 10,
+          borderTop: `1px solid ${teamColor}22`,
+        }}>
+          {[
+            { type: 'preview',   label: 'Matchup hype' },
+            { type: 'highlight', label: 'Live / recap' },
+            { type: 'score',     label: 'Final score' },
+            { type: 'leader',    label: 'Stat leader' },
+            { type: 'standings', label: 'Standings' },
+            { type: 'idea',      label: 'Idea / prep' },
+          ].map(l => (
+            <span key={l.type} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted,
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: colorForPostType(l.type, teamColor) }} />
+              {l.label}
+            </span>
+          ))}
+        </div>
+
+        {!hasAnyPosts && (
+          <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 10, fontStyle: 'italic' }}>
+            Default M/W/F cadence shown. Add games via Grand Slam Systems and this calendar bumps to game-week cadence automatically.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
