@@ -1086,25 +1086,27 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
   // injection above, every active player is already present, and a media
   // file for someone NOT on the canonical roster would just be a tag for
   // an inactive / FA / mistakenly-tagged file.
+  // Annotate roster with media availability. The roster Map is keyed by
+  // full-name (firstName|lastName), so we can't reverse-lookup from media
+  // (which only carries first-initial + lastName). Iterate roster entries
+  // and match by lastName, narrowing by first-initial when the media file
+  // carries one — this prevents cousin pairs like Paul/Will Marshall from
+  // both picking up `hasMedia=true` off a single Paul-tagged file.
   mediaList
     .filter(m => m.team === teamId && m.player && m.player !== 'TEAM' && m.player !== 'LEAGUE')
     .forEach(m => {
       const fi = (m.firstInitial || '').toUpperCase();
       const lnUpper = String(m.player).toUpperCase();
-      const exactKey = identityKey(fi, m.player);
-      const exact = fi ? roster.get(exactKey) : null;
-      if (exact) {
-        exact.hasMedia = true;
-        if (!exact.num && m.num) exact.num = m.num;
-        return;
-      }
-      // No initial OR no exact match: find any roster entry whose
-      // lastName matches.
       for (const v of roster.values()) {
-        if (v.lastName.toUpperCase() === lnUpper) {
-          v.hasMedia = true;
-          if (!v.num && m.num) v.num = m.num;
-        }
+        if (v.lastName.toUpperCase() !== lnUpper) continue;
+        // If the media file has a firstInitial AND the roster entry has
+        // a firstInitial too, they must match. If either side is missing
+        // an initial (legacy media or media-only entries) keep the loose
+        // match — the canonical roster injection already prevents most
+        // false positives.
+        if (fi && v.firstInitial && v.firstInitial.toUpperCase() !== fi) continue;
+        v.hasMedia = true;
+        if (!v.num && m.num) v.num = m.num;
       }
     });
 
