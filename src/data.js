@@ -1262,11 +1262,16 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     lastName,
     firstInitial: firstName.charAt(0).toUpperCase(),
     team: teamId,
-    // num fallback chain — manual_players (admin-set, e.g. via trades
-    // preset) → API stat row → canonical roster → empty. The canonical
-    // entry lives in CANONICAL_ROSTER_2026 and is the source of truth
-    // for cousin disambiguation since the API doesn't carry numbers.
-    num: manual?.num || source?.num || canonicalNumOf(name) || '',
+    // num fallback chain — canonical roster is FIRST because:
+    //   (a) the API never carries jersey numbers, so source.num is
+    //       always derived (often from a media filename collision
+    //       between cousins), which is unreliable for cousin pairs.
+    //   (b) manual_players records can be stale (jersey rewrites,
+    //       trade preset leftover), and canonical is the
+    //       single source of truth per recent user directives.
+    // The remaining fields are best-effort fillers when canonical
+    // doesn't have a number for the player at all.
+    num: canonicalNumOf(name) || manual?.num || source?.num || '',
     position: manual?.position || null,
     // Admin-chosen profile pic (db/005). NULL → fall back to the default
     // HEADSHOT/PORTRAIT heuristic in PlayerPage.

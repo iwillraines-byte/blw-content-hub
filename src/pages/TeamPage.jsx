@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats } from '../data';
+import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, canonicalNumOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
@@ -89,10 +89,14 @@ export default function TeamPage() {
       const canonTeam = canonicalTeamOf(fullName);
       if (canonTeam && canonTeam !== team.id) continue;
       taken.add(key);
+      // Canonical num wins over media-derived num because the
+      // jerseyByKey map collides on FI+lastname (Logan/Luke Rose
+      // both key to "L|ROSE"). Canonical roster is the single
+      // source of truth for jersey numbers; the rest are fillers.
       entries.push({
         ...p,
         firstInitial: fi,
-        num: p.num || jerseyByKey[key] || jerseyByKey[legacyKey] || '',
+        num: canonicalNumOf(fullName) || p.num || jerseyByKey[key] || jerseyByKey[legacyKey] || '',
         source: 'api',
       });
     }
@@ -124,7 +128,8 @@ export default function TeamPage() {
         firstInitial: fi,
         lastName: p.lastName,
         team: p.team,
-        num: p.num || '',
+        // Canonical num overrides any stale manual_players value.
+        num: canonicalNumOf(fullName) || p.num || '',
         position: p.position,
         isPitcher: /p/i.test(p.position),
         isBatter: /b|h|c|of|if/i.test(p.position),
@@ -191,7 +196,10 @@ export default function TeamPage() {
         firstInitial: fi,
         lastName,
         team: team.id,
-        num: '',
+        // Surface the canonical jersey number when it's set on the
+        // entry (Logan #08, Luke #05, etc). Without this, every
+        // canonical-only injection rendered as "no jersey".
+        num: c.num || '',
         isPitcher: false,
         isBatter: false,
         canonical: true,
