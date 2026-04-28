@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { TEAMS, API_CONFIG, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
+import { APP_VERSION, GIT_COMMIT, formattedBuildDate } from '../version';
 import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth, isAdminRole } from '../auth';
@@ -223,7 +224,35 @@ export default function Settings() {
       <Card>
         <SectionHeading>About</SectionHeading>
         <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
-          <div style={{ marginBottom: 6 }}><strong style={{ color: colors.red }}>BLW Content Hub</strong> · v2.0</div>
+          <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <strong style={{ color: colors.red }}>BLW Content Hub</strong>
+            {/* Live version + commit. Hovering the chip shows the build
+                date; clicking the SHA jumps to the GitHub commit. */}
+            <span
+              title={`Built ${formattedBuildDate()}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                background: colors.bg, border: `1px solid ${colors.borderLight}`,
+                padding: '2px 8px', borderRadius: radius.sm,
+                color: colors.textSecondary,
+              }}
+            >
+              v{APP_VERSION}
+              {GIT_COMMIT !== 'dev' && (
+                <>
+                  <span style={{ opacity: 0.5 }}>·</span>
+                  <a
+                    href={`https://github.com/iwillraines-byte/blw-content-hub/commit/${GIT_COMMIT}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: colors.accent, textDecoration: 'none', fontWeight: 600 }}
+                  >{GIT_COMMIT}</a>
+                </>
+              )}
+              {GIT_COMMIT === 'dev' && <span style={{ color: colors.textMuted }}>· dev</span>}
+            </span>
+          </div>
           <div>Content management and graphic generation tool for Big League Wiffle Ball.</div>
           <div style={{ marginTop: 8 }}>Managing content for 9 of 10 BLW teams. Season launch: May 1, 2026.</div>
           <div style={{ marginTop: 8 }}>Graphics are downloaded and scheduled via <strong>Metricool</strong> for social media publishing.</div>
