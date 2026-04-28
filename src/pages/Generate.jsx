@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPlayers, fetchAllData } from '../data';
-import { Card, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
+import { Card, CollapsibleCard, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
 import { TEMPLATE_TYPES, FONT_MAP, getFieldConfig } from '../template-config';
@@ -897,26 +897,58 @@ export default function Generate() {
                 </div>
               </Card>
 
-              {/* 2. Player Selector (for player-centric templates) */}
-              {customTypeObj?.playerCentric && (
-                <Card>
-                  <Label>Select Player</Label>
-                  <select value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)} style={{ ...selectStyle }} disabled={!customTeam}>
-                    <option value="">{customTeam ? 'Choose a player...' : 'Select a team first'}</option>
-                    {filteredPlayers.map(p => (
-                      <option key={`${p.team}_${p.name}`} value={`${p.team}_${p.name}`}>
-                        {p.name} · {p.team}
-                      </option>
-                    ))}
-                  </select>
-                </Card>
-              )}
+              {/* 2. Player Selector (for player-centric templates).
+                  Collapsible so the form doesn't grow into a 7-card scroll —
+                  shows the picked player's name as a summary when collapsed. */}
+              {customTypeObj?.playerCentric && (() => {
+                const selectedPlayerObj = selectedPlayer
+                  ? filteredPlayers.find(p => `${p.team}_${p.name}` === selectedPlayer)
+                  : null;
+                const summary = selectedPlayerObj
+                  ? `${selectedPlayerObj.name} · ${selectedPlayerObj.team}`
+                  : (customTeam ? 'No player selected' : 'Pick a team first');
+                return (
+                  <CollapsibleCard
+                    title="Player"
+                    summary={summary}
+                    storageKey="generate.collapse.player"
+                    defaultOpen={!selectedPlayer}
+                  >
+                    <select value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)} style={{ ...selectStyle }} disabled={!customTeam}>
+                      <option value="">{customTeam ? 'Choose a player...' : 'Select a team first'}</option>
+                      {filteredPlayers.map(p => (
+                        <option key={`${p.team}_${p.name}`} value={`${p.team}_${p.name}`}>
+                          {p.name} · {p.team}
+                        </option>
+                      ))}
+                    </select>
+                  </CollapsibleCard>
+                );
+              })()}
 
               {/* 3. Select Media — gated on team selection so we don't spin up
-                  a full team's asset library until the user has committed. */}
-              <Card>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Label style={{ marginBottom: 0 }}>Select Media</Label>
+                  a full team's asset library until the user has committed.
+                  Collapsible — surface the chosen media's name / count when
+                  collapsed so the user knows the state without expanding. */}
+              {(() => {
+                const selectedMedia = bgUrl ? playerMediaUrls.find(m => m.url === bgUrl) : null;
+                const summary = !customTeam
+                  ? 'Pick a team first'
+                  : selectedMedia
+                    ? selectedMedia.name
+                    : bgUrl
+                      ? 'Custom upload'
+                      : playerMediaUrls.length > 0
+                        ? `${playerMediaUrls.length} available`
+                        : 'No media yet';
+                return (
+              <CollapsibleCard
+                title="Media"
+                summary={summary}
+                storageKey="generate.collapse.media"
+                defaultOpen={!bgUrl}
+              >
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                   <label style={{
                     background: customTeam ? colors.accentSoft : colors.bg,
                     border: `1px solid ${customTeam ? colors.accentBorder : colors.border}`,
@@ -1007,12 +1039,37 @@ export default function Generate() {
                     )}
                   </>
                 )}
-              </Card>
+              </CollapsibleCard>
+                );
+              })()}
 
-              {/* 4. Overlay Picker — also gated on team */}
-              <Card>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Label style={{ marginBottom: 0 }}>Overlay Template</Label>
+              {/* 4. Overlay Picker — also gated on team. Collapsible like
+                  the Media picker; summary surfaces the selected overlay's
+                  name when collapsed. */}
+              {(() => {
+                const selectedPreset = selectedOverlayId && String(selectedOverlayId).startsWith('preset:')
+                  ? presetOverlays.find(p => p.id === selectedOverlayId)
+                  : null;
+                const selectedUploaded = selectedOverlayId && !String(selectedOverlayId).startsWith('preset:')
+                  ? overlays.find(o => o.id === selectedOverlayId)
+                  : null;
+                const summary = !customTeam
+                  ? 'Pick a team first'
+                  : selectedPreset
+                    ? selectedPreset.name
+                    : selectedUploaded
+                      ? selectedUploaded.name
+                      : (presetOverlays.length + filteredOverlays.length) > 0
+                        ? `${presetOverlays.length + filteredOverlays.length} available`
+                        : 'No overlay';
+                return (
+              <CollapsibleCard
+                title="Overlay"
+                summary={summary}
+                storageKey="generate.collapse.overlay"
+                defaultOpen={!selectedOverlayId}
+              >
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
                   <button onClick={() => setShowUploadModal(true)} disabled={!customTeam} style={{
                     background: customTeam ? colors.accentSoft : colors.bg,
                     border: `1px solid ${customTeam ? colors.accentBorder : colors.border}`,
@@ -1107,7 +1164,9 @@ export default function Generate() {
                     )}
                   </>
                 )}
-              </Card>
+              </CollapsibleCard>
+                );
+              })()}
 
               {/* 5. Dynamic Content — text fields that overlay the composition.
                   Each field has a VISIBLE / HIDDEN badge so you can omit a zone

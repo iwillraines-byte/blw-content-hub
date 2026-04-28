@@ -78,6 +78,97 @@ export const Label = ({ children, style }) => (
   }}>{children}</div>
 );
 
+// CollapsibleCard — Card variant with an expand/collapse chevron and an
+// optional summary line that surfaces when collapsed. Used on Generate
+// to keep the left-column form from growing into a 7-card scroll.
+//
+// Props:
+//   title      — Label-style heading at the top of the card
+//   summary    — short string or node shown next to the title when
+//                collapsed (e.g. "Konnor Jaso · LAN"). Hidden when open.
+//   defaultOpen — initial state (default: true)
+//   storageKey — optional localStorage key so the user's expand/collapse
+//                preference persists across sessions. Without one the
+//                state is purely in-memory.
+//
+// The collapsed body is removed from the DOM (display:none) rather than
+// unmounted — this preserves any uncontrolled child state (typing, focus)
+// when the user expands it again. State managed by the consumer is
+// untouched either way.
+export const CollapsibleCard = ({
+  title, summary, defaultOpen = true, storageKey,
+  children, style,
+}) => {
+  const [open, setOpen] = useState(() => {
+    if (!storageKey) return defaultOpen;
+    try {
+      const v = localStorage.getItem(storageKey);
+      if (v === '1') return true;
+      if (v === '0') return false;
+    } catch {}
+    return defaultOpen;
+  });
+  const toggle = () => {
+    setOpen(prev => {
+      const next = !prev;
+      if (storageKey) {
+        try { localStorage.setItem(storageKey, next ? '1' : '0'); } catch {}
+      }
+      return next;
+    });
+  };
+  return (
+    <div style={{
+      background: colors.white,
+      border: `1px solid ${colors.borderLight}`,
+      borderRadius: radius.lg,
+      boxShadow: '0 1px 3px rgba(17, 24, 39, 0.04), 0 1px 2px rgba(17, 24, 39, 0.03)',
+      overflow: 'hidden',
+      ...style,
+    }}>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          width: '100%', padding: open ? '14px 18px 4px' : '14px 18px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{
+          // Chevron rotates from collapsed-pointing-right to open-pointing-down.
+          // Pulled out as a separate span so the rotation transform doesn't
+          // affect text rendering of the title.
+          fontSize: 10, color: colors.textMuted,
+          transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+          transition: 'transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
+          width: 12, textAlign: 'center', flexShrink: 0,
+        }}>▶</span>
+        <div style={{
+          fontFamily: fonts.body, fontSize: 12, fontWeight: 600,
+          color: colors.textSecondary, letterSpacing: 0,
+          flexShrink: 0,
+        }}>{title}</div>
+        {!open && summary && (
+          <div style={{
+            flex: 1, minWidth: 0,
+            fontSize: 12, color: colors.text, fontWeight: 500,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            marginLeft: 4,
+          }}>
+            {summary}
+          </div>
+        )}
+      </button>
+      <div style={{ padding: open ? '0 18px 18px' : 0, display: open ? 'block' : 'none' }}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
 // ─── Data Display ───────────────────────────────────────────────────────────
 
 // TeamLogo — renders a team's logo image with graceful fallback to a colored ID chip
