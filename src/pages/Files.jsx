@@ -973,7 +973,9 @@ export default function Files() {
               time; it's idempotent.
             </div>
             {/* Storage meter — visible-at-a-glance sense of how much headroom
-                you have against Supabase's free-tier 1 GB storage limit. */}
+                you have against Supabase's plan storage limit (currently
+                Pro: 100 GB). The cap value comes from /api/cloud-usage so
+                a future plan change is one constant edit, no UI work. */}
             {usage && !usage.error && usage.storage && (() => {
               const used = usage.storage.total.bytes;
               const cap = usage.limits?.storageBytes || (1024 ** 3);

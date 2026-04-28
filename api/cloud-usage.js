@@ -1,5 +1,5 @@
 // Reports Supabase storage + table row counts so the Files page can show a
-// "47 MB used / 1 GB free" style usage meter. Cheap enough to call on every
+// "47 MB used / 100 GB" style usage meter. Cheap enough to call on every
 // Files page mount — one row-count per table, one list per bucket.
 //
 // Response:
@@ -7,7 +7,7 @@
 //   configured: true,
 //   storage: { media: { bytes: N, count: N }, overlays: {...}, effects: {...}, total: { bytes, count } },
 //   tables: { media: { rows: N }, requests: { rows: N }, ... },
-//   limits: { storageBytes: 1_073_741_824, dbRows: 500_000 },   // free-tier ballpark
+//   limits: { storageBytes: 107_374_182_400, plan: 'pro' },
 // }
 
 import { getServiceClient, missingConfigResponse, requireUser, requireRole } from './_supabase.js';
@@ -18,12 +18,17 @@ const TABLES = [
   'manual_players', 'field_overrides', 'ai_usage',
 ];
 
-// Supabase free tier, accurate as of 2025 (keeping code ref conservative):
-//   • 1 GB storage
-//   • 500 MB database (no hard row cap; size-limited)
-// We show bytes against the 1 GB ceiling — most relevant to this app since
-// media is the thing that grows fastest.
-const FREE_TIER_STORAGE_BYTES = 1024 * 1024 * 1024;
+// Supabase Pro tier as of 2026:
+//   • 100 GB storage included (additional GB billed at usage rates)
+//   • 8 GB database, 250 GB egress
+// The Files page shows bytes against this ceiling so the team can see at
+// a glance how much of the league media archive they've consumed.
+//
+// Tweak this constant if/when the plan changes — it's the only place the
+// UI reads its limit from. Override at deploy time via env var if you'd
+// rather not touch source: SUPABASE_STORAGE_LIMIT_BYTES (number of bytes).
+const PRO_TIER_STORAGE_BYTES = 100 * 1024 * 1024 * 1024;
+const STORAGE_LIMIT_BYTES = Number(process.env.SUPABASE_STORAGE_LIMIT_BYTES) || PRO_TIER_STORAGE_BYTES;
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -79,6 +84,6 @@ export default async function handler(req, res) {
     configured: true,
     storage,
     tables,
-    limits: { storageBytes: FREE_TIER_STORAGE_BYTES },
+    limits: { storageBytes: STORAGE_LIMIT_BYTES, plan: 'pro' },
   });
 }
