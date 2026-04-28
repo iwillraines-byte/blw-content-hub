@@ -34,10 +34,10 @@ const LS_MODE = 'blw_bio_sheet_mode_v1';
 // Labels match Supabase column-ish names so admins can match their
 // sheet headers intuitively.
 const FIELDS = [
-  { key: 'team',       label: 'Team',          required: true,  desc: 'Team id or name — e.g. "LAN" or "Los Angeles Naturals"' },
+  { key: 'team',       label: 'Team',          required: true,  desc: 'Team id or name (e.g. "LAN" or "Los Angeles Naturals")' },
   { key: 'firstName',  label: 'First Name',    required: false },
   { key: 'lastName',   label: 'Last Name',     required: true,  desc: 'Required (or provide Full Name)' },
-  { key: 'fullName',   label: 'Full Name',     required: false, desc: 'Alternative to first + last — we\'ll split it' },
+  { key: 'fullName',   label: 'Full Name',     required: false, desc: 'Alternative to first + last; we\'ll split it' },
   { key: 'num',        label: 'Jersey Number', required: false },
   { key: 'position',   label: 'Position',      required: false },
   { key: 'heightIn',   label: 'Height',        required: false, desc: "Accepts 73, 6'1\", 6 ft 1 in" },
@@ -47,8 +47,8 @@ const FIELDS = [
   { key: 'throws',     label: 'Throws',        required: false, desc: 'R / L' },
   { key: 'birthplace', label: 'Birthplace',    required: false },
   { key: 'nickname',   label: 'Nickname',      required: false },
-  { key: 'instagramHandle', label: 'Instagram', required: false, desc: 'Without the @ — surfaces in player extras dropdown' },
-  { key: 'funFacts',        label: 'Fun Facts', required: false, desc: 'Free-form blurb — shows in player extras dropdown' },
+  { key: 'instagramHandle', label: 'Instagram', required: false, desc: 'Without the @. Surfaces in player extras dropdown.' },
+  { key: 'funFacts',        label: 'Fun Facts', required: false, desc: 'Free-form blurb. Shows in player extras dropdown.' },
   { key: 'isRookie',        label: 'Rookie?',   required: false, desc: 'Y/N, true/false, 1/0' },
 ];
 
@@ -95,7 +95,7 @@ export default function PlayerBioImportCard() {
   const onFilePicked = async (file) => {
     if (!file) return;
     if (file.size > 4 * 1024 * 1024) {
-      toast.error('CSV is over 4MB — strip non-bio columns and try again');
+      toast.error('CSV is over 4MB. Strip non-bio columns and try again.');
       return;
     }
     try {
@@ -165,7 +165,7 @@ export default function PlayerBioImportCard() {
 
   const runApply = async () => {
     if (!preview) { toast.error('Run Preview first'); return; }
-    if (!inputReady()) { toast.error('CSV is no longer in memory — re-upload'); return; }
+    if (!inputReady()) { toast.error('CSV is no longer in memory. Re-upload.'); return; }
     if (!confirm(`Apply ${preview.summary.created + preview.summary.updated} changes to manual_players? This writes to the cloud.`)) return;
     setApplying(true);
     try {
@@ -244,7 +244,7 @@ export default function PlayerBioImportCard() {
       </div>
 
       <p style={{ fontSize: 12, color: colors.textSecondary, margin: '2px 0 14px', lineHeight: 1.6 }}>
-        Pulls a published Google Sheet (or any CSV) into <code>manual_players</code> — height/weight/birthdate/bats/throws/birthplace/nickname — so player pages show vitals. Matches existing rows by team + last name (disambiguated by first initial). <strong>Preview</strong> shows what would change without writing; <strong>Apply</strong> commits.
+        Pulls a published Google Sheet (or any CSV) into <code>manual_players</code> (height, weight, birthdate, bats, throws, birthplace, nickname) so player pages show vitals. Matches existing rows by team + last name (disambiguated by first initial). <strong>Preview</strong> shows what would change without writing; <strong>Apply</strong> commits.
       </p>
 
       {/* Privacy banner — recommends private modes, warns about URL mode. */}
@@ -253,7 +253,7 @@ export default function PlayerBioImportCard() {
         background: colors.infoBg, border: `1px solid ${colors.infoBorder}`,
         fontSize: 12, color: colors.text, lineHeight: 1.5,
       }}>
-        <strong>🛡 Privacy:</strong> The app is gated by login — only invited users see player pages. <strong>Upload</strong> and <strong>Paste</strong> never expose your sheet to anyone — the CSV travels straight from your browser to our database. <strong>URL mode</strong> requires you to publish the sheet, which makes it readable by anyone who learns the URL — only use it if your sheet has no PII. Email / phone / address columns are <strong>refused server-side</strong> regardless of mode.
+        <strong>🛡 Privacy:</strong> The app is gated by login. Only invited users see player pages. <strong>Upload</strong> and <strong>Paste</strong> never expose your sheet to anyone; the CSV travels straight from your browser to our database. <strong>URL mode</strong> requires you to publish the sheet, which makes it readable by anyone who learns the URL. Only use URL mode if your sheet has no PII. Email, phone, and address columns are <strong>refused server-side</strong> regardless of mode.
       </div>
 
       {/* Mode picker — segmented control */}
@@ -378,7 +378,7 @@ export default function PlayerBioImportCard() {
                 background: 'rgba(251, 191, 36, 0.12)', color: '#92400E',
                 border: '1px solid rgba(251, 191, 36, 0.4)',
                 fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
-              }}>PREVIEW — no writes yet</span>
+              }}>PREVIEW · no writes yet</span>
             )}
           </div>
 
@@ -414,7 +414,7 @@ export default function PlayerBioImportCard() {
                 color={colors.success}
                 label="Imported"
                 items={preview.headerCategories.mapped}
-                emptyText="(none yet — adjust the mapping below)"
+                emptyText="(none yet; adjust the mapping below)"
                 renderAction={(h) => {
                   const field = headerToField(preview.detectedMap, overrideMap, h);
                   return field ? (
@@ -431,7 +431,7 @@ export default function PlayerBioImportCard() {
                 color={colors.red}
                 label="Refused (PII)"
                 items={preview.headerCategories.piiBlocked}
-                emptyText="(no PII columns detected — good)"
+                emptyText="(no PII columns detected, good)"
                 bold
                 renderAction={(h) => canOverridePii ? (
                   <ChipButton
@@ -502,7 +502,7 @@ export default function PlayerBioImportCard() {
                   background: 'rgba(221,60,60,0.08)', border: `1px solid ${colors.redBorder}`,
                   fontSize: 11, color: '#991B1B',
                 }}>
-                  <strong>Refused {preview.blockedOverrides.length} mapping override(s)</strong> — pointed at PII headers that aren't in the allow-list: {preview.blockedOverrides.map(o => `${o.field}→${o.header}`).join(', ')}.
+                  <strong>Refused {preview.blockedOverrides.length} mapping override(s).</strong> Pointed at PII headers that aren't in the allow-list: {preview.blockedOverrides.map(o => `${o.field}→${o.header}`).join(', ')}.
                 </div>
               )}
 
@@ -557,7 +557,7 @@ export default function PlayerBioImportCard() {
                       onChange={e => updateOverride(f.key, e.target.value)}
                       style={{ ...selectStyle, fontSize: 11, padding: '4px 6px' }}
                     >
-                      <option value="">— not mapped —</option>
+                      <option value="">(not mapped)</option>
                       {headers
                         .filter(h => !preview.headerCategories?.piiBlocked?.includes(h))
                         .map(h => <option key={h} value={h}>{h}</option>)}
@@ -609,7 +609,7 @@ export default function PlayerBioImportCard() {
                     <span style={{ color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.record?.first_name || ''} {r.record?.last_name || ''}
                       {r.record?.team && <span style={{ color: colors.textMuted }}> · {r.record.team}</span>}
-                      {r.reason && <span style={{ color: colors.warning, marginLeft: 6 }}>— {r.reason}</span>}
+                      {r.reason && <span style={{ color: colors.warning, marginLeft: 6 }}>· {r.reason}</span>}
                     </span>
                   </div>
                 ))}
@@ -625,7 +625,7 @@ export default function PlayerBioImportCard() {
           background: colors.successBg, border: `1px solid ${colors.successBorder}`,
           fontSize: 12, color: colors.text,
         }}>
-          ✓ Applied — created {applied.summary.created}, updated {applied.summary.updated}, skipped {applied.summary.skipped}. Hard-refresh a player page to see the new vitals.
+          ✓ Applied · created {applied.summary.created}, updated {applied.summary.updated}, skipped {applied.summary.skipped}. Hard-refresh a player page to see the new vitals.
         </div>
       )}
     </Card>

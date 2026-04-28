@@ -157,7 +157,7 @@ export default function PlayerTradesCard() {
   };
 
   const applyPreset = async () => {
-    if (!confirm('Apply the 2026 preset trades (18 players)? This is idempotent — re-running just re-asserts the assignments.')) return;
+    if (!confirm('Apply the 2026 preset trades (18 players)? This is idempotent: re-running just re-asserts the assignments.')) return;
     setApplyingPreset(true);
     try {
       const res = await authedJson('/api/admin-player-trades', {
@@ -166,7 +166,7 @@ export default function PlayerTradesCard() {
       });
       const sc = res.successCount ?? res.results?.length ?? 0;
       const ec = res.errorCount ?? 0;
-      if (ec === 0) toast.success(`Preset applied — ${sc} trades`);
+      if (ec === 0) toast.success(`Preset applied · ${sc} trades`);
       else toast.warn(`Preset finished with ${ec} errors`, { detail: res.errors?.map(e => e.name).join(', ') });
       await refreshAfterMutation();
     } catch (err) {
@@ -188,7 +188,7 @@ export default function PlayerTradesCard() {
         </span>
       </div>
       <p style={{ fontSize: 12, color: colors.textSecondary, margin: '2px 0 14px', lineHeight: 1.5 }}>
-        The Grand Slam API doesn't reflect mid-season trades, FA signings, or retirements. Use this tool to assign a player to a different team — every roster + player page on the app will respect the override immediately.
+        The Grand Slam API doesn't reflect mid-season trades, FA signings, or retirements. Use this tool to assign a player to a different team. Every roster and player page on the app will respect the override immediately.
       </p>
 
       {/* Preset button */}
@@ -200,7 +200,7 @@ export default function PlayerTradesCard() {
         <div style={{ flex: '1 1 240px' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>2026 preset trades</div>
           <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-            Bulk-applies the 18 hand-curated trades for the current season. Idempotent — safe to re-run.
+            Bulk-applies the 18 hand-curated trades for the current season. Idempotent and safe to re-run.
           </div>
         </div>
         <RedButton onClick={applyPreset} disabled={applyingPreset || busy} style={{ padding: '8px 16px', fontSize: 12 }}>
@@ -212,7 +212,7 @@ export default function PlayerTradesCard() {
       <Label>Find a player</Label>
       <input
         type="search"
-        placeholder="Type a name — Brody Livingston, Konnor Jaso, …"
+        placeholder="Type a name (Brody Livingston, Konnor Jaso, …)"
         value={search}
         onChange={e => setSearch(e.target.value)}
         style={{ ...inputStyle, fontSize: 13 }}
@@ -259,7 +259,7 @@ export default function PlayerTradesCard() {
                   disabled={busy}
                   style={{ ...selectStyle, fontSize: 11, padding: '5px 6px' }}
                 >
-                  {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+                  {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
                 </select>
                 {source === 'override' && (
                   <button

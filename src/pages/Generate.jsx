@@ -826,7 +826,7 @@ export default function Generate() {
 
   return (
     <div>
-      <PageHeader title="GENERATE" subtitle="Create downloadable graphics for any team — download and schedule via Metricool" />
+      <PageHeader title="GENERATE" subtitle="Create downloadable graphics for any team. Download and schedule via Metricool." />
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {/* CONTROLS */}
@@ -867,15 +867,15 @@ export default function Generate() {
                         // somehow has no team_id, we degrade to a "no team" state.
                         athleteLockedTeam ? (
                           <option value={athleteLockedTeam}>
-                            {athleteLockedTeam} — {TEAMS.find(t => t.id === athleteLockedTeam)?.name || 'Your team'}
+                            {athleteLockedTeam} · {TEAMS.find(t => t.id === athleteLockedTeam)?.name || 'Your team'}
                           </option>
                         ) : (
-                          <option value="">No team assigned — ask your admin</option>
+                          <option value="">No team assigned. Ask your admin.</option>
                         )
                       ) : (
                         <>
                           <option value="">Choose a team…</option>
-                          {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+                          {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
                         </>
                       )}
                     </select>
@@ -897,7 +897,7 @@ export default function Generate() {
                     <option value="">{customTeam ? 'Choose a player...' : 'Select a team first'}</option>
                     {filteredPlayers.map(p => (
                       <option key={`${p.team}_${p.name}`} value={`${p.team}_${p.name}`}>
-                        {p.name} — {p.team}
+                        {p.name} · {p.team}
                       </option>
                     ))}
                   </select>
@@ -1186,7 +1186,7 @@ export default function Generate() {
                         type="text"
                         value={customFields[f.key] || ''}
                         onChange={e => setCustomFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        placeholder={isHidden ? '(field hidden — click HIDDEN to show)' : `Enter ${f.label.toLowerCase()}...`}
+                        placeholder={isHidden ? '(field hidden; click HIDDEN to show)' : `Enter ${f.label.toLowerCase()}...`}
                         disabled={isHidden}
                         style={{ ...inputStyle, marginTop: 0 }}
                       />
@@ -1398,7 +1398,7 @@ export default function Generate() {
             </div>
           </div>
           <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, textAlign: 'center' }}>
-            {activeW}x{activeH}px — Click download for full resolution
+            {activeW}x{activeH}px · Click download for full resolution
           </div>
 
           {/* Photo Adjust — pan/zoom + exposure. Affects ONLY the background photo;
@@ -1587,7 +1587,7 @@ export default function Generate() {
                 <label style={labelStyle}>Team (or leave blank for Universal)</label>
                 <select value={uploadTeam} onChange={e => setUploadTeam(e.target.value)} style={{ ...selectStyle, marginTop: 3 }}>
                   <option value="">Universal (all teams)</option>
-                  {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+                  {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
                 </select>
               </div>
             </div>

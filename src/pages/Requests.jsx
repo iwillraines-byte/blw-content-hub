@@ -262,8 +262,10 @@ export default function Requests() {
                 )}
                 {reqComments.map(c => {
                   const rc = roleColors[c.role] || roleColors.admin;
+                  // Thread-reply indent — structural, kept at 1px so it
+                  // reads as a divider rather than an accent stripe.
                   return (
-                    <div key={c.id} style={{ marginBottom: 10, paddingLeft: 12, borderLeft: `2px solid ${rc.bg}` }}>
+                    <div key={c.id} style={{ marginBottom: 10, paddingLeft: 12, borderLeft: `1px solid ${rc.bg}` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{c.author}</span>
                         <span style={{

@@ -79,7 +79,6 @@ function TeamsDropdown({ location }) {
         textDecoration: 'none', display: 'flex', alignItems: 'center',
         gap: 12, padding: '12px 14px', borderRadius: radius.base,
         background: onTeamRoute ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
-        borderLeft: onTeamRoute ? `3px solid ${colors.red}` : '3px solid transparent',
         color: onTeamRoute ? '#fff' : colors.textOnDarkMuted,
         fontFamily: fonts.body, fontSize: 16,
         fontWeight: onTeamRoute ? 700 : 500,
@@ -183,7 +182,6 @@ function Sidebar({ isMobile, open, onClose }) {
                 textDecoration: 'none', display: 'flex', alignItems: 'center',
                 gap: 12, padding: '12px 14px', borderRadius: radius.base,
                 background: active ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
-                borderLeft: active ? `3px solid ${colors.red}` : '3px solid transparent',
                 color: active ? '#fff' : colors.textOnDarkMuted,
                 fontFamily: fonts.body, fontSize: 16,
                 fontWeight: active ? 700 : 500, transition: 'all 0.15s',
@@ -279,13 +277,15 @@ function TopBar({ isMobile, onMenuToggle }) {
   return (
     <header style={{
       background: colors.white,
-      borderBottom: `1px solid ${colors.border}`,
-      borderLeft: currentTeam ? `4px solid ${currentTeam.color}` : '4px solid transparent',
+      // Team context shows as a full-width bottom underline tinted with the
+      // team color (not a side-stripe). When no team is in context, falls
+      // back to the standard divider.
+      borderBottom: currentTeam ? `2px solid ${currentTeam.color}` : `1px solid ${colors.border}`,
       padding: isMobile ? '10px 14px' : '12px 24px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       position: 'sticky', top: 0, zIndex: 40,
       gap: 10,
-      transition: 'border-left-color 0.2s',
+      transition: 'border-bottom-color 0.2s',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Hamburger menu on mobile */}
@@ -389,7 +389,7 @@ function TopBar({ isMobile, onMenuToggle }) {
           }}
         >
           <option value="ALL">{isMobile ? 'Jump to…' : 'Jump to team…'}</option>
-          {TEAMS.map(t => <option key={t.id} value={t.id}>{isMobile ? t.id : `${t.id} — ${t.name}`}</option>)}
+          {TEAMS.map(t => <option key={t.id} value={t.id}>{isMobile ? t.id : `${t.id} · ${t.name}`}</option>)}
         </select>
 
         {/* Hide bell on very small screens */}

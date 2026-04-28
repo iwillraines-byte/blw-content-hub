@@ -67,7 +67,7 @@ export default function TypographyCard() {
       </div>
 
       <p style={{ fontSize: 12, color: colors.textSecondary, margin: '2px 0 16px', lineHeight: 1.5 }}>
-        Each theme swaps the entire font system — headings, body text, and condensed labels all at once. Click a tile to apply live.
+        Each theme swaps the entire font system: headings, body text, and condensed labels all at once. Click a tile to apply live.
       </p>
 
       <div style={{

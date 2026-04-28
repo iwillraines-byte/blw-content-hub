@@ -98,7 +98,7 @@ export default function Settings() {
         <SectionHeading>Google Drive</SectionHeading>
         <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12, lineHeight: 1.6 }}>
           Connect Google Drive to browse and import assets from publicly-shared folders.
-          Your API key is stored locally in your browser — it never leaves this device.
+          Your API key is stored locally in your browser. It never leaves this device.
         </div>
 
         <Label>Drive API Key</Label>
@@ -152,7 +152,7 @@ export default function Settings() {
             <div style={{ fontWeight: 700, marginBottom: 6 }}>One-time Google Cloud setup (about 5 minutes)</div>
             <ol style={{ paddingLeft: 18, margin: 0 }}>
               <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: colors.red, fontWeight: 700 }}>console.cloud.google.com</a> and sign in.</li>
-              <li>Create a new project (top-left dropdown → "New Project"). Name it anything — "BLW Content Hub" works.</li>
+              <li>Create a new project (top-left dropdown → "New Project"). Name it anything; "BLW Content Hub" works.</li>
               <li>In the search bar, type <strong>"Google Drive API"</strong> → click it → click <strong>Enable</strong>.</li>
               <li>Left sidebar → <strong>APIs &amp; Services → Credentials</strong>.</li>
               <li>Click <strong>+ Create Credentials → API key</strong>. Copy the key shown.</li>
@@ -223,7 +223,7 @@ export default function Settings() {
       <Card>
         <SectionHeading>About</SectionHeading>
         <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
-          <div style={{ marginBottom: 6 }}><strong style={{ color: colors.red }}>BLW Content Hub</strong> — Version 2.0</div>
+          <div style={{ marginBottom: 6 }}><strong style={{ color: colors.red }}>BLW Content Hub</strong> · v2.0</div>
           <div>Content management and graphic generation tool for Big League Wiffle Ball.</div>
           <div style={{ marginTop: 8 }}>Managing content for 9 of 10 BLW teams. Season launch: May 1, 2026.</div>
           <div style={{ marginTop: 8 }}>Graphics are downloaded and scheduled via <strong>Metricool</strong> for social media publishing.</div>

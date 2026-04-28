@@ -202,8 +202,9 @@ export function QuickSwitcher() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '8px 16px', cursor: 'pointer',
+                  // Active state shown through background tint alone — the
+                  // colored item-icon at left already anchors the row.
                   background: active ? colors.bg : 'transparent',
-                  borderLeft: `3px solid ${active ? colors.red : 'transparent'}`,
                 }}
               >
                 <span style={{

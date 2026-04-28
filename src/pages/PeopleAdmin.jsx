@@ -175,7 +175,7 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam }) {
         disabled={!canEdit}
         style={{ ...selectStyle, padding: '5px 6px', fontSize: 11, opacity: canEdit ? 1 : 0.6, cursor: canEdit ? 'pointer' : 'not-allowed' }}
       >
-        <option value="">— team —</option>
+        <option value="">No team</option>
         {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
       </select>
 
@@ -234,7 +234,7 @@ function InviteModal({ invitableRoles, onClose, onSuccess }) {
           Invite a user
         </h2>
         <p style={{ fontSize: 12, color: colors.textSecondary, margin: '6px 0 16px', lineHeight: 1.5 }}>
-          They'll receive a magic-link email. Clicking it signs them in instantly — no password needed.
+          They'll receive a magic-link email. Clicking it signs them in instantly. No password needed.
         </p>
 
         <Label>Email</Label>
@@ -259,7 +259,7 @@ function InviteModal({ invitableRoles, onClose, onSuccess }) {
             <Label>Team {role === 'athlete' && <span style={{ color: colors.red }}>*</span>}</Label>
             <select value={teamId} onChange={e => setTeamId(e.target.value)} style={selectStyle}>
               <option value="">None</option>
-              {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+              {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
             </select>
           </div>
         </div>

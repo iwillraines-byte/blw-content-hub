@@ -692,8 +692,10 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
   return (
     <div style={{
       background: colors.white,
-      border: `1px solid ${colors.borderLight}`,
-      borderLeft: `4px solid ${team.color}`,
+      // Full-bleed hairline tinted with the team color replaces the prior
+      // 4px left side-stripe. Avatar border, team chip, and the team-color
+      // gradient wash already brand the hero.
+      border: `1px solid ${team.color}33`,
       borderRadius: radius.lg,
       // Subtle two-layer drop shadow — gives the hero card a bit of lift
       // off the page without going full Material-raised. The wider, softer
@@ -1154,7 +1156,7 @@ export default function PlayerPage() {
       border: '1px solid #FDE68A', borderRadius: radius.sm,
       padding: '10px 14px', fontSize: 13, fontFamily: fonts.body,
     }}>
-      ⚠︎ {player.candidateCount} players on {team.name} share the lastname "{player.lastName}". Showing <strong>{player.name}</strong> — use the roster on the team page for a direct link to each player.
+      ⚠︎ {player.candidateCount} players on {team.name} share the lastname "{player.lastName}". Showing <strong>{player.name}</strong>; use the roster on the team page for a direct link to each player.
     </div>
   ) : null;
 

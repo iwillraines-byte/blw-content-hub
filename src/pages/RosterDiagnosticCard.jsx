@@ -125,7 +125,7 @@ export default function RosterDiagnosticCard() {
         }}>{loading ? 'Loading…' : '↻ Force refresh'}</button>
       </div>
       <p style={{ fontSize: 12, color: colors.textSecondary, margin: '0 0 12px', lineHeight: 1.5 }}>
-        Cross-references every canonical player against the Grand Slam API. Use this to figure out why a specific player isn't matching — wrong name format (look at <strong>Loose hits</strong>), absent from the API entirely, or wrong team.
+        Cross-references every canonical player against the Grand Slam API. Use this to figure out why a specific player isn't matching: wrong name format (look at <strong>Loose hits</strong>), absent from the API entirely, or wrong team.
       </p>
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -204,7 +204,7 @@ export default function RosterDiagnosticCard() {
             })}
             {visible.length === 0 && !loading && (
               <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: colors.textMuted }}>
-                Nothing in this filter — pick a different one.
+                Nothing in this filter. Pick a different one.
               </td></tr>
             )}
           </tbody>

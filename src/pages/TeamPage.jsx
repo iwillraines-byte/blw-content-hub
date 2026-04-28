@@ -462,8 +462,11 @@ export default function TeamPage() {
           [logo + identity + owner] [record/pct/diff + rank] [aggregates card] */}
       <div style={{
         background: colors.white,
-        border: `1px solid ${colors.borderLight}`,
-        borderLeft: `4px solid ${team.color}`,
+        // Full-bleed border tinted toward the team color replaces the prior
+        // 4px left side-stripe. The team logo at left, the soft team-color
+        // gradient wash behind the logo column, and the team-color rank
+        // pill carry the brand signal — the side-stripe was redundant.
+        border: `1px solid ${team.color}33`,
         borderRadius: radius.lg,
         // Subtle two-layer drop shadow — matches PlayerHero so the two
         // pages share a visual weight. Outer layer is ambient, inner is
@@ -615,8 +618,11 @@ export default function TeamPage() {
       {/* Team Stats Summary */}
       {(topBatter || topPitcher) && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          {/* Stat-leader cards — full hairline border tinted toward team
+              color. Team identity carried by the tint; the bold metric and
+              player name carry the focus. */}
           {topBatter && (
-            <Card style={{ borderLeft: `3px solid ${team.color}` }}>
+            <Card style={{ border: `1px solid ${team.color}33` }}>
               <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>TOP BATTER · OPS+</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{topBatter.name}</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.red, letterSpacing: 1 }}>{topBatter.ops_plus}</div>
@@ -626,7 +632,7 @@ export default function TeamPage() {
             </Card>
           )}
           {topPitcher && (
-            <Card style={{ borderLeft: `3px solid ${team.color}` }}>
+            <Card style={{ border: `1px solid ${team.color}33` }}>
               <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>TOP PITCHER · FIP</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{topPitcher.name}</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.red, letterSpacing: 1 }}>
@@ -638,7 +644,7 @@ export default function TeamPage() {
             </Card>
           )}
           {hrLeader && hrLeader.hr > 0 && hrLeader !== topBatter && (
-            <Card style={{ borderLeft: `3px solid ${team.color}` }}>
+            <Card style={{ border: `1px solid ${team.color}33` }}>
               <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>HR LEADER</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{hrLeader.name}</div>
               <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.red, letterSpacing: 1 }}>{hrLeader.hr}</div>
@@ -803,7 +809,7 @@ export default function TeamPage() {
         </div>
         {teamScopedMedia.length === 0 && (
           <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
-            No team-wide photos yet. Upload a group shot, venue pic, or logo in Files — tag as <strong>TEAMPHOTO</strong>, <strong>VENUE</strong>, <strong>LOGO</strong>, or <strong>WORDMARK</strong>.
+            No team-wide photos yet. Upload a group shot, venue pic, or logo in Files. Tag it as <strong>TEAMPHOTO</strong>, <strong>VENUE</strong>, <strong>LOGO</strong>, or <strong>WORDMARK</strong>.
           </div>
         )}
         {teamScopedMedia.length > 0 && (
@@ -875,7 +881,7 @@ export default function TeamPage() {
               <BattingTable
                 rows={teamBatFull}
                 populationRows={battingCanonical}
-                title={`${team.name} — Batting`}
+                title={`${team.name} · Batting`}
                 showSearch={false}
                 emptyMessage="No batting data for this team yet."
               />
@@ -884,7 +890,7 @@ export default function TeamPage() {
               <PitchingTable
                 rows={teamPitFull}
                 populationRows={pitchingCanonical}
-                title={`${team.name} — Pitching`}
+                title={`${team.name} · Pitching`}
                 showSearch={false}
                 showLegend={false}
                 emptyMessage="No pitching data for this team yet."

@@ -214,7 +214,7 @@ export default function RawApiInspectorCard() {
           {results.rosters.map(r => (
             <EndpointBlock
               key={r.team}
-              title={`${r.team} — ${r.teamName}`}
+              title={`${r.team} · ${r.teamName}`}
               payload={r}
               hideEmpty
             />
@@ -313,7 +313,7 @@ function EndpointBlock({ title, payload, hideEmpty }) {
           {payload.matches.length === 0 ? (
             <div style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic' }}>
               No matching rows across {payload.meta.totalRows} total rows in {payload.shape?.arrayKeys?.length || 0} array(s).
-              {payload.meta.totalRows === 0 && ' Endpoint returned 0 rows total — likely a payload-shape issue (see above).'}
+              {payload.meta.totalRows === 0 && ' Endpoint returned 0 rows total. Likely a payload-shape issue (see above).'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -78,8 +78,10 @@ function ToastViewport({ toasts, dismiss }) {
           <div key={t.id} style={{
             pointerEvents: 'auto',
             background: 'white',
+            // Severity is already conveyed by the colored icon circle at left
+            // and the action-button accent. The full 1px tinted border holds
+            // the boundary without a 3px side-stripe shouting at the user.
             border: `1px solid ${s.border}`,
-            borderLeft: `3px solid ${s.fg}`,
             borderRadius: radius.base,
             padding: '10px 12px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)',

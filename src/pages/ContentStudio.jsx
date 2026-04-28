@@ -179,7 +179,7 @@ export default function ContentStudio() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title="Dashboard" subtitle="Your content command center — generate, manage, and track across all BLW teams" />
+      <PageHeader title="Dashboard" subtitle="Generate, manage, and track BLW content across every team" />
 
       {/* Live-state cards — each reflects current state, not just a nav shortcut */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
@@ -267,8 +267,8 @@ export default function ContentStudio() {
             </div>
             <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 14px', fontFamily: fonts.condensed }}>
               {aiIdeas.length > 0
-                ? 'Fresh AI ideas from the BLW League Assistant — hit "More Like This" on any card for variants.'
-                : 'Auto-generated from prowiffleball.com stats — click to create.'}
+                ? 'Fresh AI ideas from the BLW League Assistant. Hit "More Like This" on any card for variants.'
+                : 'Auto-generated from prowiffleball.com stats. Click to create.'}
             </p>
             {ideasError && (
               <div style={{
@@ -292,7 +292,12 @@ export default function ContentStudio() {
                   <div key={s.id} style={{
                     position: 'relative',
                     borderRadius: radius.base,
-                    background: bgTint, borderLeft: `3px solid ${accent}`,
+                    // Team identity comes from the tinted background (team
+                    // color at 5% alpha) plus a full hairline border in the
+                    // same hue. The TeamChip inside the row carries the loud
+                    // signal; the row itself stays calm.
+                    background: bgTint,
+                    border: `1px solid ${accent}33`,
                     padding: '12px 14px',
                     paddingBottom: s.aiGenerated ? 34 : 12,
                   }}>
@@ -387,7 +392,7 @@ export default function ContentStudio() {
               })}
               {dataLoaded && suggestions.length === 0 && aiIdeas.length === 0 && (
                 <div style={{ fontSize: 13, color: colors.textMuted, padding: 20, textAlign: 'center' }}>
-                  No content ideas yet — hit "Generate Ideas" for a fresh AI batch, or stats will populate this list.
+                  No content ideas yet. Hit "Generate Ideas" for a fresh AI batch, or stats will populate this list.
                 </div>
               )}
             </div>
@@ -439,7 +444,7 @@ export default function ContentStudio() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: API_CONFIG.isLive ? colors.success : colors.warning }} />
                 <span style={{ fontSize: 12, fontWeight: 700, color: dataLoaded ? '#15803D' : '#92400E' }}>
-                  {dataLoaded ? 'Live — Grand Slam Systems' : 'Loading...'}
+                  {dataLoaded ? 'Live · Grand Slam Systems' : 'Loading...'}
                 </span>
               </div>
               <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
@@ -552,7 +557,7 @@ function RecentPostsStrip({ posts }) {
             <Link
               key={post.id}
               to={buildRegenerateLink(post)}
-              title={`${post.team || 'BLW'} · ${post.templateType || 'template'} · ${post.platform || ''} — click to re-open in Generate`}
+              title={`${post.team || 'BLW'} · ${post.templateType || 'template'} · ${post.platform || ''} · click to re-open in Generate`}
               style={{ textDecoration: 'none', display: 'block' }}
             >
               <div style={{
@@ -609,7 +614,8 @@ function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
     <Link to={to} style={{ textDecoration: 'none' }}>
       <Card style={{
         padding: 20, cursor: 'pointer',
-        borderLeft: `3px solid ${warn ? colors.warning : colors.red}`,
+        // Severity / brand cue handled by the leading icon + the colored CTA
+        // label at the bottom; the side-stripe is redundant.
         display: 'flex', flexDirection: 'column', gap: 4,
         height: '100%', boxSizing: 'border-box',
       }}>

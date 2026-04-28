@@ -858,7 +858,7 @@ function BulkApplyBar({
             : {};
           set({ scope: next, ...reset });
         }} style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-          <option value="">— don't change</option>
+          <option value="">(leave unchanged)</option>
           <option value="player">player</option>
           <option value="team">team</option>
           <option value="league">league</option>
@@ -875,7 +875,7 @@ function BulkApplyBar({
         ) : (
           <select value={bulkPatch.team} onChange={e => set({ team: e.target.value })}
             style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-            <option value="">— don't change</option>
+            <option value="">(leave unchanged)</option>
             {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
           </select>
         )}
@@ -905,7 +905,7 @@ function BulkApplyBar({
       <BulkField label="Asset type">
         <select value={bulkPatch.assetType} onChange={e => set({ assetType: e.target.value })}
           style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }}>
-          <option value="">— don't change</option>
+          <option value="">(leave unchanged)</option>
           {types.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </BulkField>

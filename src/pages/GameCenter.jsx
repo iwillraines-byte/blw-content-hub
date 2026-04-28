@@ -318,7 +318,7 @@ function NoStatsToggle({ count, expanded, onToggle, kind }) {
       <span>
         <strong style={{ color: colors.text }}>{count}</strong> roster {count === 1 ? 'player' : 'players'} with no {kind} stats yet
         <span style={{ color: colors.textMuted, marginLeft: 6 }}>
-          (true rookies — they'll populate once games begin)
+          (true rookies; they'll populate once games begin)
         </span>
       </span>
       <button onClick={onToggle} style={{
@@ -508,7 +508,7 @@ export default function GameCenter() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 20 }}>🟢</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#15803D' }}>Live API Connected — Grand Slam Systems</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#15803D' }}>Live API Connected · Grand Slam Systems</div>
             <div style={{ fontSize: 12, color: colors.textSecondary }}>
               {batting.length} batters · {pitching.length} pitchers · {rankings.length} ranked players
             </div>
@@ -787,7 +787,7 @@ export default function GameCenter() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <select value={playersTeamFilter} onChange={e => setPlayersTeamFilter(e.target.value)} style={{ ...selectStyle, fontSize: 12, maxWidth: 130 }}>
                 <option value="ALL">All Teams</option>
-                {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} — {t.name}</option>)}
+                {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
               </select>
               <select value={playersFilter} onChange={e => setPlayersFilter(e.target.value)} style={{ ...selectStyle, fontSize: 12 }}>
                 <option value="all">All players</option>

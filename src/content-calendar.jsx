@@ -174,8 +174,11 @@ export function ContentCalendar({ team, games }) {
     <div style={{
       background: colors.white,
       borderRadius: radius.lg,
-      border: `1px solid ${colors.borderLight}`,
-      borderLeft: `4px solid ${teamColor}`,
+      // Full-bleed border tinted toward the team color — replaces the prior
+      // 4px left side-stripe. The team-color gradient header band already
+      // does the bold branding work; the calendar body just needs a subtle
+      // boundary that hints at the team without shouting.
+      border: `1px solid ${teamColor}33`,
       boxShadow: '0 8px 24px rgba(17,24,39,0.06), 0 2px 6px rgba(17,24,39,0.04)',
       overflow: 'hidden',
       position: 'relative',
@@ -246,11 +249,13 @@ export function ContentCalendar({ team, games }) {
                 const hasGame = d.dayGames.length > 0;
                 return (
                   <div key={di} style={{
+                    // Game days already get a tinted background and a stronger
+                    // border tint than non-game days. That's enough signal —
+                    // the prior 3px left side-stripe was redundant.
                     background: hasGame ? gameBg : (isToday ? todayBg : colors.bg),
                     border: `1px solid ${
-                      isToday ? todayBorder : (hasGame ? `${teamColor}33` : colors.borderLight)
+                      isToday ? todayBorder : (hasGame ? `${teamColor}55` : colors.borderLight)
                     }`,
-                    borderLeft: hasGame ? `3px solid ${gameBorder}` : `1px solid ${colors.borderLight}`,
                     borderRadius: radius.sm,
                     padding: 6,
                     minHeight: 72,
