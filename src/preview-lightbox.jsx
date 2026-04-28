@@ -26,6 +26,9 @@ export function PreviewLightbox({
   // Optional element rendered below the image — bulk import uses this
   // to put inline tag-edit fields next to the full-size photo.
   sidebar = null,
+  // Optional ReactNode rendered next to the Close button — used by the
+  // Files page to show a Download button without forking the lightbox.
+  actions = null,
 }) {
   // Keyboard nav: ←/→ flip, Esc closes. We only attach the listener
   // while the lightbox is open so no globals hang around.
@@ -57,11 +60,12 @@ export function PreviewLightbox({
     >
       <div style={{
         position: 'absolute', top: 12, right: 16,
-        display: 'flex', gap: 12, alignItems: 'center',
+        display: 'flex', gap: 8, alignItems: 'center',
         color: 'rgba(255,255,255,0.85)',
         fontFamily: fonts.condensed, fontSize: 11, letterSpacing: 0.5,
       }}>
-        {position && <span>{position}</span>}
+        {position && <span style={{ marginRight: 4 }}>{position}</span>}
+        {actions}
         <button onClick={onClose} style={{
           background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,0.4)',
           borderRadius: radius.sm, padding: '4px 10px',
