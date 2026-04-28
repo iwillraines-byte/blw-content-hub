@@ -19,27 +19,34 @@ const TIERS = [
     match: (r) => r === 1,
     image: '/badges/rank-1.png',
     label: '1st Overall',
-    glowColor: '245, 195, 0',          // gold
+    // Amethyst + gold gemstone aesthetic. Glow leans saturated violet so it
+    // reads off any background — the gold accents on the badge already
+    // carry the metallic warmth, so we don't double up there.
+    glowColor: '170, 100, 235',        // amethyst violet
     glowMin: 16, glowMax: 30, glowPeriod: '2s',
-    fallback: { bg: 'linear-gradient(135deg, #F5C300, #D69A00)', fg: '#2A1A00', border: '#F5C300', labelTop: '#1', labelBottom: 'ELITE' },
+    fallback: { bg: 'linear-gradient(135deg, #A855F7, #6B21A8)', fg: '#F5EBFF', border: '#A855F7', labelTop: '#1', labelBottom: 'ELITE' },
   },
   {
     id: 'rank-2',
     match: (r) => r === 2,
     image: '/badges/rank-2.png',
     label: '2nd Overall',
-    glowColor: '170, 210, 255',        // icy blue
+    // Emerald + gold. Punchy green so the glow reads as the gemstone, not
+    // the ornate gold trim.
+    glowColor: '60, 200, 130',         // emerald
     glowMin: 14, glowMax: 26, glowPeriod: '2.3s',
-    fallback: { bg: 'linear-gradient(135deg, #CBD5E1, #94A3B8)', fg: '#1F2937', border: '#CBD5E1', labelTop: '#2', labelBottom: 'ELITE' },
+    fallback: { bg: 'linear-gradient(135deg, #10B981, #065F46)', fg: '#ECFDF5', border: '#10B981', labelTop: '#2', labelBottom: 'ELITE' },
   },
   {
     id: 'rank-3',
     match: (r) => r === 3,
     image: '/badges/rank-3.png',
     label: '3rd Overall',
-    glowColor: '210, 140, 70',         // bronze/copper
+    // Ruby/garnet — a brighter red than the badge's deep crimson so the
+    // pulse stays visible against light surfaces.
+    glowColor: '225, 65, 75',          // ruby
     glowMin: 12, glowMax: 22, glowPeriod: '2.6s',
-    fallback: { bg: 'linear-gradient(135deg, #D97706, #92400E)', fg: '#FFF7ED', border: '#D97706', labelTop: '#3', labelBottom: 'ELITE' },
+    fallback: { bg: 'linear-gradient(135deg, #DC2626, #7F1D1D)', fg: '#FEF2F2', border: '#DC2626', labelTop: '#3', labelBottom: 'ELITE' },
   },
   {
     id: 'top-10',
