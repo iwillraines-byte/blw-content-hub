@@ -31,7 +31,10 @@
 // }
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
-const MAX_OUTPUT_TOKENS = 1200;
+// Bumped from 1200 — each idea now ships a narrative paragraph, stat pills,
+// and three caption variants. Six ideas at the new shape lands around
+// 2.4k–2.8k output tokens.
+const MAX_OUTPUT_TOKENS = 3200;
 
 const TEMPLATE_CATALOG = `TEMPLATE CATALOG (map each idea to exactly one templateId):
 - player-stat   → single-player stat card. Prefill: playerName, number, statLine, teamName
@@ -90,13 +93,14 @@ export default async function handler(req, res) {
     .map(r => `- ${r.name}: ${r.rankChange > 0 ? 'UP' : 'DOWN'} ${Math.abs(r.rankChange)} spots → now #${r.currentRank}`)
     .join('\n');
 
-  const systemPrompt = `You are the content strategist for Big League Wiffle Ball (BLW), a 10-team competitive wiffle ball league. You generate sharp, specific, post-worthy content ideas for the league's social channels. Your ideas are rooted in real data — current standings, leaderboards, notable performances — not generic "go team" fluff.
+  const systemPrompt = `You are the content strategist for Big League Wiffle Ball (BLW), a 10-team competitive wiffle ball league. You generate sharp, specific, post-worthy content drafts for the league's social channels. Each idea ships ready-to-post: a clear angle, supporting stat pills, and three caption variants for different platforms.
 
 TONE:
 - Punchy, modern, data-forward
 - Specific to a real player or team
-- One ideas per concept — don't bundle
+- One concept per idea — don't bundle
 - Never invent stats; use only the numbers provided below
+- Captions sound like a sports brand that respects its audience: confident, occasionally playful, never corny. No "Let's gooo." No "Who's ready?"
 
 BLW CURRENT STATE:
 
@@ -120,10 +124,16 @@ REQUIRED OUTPUT SHAPE — return ONLY a JSON object, no markdown, no code fence:
     {
       "id": "short-slug",
       "headline": "One punchy sentence (≤ 110 chars) that reads well as a card title",
-      "description": "One specific sentence explaining the angle — what makes this post-worthy right now",
+      "narrative": "Two to three sentences (≤ 280 chars total) explaining WHY this is post-worthy right now — the story behind the angle. Reads like a beat-writer's lede, not a stat sheet.",
       "team": "LAN" | "AZS" | ... | "BLW",     // "BLW" for league-wide concepts
       "templateId": "player-stat" | "gameday" | ...,
       "angle": "leader | hype | matchup | milestone | mover | deep-dive",
+      "dataPoints": ["171 OPS+", "3 HR", "+5 spots"],   // 2-4 short stat pills, ≤ 18 chars each
+      "captions": {
+        "instagram": "Long-form caption (3-6 lines), can use emoji sparingly, ends with 4-7 hashtags on a new line. Lead with the hook, then the story, then the stat. ≤ 500 chars.",
+        "twitter":   "Single punchy tweet ≤ 240 chars. One stat, one verb, one closer. May use 1-2 hashtags inline.",
+        "story":     "Vertical-story copy, ≤ 90 chars. Big text on a graphic. No hashtags."
+      },
       "prefill": { /* matches the template's fields */ }
     }
   ]
@@ -136,6 +146,9 @@ RULES:
 - "angle" must be one of: leader, hype, matchup, milestone, mover, deep-dive.
 - templateId must come from the catalog above — no inventing new ones.
 - prefill keys must match the template's fields. If unsure of a field, omit it.
+- dataPoints are the literal numbers you'd pin to a graphic — keep each ≤ 18 chars.
+- All three caption variants tell the same story but in the right register for the platform. They don't cross-reference each other.
+- Hashtags belong only on the instagram caption (and inline on twitter, sparingly). The story variant is hashtag-free.
 `;
 
   // ─── User-facing instruction (varies by request, not cached) ───────────────

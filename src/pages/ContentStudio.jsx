@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo } from '../components';
+import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
 import { getRequests, saveRequests, countByStatus, oldestPendingDays } from '../requests-store';
@@ -10,6 +10,7 @@ import { isAlreadyTagged } from '../tag-heuristics';
 import { getUsageToday, recordUsage } from '../ai-usage-store';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
+import IdeaCard from '../idea-card';
 
 export default function ContentStudio() {
   const navigate = useNavigate();
@@ -170,6 +171,14 @@ export default function ContentStudio() {
     });
   };
 
+  // Patch a single idea's fields (e.g., when /api/captions returns drafts).
+  // Looks the idea up in whichever list it belongs to and replaces it with
+  // a merged copy. Keeps list ordering stable.
+  const patchIdea = (ideaId, patch) => {
+    setAiIdeas(prev => prev.map(i => i.id === ideaId ? { ...i, ...patch } : i));
+    setSuggestions(prev => prev.map(i => i.id === ideaId ? { ...i, ...patch } : i));
+  };
+
   // ─── Live-state card data ─────────────────────────────────────────────────
   const pendingCount     = countByStatus(requests, 'pending');
   const inProgressCount  = countByStatus(requests, 'in-progress');
@@ -179,7 +188,7 @@ export default function ContentStudio() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title="Dashboard" subtitle="Generate, manage, and track BLW content across every team" />
+      <PageHeader title="Dashboard" subtitle="Draft, design, and track BLW content across every team" />
 
       {/* Live-state cards — each reflects current state, not just a nav shortcut */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
@@ -267,8 +276,8 @@ export default function ContentStudio() {
             </div>
             <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 14px', fontFamily: fonts.condensed }}>
               {aiIdeas.length > 0
-                ? 'Fresh AI ideas from the BLW League Assistant. Hit "More Like This" on any card for variants.'
-                : 'Auto-generated from prowiffleball.com stats. Click to create.'}
+                ? 'Each idea ships a story, the supporting numbers, and ready-to-post captions. Click a card to draft.'
+                : 'Auto-generated from prowiffleball.com stats. Hit Draft Captions on any card to write copy.'}
             </p>
             {ideasError && (
               <div style={{
@@ -281,115 +290,19 @@ export default function ContentStudio() {
                 </div>}
               </div>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(aiIdeas.length > 0 ? aiIdeas : suggestions).map(s => {
-                const team = s.team !== 'BLW' ? getTeam(s.team) : null;
-                const accent = team ? team.color : colors.border;
-                const bgTint = team ? `${team.color}0C` : colors.bg;
-                const queuedRequestId = queuedIdeas[s.id];
-                const queued = !!queuedRequestId;
-                return (
-                  <div key={s.id} style={{
-                    position: 'relative',
-                    borderRadius: radius.base,
-                    // Team identity comes from the tinted background (team
-                    // color at 5% alpha) plus a full hairline border in the
-                    // same hue. The TeamChip inside the row carries the loud
-                    // signal; the row itself stays calm.
-                    background: bgTint,
-                    border: `1px solid ${accent}33`,
-                    padding: '12px 14px',
-                    paddingBottom: s.aiGenerated ? 34 : 12,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
-                          {s.aiGenerated && (
-                            <span style={{
-                              fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
-                              letterSpacing: 0.8, color: '#7C3AED',
-                              background: 'rgba(124,58,237,0.10)', padding: '1px 5px', borderRadius: 3,
-                            }}>✨ AI</span>
-                          )}
-                          <div style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{s.headline}</div>
-                        </div>
-                        <div style={{ fontSize: 12, color: colors.textSecondary }}>{s.description}</div>
-                      </div>
-                      {team && <div style={{ flexShrink: 0 }}><TeamChip teamId={s.team} small withLogo /></div>}
-                    </div>
-                    {/* Actions row — two explicit buttons so the card doesn't
-                        hide the fact that you can BOTH queue AND generate. */}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                      {queued ? (
-                        <div style={{ display: 'flex', alignItems: 'stretch', borderRadius: radius.sm, overflow: 'hidden', border: '1px solid rgba(34,197,94,0.4)' }}>
-                          <span style={{
-                            background: 'rgba(34,197,94,0.12)', color: '#15803D',
-                            padding: '5px 10px', fontFamily: fonts.condensed,
-                            fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
-                            display: 'inline-flex', alignItems: 'center',
-                          }}>✓ QUEUED</span>
-                          <Link
-                            to={`/requests?id=${queuedRequestId}`}
-                            style={{
-                              background: '#15803D', color: '#fff',
-                              padding: '5px 10px', textDecoration: 'none',
-                              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                              letterSpacing: 0.4, display: 'inline-flex', alignItems: 'center',
-                            }}
-                          >VIEW REQUEST →</Link>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => queueIdeaAsRequest(s)}
-                          title="Create a tracked pending request from this idea"
-                          style={{
-                            background: colors.white,
-                            border: `1px solid ${colors.border}`,
-                            color: colors.textSecondary,
-                            borderRadius: radius.sm, padding: '5px 10px',
-                            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                            cursor: 'pointer', letterSpacing: 0.4,
-                          }}
-                        >
-                          📋 SEND TO REQUESTS
-                        </button>
-                      )}
-                      <button
-                        onClick={() => navigate(buildLink(s))}
-                        title="Open Generate with team, template, and fields pre-filled from this idea"
-                        style={{
-                          background: colors.redLight,
-                          border: `1px solid ${colors.redBorder}`,
-                          color: colors.red,
-                          borderRadius: radius.sm, padding: '5px 10px',
-                          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                          cursor: 'pointer', letterSpacing: 0.4,
-                        }}
-                      >
-                        🎨 OPEN IN GENERATE →
-                      </button>
-                    </div>
-                    {s.aiGenerated && (
-                      <button
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); requestIdeas(s, 3); }}
-                        disabled={ideasLoading}
-                        title="Generate 3 more ideas in the same style as this one"
-                        style={{
-                          position: 'absolute', bottom: 8, right: 10,
-                          background: 'rgba(255,255,255,0.85)',
-                          border: `1px solid ${colors.borderLight}`,
-                          color: colors.textSecondary,
-                          borderRadius: radius.sm, padding: '3px 8px',
-                          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
-                          cursor: ideasLoading ? 'wait' : 'pointer',
-                        }}
-                      >
-                        + MORE LIKE THIS
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {(aiIdeas.length > 0 ? aiIdeas : suggestions).map(s => (
+                <IdeaCard
+                  key={s.id}
+                  idea={s}
+                  queuedRequestId={queuedIdeas[s.id]}
+                  ideasLoading={ideasLoading}
+                  onQueue={queueIdeaAsRequest}
+                  onOpenInGenerate={(idea) => navigate(buildLink(idea))}
+                  onMoreLikeThis={(idea) => requestIdeas(idea, 3)}
+                  onIdeaUpdate={patchIdea}
+                />
+              ))}
               {dataLoaded && suggestions.length === 0 && aiIdeas.length === 0 && (
                 /* Empty state — gives the user one clear next action plus
                    context about what populates this list automatically. */
