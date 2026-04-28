@@ -4,17 +4,25 @@ import { colors, fonts, radius, shadows } from './theme';
 
 // ─── Layout Components ─────────────────────────────────────────────────────
 
-export const Card = ({ children, style, onClick, ...p }) => (
-  <div onClick={onClick} style={{
-    background: colors.white,
-    border: `1px solid ${colors.borderLight}`,
-    borderRadius: radius.lg,
-    padding: 22,
-    boxShadow: '0 1px 3px rgba(17, 24, 39, 0.04), 0 1px 2px rgba(17, 24, 39, 0.03)',
-    cursor: onClick ? 'pointer' : 'default',
-    transition: 'box-shadow 0.15s, border-color 0.15s',
-    ...style
-  }} {...p}>{children}</div>
+// Card — base container. When `onClick` is set, the card opts into the
+// hover affordance (lift + tinted border + deeper shadow) defined in
+// global-styles.jsx via the `.card-clickable` class. Static cards stay
+// flat.
+export const Card = ({ children, style, onClick, className, ...p }) => (
+  <div
+    onClick={onClick}
+    className={[onClick ? 'card-clickable' : '', className].filter(Boolean).join(' ')}
+    style={{
+      background: colors.white,
+      border: `1px solid ${colors.borderLight}`,
+      borderRadius: radius.lg,
+      padding: 22,
+      boxShadow: '0 1px 3px rgba(17, 24, 39, 0.04), 0 1px 2px rgba(17, 24, 39, 0.03)',
+      cursor: onClick ? 'pointer' : 'default',
+      ...style
+    }}
+    {...p}
+  >{children}</div>
 );
 
 export const PageHeader = ({ title, subtitle, children }) => (
@@ -202,57 +210,79 @@ export const PriorityDot = ({ p }) => (
 
 // ─── Buttons ────────────────────────────────────────────────────────────────
 
-// RedButton — primary CTA. Reads the `accent` token, so on team/player
-// pages it drifts to the team's color; on neutral routes (Files, Settings,
-// Dashboard) it stays brand red. Override the team-color text-on-accent
-// contrast via `accentText` (computed from the team color's luminance).
-export const RedButton = ({ children, onClick, disabled, style }) => (
-  <button onClick={onClick} disabled={disabled} style={{
-    background: disabled ? '#E5E7EB' : colors.accent,
-    color: disabled ? '#9CA3AF' : colors.accentText,
-    border: 'none',
-    borderRadius: radius.base,
-    padding: '10px 22px',
-    fontFamily: fonts.body,
-    fontSize: 13,
-    fontWeight: 700,
-    cursor: disabled ? 'default' : 'pointer',
-    letterSpacing: 0.3,
-    transition: 'background 0.15s',
-    ...style
-  }}>{children}</button>
+// RedButton — primary CTA. Background, color, and disabled state live in
+// the `.btn-primary` class (global-styles.jsx) so :hover and :active can
+// fire. Inline style still owns layout, font, padding, etc.
+//
+// Note on inline style + class interaction: CSS specificity makes inline
+// style win for any property they share. We deliberately leave background
+// + color OUT of inline style here so the class rules can express hover.
+// Only override these via className/style if you really mean to lock them.
+export const RedButton = ({ children, onClick, disabled, style, className, type }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    disabled={disabled}
+    className={['btn-primary', className].filter(Boolean).join(' ')}
+    style={{
+      border: 'none',
+      borderRadius: radius.base,
+      padding: '10px 22px',
+      fontFamily: fonts.body,
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: disabled ? 'default' : 'pointer',
+      letterSpacing: 0.3,
+      ...style
+    }}
+  >{children}</button>
 );
 
-export const OutlineButton = ({ children, onClick, disabled, style }) => (
-  <button onClick={onClick} disabled={disabled} style={{
-    background: 'transparent',
-    color: disabled ? '#9CA3AF' : colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: radius.base,
-    padding: '9px 20px',
-    fontFamily: fonts.body,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: disabled ? 'default' : 'pointer',
-    letterSpacing: 0.3,
-    transition: 'background 0.15s, border-color 0.15s',
-    ...style
-  }}>{children}</button>
+// OutlineButton — secondary action. Hover gets a soft accent-tinted fill
+// + accent-tinted border via `.btn-outline`. Border + transparent bg
+// stay in the inline style so the resting state is readable.
+export const OutlineButton = ({ children, onClick, disabled, style, className, type }) => (
+  <button
+    type={type}
+    onClick={onClick}
+    disabled={disabled}
+    className={['btn-outline', className].filter(Boolean).join(' ')}
+    style={{
+      background: 'transparent',
+      color: disabled ? '#9CA3AF' : colors.text,
+      border: `1px solid ${colors.border}`,
+      borderRadius: radius.base,
+      padding: '9px 20px',
+      fontFamily: fonts.body,
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: disabled ? 'default' : 'pointer',
+      letterSpacing: 0.3,
+      ...style
+    }}
+  >{children}</button>
 );
 
+// IconButton — square 34px button with an icon glyph. Active state is
+// expressed inline (so it persists between renders). Hover affordance
+// from `.btn-icon` only fires on non-active buttons because they already
+// carry the tint when active.
 export const IconButton = ({ children, onClick, active, style }) => (
-  <button onClick={onClick} style={{
-    background: active ? colors.redLight : 'transparent',
-    color: active ? colors.red : colors.textSecondary,
-    border: 'none',
-    borderRadius: radius.sm,
-    width: 34, height: 34,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer',
-    fontSize: 16,
-    transition: 'background 0.15s',
-    ...style
-  }}>{children}</button>
+  <button
+    onClick={onClick}
+    className={active ? '' : 'btn-icon'}
+    style={{
+      background: active ? colors.accentSoft : 'transparent',
+      color: active ? colors.accent : colors.textSecondary,
+      border: 'none',
+      borderRadius: radius.sm,
+      width: 34, height: 34,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      cursor: 'pointer',
+      fontSize: 16,
+      ...style
+    }}
+  >{children}</button>
 );
 
 // ─── Form Elements ──────────────────────────────────────────────────────────

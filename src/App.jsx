@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-r
 import { TEAMS, API_CONFIG } from './data';
 import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './theme';
 import { TeamThemeScope } from './team-theme';
+import { GlobalStyles } from './global-styles';
 import ContentStudio from './pages/ContentStudio';
 import Generate from './pages/Generate';
 import Requests from './pages/Requests';
@@ -76,16 +77,18 @@ function TeamsDropdown({ location }) {
 
   return (
     <>
-      <button onClick={() => setExpanded(!expanded)} style={{
-        textDecoration: 'none', display: 'flex', alignItems: 'center',
-        gap: 12, padding: '12px 14px', borderRadius: radius.base,
-        background: onTeamRoute ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
-        color: onTeamRoute ? '#fff' : colors.textOnDarkMuted,
-        fontFamily: fonts.body, fontSize: 16,
-        fontWeight: onTeamRoute ? 700 : 500,
-        border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
-        transition: 'all 0.15s',
-      }}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className={['nav-link', onTeamRoute ? 'is-active' : ''].filter(Boolean).join(' ')}
+        style={{
+          textDecoration: 'none', display: 'flex', alignItems: 'center',
+          gap: 12, padding: '12px 14px', borderRadius: radius.base,
+          background: onTeamRoute ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
+          color: onTeamRoute ? '#fff' : colors.textOnDarkMuted,
+          fontFamily: fonts.body, fontSize: 16,
+          fontWeight: onTeamRoute ? 700 : 500,
+          border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
+        }}>
         <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>⚑</span>
         <span style={{ flex: 1 }}>Teams</span>
         <span style={{ fontSize: 11, opacity: 0.5, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
@@ -96,15 +99,18 @@ function TeamsDropdown({ location }) {
           {TEAMS.map(t => {
             const teamActive = location.pathname === `/teams/${t.slug}` || location.pathname.startsWith(`/teams/${t.slug}/`);
             return (
-              <Link key={t.id} to={`/teams/${t.slug}`} style={{
-                textDecoration: 'none', display: 'flex', alignItems: 'center',
-                gap: 10, padding: '8px 12px', borderRadius: radius.sm,
-                background: teamActive ? 'rgba(221, 60, 60, 0.1)' : 'transparent',
-                color: teamActive ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontFamily: fonts.body, fontSize: 14,
-                fontWeight: teamActive ? 700 : 500,
-                transition: 'all 0.15s',
-              }}>
+              <Link
+                key={t.id}
+                to={`/teams/${t.slug}`}
+                className={['nav-link', teamActive ? 'is-active' : ''].filter(Boolean).join(' ')}
+                style={{
+                  textDecoration: 'none', display: 'flex', alignItems: 'center',
+                  gap: 10, padding: '8px 12px', borderRadius: radius.sm,
+                  background: teamActive ? 'rgba(221, 60, 60, 0.1)' : 'transparent',
+                  color: teamActive ? '#fff' : 'rgba(255,255,255,0.5)',
+                  fontFamily: fonts.body, fontSize: 14,
+                  fontWeight: teamActive ? 700 : 500,
+                }}>
                 <TeamLogo teamId={t.id} size={24} rounded="square" />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
               </Link>
@@ -179,14 +185,18 @@ function Sidebar({ isMobile, open, onClose }) {
           {visibleNavItems.map(n => {
             const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/dashboard');
             return (
-              <Link key={n.path} to={n.path} style={{
-                textDecoration: 'none', display: 'flex', alignItems: 'center',
-                gap: 12, padding: '12px 14px', borderRadius: radius.base,
-                background: active ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
-                color: active ? '#fff' : colors.textOnDarkMuted,
-                fontFamily: fonts.body, fontSize: 16,
-                fontWeight: active ? 700 : 500, transition: 'all 0.15s',
-              }}>
+              <Link
+                key={n.path}
+                to={n.path}
+                className={['nav-link', active ? 'is-active' : ''].filter(Boolean).join(' ')}
+                style={{
+                  textDecoration: 'none', display: 'flex', alignItems: 'center',
+                  gap: 12, padding: '12px 14px', borderRadius: radius.base,
+                  background: active ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
+                  color: active ? '#fff' : colors.textOnDarkMuted,
+                  fontFamily: fonts.body, fontSize: 16,
+                  fontWeight: active ? 700 : 500,
+                }}>
                 <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: active ? 1 : 0.6 }}>{n.icon}</span>
                 {n.label}
               </Link>
@@ -727,6 +737,9 @@ function AppShell() {
     }}>
       {/* Inject tier-badge glow keyframes once at app root */}
       <TierBadgeStyles />
+      {/* Inject global hover/focus/active rules for buttons, cards,
+          nav links, and form fields. See src/global-styles.jsx. */}
+      <GlobalStyles />
       {/* Global Cmd+K / Ctrl+K quick switcher */}
       <QuickSwitcher />
       <Sidebar isMobile={isMobile} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
