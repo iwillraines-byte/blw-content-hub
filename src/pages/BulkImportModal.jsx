@@ -16,6 +16,7 @@ import { saveMedia, buildPlayerFilename, buildTeamFilename, buildLeagueFilename,
 import { heuristicallyTag } from '../tag-heuristics';
 import { compressImageBlob, getCompressPreference, formatSavings } from '../image-compress';
 import { PreviewLightbox } from '../preview-lightbox';
+import { downloadFileAsBlob } from '../drive-api';
 
 const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
@@ -99,8 +100,9 @@ function buildRow(file, roster) {
   };
 }
 
-export default function BulkImportModal({ open, onClose, roster, onImported }) {
-  const [stage, setStage] = useState('idle'); // idle | analyzing | preview | importing | done
+export default function BulkImportModal({ open, onClose, roster, onImported, driveSeed = null }) {
+  // Stages: idle (dropzone) → downloading (Drive only) → analyzing → preview → importing → done
+  const [stage, setStage] = useState('idle');
   const [rows, setRows] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -168,6 +170,58 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
     setRows(out);
     setStage('preview');
   }, [roster]);
+
+  // Drive ingest — pulls each Drive file as a Blob with capped concurrency,
+  // then runs the resulting File-like objects through the same heuristic
+  // pipeline as a local folder drop. The driveFileId is preserved on each
+  // row so the resulting media records can be cross-referenced with the
+  // Drive folder browser ("already imported" badge etc.).
+  const ingestDriveFiles = useCallback(async (driveFiles) => {
+    setStage('downloading');
+    setProgress({ done: 0, total: driveFiles.length });
+    const concurrency = 4;
+    let cursor = 0;
+    const results = new Array(driveFiles.length);
+    async function worker() {
+      while (true) {
+        const i = cursor++;
+        if (i >= driveFiles.length) return;
+        const df = driveFiles[i];
+        try {
+          const blob = await downloadFileAsBlob(df.id);
+          // Wrap the blob as a File so the rest of the pipeline (which
+          // reads .name and .type) treats it identically to a local file.
+          // Some browsers don't preserve mime on File construction —
+          // fall back to the Drive-supplied mimeType when needed.
+          const mime = blob.type || df.mimeType || 'application/octet-stream';
+          const file = new File([blob], df.name, { type: mime });
+          // Tag the file with its Drive id so saveMedia can carry it
+          // through and the Drive panel knows it's been imported.
+          file.driveFileId = df.id;
+          results[i] = file;
+        } catch (err) {
+          console.warn(`Drive download failed for ${df.name}:`, err);
+          results[i] = null;
+        }
+        setProgress({ done: cursor, total: driveFiles.length });
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, driveFiles.length) }, worker));
+    const usable = results.filter(Boolean);
+    await ingest(usable);
+  }, [ingest]);
+
+  // When the modal is opened with a Drive seed, kick off the download
+  // pipeline. Effect runs only after the open-reset effect above so we
+  // don't race the state clears.
+  useEffect(() => {
+    if (!open || !driveSeed?.driveFiles?.length) return;
+    if (stage !== 'idle') return;
+    ingestDriveFiles(driveSeed.driveFiles);
+    // We intentionally do NOT depend on stage — that change is what we
+    // are causing, and re-running would loop. eslint-disabled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, driveSeed, ingestDriveFiles]);
 
   const handleDrop = useCallback(async (e) => {
     e.preventDefault();
@@ -321,7 +375,13 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
           }
         }
         const newName = buildName(r);
-        const rec = await saveMedia({ name: newName, blob, width, height });
+        const rec = await saveMedia({
+          name: newName, blob, width, height,
+          // Preserve Drive provenance when the row originated from a Drive
+          // download so the Drive folder browser can mark it imported.
+          driveFileId: r.file.driveFileId || null,
+          source: r.file.driveFileId ? 'gdrive' : 'local',
+        });
         records.push(rec);
         ok++;
       } catch (e) {
@@ -367,6 +427,20 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
             onDrop={handleDrop}
             onFolderInput={handleFolderInput}
           />
+        )}
+
+        {stage === 'downloading' && (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontFamily: fonts.condensed, color: colors.textSecondary, marginBottom: 12, letterSpacing: 0.5 }}>
+              Downloading from Google Drive · {progress.done} / {progress.total}
+            </div>
+            <div style={{ width: '100%', height: 8, background: colors.bg, borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{
+                width: `${(progress.done / Math.max(1, progress.total)) * 100}%`,
+                height: '100%', background: '#34A853', transition: 'width 0.2s ease',
+              }} />
+            </div>
+          </div>
         )}
 
         {stage === 'analyzing' && (

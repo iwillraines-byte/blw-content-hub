@@ -333,7 +333,7 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
 // ─── Drive Folder Browser ───────────────────────────────────────────────────
 // Shows files inside one publicly-shared Drive folder as an expandable panel,
 // lets user selectively or bulk-import them into the local media store.
-function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRename }) {
+function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRename, onBulkImport }) {
   const [expanded, setExpanded] = useState(true);
   const [files, setFiles] = useState(null); // null = not loaded, [] = empty folder
   const [loading, setLoading] = useState(false);
@@ -520,6 +520,24 @@ function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRenam
                     Import all new ({notImported.length})
                   </RedButton>
                 )}
+                {/* Bulk import — opens the pre-flight checklist modal
+                    against the selected files (or all new files if none
+                    selected). Hands the Drive metadata over and the
+                    modal handles downloads + heuristic tagging in batch. */}
+                {(selected.size > 0 || notImported.length > 0) && onBulkImport && (
+                  <OutlineButton
+                    onClick={() => {
+                      const targets = selected.size > 0
+                        ? (files || []).filter(f => selected.has(f.id))
+                        : notImported;
+                      if (targets.length) onBulkImport(targets);
+                    }}
+                    style={{ padding: '4px 14px', fontSize: 12 }}
+                    title="Open bulk import preview — heuristic-tag everything, then commit in one shot"
+                  >
+                    📁 Bulk import ({selected.size > 0 ? selected.size : notImported.length})
+                  </OutlineButton>
+                )}
               </div>
 
               {/* File grid */}
@@ -604,6 +622,11 @@ export default function Files() {
   const [thumbUrls, setThumbUrls] = useState({});
   const [dragging, setDragging] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  // When bulk-importing from Drive we hand the modal the selected file
+  // metadata in this seed; the modal downloads in batch and runs each
+  // through the same heuristic pipeline as a local-folder drop. Cleared
+  // when the modal closes.
+  const [bulkDriveSeed, setBulkDriveSeed] = useState(null);
   // Lightbox preview for the post-upload Tag & rename list. Stores the
   // media id of the row whose thumbnail was clicked; null when closed.
   // Shared with the tagged-files grid as a unified preview surface so
@@ -1243,8 +1266,9 @@ export default function Files() {
       </div>
       <BulkImportModal
         open={bulkOpen}
-        onClose={() => setBulkOpen(false)}
+        onClose={() => { setBulkOpen(false); setBulkDriveSeed(null); }}
         roster={roster}
+        driveSeed={bulkDriveSeed}
         onImported={(records) => {
           // Mirror handleFiles' state update so the freshly imported
           // files appear immediately without waiting for a re-mount.
@@ -1396,6 +1420,10 @@ export default function Files() {
                 onImport={importDriveFile}
                 onRemove={handleDriveRemove}
                 onRename={handleDriveRename}
+                onBulkImport={(driveFiles) => {
+                  setBulkDriveSeed({ driveFiles });
+                  setBulkOpen(true);
+                }}
               />
             ))}
           </>
