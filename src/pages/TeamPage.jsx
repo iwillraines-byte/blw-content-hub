@@ -4,7 +4,7 @@ import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromA
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
-import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, inputStyle } from '../components';
+import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
@@ -312,7 +312,16 @@ export default function TeamPage() {
           profileMediaId: overrideId,
           lastnameUnique: lastnameCount.get(LN) === 1,
         });
-        if (headshot?.blob) urls[`${FI}|${LN}`] = blobToObjectURL(headshot.blob);
+        if (headshot?.blob) {
+          urls[`${FI}|${LN}`] = {
+            url: blobToObjectURL(headshot.blob),
+            // Per-player pan/zoom — pulled from the manual_players row so
+            // the team roster card matches what the player page hero shows.
+            offsetX: manualRow?.profile_offset_x ?? manualRow?.profileOffsetX ?? 0,
+            offsetY: manualRow?.profile_offset_y ?? manualRow?.profileOffsetY ?? 0,
+            zoom:    manualRow?.profile_zoom ?? manualRow?.profileZoom ?? 1,
+          };
+        }
       }
       setRosterAvatars(urls);
       setLoaded(true);
@@ -725,16 +734,23 @@ export default function TeamPage() {
                       transition: 'all 0.15s',
                     }}
                   >
-                    <div style={{
-                      width: 48, height: 48, borderRadius: radius.full,
-                      background: avatar ? `url(${avatar}) center/cover` : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
-                      color: team.accent, flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: fonts.heading, fontSize: 16, letterSpacing: 0.5,
-                      border: `2px solid ${team.color}`,
-                    }}>
-                      {!avatar && p.lastName.slice(0, 2).toUpperCase()}
-                    </div>
+                    <PositionedAvatar
+                      src={avatar?.url}
+                      offsetX={avatar?.offsetX}
+                      offsetY={avatar?.offsetY}
+                      zoom={avatar?.zoom}
+                      size={48}
+                      borderColor={team.color}
+                      fallbackBg={`linear-gradient(135deg, ${team.color}, ${team.dark})`}
+                      fallback={
+                        <span style={{
+                          color: team.accent,
+                          fontFamily: fonts.heading, fontSize: 16, letterSpacing: 0.5,
+                        }}>
+                          {p.lastName.slice(0, 2).toUpperCase()}
+                        </span>
+                      }
+                    />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {p.name}

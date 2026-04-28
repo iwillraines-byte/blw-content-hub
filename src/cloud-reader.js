@@ -128,6 +128,10 @@ function rowToPlayer(r) {
     nickname:    r.nickname ?? null,
     // Profile-pic override (db/005)
     profile_media_id: r.profile_media_id ?? null,
+    // Profile-pic pan/zoom positioning (db/009)
+    profile_offset_x: r.profile_offset_x ?? null,
+    profile_offset_y: r.profile_offset_y ?? null,
+    profile_zoom:     r.profile_zoom ?? null,
     // Player-facing extras (db/006)
     instagram_handle: r.instagram_handle ?? null,
     fun_facts:        r.fun_facts ?? null,

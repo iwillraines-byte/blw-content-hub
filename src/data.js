@@ -1285,6 +1285,12 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     // Admin-chosen profile pic (db/005). NULL → fall back to the default
     // HEADSHOT/PORTRAIT heuristic in PlayerPage.
     profileMediaId: manual?.profile_media_id || manual?.profileMediaId || null,
+    // Profile-pic positioning (db/009). Pan + zoom applied via CSS in
+    // every avatar consumer (player hero, team roster card, etc).
+    // NULLs/0s mean "identity" — the avatar renders as plain object-cover.
+    profileOffsetX: manual?.profile_offset_x ?? manual?.profileOffsetX ?? null,
+    profileOffsetY: manual?.profile_offset_y ?? manual?.profileOffsetY ?? null,
+    profileZoom:    manual?.profile_zoom ?? manual?.profileZoom ?? null,
     batting: batting || null,
     pitching: pitching || null,
     ranking: ranking || null,

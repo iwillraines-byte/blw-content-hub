@@ -154,6 +154,11 @@ function mapPlayerToRow(p) {
     // Profile-pic override (db/005). NULL keeps the default headshot
     // heuristic; a media.id points at a specific uploaded asset.
     profile_media_id: p.profileMediaId ?? p.profile_media_id ?? null,
+    // Profile-pic pan/zoom positioning (db/009). NULLs mean "identity"
+    // — the avatar renders as plain object-fit:cover, no scale.
+    profile_offset_x: p.profileOffsetX ?? p.profile_offset_x ?? null,
+    profile_offset_y: p.profileOffsetY ?? p.profile_offset_y ?? null,
+    profile_zoom:     p.profileZoom    ?? p.profile_zoom    ?? null,
     // Player-facing extras (db/006). Surfaced as a dropdown badge + a
     // ROOKIE chip on the PlayerHero.
     instagram_handle: p.instagramHandle ?? p.instagram_handle ?? null,

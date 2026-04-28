@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
-import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo } from '../components';
+import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
@@ -236,6 +236,194 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
 // shot, even a team photo — as this player's profile circle. "Reset to
 // default" clears the override so the default HEADSHOT heuristic
 // resumes. Closes on background click, ESC, or after a successful pick.
+// Pan/zoom positioning editor for the chosen profile photo. Renders the
+// avatar in the same circular crop the player hero uses, with drag-to-pan
+// and scroll-to-zoom plus sliders + reset. Persists profile_offset_x/y +
+// profile_zoom to manual_players via the parent's onSave callback.
+function PositionEditor({ team, src, initial, onClose, onSave, saving }) {
+  const PREVIEW = 280; // editor circle diameter — bigger than the hero so
+                      // small adjustments are easy to dial in
+  const [offsetX, setOffsetX] = useState(initial?.offsetX ?? 0);
+  const [offsetY, setOffsetY] = useState(initial?.offsetY ?? 0);
+  const [zoom,    setZoom]    = useState(initial?.zoom ?? 1);
+  const dragRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !saving) onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, saving]);
+
+  // Drag-to-pan. The img inside is scaled by `zoom`; one px of drag in
+  // display space ≈ 1/zoom px of "image" space. We persist offset as
+  // a fraction of the pannable range, so the consumer can apply it via
+  // CSS object-position (which is also a fraction of the cover frame).
+  const onPointerDown = useCallback((e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX0: offsetX,
+      offsetY0: offsetY,
+    };
+  }, [offsetX, offsetY]);
+
+  const onPointerMove = useCallback((e) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    // Pan range available at this zoom level. At zoom=1 the cover-cropped
+    // image fully fills the circle; pan can only reveal the hidden margin.
+    // At zoom>1 the same image is larger so more pan range opens up.
+    // We approximate by tying display-pixel deltas to fractional offset
+    // through PREVIEW/2 — feels right at any zoom level.
+    const range = (PREVIEW / 2) * Math.max(0.5, zoom - 0.5);
+    const dx = (e.clientX - drag.startX) / range;
+    const dy = (e.clientY - drag.startY) / range;
+    const clamp = (v) => Math.max(-1, Math.min(1, v));
+    setOffsetX(clamp(drag.offsetX0 - dx)); // drag right → image moves right → offset decreases
+    setOffsetY(clamp(drag.offsetY0 - dy));
+  }, [zoom]);
+
+  const onPointerUp = useCallback((e) => {
+    if (dragRef.current) {
+      e.currentTarget.releasePointerCapture?.(dragRef.current.pointerId);
+      dragRef.current = null;
+    }
+  }, []);
+
+  // Scroll-to-zoom on the preview circle. Uses passive:false via useEffect
+  // so we can preventDefault the page scroll.
+  useEffect(() => {
+    const node = wrapRef.current;
+    if (!node) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      setZoom(z => Math.max(1, Math.min(4, z * factor)));
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const reset = () => { setOffsetX(0); setOffsetY(0); setZoom(1); };
+  const handleSave = () => onSave({ offsetX, offsetY, zoom });
+
+  return (
+    <div
+      onClick={() => !saving && onClose?.()}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+        zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 460,
+          background: colors.white, borderRadius: radius.lg,
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.35)',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{
+          padding: 18, borderBottom: `1px solid ${colors.borderLight}`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <TeamLogo teamId={team.id} size={28} rounded="square" />
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontFamily: fonts.heading, fontSize: 22, margin: 0, letterSpacing: 1.2, fontWeight: 400 }}>
+              Adjust position
+            </h2>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+              Drag to pan · Scroll to zoom · Affects the profile photo only.
+            </div>
+          </div>
+          <button onClick={() => !saving && onClose?.()} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 22, color: colors.textSecondary, padding: '2px 6px',
+          }}>✕</button>
+        </div>
+
+        <div style={{ padding: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <div
+            ref={wrapRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            style={{
+              width: PREVIEW, height: PREVIEW,
+              borderRadius: '50%', overflow: 'hidden',
+              border: `4px solid ${team.color}`,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+              touchAction: 'none',
+              cursor: dragRef.current ? 'grabbing' : 'grab',
+              background: '#1A1A22',
+            }}
+          >
+            <img
+              src={src}
+              alt="Profile preview"
+              draggable={false}
+              style={{
+                width: '100%', height: '100%',
+                objectFit: 'cover',
+                objectPosition: `${50 + offsetX * 50}% ${50 + offsetY * 50}%`,
+                transform: `scale(${zoom})`,
+                transformOrigin: 'center',
+                display: 'block',
+                pointerEvents: 'none', // wrapper owns pointer events
+                userSelect: 'none',
+              }}
+            />
+          </div>
+
+          {/* Sliders — duplicate of drag/scroll for fine control */}
+          <div style={{ width: '100%' }}>
+            {[
+              { key: 'zoom',    label: 'Zoom',     value: zoom,    set: setZoom,    min: 1,  max: 4, step: 0.01, fmt: v => `${v.toFixed(2)}×` },
+              { key: 'offsetX', label: 'Pan X',    value: offsetX, set: setOffsetX, min: -1, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
+              { key: 'offsetY', label: 'Pan Y',    value: offsetY, set: setOffsetY, min: -1, max: 1, step: 0.01, fmt: v => `${Math.round(v * 100)}%` },
+            ].map(s => (
+              <div key={s.key} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontFamily: fonts.body, color: colors.textSecondary, fontWeight: 600 }}>{s.label}</span>
+                  <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.red, fontWeight: 700 }}>
+                    {s.fmt(s.value)}
+                  </span>
+                </div>
+                <input
+                  type="range" min={s.min} max={s.max} step={s.step}
+                  value={s.value}
+                  onChange={e => s.set(parseFloat(e.target.value))}
+                  style={{ width: '100%', accentColor: colors.red }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{
+          padding: 14, borderTop: `1px solid ${colors.borderLight}`,
+          display: 'flex', gap: 8, justifyContent: 'space-between',
+        }}>
+          <OutlineButton onClick={reset} disabled={saving}>Reset</OutlineButton>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <OutlineButton onClick={() => !saving && onClose?.()} disabled={saving}>Cancel</OutlineButton>
+            <RedButton onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : 'Save position'}
+            </RedButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, saving }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
@@ -474,7 +662,7 @@ function ExtrasDropdown({ instagramHandle, funFacts }) {
   );
 }
 
-function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref, canEditPhoto, onEditPhoto }) {
+function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref, canEditPhoto, onEditPhoto, onAdjustPhoto }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
   const height = formatHeight(v.heightIn);
@@ -544,22 +732,28 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
               128px to give the 80px tier badge more landing room without
               eating too much of the photo/initials. */}
           <div style={{ position: 'relative', flexShrink: 0, width: 128, height: 128 }}>
-            <div style={{
-              width: 128, height: 128, borderRadius: radius.full,
-              background: avatarUrl
-                ? `url(${avatarUrl}) center/cover`
-                : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: fonts.heading, fontSize: 46, letterSpacing: 1,
-              border: `3px solid ${team.color}`,
-              boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
-            }}>
-              {!avatarUrl && (player.lastName || '??').slice(0, 2).toUpperCase()}
-            </div>
-            {/* Admin-only pencil icon at top-left of the circle. Opens
-                the photo picker modal. Tier badge sits at bottom-right,
-                so these two never collide. */}
+            <PositionedAvatar
+              src={avatarUrl}
+              offsetX={profileOffsetX}
+              offsetY={profileOffsetY}
+              zoom={profileZoom}
+              size={128}
+              borderColor={team.color}
+              borderWidth={3}
+              fallbackBg={`linear-gradient(135deg, ${team.color}, ${team.dark})`}
+              fallback={
+                <span style={{
+                  color: '#fff',
+                  fontFamily: fonts.heading, fontSize: 46, letterSpacing: 1,
+                }}>
+                  {(player.lastName || '??').slice(0, 2).toUpperCase()}
+                </span>
+              }
+              style={{ boxShadow: '0 4px 14px rgba(0,0,0,0.14)' }}
+            />
+            {/* Admin-only edit buttons. Pencil = pick photo, target =
+                pan/zoom adjust. Stacked top-left so they never collide
+                with the tier badge sitting bottom-right. */}
             {canEditPhoto && (
               <button
                 onClick={onEditPhoto}
@@ -575,9 +769,31 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
                   boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
                   fontSize: 14, lineHeight: 1,
                   padding: 0,
+                  zIndex: 1,
                 }}
               >
                 ✎
+              </button>
+            )}
+            {canEditPhoto && avatarUrl && (
+              <button
+                onClick={onAdjustPhoto}
+                title="Adjust photo position (pan/zoom)"
+                style={{
+                  position: 'absolute',
+                  top: 30, left: -4,
+                  width: 32, height: 32, borderRadius: radius.full,
+                  background: colors.white,
+                  border: `2px solid ${team.color}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+                  fontSize: 14, lineHeight: 1,
+                  padding: 0,
+                  zIndex: 1,
+                }}
+              >
+                ⌖
               </button>
             )}
             {/* Tier badge — overlaid at the 4:30 perimeter point.
@@ -760,6 +976,8 @@ export default function PlayerPage() {
   const [loaded, setLoaded] = useState(false);
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
+  const [positionEditorOpen, setPositionEditorOpen] = useState(false);
+  const [savingPosition, setSavingPosition] = useState(false);
 
   useEffect(() => {
     let cancel = false;
@@ -849,13 +1067,55 @@ export default function PlayerPage() {
         num: player.num,
         updates: { profile_media_id: mediaId || null },
       });
-      setPlayer(prev => prev ? { ...prev, profileMediaId: mediaId || null } : prev);
+      setPlayer(prev => prev ? {
+        ...prev,
+        profileMediaId: mediaId || null,
+        // Picking a new photo resets positioning so the modal opens at
+        // identity. The user can re-adjust via the ⌖ button afterward.
+        profileOffsetX: null,
+        profileOffsetY: null,
+        profileZoom: null,
+      } : prev);
       toast.success(mediaId ? 'Profile photo updated' : 'Profile photo reset');
       setPhotoPickerOpen(false);
     } catch (err) {
       toast.error('Failed to save', { detail: err.message?.slice(0, 80) });
     } finally {
       setSavingPhoto(false);
+    }
+  }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
+
+  // Persist pan/zoom offsets to manual_players. Same upsert path as the
+  // photo picker — mapPlayerToRow on cloud-sync.js translates camelCase →
+  // snake_case for the Supabase row.
+  const savePosition = useCallback(async ({ offsetX, offsetY, zoom }) => {
+    if (!team?.id || !player?.lastName) return;
+    setSavingPosition(true);
+    try {
+      await upsertManualPlayer({
+        team: team.id,
+        lastName: player.lastName,
+        firstInitial: player.firstInitial,
+        firstName: player.firstName,
+        num: player.num,
+        updates: {
+          profile_offset_x: offsetX,
+          profile_offset_y: offsetY,
+          profile_zoom: zoom,
+        },
+      });
+      setPlayer(prev => prev ? {
+        ...prev,
+        profileOffsetX: offsetX,
+        profileOffsetY: offsetY,
+        profileZoom: zoom,
+      } : prev);
+      toast.success('Position saved');
+      setPositionEditorOpen(false);
+    } catch (err) {
+      toast.error('Failed to save', { detail: err.message?.slice(0, 80) });
+    } finally {
+      setSavingPosition(false);
     }
   }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
 
@@ -972,6 +1232,9 @@ export default function PlayerPage() {
         player={player}
         team={team}
         avatarUrl={avatarUrl}
+        profileOffsetX={player.profileOffsetX}
+        profileOffsetY={player.profileOffsetY}
+        profileZoom={player.profileZoom}
         playerRank={playerRank}
         battingRanks={battingRanks}
         pitchingRanks={pitchingRanks}
@@ -980,6 +1243,7 @@ export default function PlayerPage() {
         generateHref={`/generate?${generateParams.toString()}`}
         canEditPhoto={isAdmin}
         onEditPhoto={openPhotoPicker}
+        onAdjustPhoto={() => setPositionEditorOpen(true)}
       />
 
       {/* Admin-only profile-picture picker modal. Shows the full set of
@@ -994,6 +1258,24 @@ export default function PlayerPage() {
           onClose={() => !savingPhoto && setPhotoPickerOpen(false)}
           onPick={choosePhoto}
           saving={savingPhoto}
+        />
+      )}
+
+      {/* Pan/zoom positioning modal — opens via the ⌖ button on the
+          PlayerHero. Persists profile_offset_x/y + profile_zoom which
+          flow through to all avatar consumers via PositionedAvatar. */}
+      {positionEditorOpen && avatarUrl && (
+        <PositionEditor
+          team={team}
+          src={avatarUrl}
+          initial={{
+            offsetX: player.profileOffsetX ?? 0,
+            offsetY: player.profileOffsetY ?? 0,
+            zoom:    player.profileZoom ?? 1,
+          }}
+          onClose={() => !savingPosition && setPositionEditorOpen(false)}
+          onSave={savePosition}
+          saving={savingPosition}
         />
       )}
 

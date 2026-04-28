@@ -270,6 +270,60 @@ export const inputStyle = {
 
 export const selectStyle = { ...inputStyle, cursor: 'pointer' };
 
+// Avatar with pan/zoom positioning baked in. Renders a circular crop with
+// an inner image scaled + offset per the manual_players profile_offset_*
+// + profile_zoom values. NULL/undefined values render plain object-fit:cover.
+//
+// Pan math matches the modal editor: object-position shifts the visible
+// region within the cover-cropped frame; transform: scale() zooms in.
+//
+// Use case: anywhere a player avatar appears (player hero, team roster card,
+// trade history, content calendar, etc) — passing the same offset/zoom values
+// keeps every surface visually consistent.
+export const PositionedAvatar = ({
+  src, fallback, fallbackBg, alt = '',
+  offsetX, offsetY, zoom,
+  size, // optional pixel size — when omitted the parent's box is used
+  borderColor,
+  borderWidth = 2,
+  rounded = '50%',
+  style,
+}) => {
+  const ox = (offsetX ?? 0) * 50; // -1 to 1 → -50% to 50% within cover frame
+  const oy = (offsetY ?? 0) * 50;
+  const z  = Math.max(1, zoom ?? 1);
+  const wrap = {
+    width: size ?? '100%', height: size ?? '100%',
+    borderRadius: rounded, overflow: 'hidden',
+    background: fallbackBg || `linear-gradient(135deg,#1A1A22,#2A2A35)`,
+    border: borderColor ? `${borderWidth}px solid ${borderColor}` : undefined,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+    ...style,
+  };
+  if (!src) {
+    return <div style={wrap}>{fallback}</div>;
+  }
+  return (
+    <div style={wrap}>
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        style={{
+          width: '100%', height: '100%',
+          objectFit: 'cover',
+          objectPosition: `${50 + ox}% ${50 + oy}%`,
+          transform: `scale(${z})`,
+          transformOrigin: 'center',
+          display: 'block',
+          userSelect: 'none',
+        }}
+      />
+    </div>
+  );
+};
+
 // ─── Utility ────────────────────────────────────────────────────────────────
 
 export const Divider = ({ style }) => (
