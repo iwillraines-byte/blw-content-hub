@@ -346,21 +346,49 @@ function parseBoolean(raw) {
   return null;
 }
 
-// Find an existing manual_players row matching (team, lastName, firstInitial).
-async function resolveExistingPlayer(sb, teamId, lastName, firstInitial) {
+// Find an existing manual_players row matching (team, lastName, firstName).
+// Disambiguation hierarchy:
+//   1. exact full-name match (case-insensitive on first_name) — handles
+//      cousin pairs like Logan vs Luke Rose where both share initial 'L'
+//      and the old "first initial only" check would collide them into a
+//      single row, overwriting one cousin's bio with the other's.
+//   2. first initial match — when full-name doesn't hit, e.g. CSV used
+//      "Logan" but DB has "Logan A." or similar minor variant.
+//   3. lone match by lastname — if there's only one row with this
+//      lastname on this team, it's almost certainly the one.
+//   4. nothing — caller will INSERT a new row.
+async function resolveExistingPlayer(sb, teamId, lastName, firstName) {
   const { data, error } = await sb.from('manual_players')
     .select('id, first_name, last_name, team')
     .eq('team', teamId)
-    .ilike('last_name', lastName);  // case-insensitive
+    .ilike('last_name', lastName);
   if (error) throw error;
   if (!data || data.length === 0) return null;
-  if (data.length === 1) return data[0];
-  // Disambiguate by first-initial when we have it.
-  if (firstInitial) {
-    const hit = data.find(r => (r.first_name || '').charAt(0).toUpperCase() === firstInitial.toUpperCase());
-    if (hit) return hit;
+
+  const fnLower = String(firstName || '').trim().toLowerCase();
+  if (fnLower) {
+    // Exact firstName match wins — Logan stays Logan, Luke stays Luke.
+    const exact = data.find(r => (r.first_name || '').trim().toLowerCase() === fnLower);
+    if (exact) return exact;
   }
-  return data[0]; // best-effort
+
+  // Single row for the (team, lastname) — safe to use even without
+  // a firstName match. Avoids creating duplicate Carson Rose rows
+  // every time the CSV is re-imported with a slightly different name.
+  if (data.length === 1) return data[0];
+
+  // Multiple rows AND no full-name match: try first-initial as last
+  // resort. This is what the old code did unconditionally; now it's
+  // a fallback only.
+  const fi = fnLower.charAt(0).toUpperCase();
+  if (fi) {
+    const initialHit = data.find(r => (r.first_name || '').charAt(0).toUpperCase() === fi);
+    if (initialHit) return initialHit;
+  }
+
+  // Multiple rows, no firstName signal — return null so caller creates
+  // a NEW row instead of arbitrarily overwriting one of the cousins.
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -579,7 +607,9 @@ export default async function handler(req, res) {
 
     // Upsert
     try {
-      const existing = await resolveExistingPlayer(sb, teamId, lastName, firstInitial);
+      // Pass full firstName so cousins (Logan vs Luke Rose) resolve to
+      // their own rows instead of colliding on shared first initial.
+      const existing = await resolveExistingPlayer(sb, teamId, lastName, firstName);
       if (existing) {
         if (!dryRun) {
           const { error } = await sb.from('manual_players').update(updates).eq('id', existing.id);
