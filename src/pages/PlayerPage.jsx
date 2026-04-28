@@ -512,13 +512,21 @@ function PlayerHero({ player, team, avatarUrl, playerRank, battingRanks, pitchin
       // outer layer does the ambient feel; the tighter inner layer sharpens
       // the edge on the sides of the card.
       boxShadow: '0 8px 24px rgba(17,24,39,0.08), 0 2px 6px rgba(17,24,39,0.05)',
-      overflow: 'hidden',
+      // overflow visible (not hidden) so the ExtrasDropdown's absolutely-
+      // positioned menu can escape the hero card. The team-color gradient
+      // wash below uses alpha values low enough that letting it bleed past
+      // the rounded corners would be invisible anyway, so the trade is
+      // safe — but we clip the gradient itself with its own overflow.
+      overflow: 'visible',
       position: 'relative',
     }}>
-      {/* Subtle team gradient wash on the left pane */}
+      {/* Subtle team gradient wash on the left pane. Clipped by its own
+          rounded-corner mask + a small inset so it doesn't paint over the
+          card's border radius now that the parent doesn't clip. */}
       <div style={{
         position: 'absolute', top: 0, left: 0, width: 240, height: '100%',
         background: `linear-gradient(135deg, ${team.color}18, ${team.color}04 70%, transparent)`,
+        borderRadius: `${radius.lg}px 0 0 ${radius.lg}px`,
         pointerEvents: 'none',
       }} />
       <div style={{
@@ -767,10 +775,13 @@ export default function PlayerPage() {
         const p = getPlayerByTeamLastName(team.id, lastName, manualList);
         if (p) {
           // Media match uses team + lastName, disambiguated by first initial
-          // when the player has one (handles Logan Rose vs Carson Rose). Legacy
-          // records with no firstInitial still surface — see findPlayerMedia.
+          // (handles Carson vs Logan Rose since they have different initials)
+          // AND by jersey number (Logan vs Luke Rose share initial 'L', so
+          // jersey is the only signal that separates their assets). The
+          // canonical roster carries explicit `num` for cousin pairs.
           const m = await findPlayerMedia(team.id, p.lastName, {
             firstInitial: p.firstInitial,
+            jerseyNum: p.num,
           });
           if (cancel) return;
           // Source jersey from first uploaded media file if available

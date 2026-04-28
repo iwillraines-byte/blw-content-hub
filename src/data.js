@@ -50,7 +50,7 @@ const BATTING_FALLBACK = [
   { rank:2, name:"Tommy Hernandez", num:"18", team:"MIA", ops_plus:236, avg:".435", obp:".488", slg:".756", hr:0 },
   { rank:3, name:"Andrew Ledet", num:"2", team:"AZS", ops_plus:200, avg:".462", obp:".521", slg:".812", hr:7 },
   { rank:4, name:"Josh Wheeler", num:"40", team:"PHI", ops_plus:194, avg:".310", obp:".465", slg:".692", hr:0 },
-  { rank:5, name:"Logan Rose", num:"26", team:"DAL", ops_plus:192, avg:".357", obp:".438", slg:".654", hr:0 },
+  { rank:5, name:"Logan Rose", num:"8",  team:"DAL", ops_plus:192, avg:".357", obp:".438", slg:".654", hr:0 },
   { rank:6, name:"Dustin Staggs", num:"28", team:"LV", ops_plus:192, avg:".294", obp:".421", slg:".628", hr:0 },
   { rank:7, name:"Brice Clark", num:"22", team:"AZS", ops_plus:177, avg:".292", obp:".452", slg:".681", hr:0 },
   { rank:8, name:"Nick Martinez", num:"10", team:"AZS", ops_plus:174, avg:".292", obp:".412", slg:".602", hr:2 },
@@ -624,9 +624,15 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'CHI', name: 'Grant Miller' },
   // Dallas Pandas
   { team: 'DAL', name: 'Jaxson Blum' },
+  // The Rose cousins on DAL share both team and (for Logan/Luke) the
+  // first initial "L". Carrying explicit jersey numbers on the
+  // canonical entry lets findPlayerMedia disambiguate their assets,
+  // since the API never carries jersey numbers and stat rows alone
+  // can't tell us which "L. Rose" is which. Same idea applies to the
+  // Lee cousins on LV and any future same-FI-lastname collisions.
   { team: 'DAL', name: 'Carson Rose' },
-  { team: 'DAL', name: 'Logan Rose' },
-  { team: 'DAL', name: 'Luke Rose' },
+  { team: 'DAL', name: 'Logan Rose', num: '08' },
+  { team: 'DAL', name: 'Luke Rose' /* TODO: jersey number */ },
   { team: 'DAL', name: 'Joey Jankowski' },
   { team: 'DAL', name: 'Caleb Jeter' },
   { team: 'DAL', name: 'Ben Dulin' },
@@ -636,8 +642,8 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'LV',  name: 'Konnor Jaso' },         // traded from LAN
   { team: 'LV',  name: 'Steven Hayden' },
   { team: 'LV',  name: 'Sawyer Behen' },
-  { team: 'LV',  name: 'James Lee' },
-  { team: 'LV',  name: 'Justin Lee' },
+  { team: 'LV',  name: 'James Lee'  /* TODO: jersey number */ },
+  { team: 'LV',  name: 'Justin Lee' /* TODO: jersey number */ },
   // Los Angeles Naturals
   { team: 'LAN', name: 'Jordan Robles' },
   { team: 'LAN', name: 'Preston Kolm' },         // traded from LV
@@ -761,6 +767,20 @@ const _canonicalTeamByName = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p
 // "JACKSON  RICHARDSON" → "Jackson Richardson" — preventing the
 // "looks like the same player but the strings don't match" duplication.
 const _canonicalNameByNorm = new Map(CANONICAL_ROSTER_2026.map(p => [_normName(p.name), p.name]));
+// Optional jersey number per canonical player. Used by findPlayerMedia
+// to disambiguate cousins who share team + first initial + lastname
+// (Logan vs Luke Rose, James vs Justin Lee, etc). The API never carries
+// jersey numbers and stat rows alone can't tell us which "L. Rose" is
+// which, so the canonical entry is the source of truth.
+const _canonicalNumByName = new Map(
+  CANONICAL_ROSTER_2026
+    .filter(p => p.num)
+    .map(p => [_normName(p.name), String(p.num)])
+);
+export function canonicalNumOf(name) {
+  const canonical = resolveCanonicalName(name);
+  return _canonicalNumByName.get(_normName(canonical)) || '';
+}
 export function canonicalTeamOf(name) {
   const canonical = resolveCanonicalName(name);
   return _canonicalTeamByName.get(_normName(canonical)) || null;
@@ -1242,7 +1262,11 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     lastName,
     firstInitial: firstName.charAt(0).toUpperCase(),
     team: teamId,
-    num: source?.num || '',
+    // num fallback chain — manual_players (admin-set, e.g. via trades
+    // preset) → API stat row → canonical roster → empty. The canonical
+    // entry lives in CANONICAL_ROSTER_2026 and is the source of truth
+    // for cousin disambiguation since the API doesn't carry numbers.
+    num: manual?.num || source?.num || canonicalNumOf(name) || '',
     position: manual?.position || null,
     // Admin-chosen profile pic (db/005). NULL → fall back to the default
     // HEADSHOT/PORTRAIT heuristic in PlayerPage.
