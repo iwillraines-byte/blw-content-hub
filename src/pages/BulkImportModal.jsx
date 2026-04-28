@@ -110,6 +110,18 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
   // Lightbox: which row's image is currently being viewed at full size.
   // Null when closed.
   const [lightboxRowId, setLightboxRowId] = useState(null);
+  // Row selection — drives the "bulk apply" bar above the table. We keep
+  // a Set of row ids so toggling is O(1) and the persisted state across
+  // filter switches is intuitive (selecting in 'review' filter, switching
+  // to 'all', selections stay).
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Bulk-edit fields. The user types/picks values here, then hits
+  // "Apply to N selected" to stamp them onto every selected row. Empty
+  // fields are treated as "don't touch this column", so partial apply
+  // (e.g. just set the player but leave asset-type alone) is one click.
+  const [bulkPatch, setBulkPatch] = useState({
+    team: '', scope: '', num: '', firstInitial: '', lastName: '', assetType: '',
+  });
 
   // Reset modal state whenever it (re)opens. Keeps Cancel from leaving
   // stale rows around for the next session.
@@ -125,6 +137,8 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
       setProgress({ done: 0, total: 0 });
       setResults(null);
       setFilter('all');
+      setSelectedIds(new Set());
+      setBulkPatch({ team: '', scope: '', num: '', firstInitial: '', lastName: '', assetType: '' });
     }
   }, [open]);
 
@@ -186,6 +200,81 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
     if (filter === 'all') return rows;
     return rows.filter(r => r.status === filter);
   }, [rows, filter]);
+
+  // Selection helpers. All ops work against the visible set so toggling
+  // "Select all" inside a filtered view (say "Needs review") only marks
+  // the rows the user can actually see.
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const selectAllVisible = useCallback(() => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      for (const r of visible) next.add(r.id);
+      return next;
+    });
+  }, [visible]);
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  const visibleSelectedCount = useMemo(
+    () => visible.reduce((acc, r) => acc + (selectedIds.has(r.id) ? 1 : 0), 0),
+    [visible, selectedIds]
+  );
+  const allVisibleSelected = visible.length > 0 && visibleSelectedCount === visible.length;
+
+  // Apply the bulk-patch fields to a target set of rows. Empty patch
+  // fields are skipped — stamping just the player name without touching
+  // asset type is a single Apply press.
+  const applyBulkPatch = useCallback((targetIds) => {
+    setRows(prev => prev.map(r => {
+      if (!targetIds.has(r.id)) return r;
+      const patch = {};
+      // Scope first because changing it affects which other fields are
+      // valid on the target row. When stamping a player onto a row that
+      // was previously league-scoped, force the scope back to 'player'.
+      if (bulkPatch.scope) patch.scope = bulkPatch.scope;
+      if (bulkPatch.team) patch.team = bulkPatch.team;
+      if (bulkPatch.num) patch.num = bulkPatch.num;
+      if (bulkPatch.firstInitial) patch.firstInitial = bulkPatch.firstInitial;
+      if (bulkPatch.lastName) patch.lastName = bulkPatch.lastName;
+      if (bulkPatch.assetType) patch.assetType = bulkPatch.assetType;
+      // Stamping a player implicitly promotes the row to 'auto' (it's
+      // no longer a low-confidence guess — the user just confirmed it).
+      if (bulkPatch.lastName || bulkPatch.team) {
+        if (r.status === 'review') patch.status = 'auto';
+      }
+      return { ...r, ...patch };
+    }));
+  }, [bulkPatch]);
+  const applyBulkToSelected = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    applyBulkPatch(selectedIds);
+  }, [applyBulkPatch, selectedIds]);
+  // "Stamp this row's tags onto every visible row" — the one-shot
+  // shortcut for "I just dropped 30 photos of one player." Click on
+  // any well-tagged row and every visible row inherits its team /
+  // player / asset-type fields.
+  const stampRowOnVisible = useCallback((sourceRow) => {
+    const targetIds = new Set(visible.map(v => v.id).filter(id => id !== sourceRow.id));
+    setRows(prev => prev.map(r => {
+      if (!targetIds.has(r.id)) return r;
+      return {
+        ...r,
+        scope: sourceRow.scope,
+        team: sourceRow.team,
+        num: sourceRow.num,
+        firstInitial: sourceRow.firstInitial,
+        lastName: sourceRow.lastName,
+        // Don't overwrite assetType — different photos of the same
+        // player are usually different types (HEADSHOT vs ACTION).
+        // Leave the heuristic's per-file guess in place.
+        status: r.status === 'review' ? 'auto' : r.status,
+      };
+    }));
+  }, [visible]);
 
   // Build the canonical filename from the resolved tags so parseFilename
   // (and every downstream lookup) treats the import as already-tagged.
@@ -295,6 +384,16 @@ export default function BulkImportModal({ open, onClose, roster, onImported }) {
             updateRow={updateRow}
             setRowStatus={setRowStatus}
             onOpenLightbox={setLightboxRowId}
+            selectedIds={selectedIds}
+            toggleSelect={toggleSelect}
+            selectAllVisible={selectAllVisible}
+            clearSelection={clearSelection}
+            allVisibleSelected={allVisibleSelected}
+            visibleSelectedCount={visibleSelectedCount}
+            bulkPatch={bulkPatch}
+            setBulkPatch={setBulkPatch}
+            applyBulkToSelected={applyBulkToSelected}
+            stampRowOnVisible={stampRowOnVisible}
           />
         )}
 
@@ -418,7 +517,12 @@ function DropZone({ dragOver, onDragEnter, onDragLeave, onDragOver, onDrop, onFo
   );
 }
 
-function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus, onOpenLightbox }) {
+function PreviewBody({
+  rows, counts, filter, setFilter, updateRow, setRowStatus, onOpenLightbox,
+  selectedIds, toggleSelect, selectAllVisible, clearSelection,
+  allVisibleSelected, visibleSelectedCount,
+  bulkPatch, setBulkPatch, applyBulkToSelected, stampRowOnVisible,
+}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
       <div style={{
@@ -441,10 +545,32 @@ function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus,
           }}>{t.label}</button>
         ))}
       </div>
+
+      {/* Bulk-apply bar — only fields you fill in get stamped onto the
+          selected rows, so partial apply ("just set the player, leave
+          asset-type alone") is one click. Hidden until at least one
+          row is selected to keep the panel quiet otherwise. */}
+      <BulkApplyBar
+        bulkPatch={bulkPatch}
+        setBulkPatch={setBulkPatch}
+        selectedCount={selectedIds.size}
+        applyBulkToSelected={applyBulkToSelected}
+        clearSelection={clearSelection}
+      />
+
       <div style={{ overflow: 'auto', flex: 1 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: colors.bg, zIndex: 1 }}>
             <tr>
+              <Th style={{ width: 36 }}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={() => allVisibleSelected ? clearSelection() : selectAllVisible()}
+                  title={allVisibleSelected ? 'Clear selection' : 'Select all visible rows'}
+                  style={{ cursor: 'pointer' }}
+                />
+              </Th>
               <Th style={{ width: 60 }}>Preview</Th>
               <Th style={{ width: 80 }}>Status</Th>
               <Th>Original filename</Th>
@@ -453,16 +579,28 @@ function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus,
               <Th style={{ width: 80 }}>Number</Th>
               <Th style={{ width: 120 }}>Last name</Th>
               <Th style={{ width: 150 }}>Asset type</Th>
-              <Th style={{ width: 90 }}></Th>
+              <Th style={{ width: 130 }}></Th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
+            {rows.map(r => {
+              const isSelected = selectedIds.has(r.id);
+              return (
               <tr key={r.id} style={{
                 borderTop: `1px solid ${colors.divider}`,
                 opacity: r.status === 'skip' ? 0.5 : 1,
-                background: r.status === 'review' ? 'rgba(245,158,11,0.06)' : 'transparent',
+                background: isSelected
+                  ? 'rgba(220,38,38,0.06)'
+                  : r.status === 'review' ? 'rgba(245,158,11,0.06)' : 'transparent',
               }}>
+                <Td>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(r.id)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </Td>
                 <Td>
                   <button
                     onClick={() => onOpenLightbox(r.id)}
@@ -543,16 +681,30 @@ function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus,
                   </select>
                 </Td>
                 <Td>
-                  {r.status === 'skip' ? (
-                    <button onClick={() => setRowStatus(r.id, 'review')} style={miniBtn(colors.text)}>Restore</button>
-                  ) : (
-                    <button onClick={() => setRowStatus(r.id, 'skip')} style={miniBtn(colors.textMuted)}>Skip</button>
-                  )}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {r.status === 'skip' ? (
+                      <button onClick={() => setRowStatus(r.id, 'review')} style={miniBtn(colors.text)}>Restore</button>
+                    ) : (
+                      <button onClick={() => setRowStatus(r.id, 'skip')} style={miniBtn(colors.textMuted)}>Skip</button>
+                    )}
+                    {/* "Stamp this row's tags onto every other visible row"
+                        — the one-click shortcut for "I just dropped 30
+                        photos of the same player." Disabled if this row
+                        doesn't have enough info to stamp. */}
+                    {(r.scope === 'league' ? r.assetType : (r.team && (r.scope === 'team' || r.lastName))) && (
+                      <button
+                        onClick={() => stampRowOnVisible(r)}
+                        title="Stamp this row's team / player onto every visible row (asset type left as detected per-file)"
+                        style={miniBtn('#15803D')}
+                      >📌 To all</button>
+                    )}
+                  </div>
                 </Td>
               </tr>
-            ))}
+              );
+            })}
             {rows.length === 0 && (
-              <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: colors.textMuted, fontStyle: 'italic' }}>
+              <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: colors.textMuted, fontStyle: 'italic' }}>
                 No rows in this filter.
               </td></tr>
             )}
@@ -562,6 +714,130 @@ function PreviewBody({ rows, counts, filter, setFilter, updateRow, setRowStatus,
     </div>
   );
 }
+
+// Bulk apply bar — one-shot way to stamp the same player onto a whole
+// batch of selected rows. Empty fields are no-ops, so partial apply
+// works ("just set Konnor Jaso, leave asset types as auto-detected").
+function BulkApplyBar({ bulkPatch, setBulkPatch, selectedCount, applyBulkToSelected, clearSelection }) {
+  const dim = selectedCount === 0;
+  const set = (patch) => setBulkPatch(prev => ({ ...prev, ...patch }));
+  // Choose asset-type list based on the chosen scope (defaults to player
+  // when scope is left blank — the most common case).
+  const types =
+    bulkPatch.scope === 'team'   ? TEAM_ASSET_TYPES :
+    bulkPatch.scope === 'league' ? LEAGUE_ASSET_TYPES :
+                                   PLAYER_ASSET_TYPES;
+  return (
+    <div style={{
+      padding: '10px 18px',
+      borderBottom: `1px solid ${colors.borderLight}`,
+      background: dim ? colors.bg : 'rgba(220,38,38,0.04)',
+      display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end',
+      transition: 'background 0.15s',
+    }}>
+      <div style={{
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+        letterSpacing: 0.5, textTransform: 'uppercase',
+        color: dim ? colors.textMuted : colors.red,
+        flexBasis: '100%',
+      }}>
+        Bulk apply{dim
+          ? ' · select rows below to enable'
+          : ` · ${selectedCount} row${selectedCount === 1 ? '' : 's'} selected`}
+      </div>
+      <BulkField label="Scope">
+        <select value={bulkPatch.scope} onChange={e => {
+          const next = e.target.value;
+          // Switching scope through the bulk bar resets defaults that
+          // don't apply in the new mode (e.g. moving to league clears
+          // team / player fields so the apply doesn't mix them in).
+          const reset = next === 'league'
+            ? { team: '', num: '', firstInitial: '', lastName: '' }
+            : {};
+          set({ scope: next, ...reset });
+        }} style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }} disabled={dim}>
+          <option value="">— don't change</option>
+          <option value="player">player</option>
+          <option value="team">team</option>
+          <option value="league">league</option>
+        </select>
+      </BulkField>
+      <BulkField label="Team">
+        {bulkPatch.scope === 'league' ? (
+          <span style={{
+            padding: '4px 10px', borderRadius: radius.sm,
+            background: colors.redLight, color: colors.red,
+            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+            border: `1px solid ${colors.red}33`, display: 'inline-block',
+          }}>BLW</span>
+        ) : (
+          <select value={bulkPatch.team} onChange={e => set({ team: e.target.value })}
+            style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }} disabled={dim}>
+            <option value="">— don't change</option>
+            {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
+          </select>
+        )}
+      </BulkField>
+      {bulkPatch.scope !== 'team' && bulkPatch.scope !== 'league' && (
+        <>
+          <BulkField label="#">
+            <input value={bulkPatch.num}
+              onChange={e => set({ num: e.target.value.replace(/\D/g, '').slice(0, 2) })}
+              placeholder="##"
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 50, textAlign: 'center' }} disabled={dim} />
+          </BulkField>
+          <BulkField label="FI">
+            <input value={bulkPatch.firstInitial}
+              onChange={e => set({ firstInitial: e.target.value.toUpperCase().slice(0, 1) })}
+              placeholder="F"
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 38, textAlign: 'center' }} disabled={dim} />
+          </BulkField>
+          <BulkField label="Last name">
+            <input value={bulkPatch.lastName}
+              onChange={e => set({ lastName: e.target.value.toUpperCase() })}
+              placeholder="LASTNAME"
+              style={{ ...inputStyle, fontSize: 11, padding: '4px 8px', width: 130 }} disabled={dim} />
+          </BulkField>
+        </>
+      )}
+      <BulkField label="Asset type">
+        <select value={bulkPatch.assetType} onChange={e => set({ assetType: e.target.value })}
+          style={{ ...selectStyle, fontSize: 11, padding: '4px 8px' }} disabled={dim}>
+          <option value="">— don't change</option>
+          {types.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </BulkField>
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        <button onClick={clearSelection} disabled={dim} style={{
+          padding: '6px 12px', borderRadius: radius.sm,
+          background: 'transparent', color: dim ? colors.textMuted : colors.textSecondary,
+          border: `1px solid ${colors.border}`,
+          fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
+          letterSpacing: 0.4, textTransform: 'uppercase',
+          cursor: dim ? 'not-allowed' : 'pointer',
+        }}>Clear</button>
+        <button onClick={applyBulkToSelected} disabled={dim} style={{
+          padding: '6px 14px', borderRadius: radius.sm,
+          background: dim ? colors.border : colors.red,
+          color: '#fff', border: 'none',
+          fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
+          letterSpacing: 0.5, textTransform: 'uppercase',
+          cursor: dim ? 'not-allowed' : 'pointer',
+        }}>Apply to {selectedCount} row{selectedCount === 1 ? '' : 's'}</button>
+      </div>
+    </div>
+  );
+}
+
+const BulkField = ({ label, children }) => (
+  <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <span style={{
+      fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700,
+      letterSpacing: 0.5, textTransform: 'uppercase', color: colors.textSecondary,
+    }}>{label}</span>
+    {children}
+  </label>
+);
 
 function StatusChip({ status, confidence }) {
   const palette = {
