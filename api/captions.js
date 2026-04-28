@@ -59,11 +59,14 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch { body = {}; }
   }
-  const { idea, platform } = body || {};
+  const { idea, platform, leagueContext = '' } = body || {};
   if (!idea || !idea.headline) {
     res.status(400).json({ error: 'idea (with headline) is required' });
     return;
   }
+  // Master-admin narrative context — same blob /api/ideas uses. Caps to keep
+  // this endpoint cheap; rewrites should be quick.
+  const trimmedLeagueContext = (leagueContext || '').trim().slice(0, 3000);
   if (platform && !VALID_PLATFORMS.has(platform)) {
     res.status(400).json({ error: `platform must be one of ${[...VALID_PLATFORMS].join(', ')}` });
     return;
@@ -104,9 +107,13 @@ PLATFORM BRIEFS:
 ${briefs}
 `;
 
+  const narrativeBlock = trimmedLeagueContext
+    ? `\n\nLEAGUE NARRATIVES (use these to ground tone/specifics if relevant):\n${trimmedLeagueContext}`
+    : '';
+
   const userInstruction = `Write the requested caption${platformsToWrite.length === 1 ? '' : 's'} for this idea:
 
-${ideaSummary}`;
+${ideaSummary}${narrativeBlock}`;
 
   const anthropicBody = {
     model,

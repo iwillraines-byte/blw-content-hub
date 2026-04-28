@@ -50,6 +50,7 @@ export default function IdeaCard({
   onIdeaUpdate,      // (ideaId, patch) => void   parent merges patch into idea
   queuedRequestId,   // string | null
   ideasLoading,      // boolean — disables "More like this"
+  leagueContext = '', // master-admin notes — forwarded to /api/captions
 }) {
   const toast = useToast();
   const team = idea.team && idea.team !== 'BLW' ? getTeam(idea.team) : null;
@@ -99,7 +100,7 @@ export default function IdeaCard({
       const res = await fetch('/api/captions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ idea }),
+        body: JSON.stringify({ idea, leagueContext }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
@@ -119,7 +120,7 @@ export default function IdeaCard({
       const res = await fetch('/api/captions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ idea, platform }),
+        body: JSON.stringify({ idea, platform, leagueContext }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);

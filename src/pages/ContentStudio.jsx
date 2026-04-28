@@ -11,10 +11,14 @@ import { getUsageToday, recordUsage } from '../ai-usage-store';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
 import IdeaCard from '../idea-card';
+import { useLeagueContext, LeagueContextCard } from '../league-context';
 
 export default function ContentStudio() {
   const navigate = useNavigate();
   const toast = useToast();
+  // The league-context hook fetches once on mount. Master admins see the
+  // editing card; everyone benefits from the value being passed into AI calls.
+  const leagueCtx = useLeagueContext();
   const [suggestions, setSuggestions] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [requests, setRequests] = useState([]);
@@ -91,12 +95,17 @@ export default function ContentStudio() {
         body: JSON.stringify({
           context: {
             teams: TEAMS.map(t => ({ id: t.id, name: t.name, record: t.record, rank: t.rank, color: t.color, accent: t.accent })),
-            batting: batting.slice(0, 20),
-            pitching: pitching.slice(0, 20),
-            rankings: rankings.slice(0, 40),
+            // Send the FULL stat tables so the API can stratify (top + mid +
+            // sleeper). Server slices/randomises from this pool.
+            batting: batting.slice(0, 60),
+            pitching: pitching.slice(0, 60),
+            rankings: rankings.slice(0, 60),
           },
           count,
           seedIdea,
+          // Master-admin notes — trades, draft, storylines. Empty string is
+          // fine; the server prompt handles the no-context case.
+          leagueContext: leagueCtx.notes || '',
         }),
       });
       const data = await res.json();
@@ -233,6 +242,12 @@ export default function ContentStudio() {
         />
       </div>
 
+      {/* League context — master admin only. Returns null for everyone else,
+          so it's safe to always render. The hook still fetches the value so
+          we can forward it to /api/ideas for ALL users (admins set the
+          context; everyone benefits from grounded AI output). */}
+      <LeagueContextCard ctx={leagueCtx} />
+
       {/* Recent posts — public feed of the last 10 downloads across the team.
           Click a thumbnail to re-open Generate with the same composition.
           Empty state hides the whole row until someone has actually posted. */}
@@ -302,6 +317,7 @@ export default function ContentStudio() {
                   idea={s}
                   queuedRequestId={queuedIdeas[s.id]}
                   ideasLoading={ideasLoading}
+                  leagueContext={leagueCtx.notes || ''}
                   onQueue={queueIdeaAsRequest}
                   onOpenInGenerate={(idea) => navigate(buildLink(idea))}
                   onMoreLikeThis={(idea) => requestIdeas(idea, 3)}
