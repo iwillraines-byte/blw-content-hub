@@ -1791,7 +1791,14 @@ export default function PlayerPage() {
         {player.batting && (
           <Card>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-              <SectionHeading style={{ margin: 0 }}>Batting · percentile</SectionHeading>
+              <SectionHeading style={{
+                margin: 0,
+                fontFamily: fonts.heading,
+                fontSize: 20,
+                fontWeight: 600,
+                letterSpacing: 0.6,
+                textTransform: 'uppercase',
+              }}>BLW Batting Percentile Rankings</SectionHeading>
               <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
                 Across {bTotal} BLW batters
               </span>
@@ -1818,6 +1825,12 @@ export default function PlayerPage() {
                 { label: 'RBI/PA', value: formatRate(player.batting.rbi, player.batting.pa),
                   percentile: derivedPercentileFor(battingLeaders, player.name,
                     (r) => safeRate(r.rbi, r.pa), 'desc') },
+                // R/PA — runs scored per plate appearance. Tracks how often
+                // the player crosses the plate when they come up; pairs
+                // nicely with RBI/PA above (driving in vs scoring runs).
+                { label: 'R/PA',   value: formatRate(player.batting.runs, player.batting.pa),
+                  percentile: derivedPercentileFor(battingLeaders, player.name,
+                    (r) => safeRate(r.runs, r.pa), 'desc') },
               ]}
             />
           </Card>
@@ -1825,7 +1838,14 @@ export default function PlayerPage() {
         {player.pitching && (
           <Card>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-              <SectionHeading style={{ margin: 0 }}>Pitching · percentile</SectionHeading>
+              <SectionHeading style={{
+                margin: 0,
+                fontFamily: fonts.heading,
+                fontSize: 20,
+                fontWeight: 600,
+                letterSpacing: 0.6,
+                textTransform: 'uppercase',
+              }}>BLW Pitching Percentile Rankings</SectionHeading>
               <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
                 Across {pTotal} BLW pitchers
               </span>

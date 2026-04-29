@@ -68,7 +68,8 @@ export function PercentileBubble({
   // (a bubble at 0% or 100% would otherwise clip).
   const targetWidthPct = pct == null ? 0 : pct;
   const animatedWidthPct = mounted ? targetWidthPct : 0;
-  const bubbleSize = 22;
+  const bubbleSize = 24;
+  const trackHeight = 12;
 
   return (
     <div
@@ -79,7 +80,7 @@ export function PercentileBubble({
         gridTemplateColumns: '70px 1fr 56px',
         alignItems: 'center',
         gap: 12,
-        padding: '6px 0',
+        padding: '3px 0',
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
@@ -93,9 +94,9 @@ export function PercentileBubble({
         whiteSpace: 'nowrap',
       }}>{label}</div>
 
-      {/* Track + fill + bubble. The track is 8px tall so the 22px bubble
-          overhangs ±7px above/below the bar — exactly matches the Savant
-          reference's "bubble floats on the bar" feel. */}
+      {/* Track + fill + bubble. The track is 12px tall so the 24px bubble
+          overhangs ±6px above/below the bar — Savant-style "bubble floats
+          on the bar" feel with a chunkier, more readable track. */}
       <div style={{
         position: 'relative',
         height: bubbleSize + 4,                // breathing room for the bubble
@@ -103,7 +104,7 @@ export function PercentileBubble({
       }}>
         {/* Background track */}
         <div style={{
-          width: '100%', height: 8, borderRadius: 999,
+          width: '100%', height: trackHeight, borderRadius: 999,
           background: '#E5E7EB',
           position: 'relative', overflow: 'visible',
         }}>
