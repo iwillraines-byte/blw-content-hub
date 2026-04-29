@@ -1439,6 +1439,52 @@ export default function PlayerPage() {
   }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
 
   // ─── Hooks below MUST stay above the early returns (Rules of Hooks). ─────
+  // ── Generate-content flow ──────────────────────────────────────────────
+  // The hero CTA used to be a direct deep-link into Generate with the
+  // player's name + stat line pre-filled into legacy params. Now it
+  // calls /api/ideas with a player-scoped seed and shows the resulting
+  // SINGLE idea in a modal — the IdeaCard on the dashboard. From the
+  // modal the user can edit captions, queue as a request, or open in
+  // Generate (the IdeaCard's own "Open in Generate" deep-link).
+  //
+  // Tolerates a null `player` / `team` so it can sit above the early
+  // returns. The actual click handler bails when player isn't loaded.
+  const generateIdea = useCallback(async () => {
+    if (!player || !team) return;
+    setGeneratingIdea(true);
+    try {
+      const res = await fetch('/api/ideas', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          context: {
+            teams: TEAMS.map(t => ({ id: t.id, name: t.name, record: t.record, rank: t.rank, color: t.color, accent: t.accent })),
+            batting: battingLeaders.slice(0, 60),
+            pitching: pitchingLeaders.slice(0, 60),
+          },
+          count: 1,
+          seedIdea: {
+            id: `playerpage-seed-${Date.now()}`,
+            team: player.team || team.id,
+            headline: `${player.name} — content seed`,
+            prefill: { playerName: player.name },
+          },
+          team: player.team || team.id,
+          leagueContext: leagueCtx.notes || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const idea = (data.ideas || [])[0];
+      if (!idea) throw new Error('No idea returned');
+      setPendingIdea(idea);
+    } catch (err) {
+      toast.error('Couldn\'t generate idea', { detail: err.message?.slice(0, 80) });
+    } finally {
+      setGeneratingIdea(false);
+    }
+  }, [player, team, battingLeaders, pitchingLeaders, leagueCtx.notes, toast]);
+
   // They all tolerate null/undefined `team` and `player` so calling them
   // before the data has loaded is safe.
 
@@ -1556,58 +1602,6 @@ export default function PlayerPage() {
     (acc[k] = acc[k] || []).push(m);
     return acc;
   }, {});
-
-  // ── Generate-content flow ──────────────────────────────────────────────
-  // The hero CTA used to be a direct deep-link into Generate with the
-  // player's name + stat line pre-filled into legacy params. Now it
-  // calls /api/ideas with a player-scoped seed and shows the resulting
-  // SINGLE idea in a modal — the IdeaCard on the dashboard. From the
-  // modal the user can edit captions, queue as a request, or open in
-  // Generate (the IdeaCard's own "Open in Generate" deep-link). This
-  // means every player-page generation starts from an AI-drafted idea
-  // instead of dropping the user into the canvas with empty fields.
-  const generateIdea = useCallback(async () => {
-    if (!player) return;
-    setGeneratingIdea(true);
-    try {
-      const res = await fetch('/api/ideas', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          // Same context shape the dashboard sends so the model has the
-          // full BLW state to draw on (team table, batting/pitching
-          // leaderboards, rankings). Slices match the dashboard cap.
-          context: {
-            teams: TEAMS.map(t => ({ id: t.id, name: t.name, record: t.record, rank: t.rank, color: t.color, accent: t.accent })),
-            batting: battingLeaders.slice(0, 60),
-            pitching: pitchingLeaders.slice(0, 60),
-          },
-          // Lock the generation to this team + player via the seed-scope
-          // mechanism. The API's existing seed-scope block requires every
-          // idea in the batch to be about ${player.name} or their
-          // teammates. count=1 because we only need a single popup idea.
-          count: 1,
-          seedIdea: {
-            id: `playerpage-seed-${Date.now()}`,
-            team: player.team || team.id,
-            headline: `${player.name} — content seed`,
-            prefill: { playerName: player.name },
-          },
-          team: player.team || team.id,
-          leagueContext: leagueCtx.notes || '',
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      const idea = (data.ideas || [])[0];
-      if (!idea) throw new Error('No idea returned');
-      setPendingIdea(idea);
-    } catch (err) {
-      toast.error('Couldn\'t generate idea', { detail: err.message?.slice(0, 80) });
-    } finally {
-      setGeneratingIdea(false);
-    }
-  }, [player, team, battingLeaders, pitchingLeaders, leagueCtx.notes, toast]);
 
   // Stat line is still useful for the IdeaCard's "Open in Generate"
   // path — kept here so the existing helper still resolves.

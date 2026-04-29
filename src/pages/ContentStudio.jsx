@@ -294,13 +294,6 @@ export default function ContentStudio() {
           top of AppShell so the active impersonation is always visible. */}
       <ViewAsPicker />
 
-      {/* Recent posts — public feed of the last 10 downloads across the team.
-          Click a thumbnail to re-open Generate with the same composition.
-          Empty state hides the whole row until someone has actually posted. */}
-      {recentPosts.length > 0 && (
-        <RecentPostsStrip posts={recentPosts} />
-      )}
-
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {/* LEFT — Content Suggestions */}
         <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -548,6 +541,17 @@ export default function ContentStudio() {
             />
           )}
         </div>
+      )}
+
+      {/* Recent posts — public feed of the last N downloads across the
+          team. Click a thumbnail to re-open Generate with the same
+          composition. Lives at the bottom of the dashboard, below the
+          Top-10 leaderboards, so it reads as the closing "what's been
+          shipping" row instead of competing with the live-state cards
+          and content ideas at the top of the page. Empty state hides
+          the whole row until someone has actually posted. */}
+      {recentPosts.length > 0 && (
+        <RecentPostsStrip posts={recentPosts} />
       )}
     </div>
   );
