@@ -1207,15 +1207,26 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   // share an initial (Logan vs Luke Rose, James vs Justin Lee). WANT_FI
   // is the legacy form. Without either we return every match for the
   // lastname and let the caller flag it as ambiguous.
+  //
+  // Robustness: check BOTH p.firstName (when present, e.g. on manual_players
+  // records imported via the bio sync) AND the first word of p.name. A
+  // record with name="L. Rose" but firstName="Logan" used to slip through
+  // because we only inspected the name field — leaving Logan/Luke Rose
+  // with their stat data but missing all of their imported bio info.
   const narrow = (arr) => {
     if (WANT_FN) {
       return arr.filter(p => {
-        const firstWord = String(p.name || p.firstName || '').trim().split(/\s+/)[0] || '';
-        return slugify(firstWord) === WANT_FN;
+        const candidates = [];
+        if (p.firstName) candidates.push(String(p.firstName).trim().split(/\s+/)[0] || '');
+        if (p.name)      candidates.push(String(p.name).trim().split(/\s+/)[0] || '');
+        return candidates.some(c => slugify(c) === WANT_FN);
       });
     }
     if (WANT_FI) {
-      return arr.filter(p => String(p.name || p.lastName || '').trim().charAt(0).toUpperCase() === WANT_FI);
+      return arr.filter(p => {
+        const fnSrc = p.firstName || p.name || p.lastName || '';
+        return String(fnSrc).trim().charAt(0).toUpperCase() === WANT_FI;
+      });
     }
     return arr;
   };
@@ -1234,15 +1245,22 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   }
   const ambiguous = !WANT_FN && !WANT_FI && candidateNames.size > 1;
 
-  // Source picks. The fallback to *All[0] exists for legacy slugs that
-  // don't carry a firstname/initial — without disambiguation we just
-  // grab the first matching row. But when the URL DOES disambiguate
-  // (logan-rose, c-rose), falling back to allMatches[0] is wrong: it
-  // would surface another cousin's record (e.g. Carson's bio CSV row
-  // showing up under Logan's player page when only Carson has a bio).
-  // Strict mode = WANT_FN or WANT_FI is set → no allMatches fallback.
+  // Source picks. Three cases:
+  //   1. narrow has a hit → use it. (Always preferred.)
+  //   2. strict mode (WANT_FN or WANT_FI set) AND narrow is empty: only
+  //      fall back to all[0] if there's exactly ONE candidate row. With
+  //      a single row, ambiguity is impossible — it can't be a cousin
+  //      collision, just a data-shape quirk (e.g. a manual_players row
+  //      where firstName came in as "L." or empty so narrow missed
+  //      it). With 2+ rows we MUST stay strict, otherwise we'd serve
+  //      Carson Rose's bio under Logan's URL.
+  //   3. legacy mode (no WANT_FN/FI): grab first match for the lastname.
   const strict = Boolean(WANT_FN || WANT_FI);
-  const pickStrict = (narrow, all) => narrow[0] || (strict ? null : (all[0] || null));
+  const pickStrict = (narrowed, all) => {
+    if (narrowed[0]) return narrowed[0];
+    if (strict) return all.length === 1 ? all[0] : null;
+    return all[0] || null;
+  };
   const batting = pickStrict(battingMatches, battingAll);
   const pitching = pickStrict(pitchingMatches, pitchingAll);
   const rosterPlayer = pickStrict(rosterMatches, rosterAll);

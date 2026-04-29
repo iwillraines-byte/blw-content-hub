@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAllData, getTeam, getTeamRoster, slugify, TEAMS } from '../data';
+import { fetchAllData, getTeam, getTeamRoster, playerSlug, TEAMS } from '../data';
 import { Card, PageHeader, SectionHeading, RedButton, TeamLogo } from '../components';
 import { colors, fonts, radius, shadows } from '../theme';
 import { findTeamMedia, blobToObjectURL } from '../media-store';
@@ -145,7 +145,7 @@ export default function MyStats() {
             {roster.map(p => (
               <Link
                 key={`${p.lastName}-${p.num || p.firstInitial || ''}`}
-                to={`/teams/${team.slug}/players/${slugify(p.lastName)}`}
+                to={`/teams/${team.slug}/players/${playerSlug(p)}`}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: 10, borderRadius: radius.base,
