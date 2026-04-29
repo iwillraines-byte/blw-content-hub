@@ -4,6 +4,7 @@ import { TEAMS, API_CONFIG, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from '../version';
+import ChangelogModal from '../changelog-modal';
 import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth } from '../auth';
@@ -21,6 +22,8 @@ export default function Settings() {
   const [driveKeyDraft, setDriveKeyDraft] = useState('');
   const [driveKeyMasked, setDriveKeyMasked] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
+  // Changelog popup — driven by the version chip in the About card.
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   useEffect(() => {
     const k = getApiKey();
@@ -232,27 +235,33 @@ export default function Settings() {
         <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
           <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <strong style={{ color: colors.red }}>BLW Content Hub</strong>
-            {/* Live build label — auto-rolls every Vercel deploy via
-                VERCEL_GIT_COMMIT_SHA. Hover for the full build date.
-                The SHA is just a fingerprint, not a clickable link. */}
-            <span
-              title={`Built ${formattedBuildDate()}`}
+            {/* Version chip — semver + build date. Click to open the
+                full changelog. The chip stays small + monospace so it
+                reads as a build fingerprint, not a primary CTA, but
+                the cursor + caret signal it's interactive. */}
+            <button
+              type="button"
+              onClick={() => setChangelogOpen(true)}
+              title={`Built ${formattedBuildDate()}${GIT_COMMIT !== 'dev' ? ` · ${GIT_COMMIT}` : ''} — click to see release notes`}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, monospace',
                 background: colors.bg, border: `1px solid ${colors.borderLight}`,
                 padding: '2px 8px', borderRadius: radius.sm,
                 color: colors.textSecondary,
+                cursor: 'pointer',
               }}
             >
               {GIT_COMMIT === 'dev' ? 'dev build' : BUILD_LABEL}
-            </span>
+              <span style={{ opacity: 0.5 }}>↗</span>
+            </button>
           </div>
           <div>Content management and graphic generation tool for Big League Wiffle Ball.</div>
           <div style={{ marginTop: 8 }}>Managing content for 9 of 10 BLW teams. Season launch: May 1, 2026.</div>
           <div style={{ marginTop: 8 }}>Graphics are downloaded and scheduled via <strong>Metricool</strong> for social media publishing.</div>
         </div>
       </Card>
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </div>
   );
 }

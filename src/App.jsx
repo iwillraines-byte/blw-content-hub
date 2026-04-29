@@ -5,6 +5,7 @@ import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './them
 import { TeamThemeScope } from './team-theme';
 import { GlobalStyles } from './global-styles';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from './version';
+import ChangelogModal from './changelog-modal';
 import ContentStudio from './pages/ContentStudio';
 import Generate from './pages/Generate';
 import Requests from './pages/Requests';
@@ -142,6 +143,9 @@ function TeamsDropdown({ location }) {
 function Sidebar({ isMobile, open, onClose }) {
   const location = useLocation();
   const { role, isConfigured } = useAuth();
+  // Changelog popup state. Lives at the Sidebar level (not page-global)
+  // because the trigger is the version row in the footer here.
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   // Close sidebar on navigation (mobile)
   useEffect(() => {
@@ -224,31 +228,42 @@ function Sidebar({ isMobile, open, onClose }) {
           <TeamsDropdown location={location} />
         </nav>
 
-        {/* Footer — build label is live at build time (see src/version.js
-            + vite.config.js). On Vercel the SHA is taken from
-            VERCEL_GIT_COMMIT_SHA per deploy, so the footer auto-rolls
-            every push without us having to remember to bump
-            package.json. Format: "Apr 29 · a3f8c2b". Hover shows the
-            full build date. The SHA isn't linked anymore — it's just a
-            fingerprint for correlating a bug report to a deploy. */}
+        {/* Footer — version label is a button that opens the changelog
+            modal. Semver headline ("v4.0.0 · Apr 29") comes from
+            package.json + the build date; tooltip carries the full
+            build date + commit SHA for bug-report correlation. The
+            modal renders the curated release history from
+            src/changelog.js so the user can scan what shipped over the
+            last few pushes without leaving the app. */}
         <div style={{
           padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,0.06)',
           fontFamily: fonts.condensed, fontSize: 10,
           color: 'rgba(255,255,255,0.25)', textAlign: 'center', lineHeight: 1.5,
         }}>
           <div>Created by Savant Media</div>
-          <div
+          <button
+            type="button"
+            onClick={() => setChangelogOpen(true)}
+            title={`Built ${formattedBuildDate()}${GIT_COMMIT !== 'dev' ? ` · ${GIT_COMMIT}` : ''} — click to see release notes`}
             style={{
+              background: 'transparent',
+              border: 'none', padding: '2px 4px',
+              margin: 0,
               opacity: 0.7,
+              cursor: 'pointer',
               fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+              fontSize: 10, lineHeight: 1.5,
+              color: 'inherit',
+              textAlign: 'center',
             }}
-            title={`Built ${formattedBuildDate()}`}
           >
             {GIT_COMMIT === 'dev' ? 'dev build' : BUILD_LABEL}
-            {' · prowiffleball.com'}
-          </div>
+            <span style={{ opacity: 0.5, marginLeft: 4 }}>↗</span>
+          </button>
+          <div>prowiffleball.com</div>
         </div>
       </aside>
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </>
   );
 }

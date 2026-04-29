@@ -49,9 +49,15 @@ export function shortBuildDate() {
   }
 }
 
-// Build label that auto-rolls every deploy without anyone having to
-// remember to bump package.json. Format: "Apr 29 · a3f8c2b". The SHA
-// comes from VERCEL_GIT_COMMIT_SHA on prod (set per deployment), so
-// each push produces a visibly-different footer. No GitHub link —
-// the SHA is just a fingerprint, not a clickable destination.
-export const BUILD_LABEL = `${shortBuildDate()} · ${GIT_COMMIT}`;
+// Build label users see in the footer. Semver is the headline (it
+// signals "what release is this"); the build date confirms when this
+// bundle was cut. The SHA stays in the tooltip for debugging but isn't
+// the primary identifier anymore — the version footer is now meant to
+// be clicked to see the changelog, not parsed as a git ref.
+//
+// Semver source = package.json (which mirrors the top entry of
+// src/changelog.js). When you ship a meaningful change:
+//   1. Add a release object to RELEASES in src/changelog.js
+//   2. Bump package.json version to match
+// The footer + Settings card auto-pick up the new label on next build.
+export const BUILD_LABEL = `v${APP_VERSION} · ${shortBuildDate()}`;
