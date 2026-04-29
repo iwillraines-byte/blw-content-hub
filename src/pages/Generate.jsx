@@ -641,19 +641,29 @@ export default function Generate() {
     renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform });
   }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion]);
 
-  // Run render whenever any of its inputs change. Wrapped to also
-  // re-run once local fonts finish preloading on first mount —
-  // otherwise the very first paint can land before Gotham/Press
-  // Gothic/United Sans are in document.fonts and any field that
-  // references them falls back to Times for one frame.
+  // Per-input render — exactly the same shape as before the local-fonts
+  // change. Two reasons not to await fonts here: (1) rebinding inside a
+  // promise on every drag step calls render() twice per pointermove
+  // tick, and canvas.width=N inside render() forces a state reset on
+  // every call — fine but wasteful; (2) the second-pass render was
+  // queued from a microtask, so any pointer event fired between the
+  // two renders interacts with stale React state.
+  useEffect(() => { render(); }, [render]);
+
+  // Mount-only font preload re-render. Captures the latest render
+  // function via a ref so a font-ready callback that fires AFTER state
+  // has changed still draws the up-to-date frame. Fires exactly once:
+  // localFontsReady() returns a cached resolved promise after the
+  // first call, so future re-renders don't trigger more font waits.
+  const renderRef = useRef(render);
+  useEffect(() => { renderRef.current = render; }, [render]);
   useEffect(() => {
-    render();
     let cancelled = false;
     localFontsReady().then(() => {
-      if (!cancelled) render();
+      if (!cancelled) renderRef.current();
     });
     return () => { cancelled = true; };
-  }, [render]);
+  }, []);
 
   const download = () => {
     const canvas = canvasRef.current;
@@ -751,25 +761,41 @@ export default function Generate() {
   // ── Photo pan/zoom interaction on the preview canvas ──
   // Drag to pan, scroll to zoom. Both edit `bgTransform` in offset/zoom units —
   // the renderer translates back to source pixels via computeBgCrop().
+  //
+  // Why the ref dance: the raw bgTransform is a state object that changes
+  // every pointermove tick. Putting it directly in onCanvasPointerDown's
+  // deps means React rebinds the wrapper's onPointerDown listener mid-drag,
+  // and putting bgTransform-the-object in onCanvasPointerMove's deps does
+  // the same. Pointer capture survives the rebind, but the churn is
+  // unnecessary AND occasionally drops the first move event after a
+  // rebind (the drop is what made drag feel "lost"). So we point both
+  // handlers at refs that always carry the latest values, and keep the
+  // useCallback deps narrow — the handlers themselves stay referentially
+  // stable across the entire drag.
   const bgDragRef = useRef(null); // { startX, startY, offsetX0, offsetY0 }
+  const bgTransformRef = useRef(bgTransform);
+  useEffect(() => { bgTransformRef.current = bgTransform; }, [bgTransform]);
+
   const onCanvasPointerDown = useCallback((e) => {
     if (!bgImg || showLayoutEditor) return; // layout editor owns pointer when on
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
+    const t = bgTransformRef.current;
     bgDragRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      offsetX0: bgTransform.offsetX,
-      offsetY0: bgTransform.offsetY,
+      offsetX0: t.offsetX,
+      offsetY0: t.offsetY,
     };
-  }, [bgImg, showLayoutEditor, bgTransform.offsetX, bgTransform.offsetY]);
+  }, [bgImg, showLayoutEditor]);
 
   const onCanvasPointerMove = useCallback((e) => {
     const drag = bgDragRef.current;
     if (!drag || !bgImg) return;
     // dx/dy in canvas-display pixels → convert to offset units
-    const crop = computeBgCrop(bgImg, activeW, activeH, bgTransform);
+    const t = bgTransformRef.current;
+    const crop = computeBgCrop(bgImg, activeW, activeH, t);
     if (crop.maxPanXSource <= 0 && crop.maxPanYSource <= 0) return;
     const dxDisplay = e.clientX - drag.startX;
     const dyDisplay = e.clientY - drag.startY;
@@ -779,12 +805,12 @@ export default function Generate() {
     const dxOffset = crop.maxPanXSource > 0 ? -(dxDisplay * sxPerDisplayPx) / crop.maxPanXSource : 0;
     const dyOffset = crop.maxPanYSource > 0 ? -(dyDisplay * syPerDisplayPx) / crop.maxPanYSource : 0;
     const clamp = (v) => Math.max(-1, Math.min(1, v));
-    setBgTransform(t => ({
-      ...t,
+    setBgTransform(prev => ({
+      ...prev,
       offsetX: clamp(drag.offsetX0 + dxOffset),
       offsetY: clamp(drag.offsetY0 + dyOffset),
     }));
-  }, [bgImg, activeW, activeH, scale, bgTransform]);
+  }, [bgImg, activeW, activeH, scale]);
 
   const onCanvasPointerUp = useCallback((e) => {
     if (bgDragRef.current) {
