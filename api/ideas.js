@@ -133,13 +133,24 @@ export default async function handler(req, res) {
     .join('\n');
 
   // Master-admin-supplied free text — trades, draft results, storylines,
-  // rivalries, anything that isn't in the live stats. Highest priority
-  // signal: the AI is told to PREFER these angles over generic stat cards.
+  // rivalries, anything that isn't in the live stats. Treated as RESEARCH
+  // material, not as content to paraphrase. The reframing in the block
+  // header is intentional — earlier prompts that said "build ideas around
+  // these storylines" got us 4 near-identical headlines that just
+  // restated each note as a question, which was exactly what we didn't
+  // want. Now we tell the model to use these as background context for
+  // creative leaps, not assignments to summarise.
   const trimmedLeagueContext = (leagueContext || '').trim().slice(0, 6000);
   const leagueNarrativesBlock = trimmedLeagueContext
-    ? `LEAGUE NARRATIVES (master admin notes — these are the most important signal for this batch; build ideas around these storylines wherever possible):
+    ? `LEAGUE NARRATIVES (background research — NOT a list of assignments):
+The notes below are reference material for context. They are NOT prompts to paraphrase. Don't quote them verbatim. Don't write a headline that essentially restates a note as a question or sentence. Instead:
+  • Find the SECOND-ORDER observation (what the note implies, what it predicts, what it changes about a stat ranking).
+  • Tie a note to a stat number from the data above to make a sharper claim.
+  • Look for tension between two notes (e.g., a trade + a slumping team).
+  • You can ignore notes that don't fit the angles you're picking — quality over coverage.
+
 ${trimmedLeagueContext}`
-    : '(no admin narratives provided — lean on the stat data above and pull from a wide variety of teams/players)';
+    : '(no admin narratives provided — lean on the stat data above. Spread across different teams and undertold angles.)';
 
   // ─── Cached system prompt (the "how to do the job") ───────────────────────
   // Static across all calls — tone, angle rules, output shape, template
@@ -154,11 +165,40 @@ TONE:
 - Never invent stats; use only the numbers provided in the user message
 - Captions sound like a sports brand that respects its audience: confident, occasionally playful, never corny. No "Let's gooo." No "Who's ready?"
 
-ANGLE MIX (this is critical):
-- AT LEAST HALF of the ideas you generate must hook off NARRATIVE — trades, signings, draft storylines, team chemistry, rivalries, comeback arcs, locker-room dynamics — drawn from the LEAGUE NARRATIVES block when present.
-- The remaining ideas can be stat-led, but pick UNDERTOLD angles: a mid-tier player heating up, a team with a quietly improving record, a sleeper having a great month. Don't reflexively spotlight the OPS+ leader yet again.
-- ACROSS THE BATCH you must reference at least 4 DIFFERENT teams. Never produce two ideas about the same player.
-- If a LEAGUE NARRATIVE explicitly names a player or team (e.g., "Caleb Jeter signed with Dallas"), you MUST give that storyline at least one idea — in fact, prioritise it as the lead idea.
+ANGLE DIVERSITY (this is the most important rule — read it twice):
+
+Each idea in a batch MUST take a different ANGLE TYPE. Pick from this menu and use each TYPE at most once per batch. If you can't fit four different types, generate fewer ideas — quality > quota.
+
+  1. STAT SPOTLIGHT — a single number tells the story (a leader, a milestone, a "first since…" moment). Best for: top performers, round-number records.
+  2. CONTRARIAN TAKE — a fact that runs counter to expectation. ("This team is 4-8 but their OPS+ is top-3", "Everyone's watching Jaso, but the second-best OPS+ on his team is…").
+  3. COMPARISON / RIVALRY — two players, two teams, or this player vs. the league. ("Jeter's FIP since Dallas trade vs. before").
+  4. ARC / TRAJECTORY — a player or team trending up or down. Comebacks, slumps, breakouts. Use rank movers when relevant.
+  5. STORYLINE ECHO — a creative leap from the LEAGUE NARRATIVES that ties context to a stat. (Not "Jeter signed with Dallas — what does it mean?" — instead "Pandas had baseball's worst FIP before March 12. Now they're top half. One name moved that needle.")
+  6. UNDERTOLD — a mid-tier player or quietly excellent team that's been overlooked. Pull from the mid-tier and sleeper buckets in the player sample.
+  7. CHARACTER / VIBE — a fun-fact, rookie story, nickname, or personality angle. Lighter register, less data-heavy.
+  8. PREDICTION / WATCH — what to keep an eye on next week. ("Five more HRs and Jaso passes the league record.")
+
+ANTI-PARAPHRASE RULE:
+- If your headline could be rewritten as a sentence directly from the LEAGUE NARRATIVES, REWRITE the headline. Headlines are creative leaps from the data, not summaries of it.
+- If two headlines in the same batch share a verb, a name, AND a stat, one of them is a duplicate — pick a different angle.
+
+TEAM SPREAD:
+- Reference at least 4 DIFFERENT teams across the batch unless explicitly scoped (see SEED SCOPE in the user message).
+- Never produce two ideas about the same player in the same batch (unless seed-scoped to that player).
+
+CREATIVE LEAP — ONE-SHOT EXAMPLE:
+
+Suppose the LEAGUE NARRATIVES says: "Caleb Jeter signed with Dallas Pandas (3/12). Pandas were 4-8 before; now 6-9. Jeter ranked top-3 FIP in BLW last season."
+
+WRONG (literal paraphrase, low value):
+  headline: "Caleb Jeter joins Dallas — what does it mean for the Pandas?"
+  narrative: "Caleb Jeter, an elite pitcher, signed with the Dallas Pandas..."
+
+RIGHT (creative leap, anchored in stats):
+  headline: "Two starts in. Pandas FIP dropped 1.40 points."
+  narrative: "Dallas had a bottom-three rotation FIP before the Jeter trade. After two of his starts, they're rotation-FIP league average. The signing isn't the story — the math behind it is."
+
+The RIGHT version uses the narrative as RESEARCH (knowing the trade context), pulls a SPECIFIC NUMBER from the stat data (FIP), and frames the angle as a CLAIM you'd actually want to read on a graphic. That's the bar.
 
 ${TEMPLATE_CATALOG}
 
@@ -171,7 +211,7 @@ REQUIRED OUTPUT SHAPE — return ONLY a JSON object, no markdown, no code fence:
       "narrative": "Two to three sentences (≤ 280 chars total) explaining WHY this is post-worthy right now — the story behind the angle. Reads like a beat-writer's lede, not a stat sheet.",
       "team": "LAN" | "AZS" | ... | "BLW",     // "BLW" for league-wide concepts
       "templateId": "player-stat" | "gameday" | ...,
-      "angle": "leader | hype | matchup | milestone | mover | deep-dive",
+      "angle": "stat-spotlight | contrarian | comparison | arc | storyline | undertold | character | prediction",
       "dataPoints": ["171 OPS+", "3 HR", "+5 spots"],   // 2-4 short stat pills, ≤ 18 chars each
       "captions": {
         "instagram": "Long-form caption (3-6 lines), can use emoji sparingly, ends with 4-7 hashtags on a new line. Lead with the hook, then the story, then the stat. ≤ 500 chars.",
@@ -186,13 +226,14 @@ REQUIRED OUTPUT SHAPE — return ONLY a JSON object, no markdown, no code fence:
 RULES:
 - NEVER fabricate stats. Use only numbers from the user message.
 - Each idea must reference a real team or real player from the data provided.
-- Variety: don't generate multiple ideas about the same player. Spread across teams.
-- "angle" must be one of: leader, hype, matchup, milestone, mover, deep-dive.
+- Variety: don't generate multiple ideas about the same player. Each idea picks a different ANGLE TYPE from the menu above.
+- "angle" must be one of: stat-spotlight, contrarian, comparison, arc, storyline, undertold, character, prediction.
 - templateId must come from the catalog above — no inventing new ones.
 - prefill keys must match the template's fields. If unsure of a field, omit it.
 - dataPoints are the literal numbers you'd pin to a graphic — keep each ≤ 18 chars.
 - All three caption variants tell the same story but in the right register for the platform. They don't cross-reference each other.
 - Hashtags belong only on the instagram caption (and inline on twitter, sparingly). The story variant is hashtag-free.
+- Quality bar: would a sports beat-writer share this on their personal account? If not, rewrite or skip it.
 `;
 
   // ─── Per-call user message (NOT cached — randomised samples + dynamic context) ─
@@ -236,16 +277,22 @@ ${leagueNarrativesBlock}`;
   const userInstruction = seedIdea
     ? `${stateBlock}
 
-Generate ${count} more content ideas in the SAME register as this seed. Vary the angle and specifics — don't duplicate the seed itself.${seedScopeBlock}
+Generate ${count} more content ideas in the SAME register as this seed. Each must take a DIFFERENT ANGLE TYPE from the menu in the system prompt — no duplicates of the seed's angle either.${seedScopeBlock}
 SEED IDEA:
 ${JSON.stringify(seedIdea, null, 2)}`
     : `${stateBlock}
 
-Generate ${count} fresh content ideas drawing on the BLW state above. Lean heavily on the LEAGUE NARRATIVES if any are provided. Hit a variety of teams and undertold angles.`;
+Generate ${count} fresh content ideas. CRITICAL: each idea must take a different ANGLE TYPE from the menu in the system prompt. Treat the LEAGUE NARRATIVES as research, not as a checklist — you don't have to use every note. Pick the most post-worthy angles you can find, even if they're tangential to what's in the notes.`;
 
   const anthropicBody = {
     model,
     max_tokens: MAX_OUTPUT_TOKENS,
+    // High temperature for content ideation — we want variance across the
+    // batch, not consensus. The angle-diversity rule + anti-paraphrase
+    // rule in the system prompt enforce STRUCTURE; the temperature gives
+    // us creative WIDTH within that structure. Output is JSON-validated
+    // downstream so high temp doesn't risk format breakage.
+    temperature: 1,
     system: [
       { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
     ],

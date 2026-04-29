@@ -27,7 +27,23 @@ import { TeamChip } from './components';
 import { colors, fonts, radius } from './theme';
 import { useToast } from './toast';
 
+// Angle taxonomy matches the menu in api/ideas.js — every angle a new
+// idea ships with should fall into one of these. Legacy angles from
+// older saved ideas (leader, hype, matchup, milestone, mover, deep-dive)
+// still resolve via the fallback in the angle-label lookup below, so
+// the 14-day rolling content_ideas store stays readable across the
+// schema change.
 const ANGLE_LABELS = {
+  // Current taxonomy
+  'stat-spotlight': 'STAT SPOTLIGHT',
+  contrarian:       'CONTRARIAN',
+  comparison:       'COMPARISON',
+  arc:              'TRAJECTORY',
+  storyline:        'STORYLINE',
+  undertold:        'UNDERTOLD',
+  character:        'CHARACTER',
+  prediction:       'PREDICTION',
+  // Legacy angles — still readable on older cards in the rolling store.
   leader:    'LEADER',
   hype:      'HYPE',
   matchup:   'MATCHUP',
