@@ -187,30 +187,13 @@ function VitalRow({ label, value, dot }) {
 }
 
 // Season stats compact card — 4 KPIs with tiny league-rank labels.
-function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pTotal }) {
-  // Pick 4 headline stats + ranks — batting first if they hit, else pitching.
-  const isPitcher = !!player.pitching && !player.batting;
-  const tiles = isPitcher
-    ? [
-        { label: 'ERA',  value: player.pitching?.era,  rank: pitchingRanks?.era,  total: pTotal },
-        { label: 'WHIP', value: player.pitching?.whip, rank: pitchingRanks?.whip, total: pTotal },
-        { label: 'K/4',  value: player.pitching?.k4,   rank: pitchingRanks?.k4,   total: pTotal, highlight: true },
-        { label: 'BB/4', value: player.pitching?.bb4,  rank: pitchingRanks?.bb4,  total: pTotal },
-      ]
-    : [
-        { label: 'AVG',  value: player.batting?.avg,      rank: battingRanks?.avg,      total: bTotal },
-        { label: 'HR',   value: player.batting?.hr,       rank: battingRanks?.hr,       total: bTotal },
-        { label: 'RBI',  value: player.batting?.rbi,      rank: battingRanks?.rbi,      total: bTotal },
-        { label: 'OPS+', value: player.batting?.ops_plus, rank: battingRanks?.ops_plus, total: bTotal, highlight: true },
-      ];
-
+// Renders one stat sub-card (gradient header + 4-tile grid). Reused by
+// SeasonStatsCard so two-way players can show batting + pitching stacked
+// in the same hero column. Each card is self-contained: its own header,
+// its own tile grid, its own percentile bars.
+function SeasonStatsSubCard({ team, label, tiles }) {
   return (
     <div style={{
-      // Now that the tier-badge column is gone, the stats card gets the
-      // breathing room. Larger min-width + flex basis so it can expand
-      // into what used to be column 4.
-      minWidth: 280,
-      flex: '1 1 280px',
       background: colors.white,
       border: `1px solid ${colors.borderLight}`,
       borderRadius: radius.base,
@@ -224,7 +207,7 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
         fontFamily: fonts.condensed, fontSize: 12, fontWeight: 700,
         letterSpacing: 1.4, textAlign: 'center', textTransform: 'uppercase',
       }}>
-        2026 Season Stats
+        {label}
       </div>
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
@@ -259,9 +242,8 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
               }}>
                 {t.rank ? `#${t.rank} / ${t.total}` : '—'}
               </div>
-              {/* Percentile bar — same idea as StatTile, just in the
-                  hero's headline stat strip. Tinted with team color when
-                  highlighted (the marquee stat for the player's role). */}
+              {/* Percentile bar — visible only when rank/total available.
+                  Tinted with team color for the marquee stat in each row. */}
               {pct != null && (
                 <div
                   aria-hidden="true"
@@ -285,6 +267,57 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// Hero-column stats. For two-way players, renders BOTH batting + pitching
+// as two stacked sub-cards in the same flex slot. For single-role players,
+// renders just one. The wrapper enforces flex sizing so the column behavior
+// is identical regardless of how many sub-cards live inside.
+function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pTotal }) {
+  const hasBatting = !!player.batting;
+  const hasPitching = !!player.pitching;
+
+  const battingTiles = [
+    { label: 'AVG',  value: player.batting?.avg,      rank: battingRanks?.avg,      total: bTotal },
+    { label: 'HR',   value: player.batting?.hr,       rank: battingRanks?.hr,       total: bTotal },
+    { label: 'RBI',  value: player.batting?.rbi,      rank: battingRanks?.rbi,      total: bTotal },
+    { label: 'OPS+', value: player.batting?.ops_plus, rank: battingRanks?.ops_plus, total: bTotal, highlight: true },
+  ];
+
+  const pitchingTiles = [
+    { label: 'ERA',  value: player.pitching?.era,  rank: pitchingRanks?.era,  total: pTotal },
+    { label: 'IP',   value: player.pitching?.ip,   rank: pitchingRanks?.ip,   total: pTotal },
+    { label: 'K/4',  value: player.pitching?.k4,   rank: pitchingRanks?.k4,   total: pTotal, highlight: true },
+    { label: 'WHIP', value: player.pitching?.whip, rank: pitchingRanks?.whip, total: pTotal },
+  ];
+
+  // Single-role: original visual carries over with the original label.
+  // Two-way: split the labels so each card is unambiguous about which
+  // role it's reporting.
+  const isTwoWay = hasBatting && hasPitching;
+  const battingLabel = isTwoWay ? '2026 Batting' : '2026 Season Stats';
+  const pitchingLabel = isTwoWay ? '2026 Pitching' : '2026 Season Stats';
+
+  return (
+    <div style={{
+      // Now that the tier-badge column is gone, the stats card gets the
+      // breathing room. Larger min-width + flex basis so it can expand
+      // into what used to be column 4. For two-way players, the wrapper
+      // becomes a vertical flex stack of two sub-cards.
+      minWidth: 280,
+      flex: '1 1 280px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+    }}>
+      {hasBatting && (
+        <SeasonStatsSubCard team={team} label={battingLabel} tiles={battingTiles} />
+      )}
+      {hasPitching && (
+        <SeasonStatsSubCard team={team} label={pitchingLabel} tiles={pitchingTiles} />
+      )}
     </div>
   );
 }
@@ -1547,6 +1580,11 @@ export default function PlayerPage() {
     whip: rankOf(pitchingLeaders, pn, 'whip', 'asc',  parseFloat),
     k4:   rankOf(pitchingLeaders, pn, 'k4',   'desc', parseFloat),
     bb4:  rankOf(pitchingLeaders, pn, 'bb4',  'asc',  parseFloat),
+    // IP — descending (more is better, durability signal). Powers the
+    // hero strip's percentile bar; the field-level rank chip already
+    // renders only when this is non-null, so a missing rank just hides
+    // the bar without breaking layout.
+    ip:   rankOf(pitchingLeaders, pn, 'ip',   'desc', parseFloat),
   } : null;
 
   const playerRank = player.ranking?.currentRank || null;
