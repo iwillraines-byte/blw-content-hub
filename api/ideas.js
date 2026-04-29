@@ -73,7 +73,7 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch { body = {}; }
   }
-  const { context = {}, count = 6, seedIdea = null, leagueContext = '' } = body || {};
+  const { context = {}, count = 6, seedIdea = null, leagueContext = '', team: scopeTeam = null } = body || {};
 
   // ─── Build the cacheable system prompt ─────────────────────────────────────
   // This chunk is stable across a single session, so cache it so "More Like
@@ -274,6 +274,19 @@ ${leagueNarrativesBlock}`;
     return parts.length ? `\nSEED SCOPE — REQUIRED:\n- ${parts.join('\n- ')}\n` : '';
   })();
 
+  // Top-level team scope from the dashboard's team picker — independent
+  // of seed scoping (a user can pick a team, hit Generate, then later
+  // hit "More like this" on one of those ideas to drill in further).
+  // When supplied, locks ALL ideas in this batch to that team and waives
+  // the spread-across-4-teams rule. seedScopeBlock takes precedence
+  // structurally because it's about a specific seed, but in practice
+  // they collapse to "this batch is about TEAM X" either way.
+  const upperScopeTeam = scopeTeam && typeof scopeTeam === 'string' && scopeTeam !== 'BLW'
+    ? scopeTeam.toUpperCase() : null;
+  const teamScopeBlock = (!seedIdea && upperScopeTeam)
+    ? `\nTEAM SCOPE — REQUIRED:\n- Every idea in this batch MUST be about team ${upperScopeTeam} or a player on team ${upperScopeTeam}. Do NOT pick a different team.\n- Spread across DIFFERENT players and DIFFERENT angle types on ${upperScopeTeam}. Don't repeat the same player.\n- IGNORE the system prompt rule about referencing at least 4 different teams.\n`
+    : '';
+
   const userInstruction = seedIdea
     ? `${stateBlock}
 
@@ -281,7 +294,7 @@ Generate ${count} more content ideas in the SAME register as this seed. Each mus
 SEED IDEA:
 ${JSON.stringify(seedIdea, null, 2)}`
     : `${stateBlock}
-
+${teamScopeBlock}
 Generate ${count} fresh content ideas. CRITICAL: each idea must take a different ANGLE TYPE from the menu in the system prompt. Treat the LEAGUE NARRATIVES as research, not as a checklist — you don't have to use every note. Pick the most post-worthy angles you can find, even if they're tangential to what's in the notes.`;
 
   const anthropicBody = {

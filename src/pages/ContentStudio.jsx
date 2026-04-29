@@ -31,11 +31,27 @@ export default function ContentStudio() {
   const [batting, setBatting] = useState([]);
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
+  // Scope for new generations + the displayed list. null = league-wide.
+  // Setting a team locks the next Generate batch to that team AND filters
+  // the visible ideas list so the dashboard reflects the active scope.
+  // Persisted in localStorage so a refresh keeps the user's last filter.
+  const [targetTeam, setTargetTeamState] = useState(() => {
+    try { return localStorage.getItem('blw_dashboard_target_team') || null; }
+    catch { return null; }
+  });
+  const setTargetTeam = (next) => {
+    setTargetTeamState(next || null);
+    try {
+      if (next) localStorage.setItem('blw_dashboard_target_team', next);
+      else localStorage.removeItem('blw_dashboard_target_team');
+    } catch {}
+  };
+
   // AI-generated content ideas — persisted server-side via /api/content-ideas
   // and fetched here. The store handles fetch/refetch/patch/dismiss with
-  // optimistic updates. Falls back to the deterministic `suggestions` list
-  // when empty so the dashboard still works without the Anthropic key.
-  const ideasStore = useContentIdeas({ team: null, limit: 24 });
+  // optimistic updates. Filtered by `targetTeam` so picking a team in the
+  // dropdown above scopes both new generations AND the visible list.
+  const ideasStore = useContentIdeas({ team: targetTeam, limit: 24 });
   const aiIdeas = ideasStore.ideas;
   const [ideasLoading, setIdeasLoading] = useState(false);
   const [ideasError, setIdeasError] = useState(null);
@@ -107,6 +123,12 @@ export default function ContentStudio() {
           // Master-admin notes — trades, draft, storylines. Empty string is
           // fine; the server prompt handles the no-context case.
           leagueContext: leagueCtx.notes || '',
+          // Top-level team scope from the dashboard's team picker. When
+          // set, /api/ideas locks every generated idea to that team and
+          // waives the spread-across-4-teams rule. Ignored when seedIdea
+          // is set (seed scoping takes precedence — they collapse to the
+          // same intent in practice).
+          team: targetTeam || null,
         }),
       });
       const data = await res.json();
@@ -285,7 +307,7 @@ export default function ContentStudio() {
           <Card>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
               <SectionHeading style={{ margin: 0 }}>Content ideas</SectionHeading>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {(usageToday.ideas || 0) > 0 && (
                   <span
                     title={`${usageToday.ideas} ideas generated in ${usageToday.ideasCalls || 1} call${(usageToday.ideasCalls || 1) === 1 ? '' : 's'} today. Resets at local midnight.`}
@@ -300,10 +322,47 @@ export default function ContentStudio() {
                     ✨ {usageToday.ideas} TODAY
                   </span>
                 )}
+                {/* Team scope picker — drives both the generation request
+                    and the visible list filter. Background drifts to the
+                    selected team's color when set, so the user has a
+                    persistent visual cue that the dashboard is in a
+                    scoped view (vs. league-wide). */}
+                {(() => {
+                  const t = targetTeam ? getTeam(targetTeam) : null;
+                  const tinted = !!t;
+                  return (
+                    <select
+                      value={targetTeam || 'ALL'}
+                      onChange={(e) => setTargetTeam(e.target.value === 'ALL' ? null : e.target.value)}
+                      title="Scope generation + visible list to one team. Pick a team to lock the next batch and filter the cards below."
+                      style={{
+                        background: tinted ? `${t.color}14` : colors.white,
+                        color: tinted ? t.dark || t.color : colors.text,
+                        border: `1px solid ${tinted ? `${t.color}55` : colors.border}`,
+                        borderRadius: radius.sm,
+                        padding: '5px 10px',
+                        fontFamily: fonts.condensed,
+                        fontSize: 11, fontWeight: 800,
+                        letterSpacing: 0.5,
+                        cursor: 'pointer', outline: 'none',
+                        transition: 'background 160ms ease, border-color 160ms ease, color 160ms ease',
+                      }}
+                    >
+                      <option value="ALL">ALL TEAMS</option>
+                      {TEAMS.map(t => (
+                        <option key={t.id} value={t.id}>{t.id} · {t.name}</option>
+                      ))}
+                    </select>
+                  );
+                })()}
                 <button
                   onClick={() => requestIdeas(null)}
                   disabled={ideasLoading || !dataLoaded}
-                  title="Generate a fresh batch of AI-powered content ideas using the current BLW state"
+                  title={
+                    targetTeam
+                      ? `Generate a fresh batch of AI ideas scoped to ${getTeam(targetTeam)?.name || targetTeam}`
+                      : 'Generate a fresh batch of AI-powered content ideas using the current BLW state'
+                  }
                   style={{
                     background: ideasLoading ? colors.bg : colors.redLight,
                     border: `1px solid ${ideasLoading ? colors.border : colors.redBorder}`,
@@ -314,7 +373,11 @@ export default function ContentStudio() {
                     letterSpacing: 0.6,
                   }}
                 >
-                  {ideasLoading ? '…THINKING' : aiIdeas.length ? '✨ REGENERATE' : '✨ GENERATE IDEAS'}
+                  {ideasLoading
+                    ? '…THINKING'
+                    : aiIdeas.length
+                      ? (targetTeam ? `✨ REGENERATE ${targetTeam}` : '✨ REGENERATE')
+                      : (targetTeam ? `✨ GENERATE ${targetTeam} IDEAS` : '✨ GENERATE IDEAS')}
                 </button>
               </div>
             </div>
