@@ -10,6 +10,7 @@ import { TierBadge } from '../tier-badges';
 import { useAuth, isAdminRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
+import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
 
 // Shared style for the teammate prev/next chips on the breadcrumb row.
 // Disabled state (no neighbor in that direction) renders as a muted chip
@@ -28,6 +29,51 @@ function teammateNavBtnStyle(enabled) {
     textTransform: 'uppercase',
     transition: 'background 120ms ease, border-color 120ms ease',
   };
+}
+
+// ─── Small format helpers used by the percentile bubble lists ──────────────
+// Keep them as plain functions (not memoised) — they run once per render
+// per row and the cost is trivial compared to the surrounding work.
+
+// Decimal percentage from the leaders feed comes through as a number in
+// 0..100 range (e.g. 14.9). Format as "14.9%" with one decimal.
+function formatPct(value) {
+  if (value == null || value === '' || !Number.isFinite(Number(value))) return '—';
+  const n = Number(value);
+  return `${n.toFixed(1)}%`;
+}
+
+// Per-PA / per-IP rate stat: numerator over denominator, formatted as a
+// 3-decimal proportion ("0.057"). Returns "—" when denominator is 0.
+function formatRate(num, denom) {
+  const n = Number(num);
+  const d = Number(denom);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return '—';
+  return (n / d).toFixed(3);
+}
+
+function safeRate(num, denom) {
+  const n = Number(num);
+  const d = Number(denom);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null;
+  return n / d;
+}
+
+// K:BB ratio — formatted as "X.XX" so even 12 strikeouts vs 1 walk
+// reads as "12.00" rather than "12". Returns "—" on no walks (avoids
+// dividing by zero); some pitchers will hit this and that's accurate.
+function formatRatio(num, denom) {
+  const n = Number(num);
+  const d = Number(denom);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return '—';
+  return (n / d).toFixed(2);
+}
+
+function safeRatio(num, denom) {
+  const n = Number(num);
+  const d = Number(denom);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null;
+  return n / d;
 }
 
 function buildStatLine(player) {
@@ -1734,40 +1780,83 @@ export default function PlayerPage() {
         />
       )}
 
-      {/* Stats Cards — curated set with per-stat league rank */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+      {/* Percentile bubble cards — Savant-style horizontal bars showing
+          where this player ranks across the league for each stat. The
+          bubble carries the percentile, the value sits on the right.
+          Direct stats use percentileFor(); rate stats (HR/PA, RBI/PA,
+          K:BB) use derivedPercentileFor() with an inline value getter
+          so we don't have to materialise them into the leaderboard
+          rows. Bars animate in with a 30ms-per-row stagger on mount. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 12 }}>
         {player.batting && (
           <Card>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-              <SectionHeading style={{ margin: 0 }}>Batting</SectionHeading>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
+              <SectionHeading style={{ margin: 0 }}>Batting · percentile</SectionHeading>
               <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
-                Rank across {bTotal} BLW batters
+                Across {bTotal} BLW batters
               </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              <StatTile label="AVG"  value={player.batting.avg}       rank={battingRanks?.avg}      total={bTotal} />
-              <StatTile label="H"    value={player.batting.hits}      rank={battingRanks?.hits}     total={bTotal} />
-              <StatTile label="HR"   value={player.batting.hr}        rank={battingRanks?.hr}       total={bTotal} />
-              <StatTile label="RBI"  value={player.batting.rbi}       rank={battingRanks?.rbi}      total={bTotal} />
-              <StatTile label="OBP"  value={player.batting.obp}       rank={battingRanks?.obp}      total={bTotal} />
-              <StatTile label="OPS+" value={player.batting.ops_plus}  rank={battingRanks?.ops_plus} total={bTotal} highlight />
-            </div>
+            <PercentileList
+              ariaLabel={`${player.name} batting percentiles`}
+              rows={[
+                { label: 'AVG',    value: player.batting.avg,
+                  percentile: percentileFor(battingLeaders, player.name, 'avg', 'desc', parseFloat) },
+                { label: 'OBP',    value: player.batting.obp,
+                  percentile: percentileFor(battingLeaders, player.name, 'obp', 'desc', parseFloat) },
+                { label: 'SLG',    value: player.batting.slg,
+                  percentile: percentileFor(battingLeaders, player.name, 'slg', 'desc', parseFloat) },
+                { label: 'OPS',    value: player.batting.ops,
+                  percentile: percentileFor(battingLeaders, player.name, 'ops', 'desc', parseFloat) },
+                { label: 'BB%',    value: formatPct(player.batting.bbPct),
+                  percentile: percentileFor(battingLeaders, player.name, 'bbPct', 'desc', Number) },
+                // K% is "lower is better" for hitters — fewer strikeouts is good.
+                { label: 'K%',     value: formatPct(player.batting.kPct),
+                  percentile: percentileFor(battingLeaders, player.name, 'kPct', 'asc', Number) },
+                { label: 'HR/PA',  value: formatRate(player.batting.hr, player.batting.pa),
+                  percentile: derivedPercentileFor(battingLeaders, player.name,
+                    (r) => safeRate(r.hr, r.pa), 'desc') },
+                { label: 'RBI/PA', value: formatRate(player.batting.rbi, player.batting.pa),
+                  percentile: derivedPercentileFor(battingLeaders, player.name,
+                    (r) => safeRate(r.rbi, r.pa), 'desc') },
+              ]}
+            />
           </Card>
         )}
         {player.pitching && (
           <Card>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-              <SectionHeading style={{ margin: 0 }}>Pitching</SectionHeading>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
+              <SectionHeading style={{ margin: 0 }}>Pitching · percentile</SectionHeading>
               <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
-                Rank across {pTotal} BLW pitchers
+                Across {pTotal} BLW pitchers
               </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-              <StatTile label="ERA"  value={player.pitching.era}  rank={pitchingRanks?.era}  total={pTotal} />
-              <StatTile label="WHIP" value={player.pitching.whip} rank={pitchingRanks?.whip} total={pTotal} />
-              <StatTile label="K/4"  value={player.pitching.k4}   rank={pitchingRanks?.k4}   total={pTotal} highlight />
-              <StatTile label="BB/4" value={player.pitching.bb4}  rank={pitchingRanks?.bb4}  total={pTotal} />
-            </div>
+            <PercentileList
+              ariaLabel={`${player.name} pitching percentiles`}
+              rows={[
+                // Lower-is-better stats use 'asc' direction so the percentile
+                // points at "good" the same way it does for hitter-friendly
+                // metrics — bubble at 95 means "elite," not "worst ERA in BLW".
+                { label: 'ERA',  value: player.pitching.era,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'era',  'asc', parseFloat) },
+                { label: 'WHIP', value: player.pitching.whip,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'whip', 'asc', parseFloat) },
+                { label: 'IP',   value: player.pitching.ip,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'ip',   'desc', parseFloat) },
+                { label: 'K',    value: player.pitching.k,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'k',    'desc', Number) },
+                { label: 'K/4',  value: player.pitching.k4,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'k4',   'desc', parseFloat) },
+                { label: 'BB',   value: player.pitching.bb,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'bb',   'asc', Number) },
+                { label: 'BB/4', value: player.pitching.bb4,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'bb4',  'asc', parseFloat) },
+                { label: 'FIP',  value: typeof player.pitching.fip === 'number' ? player.pitching.fip.toFixed(2) : player.pitching.fip,
+                  percentile: percentileFor(pitchingLeaders, player.name, 'fip',  'asc', parseFloat) },
+                { label: 'K:BB', value: player.pitching.kbb || formatRatio(player.pitching.k, player.pitching.bb),
+                  percentile: derivedPercentileFor(pitchingLeaders, player.name,
+                    (r) => safeRatio(r.k, r.bb), 'desc') },
+              ]}
+            />
           </Card>
         )}
       </div>
