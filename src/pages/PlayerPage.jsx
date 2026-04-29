@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { ContentIdeasSection } from '../content-ideas-section';
 import { colors, fonts, radius } from '../theme';
@@ -9,6 +9,26 @@ import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from 
 import { TierBadge } from '../tier-badges';
 import { useAuth, isAdminRole } from '../auth';
 import { useToast } from '../toast';
+import { fetchRecentGenerates } from '../cloud-sync';
+
+// Shared style for the teammate prev/next chips on the breadcrumb row.
+// Disabled state (no neighbor in that direction) renders as a muted chip
+// without hover affordances, so the layout stays balanced even at the
+// ends of the roster.
+function teammateNavBtnStyle(enabled) {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '4px 10px', borderRadius: 999,
+    background: enabled ? 'transparent' : 'transparent',
+    color: enabled ? '#475569' : '#94A3B8',
+    border: '1px solid #E5E7EB',
+    fontFamily: 'var(--font-condensed, system-ui)',
+    fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+    textDecoration: 'none', cursor: enabled ? 'pointer' : 'default',
+    textTransform: 'uppercase',
+    transition: 'background 120ms ease, border-color 120ms ease',
+  };
+}
 
 function buildStatLine(player) {
   if (player.batting) {
@@ -210,28 +230,60 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
         padding: '16px 8px', gap: 4,
       }}>
-        {tiles.map(t => (
-          <div key={t.label} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-            padding: '2px 4px',
-          }}>
-            <div style={{
-              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-              color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
-            }}>{t.label}</div>
-            <div style={{
-              fontFamily: fonts.heading, fontSize: 34,
-              color: t.highlight ? colors.accent : colors.text,
-              lineHeight: 1, letterSpacing: 0.5,
-            }}>{t.value ?? '—'}</div>
-            <div style={{
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
-              color: colors.textMuted, letterSpacing: 0.4,
+        {tiles.map(t => {
+          const pct = (t.rank && t.total && t.total > 0)
+            ? Math.max(0, Math.min(1, 1 - (t.rank - 1) / Math.max(1, t.total - 1)))
+            : null;
+          const fill = pct == null
+            ? colors.borderLight
+            : t.highlight
+              ? team.color
+              : (pct >= 0.85 ? '#22C55E' : pct >= 0.5 ? '#3B82F6' : pct >= 0.25 ? '#F59E0B' : '#94A3B8');
+          return (
+            <div key={t.label} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+              padding: '2px 4px',
             }}>
-              {t.rank ? `#${t.rank} / ${t.total}` : '—'}
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+              }}>{t.label}</div>
+              <div style={{
+                fontFamily: fonts.heading, fontSize: 34,
+                color: t.highlight ? colors.accent : colors.text,
+                lineHeight: 1, letterSpacing: 0.5,
+              }}>{t.value ?? '—'}</div>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
+                color: colors.textMuted, letterSpacing: 0.4,
+              }}>
+                {t.rank ? `#${t.rank} / ${t.total}` : '—'}
+              </div>
+              {/* Percentile bar — same idea as StatTile, just in the
+                  hero's headline stat strip. Tinted with team color when
+                  highlighted (the marquee stat for the player's role). */}
+              {pct != null && (
+                <div
+                  aria-hidden="true"
+                  title={`${Math.round(pct * 100)}th percentile`}
+                  style={{
+                    marginTop: 2, width: '78%',
+                    height: 3, borderRadius: 999,
+                    background: 'rgba(0,0,0,0.06)',
+                    position: 'relative', overflow: 'hidden',
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute', top: 0, left: 0, bottom: 0,
+                    width: `${pct * 100}%`,
+                    background: fill,
+                    borderRadius: 999,
+                  }} />
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -668,7 +720,7 @@ function ExtrasDropdown({ instagramHandle, funFacts }) {
   );
 }
 
-function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref, canEditPhoto, onEditPhoto, onAdjustPhoto }) {
+function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref, generateChips = [], canEditPhoto, onEditPhoto, onAdjustPhoto, prevPlayer = null, nextPlayer = null }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
   const height = formatHeight(v.heightIn);
@@ -679,6 +731,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
   const throws = v.throws ? ({ R: 'Right', L: 'Left' }[v.throws] || v.throws) : null;
   const batThrow = bats && throws ? `${bats}/${throws}` : (bats || throws || null);
   const birthplace = v.birthplace || null;
+  const nickname = v.nickname || null;
   const status = v.status || 'active';
   const statusColor = status === 'active' ? colors.success : status === 'injured' ? colors.warning : colors.textMuted;
   const statusLabel = status === 'active' ? 'Active' : status === 'injured' ? 'Injured' : 'Inactive';
@@ -861,6 +914,20 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               )}
             </div>
 
+            {/* Nickname — quiet italic line, shown only when present.
+                Lives directly under the lastName so it reads as part
+                of the identity ("Konnor Jaso · 'The Closer'"). */}
+            {nickname && (
+              <div style={{
+                marginTop: 6,
+                fontFamily: fonts.body, fontStyle: 'italic',
+                fontSize: 13, color: colors.textSecondary,
+                letterSpacing: 0.2,
+              }}>
+                "{nickname}"
+              </div>
+            )}
+
             {/* Team + jersey + position row */}
             <div style={{
               marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
@@ -903,19 +970,85 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                   </span>
                 </>
               )}
+              {/* Inline IG chip — surfaced from the dropdown that used to
+                  hide it. One click → opens the player's profile in a
+                  new tab. Only renders when the handle is set. */}
+              {player.instagramHandle && (
+                <>
+                  <span style={{ color: colors.textMuted, fontSize: 11 }}>·</span>
+                  <a
+                    href={`https://instagram.com/${player.instagramHandle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`@${player.instagramHandle} on Instagram`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                      letterSpacing: 0.4,
+                      padding: '2px 8px', borderRadius: radius.full,
+                      background: 'rgba(228, 64, 95, 0.10)',
+                      color: '#E4405F',
+                      border: '1px solid rgba(228, 64, 95, 0.30)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <span aria-hidden="true">◉</span>
+                    @{player.instagramHandle}
+                  </a>
+                </>
+              )}
             </div>
 
-            {/* Generate CTA + extras dropdown badge */}
+            {/* Fun-facts strip — quiet italic blurb directly under the
+                identity row. Used to be tucked behind the "More" dropdown,
+                but it's the single most personality-bearing piece of bio
+                we have, so we surface it inline now. Hidden when blank. */}
+            {player.funFacts && (
+              <div style={{
+                marginTop: 8,
+                fontFamily: fonts.body, fontSize: 12,
+                color: colors.textSecondary, lineHeight: 1.55,
+                whiteSpace: 'pre-wrap',
+                maxWidth: '60ch',
+                paddingLeft: 10, borderLeft: `2px solid ${team.color}40`,
+              }}>
+                {player.funFacts}
+              </div>
+            )}
+
+            {/* Generate CTAs — primary stat post + secondary template
+                chips (Highlight, Hype) so the user can pick the angle
+                without having to think about which template id it maps
+                to. Each chip is a deep-link into Generate with the
+                template + team + player pre-filled. */}
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Link to={generateHref} style={{ textDecoration: 'none' }}>
                 <RedButton style={{ padding: '8px 16px', fontSize: 12 }}>
                   ✦ Generate Stat Post
                 </RedButton>
               </Link>
-              <ExtrasDropdown
-                instagramHandle={player.instagramHandle}
-                funFacts={player.funFacts}
-              />
+              {generateChips.map(chip => (
+                <Link
+                  key={chip.template}
+                  to={chip.href}
+                  title={chip.title}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '7px 12px', borderRadius: radius.full,
+                    background: 'transparent',
+                    color: colors.textSecondary,
+                    border: `1px solid ${colors.border}`,
+                    cursor: 'pointer',
+                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                    letterSpacing: 0.4, textTransform: 'uppercase',
+                    textDecoration: 'none',
+                    transition: 'background 120ms ease, border-color 120ms ease',
+                  }}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 13 }}>{chip.icon}</span>
+                  {chip.label}
+                </Link>
+              ))}
             </div>
           </div>
         </div>
@@ -945,8 +1078,25 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
   );
 }
 
-// Single stat tile: value on top, label + league rank chip below
+// Single stat tile: value on top, label + league rank chip below, plus a
+// thin percentile bar at the bottom that fills proportionally to the
+// player's rank-out-of-N (1 = full, last = empty). Lets the user judge
+// "how good is this number?" at a glance without having to read the
+// "#57 / 64" chip.
 function StatTile({ label, value, rank, total, highlight }) {
+  // Percentile in [0..1]. Only render when we have both rank + total and
+  // total is reasonable. Bar uses team-tinted hue if highlighted (i.e. the
+  // marquee stat for this row), otherwise a neutral. Color shifts from
+  // muted at 0 to vibrant at 1 so a top-5 stat looks alive.
+  const pct = (rank && total && total > 0)
+    ? Math.max(0, Math.min(1, 1 - (rank - 1) / Math.max(1, total - 1)))
+    : null;
+  const barFillColor = pct == null
+    ? colors.borderLight
+    : highlight
+      ? colors.accent
+      : (pct >= 0.85 ? '#22C55E' : pct >= 0.5 ? '#3B82F6' : pct >= 0.25 ? '#F59E0B' : '#94A3B8');
+
   return (
     <div style={{
       padding: '12px 10px',
@@ -963,12 +1113,36 @@ function StatTile({ label, value, rank, total, highlight }) {
         <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8 }}>{label}</span>
         <RankChip rank={rank} total={total} />
       </div>
+      {/* Percentile bar — visible only when rank/total available. Rendered
+          as a 4px-tall track at the bottom edge of the tile so it acts as
+          a quiet "stat health" indicator without competing with the value. */}
+      {pct != null && (
+        <div
+          aria-hidden="true"
+          title={`${Math.round(pct * 100)}th percentile in BLW`}
+          style={{
+            marginTop: 4,
+            height: 4, borderRadius: 999,
+            background: 'rgba(0,0,0,0.06)',
+            position: 'relative', overflow: 'hidden',
+          }}
+        >
+          <div style={{
+            position: 'absolute', top: 0, left: 0, bottom: 0,
+            width: `${pct * 100}%`,
+            background: barFillColor,
+            borderRadius: 999,
+            transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+          }} />
+        </div>
+      )}
     </div>
   );
 }
 
 export default function PlayerPage() {
   const { slug, lastName } = useParams();
+  const navigate = useNavigate();
   const team = getTeam(slug);
   const toast = useToast();
   const { role } = useAuth();
@@ -995,6 +1169,15 @@ export default function PlayerPage() {
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [positionEditorOpen, setPositionEditorOpen] = useState(false);
   const [savingPosition, setSavingPosition] = useState(false);
+  // Recent posts featuring this player. Pulled from the global generate-log
+  // (last 100 posts) and filtered client-side on settings.fields.playerName
+  // so we don't need a new index. Soft-fails to an empty list when cloud
+  // isn't configured.
+  const [recentPosts, setRecentPosts] = useState([]);
+  // Teammate roster (alphabetical by lastName) — drives prev/next navigation.
+  // Populated in the same mount effect that loads `player`. We don't need
+  // media here, just the names → slugs mapping for the nav links.
+  const [teammates, setTeammates] = useState([]);
 
   useEffect(() => {
     let cancel = false;
@@ -1026,6 +1209,37 @@ export default function PlayerPage() {
           const mediaJersey = m.find(x => x.num)?.num || '';
           setPlayer({ ...p, num: p.num || mediaJersey });
           setMedia(m);
+          // Build the teammate roster (alphabetical by lastName) so prev/
+          // next navigation works. getTeamRoster handles cousin pairs and
+          // canonical-roster injection so even players without API stats
+          // appear. We pass an empty mediaList here — we only need names
+          // and slugs for the nav links.
+          try {
+            const roster = getTeamRoster(team.id, [], manualList || []);
+            setTeammates(roster);
+          } catch { setTeammates([]); }
+          // Pull recent generates and filter to posts that named this
+          // player in their template fields. We pull a generous 100 so
+          // even infrequently-spotlit players have a chance to surface a
+          // few results. Filter is name-equality (case-insensitive) and
+          // also matches the player's lastName as a fallback for posts
+          // whose playerName field is missing/short.
+          fetchRecentGenerates(100).then(posts => {
+            if (cancel) return;
+            const targetName = (p.name || '').trim().toLowerCase();
+            const targetLast = (p.lastName || '').trim().toLowerCase();
+            const matches = posts.filter(post => {
+              if (post.team && post.team !== team.id) return false;
+              const fields = post?.settings?.fields || {};
+              const pn = String(fields.playerName || '').trim().toLowerCase();
+              if (!pn) return false;
+              if (targetName && pn === targetName) return true;
+              // Loose fallback: same lastName + (no FI conflict OR matching FI)
+              const lastInPost = pn.split(/\s+/).pop();
+              return targetLast && lastInPost === targetLast;
+            });
+            setRecentPosts(matches.slice(0, 12));
+          }).catch(() => { /* soft-fail */ });
         } else {
           setPlayer(null);
         }
@@ -1198,6 +1412,37 @@ export default function PlayerPage() {
   const statLine = buildStatLine(player);
   if (statLine) generateParams.set('statLine', statLine);
 
+  // Secondary quick-action chips — one-click deep-links into Generate
+  // with the right template selected and the player pre-filled. Skipped
+  // for templates that don't apply to this player (e.g., Hype's quote
+  // text needs a player; Highlight wants a stat line).
+  const buildChipHref = (templateId, extra = {}) => {
+    const p = new URLSearchParams();
+    p.set('template', templateId);
+    p.set('team', team.id);
+    p.set('platform', 'feed');
+    p.set('playerName', player.name);
+    if (player.num) p.set('number', player.num);
+    if (extra.statLine && statLine) p.set('statLine', statLine);
+    return `/generate?${p.toString()}`;
+  };
+  const generateChips = [
+    {
+      template: 'highlight',
+      label: 'Highlight',
+      icon: '✶',
+      title: `Open Generate with the Highlight template pre-filled for ${player.name}`,
+      href: buildChipHref('highlight', { statLine: true }),
+    },
+    {
+      template: 'hype',
+      label: 'Hype',
+      icon: '⚡',
+      title: `Open Generate with the Hype template pre-filled for ${player.name}`,
+      href: buildChipHref('hype'),
+    },
+  ];
+
   // Avatar resolution — delegate to the canonical resolver in
   // media-store.js so the player hero and team-page roster card always
   // pick the same photo. Feeds the FULL local media pool (not just the
@@ -1233,12 +1478,90 @@ export default function PlayerPage() {
 
   const playerRank = player.ranking?.currentRank || null;
 
+  // ─── Teammate prev/next nav ───────────────────────────────────────────────
+  // Locate this player in the alphabetical roster, then surface link chips
+  // (and ←/→ keyboard shortcuts) that walk to the previous and next teammate.
+  const teammateNav = useMemo(() => {
+    if (!teammates.length || !player?.lastName) return { prev: null, next: null };
+    const norm = (s) => String(s || '').toLowerCase();
+    const targetName = norm(player.name);
+    const targetLast = norm(player.lastName);
+    const idx = teammates.findIndex(t =>
+      norm(t.name) === targetName || norm(t.lastName) === targetLast
+    );
+    if (idx < 0) return { prev: null, next: null };
+    const prev = idx > 0 ? teammates[idx - 1] : null;
+    const next = idx < teammates.length - 1 ? teammates[idx + 1] : null;
+    const toLink = (t) => {
+      if (!t) return null;
+      const slug = playerSlug({
+        firstName: t.firstName,
+        firstInitial: t.firstInitial,
+        lastName: t.lastName,
+      });
+      return {
+        name: t.name,
+        firstName: t.firstName,
+        lastName: t.lastName,
+        href: `/teams/${team.slug}/players/${slug}`,
+      };
+    };
+    return { prev: toLink(prev), next: toLink(next), idx, total: teammates.length };
+  }, [teammates, player?.name, player?.lastName, team?.slug]);
+
+  // Keyboard shortcuts: ← prev, → next. Skip when focus is in an input/
+  // textarea so typing in caption editors / search bars stays unaffected.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+      if (e.key === 'ArrowLeft' && teammateNav.prev) {
+        e.preventDefault();
+        navigate(teammateNav.prev.href);
+      } else if (e.key === 'ArrowRight' && teammateNav.next) {
+        e.preventDefault();
+        navigate(teammateNav.next.href);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [teammateNav.prev, teammateNav.next, navigate]);
+
+  // Sticky mini-hero — fades in once the full hero scrolls out of view.
+  // We attach the observer to the hero card via a ref further down.
+  const heroRef = useRef(null);
+  const [heroOutOfView, setHeroOutOfView] = useState(false);
+  useEffect(() => {
+    const node = heroRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return undefined;
+    const obs = new IntersectionObserver(
+      ([entry]) => setHeroOutOfView(!entry.isIntersecting),
+      // Trigger when the BOTTOM of the hero crosses the top of the
+      // viewport (rootMargin shifts the trigger line down by ~80px so
+      // the mini hero appears just AFTER the real hero leaves the
+      // visible area, not the moment its bottom edge clips). The
+      // negative bottom margin makes the bar reappear as soon as the
+      // hero comes back into view from below on a scroll-up.
+      { rootMargin: '-80px 0px 0px 0px', threshold: 0 }
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [player?.name]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {ambiguityBanner}
 
-      {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontFamily: fonts.condensed }}>
+      {/* Breadcrumb + teammate nav. Left side links back to the team
+          page, right side has prev/next teammate chips. ←/→ keyboard
+          shortcuts also fire (when no input has focus) — see the
+          teammateNav effect above. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        fontSize: 12, fontFamily: fonts.condensed,
+        flexWrap: 'wrap', justifyContent: 'space-between',
+      }}>
         <Link to={`/teams/${team.slug}`} style={{
           color: colors.accent, textDecoration: 'none', fontWeight: 700,
           display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -1247,6 +1570,53 @@ export default function PlayerPage() {
           <TeamLogo teamId={team.id} size={20} rounded="square" />
           {team.name.toUpperCase()}
         </Link>
+        {(teammateNav.prev || teammateNav.next) && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontFamily: fonts.condensed,
+          }}>
+            {teammateNav.prev ? (
+              <Link
+                to={teammateNav.prev.href}
+                title={`Previous teammate: ${teammateNav.prev.name} (← key)`}
+                style={teammateNavBtnStyle(true)}
+              >
+                <span aria-hidden="true">‹</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
+                  {teammateNav.prev.lastName}
+                </span>
+              </Link>
+            ) : (
+              <span style={teammateNavBtnStyle(false)}>
+                <span aria-hidden="true">‹</span>
+                <span>Start of roster</span>
+              </span>
+            )}
+            <span style={{
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+              color: colors.textMuted, letterSpacing: 0.4,
+            }}>
+              {teammateNav.idx + 1} / {teammateNav.total}
+            </span>
+            {teammateNav.next ? (
+              <Link
+                to={teammateNav.next.href}
+                title={`Next teammate: ${teammateNav.next.name} (→ key)`}
+                style={teammateNavBtnStyle(true)}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
+                  {teammateNav.next.lastName}
+                </span>
+                <span aria-hidden="true">›</span>
+              </Link>
+            ) : (
+              <span style={teammateNavBtnStyle(false)}>
+                <span>End of roster</span>
+                <span aria-hidden="true">›</span>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Player Header — ESPN-style 4-column layout.
@@ -1254,22 +1624,41 @@ export default function PlayerPage() {
           Middle: vitals (HT/WT, birthdate, bats/throws, birthplace, status)
           Right: season stats card with league ranks
           Tier badge floats at top-right of the name column. */}
-      <PlayerHero
+      <div ref={heroRef}>
+        <PlayerHero
+          player={player}
+          team={team}
+          avatarUrl={avatarUrl}
+          profileOffsetX={player.profileOffsetX}
+          profileOffsetY={player.profileOffsetY}
+          profileZoom={player.profileZoom}
+          playerRank={playerRank}
+          battingRanks={battingRanks}
+          pitchingRanks={pitchingRanks}
+          bTotal={bTotal}
+          pTotal={pTotal}
+          generateHref={`/generate?${generateParams.toString()}`}
+          generateChips={generateChips}
+          canEditPhoto={isAdmin}
+          onEditPhoto={openPhotoPicker}
+          onAdjustPhoto={() => setPositionEditorOpen(true)}
+        />
+      </div>
+
+      {/* Sticky mini-hero — fades in once the full hero scrolls out of
+          view so the primary "Generate Stat Post" CTA stays one click
+          away while you're reading down the page. Tucks itself just below
+          the topbar (which is sticky at top:0 with z-index 40 in App.jsx),
+          so it sits at top:60 with z-index 30 — under modals/banners. */}
+      <StickyMiniHero
+        active={heroOutOfView}
         player={player}
         team={team}
         avatarUrl={avatarUrl}
         profileOffsetX={player.profileOffsetX}
         profileOffsetY={player.profileOffsetY}
         profileZoom={player.profileZoom}
-        playerRank={playerRank}
-        battingRanks={battingRanks}
-        pitchingRanks={pitchingRanks}
-        bTotal={bTotal}
-        pTotal={pTotal}
         generateHref={`/generate?${generateParams.toString()}`}
-        canEditPhoto={isAdmin}
-        onEditPhoto={openPhotoPicker}
-        onAdjustPhoto={() => setPositionEditorOpen(true)}
       />
 
       {/* Admin-only profile-picture picker modal. Shows the full set of
@@ -1343,6 +1732,14 @@ export default function PlayerPage() {
         )}
       </div>
 
+      {/* Recent posts featuring this player — pulled from the global
+          generate-log so users can see at a glance what content has
+          already been made about this player. Helps avoid duplicates.
+          Self-hides when no posts match. */}
+      {recentPosts.length > 0 && (
+        <PlayerRecentPosts posts={recentPosts} team={team} player={player} />
+      )}
+
       {/* Content ideas about this player — only shows when there are
           actually ideas tagged for this player (matched server-side via
           player_last_name extracted from prefill.playerName). The section
@@ -1411,5 +1808,184 @@ export default function PlayerPage() {
         ))}
       </Card>
     </div>
+  );
+}
+
+// ─── Sticky mini-hero ───────────────────────────────────────────────────────
+// Compact strip that slides down from below the topbar once the full hero
+// scrolls out of view. Carries the avatar + name + team chip + the primary
+// Generate CTA so the user never has to scroll back up to start a post.
+function StickyMiniHero({ active, player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, generateHref }) {
+  const playerFirst = player.firstName || (player.name || '').split(' ')[0] || '';
+  const playerLast = player.lastName || '';
+  return (
+    <div
+      aria-hidden={!active}
+      style={{
+        position: 'fixed',
+        top: 60,                       // sits just below the global TopBar
+        left: 0, right: 0,
+        zIndex: 30,                    // below modals (200+) and banners (50)
+        // Slide-down + fade-in. When inactive we still keep the element in
+        // the tree so the transition runs both ways smoothly.
+        transform: active ? 'translateY(0)' : 'translateY(-100%)',
+        opacity: active ? 1 : 0,
+        pointerEvents: active ? 'auto' : 'none',
+        transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease',
+        background: colors.white,
+        borderBottom: `2px solid ${team.color}`,
+        boxShadow: '0 4px 14px rgba(17, 24, 39, 0.08)',
+      }}
+    >
+      <div style={{
+        maxWidth: 1200, margin: '0 auto',
+        padding: '8px 24px',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <div style={{ flexShrink: 0, width: 36, height: 36 }}>
+          <PositionedAvatar
+            src={avatarUrl}
+            offsetX={profileOffsetX}
+            offsetY={profileOffsetY}
+            zoom={profileZoom}
+            size={36}
+            borderColor={team.color}
+            borderWidth={2}
+            fallbackBg={`linear-gradient(135deg, ${team.color}, ${team.dark})`}
+            fallback={
+              <span style={{
+                color: '#fff', fontFamily: fonts.heading,
+                fontSize: 13, letterSpacing: 0.4,
+              }}>{playerLast.slice(0, 2).toUpperCase()}</span>
+            }
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: fonts.heading,
+            fontSize: 16, lineHeight: 1,
+            color: colors.text, letterSpacing: 0.6,
+            textTransform: 'uppercase',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {playerFirst} {playerLast}
+          </span>
+          <TeamLogo teamId={team.id} size={16} rounded="square" />
+          <span style={{
+            fontFamily: fonts.body, fontSize: 11, color: colors.textSecondary, fontWeight: 600,
+          }}>{team.name}{player.num ? ` · #${player.num}` : ''}</span>
+        </div>
+        <Link to={generateHref} style={{ textDecoration: 'none', flexShrink: 0 }}>
+          <RedButton style={{ padding: '6px 14px', fontSize: 11 }}>
+            ✦ Generate Stat Post
+          </RedButton>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ─── Recent posts featuring this player ─────────────────────────────────────
+// A small horizontal grid of thumbnails pulled from the global generate-log,
+// filtered to posts where settings.fields.playerName matches this player.
+// Useful for "have we already made a Jaso highlight this week?" — clicking
+// a thumbnail re-opens the same composition in Generate.
+function PlayerRecentPosts({ posts, team, player }) {
+  const timeAgo = (d) => {
+    if (!d) return '';
+    const diff = Date.now() - d.getTime();
+    if (diff < 60_000) return 'Just now';
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+  const buildRegenerateLink = (post) => {
+    const params = new URLSearchParams();
+    if (post.templateType) params.set('template', post.templateType);
+    if (post.team) params.set('team', post.team);
+    if (post.platform) params.set('platform', post.platform);
+    if (post.settings?.fields) {
+      for (const [k, v] of Object.entries(post.settings.fields)) {
+        if (v != null && v !== '') params.set(k, v);
+      }
+    }
+    return `/generate?${params.toString()}`;
+  };
+  const playerFirst = player.firstName || (player.name || '').split(' ')[0] || '';
+  const titleName = `${playerFirst} ${player.lastName}`.trim();
+
+  return (
+    <Card style={{ padding: 16 }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline',
+        justifyContent: 'space-between', gap: 10,
+        flexWrap: 'wrap', marginBottom: 10,
+      }}>
+        <SectionHeading style={{ margin: 0 }}>Recent posts featuring {titleName}</SectionHeading>
+        <span style={{
+          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+          letterSpacing: 0.5, color: colors.textMuted,
+        }}>{posts.length} POST{posts.length === 1 ? '' : 'S'} · CHECK BEFORE DUPLICATING</span>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+        gap: 10,
+      }}>
+        {posts.map(post => (
+          <Link
+            key={post.id}
+            to={buildRegenerateLink(post)}
+            title={`${post.templateType || 'post'} · ${post.platform || ''} · ${timeAgo(post.createdAt)} · click to re-open in Generate`}
+            style={{ textDecoration: 'none', display: 'block' }}
+          >
+            <div style={{
+              borderRadius: radius.base, overflow: 'hidden',
+              border: `1px solid ${colors.borderLight}`,
+              background: '#1A1A22',
+              aspectRatio: '1 / 1',
+              position: 'relative',
+            }}>
+              {post.thumbnailUrl ? (
+                <img
+                  src={post.thumbnailUrl}
+                  alt=""
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              ) : (
+                <div style={{
+                  width: '100%', height: '100%',
+                  background: `linear-gradient(135deg, ${team.color}, ${team.dark})`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: fonts.heading, fontSize: 24, color: team.accent || '#fff',
+                  letterSpacing: 1,
+                }}>{team.id}</div>
+              )}
+            </div>
+            <div style={{ padding: '6px 2px 0' }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: colors.text,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {post.templateType || 'post'}
+              </div>
+              <div style={{
+                fontSize: 10, fontFamily: fonts.condensed,
+                color: colors.textMuted, letterSpacing: 0.3,
+                display: 'flex', justifyContent: 'space-between',
+              }}>
+                <span>{post.platform || '—'}</span>
+                <span>{timeAgo(post.createdAt)}</span>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }
