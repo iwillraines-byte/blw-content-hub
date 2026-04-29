@@ -867,11 +867,20 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
       }}>
         {/* Col 1 — Profile + name + team chip. flex:1 so name breathes if there's space. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: '2 1 300px', minWidth: 260 }}>
+          {/* Avatar column — circle plus the Instagram chip stacked
+              below. Vertical flex so the IG handle reads as part of the
+              player's identity, not their stat row. Gap leaves enough
+              room for the tier badge that overflows the circle on the
+              bottom-right (extends ~29px below the wrapper). */}
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            flexShrink: 0, gap: 36,
+          }}>
           {/* Profile circle — wrapped in position:relative so the tier
               badge can overlay on the bottom-right. Circle bumped to
               128px to give the 80px tier badge more landing room without
               eating too much of the photo/initials. */}
-          <div style={{ position: 'relative', flexShrink: 0, width: 128, height: 128 }}>
+          <div style={{ position: 'relative', width: 128, height: 128 }}>
             <PositionedAvatar
               src={avatarUrl}
               offsetX={profileOffsetX}
@@ -954,6 +963,34 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                 <TierBadge rank={playerRank} size={96} />
               </div>
             )}
+          </div>
+          {/* IG chip — sits below the avatar (and clears the tier badge
+              via the column gap). One click → opens the player's
+              profile in a new tab. Hidden when the handle is unset. */}
+          {player.instagramHandle && (
+            <a
+              href={`https://instagram.com/${player.instagramHandle}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`@${player.instagramHandle} on Instagram`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                letterSpacing: 0.4,
+                padding: '3px 10px', borderRadius: radius.full,
+                background: 'rgba(228, 64, 95, 0.10)',
+                color: '#E4405F',
+                border: '1px solid rgba(228, 64, 95, 0.30)',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+                maxWidth: 140,
+                overflow: 'hidden', textOverflow: 'ellipsis',
+              }}
+            >
+              <span aria-hidden="true">◉</span>
+              @{player.instagramHandle}
+            </a>
+          )}
           </div>
           <div style={{ minWidth: 0 }}>
             {firstName && (
@@ -1047,33 +1084,6 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                     </span>
                     <span>Composite</span>
                   </span>
-                </>
-              )}
-              {/* Inline IG chip — surfaced from the dropdown that used to
-                  hide it. One click → opens the player's profile in a
-                  new tab. Only renders when the handle is set. */}
-              {player.instagramHandle && (
-                <>
-                  <span style={{ color: colors.textMuted, fontSize: 11 }}>·</span>
-                  <a
-                    href={`https://instagram.com/${player.instagramHandle}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={`@${player.instagramHandle} on Instagram`}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                      letterSpacing: 0.4,
-                      padding: '2px 8px', borderRadius: radius.full,
-                      background: 'rgba(228, 64, 95, 0.10)',
-                      color: '#E4405F',
-                      border: '1px solid rgba(228, 64, 95, 0.30)',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    <span aria-hidden="true">◉</span>
-                    @{player.instagramHandle}
-                  </a>
                 </>
               )}
             </div>
@@ -1585,13 +1595,6 @@ export default function PlayerPage() {
       icon: '✶',
       title: `Open Generate with the Highlight template pre-filled for ${player.name}`,
       href: buildChipHref('highlight', { statLine: true }),
-    },
-    {
-      template: 'hype',
-      label: 'Hype',
-      icon: '⚡',
-      title: `Open Generate with the Hype template pre-filled for ${player.name}`,
-      href: buildChipHref('hype'),
     },
   ];
 
