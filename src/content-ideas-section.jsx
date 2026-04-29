@@ -15,6 +15,7 @@ import { useContentIdeas } from './content-ideas-store';
 import { useToast } from './toast';
 import { getRequests, saveRequests } from './requests-store';
 import IdeaCard from './idea-card';
+import { Pager, useIdeaPagination } from './idea-pager';
 import { useLeagueContext } from './league-context';
 
 export function ContentIdeasSection({
@@ -29,6 +30,7 @@ export function ContentIdeasSection({
   const leagueCtx = useLeagueContext();
   const ideasStore = useContentIdeas({ team, player, limit });
   const ideas = ideasStore.ideas;
+  const { pageItems, pagerProps } = useIdeaPagination(ideas);
 
   // Per-card "queued" badge state — same shape as the dashboard's so the
   // IdeaCard renders the post-queue chip identically.
@@ -136,22 +138,25 @@ export function ContentIdeasSection({
       )}
 
       {ideas.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
-          {ideas.map(idea => (
-            <IdeaCard
-              key={idea.id}
-              idea={idea}
-              queuedRequestId={queuedIdeas[idea.id]}
-              ideasLoading={false}
-              leagueContext={leagueCtx.notes || ''}
-              onQueue={queueIdeaAsRequest}
-              onOpenInGenerate={(i) => navigate(buildLink(i))}
-              onIdeaUpdate={ideasStore.patchIdea}
-              // Intentionally NO onMoreLikeThis — that's a dashboard-only
-              // affordance (it needs the full BLW context to seed a regen).
-            />
-          ))}
-        </div>
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
+            {pageItems.map(idea => (
+              <IdeaCard
+                key={idea.id}
+                idea={idea}
+                queuedRequestId={queuedIdeas[idea.id]}
+                ideasLoading={false}
+                leagueContext={leagueCtx.notes || ''}
+                onQueue={queueIdeaAsRequest}
+                onOpenInGenerate={(i) => navigate(buildLink(i))}
+                onIdeaUpdate={ideasStore.patchIdea}
+                // Intentionally NO onMoreLikeThis — that's a dashboard-only
+                // affordance (it needs the full BLW context to seed a regen).
+              />
+            ))}
+          </div>
+          <Pager {...pagerProps} />
+        </>
       )}
     </Card>
   );

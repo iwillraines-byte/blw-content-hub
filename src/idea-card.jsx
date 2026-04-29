@@ -307,21 +307,40 @@ export default function IdeaCard({
         {/* Push the right-side actions to the far edge */}
         <span style={{ flex: 1 }} />
 
-        {idea.aiGenerated && onMoreLikeThis && (
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMoreLikeThis(idea); }}
-            disabled={ideasLoading}
-            title="Generate 3 more ideas in the same style"
-            style={{
-              background: 'transparent',
-              border: `1px solid ${colors.borderLight}`,
-              color: colors.textSecondary,
-              borderRadius: radius.sm, padding: '5px 9px',
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-              cursor: ideasLoading ? 'wait' : 'pointer',
-            }}
-          >+ More like this</button>
-        )}
+        {idea.aiGenerated && onMoreLikeThis && (() => {
+          // Label the button by the actual scope of the regen so the user
+          // knows whether they're getting more about the SAME player, the
+          // SAME team, or just BLW-wide variants.
+          const playerName = (idea?.prefill?.playerName || '').trim();
+          const playerLast = playerName ? playerName.split(/\s+/).pop() : '';
+          const isPlayer = !!playerLast;
+          const isTeam = !!(idea.team && idea.team !== 'BLW');
+          const label = isPlayer
+            ? `+ More about ${playerLast}`
+            : isTeam
+              ? `+ More about ${idea.team}`
+              : '+ More like this';
+          const tip = isPlayer
+            ? `Generate 3 more ideas about ${playerName}`
+            : isTeam
+              ? `Generate 3 more ideas scoped to ${idea.team}`
+              : 'Generate 3 more ideas in the same style';
+          return (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMoreLikeThis(idea); }}
+              disabled={ideasLoading}
+              title={tip}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${colors.borderLight}`,
+                color: colors.textSecondary,
+                borderRadius: radius.sm, padding: '5px 9px',
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+                cursor: ideasLoading ? 'wait' : 'pointer',
+              }}
+            >{label}</button>
+          );
+        })()}
 
         {hasCaptions ? (
           <button

@@ -11,6 +11,7 @@ import { getUsageToday, recordUsage } from '../ai-usage-store';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
 import IdeaCard from '../idea-card';
+import { Pager, useIdeaPagination, IDEAS_PAGE_SIZE } from '../idea-pager';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
 import { ViewAsPicker } from '../view-as';
 import { useContentIdeas } from '../content-ideas-store';
@@ -83,13 +84,9 @@ export default function ContentStudio() {
 
   // Kick off an ideas request. `seedIdea` is optional — passed through to the
   // API as the "more like this" seed. Results PREpend to aiIdeas so newer
-  // batches bubble to the top of the list.
-  // Cap on visible cards. Generation calls request this same number, and the
-  // render also slices to it — so even if "More like this" prepends extras,
-  // only the freshest MAX_VISIBLE_IDEAS render. Keeps the surface focused.
-  const MAX_VISIBLE_IDEAS = 4;
-
-  const requestIdeas = async (seedIdea = null, count = MAX_VISIBLE_IDEAS) => {
+  // batches bubble to the top of the list. Generation requests a single page
+  // worth (IDEAS_PAGE_SIZE) per click; older batches stay paginated below.
+  const requestIdeas = async (seedIdea = null, count = IDEAS_PAGE_SIZE) => {
     setIdeasLoading(true);
     setIdeasError(null);
     try {
@@ -216,6 +213,11 @@ export default function ContentStudio() {
   const oldestDays       = oldestPendingDays(requests);
   const topSuggestion    = suggestions[0];
 
+  // Pagination — applied to whichever list is currently displayed
+  // (aiIdeas wins; deterministic suggestions fall through if empty).
+  const ideasList = aiIdeas.length > 0 ? aiIdeas : suggestions;
+  const { pageItems: ideasPageItems, pagerProps: ideasPagerProps } = useIdeaPagination(ideasList);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="Dashboard" subtitle="Draft, design, and track BLW content across every team" />
@@ -332,8 +334,13 @@ export default function ContentStudio() {
                 </div>}
               </div>
             )}
+            {/* Paginated view — shows IDEAS_PAGE_SIZE cards at a time with
+                ‹ / › arrows when the rolling 14-day store has more. The
+                pager hook auto-resets to page 1 when fresh ideas are
+                prepended (so "More about Jaso" actually shows the new
+                ones, not whatever page you were idling on). */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {(aiIdeas.length > 0 ? aiIdeas : suggestions).slice(0, MAX_VISIBLE_IDEAS).map(s => (
+              {ideasPageItems.map(s => (
                 <IdeaCard
                   key={s.id}
                   idea={s}
@@ -346,36 +353,38 @@ export default function ContentStudio() {
                   onIdeaUpdate={patchIdea}
                 />
               ))}
-              {dataLoaded && suggestions.length === 0 && aiIdeas.length === 0 && (
-                /* Empty state — gives the user one clear next action plus
-                   context about what populates this list automatically. */
-                <div style={{
-                  padding: '32px 20px', textAlign: 'center',
-                  background: colors.bg, borderRadius: radius.base,
-                  border: `1px dashed ${colors.borderLight}`,
-                }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>✨</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
-                    No content ideas yet
-                  </div>
-                  <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 280, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
-                    Generate a fresh AI batch, or wait for live stats to seed this list once games start.
-                  </div>
-                  <button
-                    onClick={() => requestIdeas(null)}
-                    className="btn-primary"
-                    style={{
-                      border: 'none', borderRadius: radius.base,
-                      padding: '8px 20px', fontFamily: fonts.body,
-                      fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Generate ideas
-                  </button>
-                </div>
-              )}
             </div>
+            <Pager {...ideasPagerProps} />
+            {dataLoaded && suggestions.length === 0 && aiIdeas.length === 0 && (
+              /* Empty state — gives the user one clear next action plus
+                 context about what populates this list automatically. */
+              <div style={{
+                padding: '32px 20px', textAlign: 'center',
+                background: colors.bg, borderRadius: radius.base,
+                border: `1px dashed ${colors.borderLight}`,
+                marginTop: 12,
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>✨</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+                  No content ideas yet
+                </div>
+                <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 280, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+                  Generate a fresh AI batch, or wait for live stats to seed this list once games start.
+                </div>
+                <button
+                  onClick={() => requestIdeas(null)}
+                  className="btn-primary"
+                  style={{
+                    border: 'none', borderRadius: radius.base,
+                    padding: '8px 20px', fontFamily: fonts.body,
+                    fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Generate ideas
+                </button>
+              </div>
+            )}
           </Card>
         </div>
 

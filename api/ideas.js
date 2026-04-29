@@ -212,11 +212,31 @@ ${rankMovers || '(none notable this week)'}
 
 ${leagueNarrativesBlock}`;
 
+  // Extract the seed's scoping signals so we can lock follow-up ideas to
+  // the SAME team (and same player when the seed is player-scoped). The
+  // previous prompt explicitly told the model to "vary the team" — exact
+  // opposite of what users actually want when they hit "More like this."
+  const seedTeam = seedIdea?.team && seedIdea.team !== 'BLW' ? seedIdea.team : null;
+  const seedPlayerName = (seedIdea?.prefill?.playerName || '').trim();
+  const seedPlayerLast = seedPlayerName ? seedPlayerName.split(/\s+/).pop() : '';
+
+  const seedScopeBlock = (() => {
+    if (!seedIdea) return '';
+    const parts = [];
+    if (seedTeam) parts.push(`MUST scope every idea to team ${seedTeam}. Do NOT pick a different team.`);
+    if (seedPlayerLast) parts.push(`The seed is about ${seedPlayerName}. Generate ideas focused on ${seedPlayerLast} — different angles on the same player (a stat highlight, a hype moment, a comparison, a milestone) — OR on their direct teammates on ${seedTeam || 'their team'}. Do NOT switch to other teams' players.`);
+    if (!seedPlayerLast && seedTeam) parts.push(`Spread across different players and storylines on ${seedTeam}. Don't repeat the seed's exact angle.`);
+    // The system prompt's "at least 4 different teams" rule explicitly does
+    // NOT apply to seeded regenerations — the whole point is to drill into
+    // one team or one player.
+    parts.push('IGNORE the system prompt rule about referencing at least 4 different teams. This regeneration is intentionally narrow-scoped.');
+    return parts.length ? `\nSEED SCOPE — REQUIRED:\n- ${parts.join('\n- ')}\n` : '';
+  })();
+
   const userInstruction = seedIdea
     ? `${stateBlock}
 
-Generate ${count} more content ideas IN THE SAME STYLE as this seed idea. Vary the angle, team, and specifics — don't duplicate it.
-
+Generate ${count} more content ideas in the SAME register as this seed. Vary the angle and specifics — don't duplicate the seed itself.${seedScopeBlock}
 SEED IDEA:
 ${JSON.stringify(seedIdea, null, 2)}`
     : `${stateBlock}
