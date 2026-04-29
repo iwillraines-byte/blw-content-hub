@@ -4,6 +4,7 @@ import { TEAMS, TEMPLATES, getTeam, playerSlug } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, StatusBadge, PriorityDot, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getRequests, saveRequests, getComments, saveComments, extractIdeaFromNote, buildGenerateLinkFromIdea, suggestAssetTypesForIdea } from '../requests-store';
+import { stashIdeaForGenerate } from '../idea-context-store';
 
 const STATUS_LABELS = {
   pending: 'Pending',
@@ -226,8 +227,9 @@ export default function Requests() {
         const detailOpen = !!expandedDetail[r.id];
         const teamMeta = getTeam(r.team);
         // Build a /generate?... URL from the request. If we have the
-        // structured idea, use it directly. Otherwise fall back to a
-        // partial URL with whatever flat fields the request carries.
+        // structured idea, use it directly AND stash it for the brief
+        // context drawer in Generate. Otherwise fall back to a partial
+        // URL with whatever flat fields the request carries.
         const generateLink = idea
           ? buildGenerateLinkFromIdea({ ...idea, requestId: r.id })
           : buildGenerateLinkFromIdea({
@@ -236,6 +238,10 @@ export default function Requests() {
               prefill: {},
               requestId: r.id,
             });
+        // Stash on render so the next click into Generate has the
+        // payload waiting in sessionStorage. Cheap — one
+        // sessionStorage write per render of an open card.
+        if (idea) stashIdeaForGenerate({ ...idea, requestId: r.id });
 
         return (
           <div key={r.id} ref={node => { if (node) cardRefs.current[r.id] = node; }}>

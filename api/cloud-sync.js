@@ -115,6 +115,31 @@ export default async function handler(req, res) {
       // the full history.
       let q = sb.from(table).select('*');
       if (kind === 'generate-log') {
+        // Optional team + since filters drive the team-page monthly
+        // progress bar without needing a separate endpoint. Both are
+        // ignored when absent so existing dashboard / settings reads
+        // behave the same as before.
+        const teamFilter = (req.query.team || '').trim();
+        const sinceParam = (req.query.since || '').trim();
+        if (teamFilter) q = q.eq('team', teamFilter);
+        if (sinceParam) {
+          const sinceDate = new Date(sinceParam);
+          if (!isNaN(sinceDate.getTime())) q = q.gte('created_at', sinceDate.toISOString());
+        }
+        // Lightweight projection — when the caller only needs counts
+        // (the team progress bar) they pass `fields=id,team,created_at`
+        // so the server skips the full record + signed-URL generation.
+        const fieldsParam = (req.query.fields || '').trim();
+        if (fieldsParam) {
+          const allowed = new Set(['id', 'team', 'template_type', 'platform', 'created_at']);
+          const cols = fieldsParam.split(',').map(s => s.trim()).filter(c => allowed.has(c));
+          if (cols.length > 0) q = sb.from(table).select(cols.join(','));
+          if (teamFilter) q = q.eq('team', teamFilter);
+          if (sinceParam) {
+            const sinceDate = new Date(sinceParam);
+            if (!isNaN(sinceDate.getTime())) q = q.gte('created_at', sinceDate.toISOString());
+          }
+        }
         const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
         q = q.order('created_at', { ascending: false }).limit(limit);
       }
@@ -122,7 +147,11 @@ export default async function handler(req, res) {
       if (error) throw error;
       let records = data || [];
 
-      if (BLOB_KINDS.has(kind)) {
+      // Skip signed-URL generation when the caller asked for a
+      // light projection (fields=...) — they don't need the blob
+      // and signing 100s of URLs slows the count query.
+      const skipSign = !!(req.query.fields || '').trim();
+      if (BLOB_KINDS.has(kind) && !skipSign) {
         const bucket = BUCKET_FOR[kind];
         const pathCol = STORAGE_PATH_COL[kind] || 'storage_path';
         const paths = records.map(r => r[pathCol]).filter(Boolean);

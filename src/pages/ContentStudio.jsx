@@ -4,7 +4,8 @@ import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, a
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
-import { getRequests, saveRequests, countByStatus, oldestPendingDays, embedIdeaInNote } from '../requests-store';
+import { getRequests, saveRequests, countByStatus, oldestPendingDays, embedIdeaInNote, buildGenerateLinkFromIdea } from '../requests-store';
+import { stashIdeaForGenerate } from '../idea-context-store';
 import { getAllMedia } from '../media-store';
 import { isAlreadyTagged } from '../tag-heuristics';
 import { getUsageToday, recordUsage } from '../ai-usage-store';
@@ -160,14 +161,13 @@ export default function ContentStudio() {
     }
   };
 
+  // Hand-off to Generate. Stashes the FULL idea (headline, narrative,
+  // captions, dataPoints) in sessionStorage so Generate can render its
+  // "Brief context" drawer next to the canvas. URL still carries the
+  // flat prefill so deep-link bookmarks keep working without the stash.
   const buildLink = (s) => {
-    const params = new URLSearchParams();
-    params.set('template', s.templateId);
-    if (s.team && s.team !== 'BLW') params.set('team', s.team);
-    if (s.prefill) {
-      Object.entries(s.prefill).forEach(([k, v]) => { if (v) params.set(k, v); });
-    }
-    return `/generate?${params.toString()}`;
+    stashIdeaForGenerate(s);
+    return buildGenerateLinkFromIdea(s);
   };
 
   // "Send to Requests" — turns a content idea into a tracked pending request.

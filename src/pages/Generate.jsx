@@ -12,6 +12,9 @@ import { getPresetOverlays, loadPresetImage } from '../preset-overlays';
 import { applyOverrides, setFieldOverride, getOverrides, resetOverrides } from '../field-overrides-store';
 import { useToast } from '../toast';
 import { cloud } from '../cloud-sync';
+import { refreshOverlaysFromCloud } from '../cloud-reader';
+import { readStashedIdea } from '../idea-context-store';
+import { extractIdeaFromNote, getRequests } from '../requests-store';
 import { TemplatePreview } from '../template-preview';
 import { useAuth, isAthleteRole } from '../auth';
 import { localFontsReady } from '../local-fonts';
@@ -449,6 +452,47 @@ export default function Generate() {
   const [uploadTeam, setUploadTeam] = useState('');
   const [uploadPlatform, setUploadPlatform] = useState('feed');
 
+  // Brief context drawer — when the user lands on Generate from an
+  // idea card (dashboard, team page, player modal, or a Request),
+  // recover the full idea payload so we can show its narrative +
+  // captions next to the canvas. Two recovery paths:
+  //   1. ?ideaId=X → sessionStorage stash (set by every idea-driven
+  //      navigation handler).
+  //   2. ?fromRequest=Y → look up the request locally and extract its
+  //      embedded idea via extractIdeaFromNote. Backstop for when the
+  //      stash was wiped (tab reload, private browsing).
+  const [briefIdea, setBriefIdea] = useState(() => {
+    const ideaId = searchParams.get('ideaId');
+    if (ideaId) {
+      const stashed = readStashedIdea(ideaId);
+      if (stashed) return stashed;
+    }
+    const fromRequest = searchParams.get('fromRequest');
+    if (fromRequest) {
+      const r = getRequests().find(x => x.id === fromRequest);
+      if (r) {
+        const { idea } = extractIdeaFromNote(r.note);
+        if (idea) return { ...idea, requestId: fromRequest };
+      }
+    }
+    return null;
+  });
+  // Re-read on URL change (browser back/forward, in-app re-link).
+  useEffect(() => {
+    const ideaId = searchParams.get('ideaId');
+    const fromRequest = searchParams.get('fromRequest');
+    if (!ideaId && !fromRequest) { setBriefIdea(null); return; }
+    if (ideaId) {
+      const stashed = readStashedIdea(ideaId);
+      if (stashed) { setBriefIdea(stashed); return; }
+    }
+    if (fromRequest) {
+      const r = getRequests().find(x => x.id === fromRequest);
+      const { idea } = extractIdeaFromNote(r?.note || '');
+      setBriefIdea(idea ? { ...idea, requestId: fromRequest } : null);
+    }
+  }, [searchParams]);
+
   // Effects state
   const [activeEffects, setActiveEffects] = useState([]); // [{ id, type: 'builtin'|'upload', opacity, builtin?, image? }]
   const [uploadedEffects, setUploadedEffects] = useState([]); // from IndexedDB
@@ -532,9 +576,34 @@ export default function Generate() {
 
   // Load overlays + effects from IndexedDB — gated on team selection so we
   // don't hydrate a team's entire asset library until the user commits to one.
+  // We also kick off a focused cloud-pull for overlays so a fresh upload by
+  // another user appears WITHOUT waiting for the global 10-minute hydrate
+  // throttle. Pull-then-reload is sequenced so the picker shows up fast
+  // (local first), then refreshes silently when the cloud round-trip
+  // completes. Tiny network cost, big consistency win across machines.
+  const [overlayRefreshing, setOverlayRefreshing] = useState(false);
+  const reloadOverlays = useCallback(async () => {
+    if (!customTeam) return;
+    setOverlayRefreshing(true);
+    try { await refreshOverlaysFromCloud(); }
+    catch { /* best-effort — local list still renders */ }
+    const list = await getOverlays();
+    setOverlays(list);
+    setOverlayRefreshing(false);
+  }, [customTeam]);
   useEffect(() => {
     if (!customTeam) { setOverlays([]); return; }
-    getOverlays().then(setOverlays);
+    // Render the local list immediately, then refresh from cloud in the
+    // background. Two state-sets per team-select is fine — second one is
+    // a no-op when nothing new arrived.
+    let cancelled = false;
+    getOverlays().then(list => { if (!cancelled) setOverlays(list); });
+    refreshOverlaysFromCloud().then(async () => {
+      if (cancelled) return;
+      const fresh = await getOverlays();
+      if (!cancelled) setOverlays(fresh);
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [customTeam]);
   useEffect(() => {
     if (!customTeam) { setUploadedEffects([]); return; }
@@ -1188,7 +1257,29 @@ export default function Generate() {
                 storageKey="generate.collapse.overlay"
                 defaultOpen={!selectedOverlayId}
               >
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8, gap: 6 }}>
+                  {/* Cloud refresh — pulls any overlays uploaded by other
+                      users since the local IDB cache was last hydrated.
+                      Auto-fires on team-select; this button is the
+                      manual nudge for "I just uploaded one on my desktop
+                      and I'm checking from my laptop." */}
+                  <button
+                    onClick={async () => {
+                      await reloadOverlays();
+                      toast.success('Overlays synced from cloud');
+                    }}
+                    disabled={!customTeam || overlayRefreshing}
+                    title="Pull the latest overlays uploaded by anyone on the team"
+                    style={{
+                      background: 'transparent',
+                      border: `1px solid ${colors.border}`,
+                      color: colors.textSecondary,
+                      borderRadius: radius.sm, padding: '3px 10px',
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                      cursor: customTeam ? 'pointer' : 'not-allowed',
+                      opacity: customTeam ? 1 : 0.6,
+                    }}
+                  >{overlayRefreshing ? '↻ Syncing…' : '↻ Sync'}</button>
                   <button onClick={() => setShowUploadModal(true)} disabled={!customTeam} style={{
                     background: customTeam ? colors.accentSoft : colors.bg,
                     border: `1px solid ${customTeam ? colors.accentBorder : colors.border}`,
@@ -1727,6 +1818,15 @@ export default function Generate() {
               </div>
             )}
           </Card>
+
+          {/* Brief context drawer — only renders when the user landed
+              on Generate from a content idea (dashboard, team page,
+              player modal, or a Request). Shows the AI-drafted
+              narrative and any caption variants the idea carried so
+              the user has the original brief in view while composing
+              the canvas. Read-only; this isn't where you EDIT
+              captions, just where you reference them. */}
+          {briefIdea && <BriefContextDrawer idea={briefIdea} onDismiss={() => setBriefIdea(null)} />}
         </div>
       </div>
 
@@ -1834,5 +1934,164 @@ export default function Generate() {
       )}
     </div>
     </TeamThemeScope>
+  );
+}
+
+// ─── Brief context drawer ──────────────────────────────────────────────────
+// Renders below the Effects card when the user came from an idea card.
+// Three sections, all collapsible-friendly via height/overflow:
+//   1. Headline + narrative — what the idea is ABOUT
+//   2. Caption tabs — copy-ready text per platform
+//   3. Stat pills — numbers the AI cited, for visual reinforcement
+// Pure presentational; doesn't mutate the idea, just surfaces it.
+function BriefContextDrawer({ idea, onDismiss }) {
+  // Active caption tab. Falls back to the first key with a draft so
+  // the panel doesn't open on an empty platform when one was generated.
+  const captionKeys = idea?.captions ? Object.keys(idea.captions).filter(k => idea.captions[k]) : [];
+  const [tab, setTab] = useState(captionKeys[0] || 'instagram');
+  // Re-pin the tab when the idea changes (browser back/forward).
+  useEffect(() => { setTab(captionKeys[0] || 'instagram'); /* eslint-disable-next-line */ }, [idea?.id]);
+
+  const stats = Array.isArray(idea?.dataPoints) ? idea.dataPoints.filter(Boolean) : [];
+  const narrative = idea?.narrative || idea?.description || '';
+  const tabsAvailable = captionKeys.length > 0;
+
+  const copyCaption = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text || '');
+    } catch {
+      /* clipboard might be denied; fail silently */
+    }
+  };
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      {/* Header strip — one line, identifies the source so the user
+          knows why this drawer is here. AI badge + dismiss control. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '10px 14px',
+        borderBottom: `1px solid ${colors.borderLight}`,
+        background: colors.bg,
+      }}>
+        <span style={{
+          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+          letterSpacing: 0.8, textTransform: 'uppercase',
+          color: '#7C3AED',
+          background: 'rgba(124,58,237,0.10)',
+          border: '1px solid rgba(124,58,237,0.30)',
+          padding: '2px 7px', borderRadius: radius.sm,
+        }}>{idea.aiGenerated ? '✨ AI brief' : 'Brief'}</span>
+        <Label style={{ marginBottom: 0, flex: 1 }}>
+          {idea.requestId ? 'From request' : 'From content idea'}
+        </Label>
+        <button
+          onClick={onDismiss}
+          title="Hide this brief"
+          style={{
+            background: 'transparent', border: 'none',
+            color: colors.textMuted, cursor: 'pointer',
+            fontSize: 16, lineHeight: 1, padding: '0 4px',
+          }}
+        >✕</button>
+      </div>
+
+      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Headline + narrative */}
+        {idea.headline && (
+          <div>
+            <div style={{
+              fontFamily: fonts.heading, fontSize: 16, lineHeight: 1.25,
+              color: colors.text, fontWeight: 400, letterSpacing: 0.3,
+              marginBottom: 4,
+            }}>{idea.headline}</div>
+            {narrative && (
+              <div style={{
+                fontFamily: fonts.body, fontSize: 12, color: colors.textSecondary,
+                lineHeight: 1.55, whiteSpace: 'pre-wrap', maxWidth: '60ch',
+              }}>{narrative}</div>
+            )}
+          </div>
+        )}
+
+        {/* Stat pills — AI-cited numbers, lightly tinted */}
+        {stats.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {stats.map((s, i) => (
+              <span
+                key={i}
+                className="tnum"
+                style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                  letterSpacing: 0.3, color: colors.textSecondary,
+                  background: colors.bg,
+                  border: `1px solid ${colors.borderLight}`,
+                  padding: '2px 7px', borderRadius: radius.sm,
+                }}
+              >{s}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Caption tabs — only when the idea has drafted captions */}
+        {tabsAvailable ? (
+          <div>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+              {captionKeys.map(k => (
+                <button
+                  key={k}
+                  onClick={() => setTab(k)}
+                  style={{
+                    background: tab === k ? colors.accentSoft : 'transparent',
+                    border: `1px solid ${tab === k ? colors.accentBorder : colors.borderLight}`,
+                    color: tab === k ? colors.accent : colors.textSecondary,
+                    borderRadius: radius.sm,
+                    padding: '3px 10px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                    letterSpacing: 0.4, textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >{k}</button>
+              ))}
+              <span style={{ flex: 1 }} />
+              <button
+                onClick={() => copyCaption(idea.captions?.[tab])}
+                title="Copy this caption to clipboard"
+                style={{
+                  background: 'transparent',
+                  border: `1px solid ${colors.border}`,
+                  color: colors.textSecondary,
+                  borderRadius: radius.sm,
+                  padding: '3px 10px',
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                  letterSpacing: 0.4, textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >Copy</button>
+            </div>
+            <div style={{
+              fontFamily: fonts.body, fontSize: 12, color: colors.text,
+              lineHeight: 1.55,
+              padding: 10,
+              background: colors.bg,
+              border: `1px solid ${colors.borderLight}`,
+              borderRadius: radius.sm,
+              whiteSpace: 'pre-wrap',
+              maxHeight: 180, overflowY: 'auto',
+            }}>
+              {idea.captions[tab] || '—'}
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed,
+            fontStyle: 'italic',
+          }}>
+            No captions drafted yet for this idea. Generate them on the dashboard
+            or in the Requests detail panel.
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

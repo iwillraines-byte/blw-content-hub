@@ -9,7 +9,8 @@
 // optional sidebar element (used by the bulk modal to show edit
 // fields right next to the photo).
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { colors, fonts, radius } from './theme';
 
 export function PreviewLightbox({
@@ -45,11 +46,31 @@ export function PreviewLightbox({
 
   // Generate a transient blob URL when the caller hands us a Blob.
   // Revoke on unmount / blob swap so we don't leak.
-  const resolvedUrl = useResolvedUrl(url, blob);
+  const resolvedUrl = useResolvedUrl(url, blob, open);
+
+  // Body scroll-lock while the lightbox is open. Without this the page
+  // behind can still scroll (mouse-wheel, trackpad, arrow keys) which
+  // makes the viewport feel like it "moves" out from under the modal —
+  // which is what was happening when users said they had to "scroll
+  // to find" the image. Lock at the body level only, not html, so the
+  // sidebar still renders above its native scroll position.
+  useEffect(() => {
+    if (!open) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
   if (!open) return null;
 
-  return (
+  // Render via a portal directly on document.body so the lightbox
+  // escapes any ancestor with `transform`, `filter`, `perspective`, or
+  // `contain` that would otherwise turn `position: fixed` into a
+  // viewport-of-the-ancestor instead of viewport-of-the-page. That's
+  // the most likely culprit when users say "the modal opens but I
+  // have to scroll to find it" — a parent transform was scoping
+  // fixed-positioning to the wrong containing block.
+  const overlay = (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
@@ -117,32 +138,46 @@ export function PreviewLightbox({
       {sidebar}
     </div>
   );
+
+  // Mount on body via portal — see overlay comment for why.
+  if (typeof document === 'undefined') return overlay;
+  return createPortal(overlay, document.body);
 }
 
-// Keep blob → URL conversion in one place so we always remember to revoke.
-function useResolvedUrl(url, blob) {
-  // We can't useState here without importing React's hook list. Inline
-  // ref-style lifecycle via a closure-stable variable + useEffect.
-  // Simpler: caller almost always passes `url` directly (the Files page
-  // already keeps blobToObjectURL maps). Use blob as a fallback.
-  if (url) return url;
-  if (!blob) return null;
-  // Note: this allocates a new URL on every render the lightbox is open,
-  // which is fine because the lightbox unmounts on close. The bulk
-  // import modal handles its own URL lifecycle and never passes a blob
-  // here, so we don't see the cost in practice.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return resolveBlobUrl(blob);
-}
+// Proper hook: owns the lifecycle of any blob-derived object URL,
+// revokes on unmount and on blob/url swap, and bails out cleanly when
+// the caller passes a precomputed url directly. The previous
+// implementation cached a single URL at module scope, which broke when
+// (a) the lightbox unmounted while the cached blob was still being
+// referenced from somewhere else and (b) a remount occurred against
+// the same blob — the cached URL had already been revoked elsewhere
+// so the <img> rendered as a dark frame.
+function useResolvedUrl(url, blob, open) {
+  const [resolved, setResolved] = useState(() => url || null);
 
-let _activeBlobUrl = null;
-let _activeBlob = null;
-function resolveBlobUrl(blob) {
-  if (_activeBlob === blob && _activeBlobUrl) return _activeBlobUrl;
-  if (_activeBlobUrl) URL.revokeObjectURL(_activeBlobUrl);
-  _activeBlob = blob;
-  _activeBlobUrl = URL.createObjectURL(blob);
-  return _activeBlobUrl;
+  useEffect(() => {
+    // Closed → nothing to render, no URL to manage.
+    if (!open) {
+      setResolved(null);
+      return undefined;
+    }
+    // Caller-supplied URL wins; we don't allocate or revoke anything.
+    if (url) {
+      setResolved(url);
+      return undefined;
+    }
+    // No blob either → render the "preview not available" fallback.
+    if (!blob) {
+      setResolved(null);
+      return undefined;
+    }
+    // Allocate a fresh blob URL we own and clean up on swap/unmount.
+    const u = URL.createObjectURL(blob);
+    setResolved(u);
+    return () => URL.revokeObjectURL(u);
+  }, [url, blob, open]);
+
+  return resolved;
 }
 
 const navBtn = (side) => ({

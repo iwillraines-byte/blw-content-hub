@@ -18,10 +18,26 @@
 
 export const RELEASES = [
   {
+    version: '4.1.0',
+    date: '2026-04-29',
+    kind: 'minor',
+    summary: 'Files preview fix, cloud overlays, brief drawer, monthly progress, smarter AI tagging',
+    items: [
+      'Files preview lightbox rewritten: portal-mounted to escape ancestor stacking contexts, body scroll-locked while open, blob URL lifecycle owned by a proper hook — no more dark-screen / scroll-to-find-it bugs.',
+      'Overlays now sync universally across users — Generate auto-pulls fresh overlays on team-select and a manual "↻ Sync" button surfaces uploads from other machines without waiting for the 10-min global hydrate.',
+      'Brief context drawer on Generate: when you arrive from a content idea (dashboard, team page, player modal, or a Request) a small panel below Effects shows the original headline, narrative, stat pills, and platform-tabbed captions. Read-only with one-click copy.',
+      'Monthly content progress on every team page: counts every published post for the team since the 1st of the calendar month, with a 12-post target. Glows team-tinted gold + 🔥 badge once you cross target.',
+      'Smarter AI photo tagging: vision API now returns up to 5 ranked roster candidates when only partial info is visible (e.g. clear jersey number, ambiguous team). Files page shows the candidates as one-click chips so you pick the right player instead of typing.',
+      'Server-side generate-log endpoint accepts team + since + fields filters so the progress bar runs as a count query, not a full record fetch.',
+      'Role model consolidated: Admin tier is dormant. Master Admin handles trades / CSV bio import / people management / roster diagnostic; Content team gets everything else (incl. player photo edits).',
+      'Hand-curated release log surfaced as a clickable popup from the sidebar footer + Settings About card.',
+    ],
+  },
+  {
     version: '4.0.0',
     date: '2026-04-29',
     kind: 'major',
-    summary: 'Requests detail overhaul + role consolidation',
+    summary: 'Requests detail overhaul + 9 polish/bug fixes',
     items: [
       'Requests page: every card has a "Brief details" disclosure with narrative, stats cited, suggested template, photos to reach for, and a flat prefill listing — plus a permanent red "Open in Generate" CTA that auto-populates team, template, and every line of copy.',
       'Idea payload now travels with the request, fenced inside the existing note column (no schema migration), so deep-links from Requests → Generate carry the FULL idea context.',

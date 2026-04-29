@@ -13,7 +13,8 @@ import { Card, SectionHeading } from './components';
 import { colors, fonts, radius } from './theme';
 import { useContentIdeas } from './content-ideas-store';
 import { useToast } from './toast';
-import { getRequests, saveRequests } from './requests-store';
+import { getRequests, saveRequests, buildGenerateLinkFromIdea } from './requests-store';
+import { stashIdeaForGenerate } from './idea-context-store';
 import IdeaCard from './idea-card';
 import { Pager, useIdeaPagination } from './idea-pager';
 import { useLeagueContext } from './league-context';
@@ -42,14 +43,11 @@ export function ContentIdeasSection({
     return () => clearTimeout(t);
   }, [queuedIdeas]);
 
+  // Stash full idea (narrative + captions) so Generate can render the
+  // brief-context drawer, then route with prefill + ideaId tag.
   const buildLink = useCallback((s) => {
-    const params = new URLSearchParams();
-    if (s.templateId) params.set('template', s.templateId);
-    if (s.team && s.team !== 'BLW') params.set('team', s.team);
-    if (s.prefill) {
-      Object.entries(s.prefill).forEach(([k, v]) => { if (v) params.set(k, v); });
-    }
-    return `/generate?${params.toString()}`;
+    stashIdeaForGenerate(s);
+    return buildGenerateLinkFromIdea(s);
   }, []);
 
   const queueIdeaAsRequest = useCallback((s) => {

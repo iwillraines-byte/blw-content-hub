@@ -13,6 +13,8 @@ import { fetchRecentGenerates } from '../cloud-sync';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
 import { useLeagueContext } from '../league-context';
 import IdeaCard from '../idea-card';
+import { buildGenerateLinkFromIdea } from '../requests-store';
+import { stashIdeaForGenerate } from '../idea-context-store';
 
 // Shared style for the teammate prev/next chips on the breadcrumb row.
 // Disabled state (no neighbor in that direction) renders as a muted chip
@@ -1846,15 +1848,12 @@ export default function PlayerPage() {
           onClose={() => setPendingIdea(null)}
           onIdeaUpdate={(id, patch) => setPendingIdea(prev => prev && prev.id === id ? { ...prev, ...patch } : prev)}
           onOpenInGenerate={(idea) => {
-            const params = new URLSearchParams();
-            if (idea.templateId) params.set('template', idea.templateId);
-            if (idea.team && idea.team !== 'BLW') params.set('team', idea.team);
-            if (idea.prefill) {
-              for (const [k, v] of Object.entries(idea.prefill)) {
-                if (v != null && v !== '') params.set(k, String(v));
-              }
-            }
-            navigate(`/generate?${params.toString()}`);
+            // Stash full idea (narrative + captions) for the brief
+            // context drawer in Generate, then route with prefill
+            // params + ideaId tag so a refresh of /generate keeps the
+            // drawer populated from sessionStorage.
+            stashIdeaForGenerate(idea);
+            navigate(buildGenerateLinkFromIdea(idea));
             setPendingIdea(null);
           }}
           onRegenerate={generateIdea}

@@ -4,6 +4,7 @@ import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromA
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
+import { fetchTeamMonthlyPostCount } from '../cloud-sync';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, Skeleton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
@@ -43,6 +44,17 @@ export default function TeamPage() {
   const [newPlayerLast, setNewPlayerLast] = useState('');
   const [newPlayerNum, setNewPlayerNum] = useState('');
   const [newPlayerPosition, setNewPlayerPosition] = useState('');
+  // Monthly post count — drives the team-page content-calendar progress
+  // bar. Resets on the 1st of each calendar month (the API filters on
+  // `since=startOfMonth` server-side). Re-fetched whenever the team
+  // changes; one round trip per visit, ~12kb transfer for ~12 records.
+  const [monthlyPosts, setMonthlyPosts] = useState(0);
+  useEffect(() => {
+    if (!team?.id) return;
+    let cancel = false;
+    fetchTeamMonthlyPostCount(team.id).then(n => { if (!cancel) setMonthlyPosts(n); });
+    return () => { cancel = true; };
+  }, [team?.id]);
 
   const rebuildRoster = useCallback((apiRoster, teamMedia, manualList, allManual = manualList) => {
     // Identity key: "FI|LASTNAME" (uppercase) — lets Logan Rose and Carson Rose
@@ -1009,10 +1021,116 @@ export default function TeamPage() {
         )}
       </Card>
 
+      {/* Monthly content progress — counts every generate-log entry
+          for this team since the 1st of the current month. Goal is
+          12 posts/month (M/W/F default cadence × ~4 weeks). Past 12
+          the bar glows + a "🔥 Above target" chip surfaces so the
+          team gets credit for over-shipping. Re-derives from server
+          on every team-page mount; auto-resets at month rollover via
+          the dynamic `since` filter. */}
+      <MonthlyContentProgress team={team} count={monthlyPosts} />
+
       {/* Content calendar — 4-week posting cadence. Baseline M/W/F; game weeks
           bump to game-day × 3 posts; the week after goes light. Pulls games
           from Grand Slam Systems /games (already proxied via /api/gss). */}
       <ContentCalendar team={team} games={games} />
     </div>
+  );
+}
+
+// ─── Monthly content progress ──────────────────────────────────────────────
+// Horizontal bar showing how many posts this team has published this
+// calendar month vs. the 12-post target. Animates on first paint;
+// glows team-tinted gold when over target so the team gets a visible
+// reward for going above the line. Animation is CSS-only (transition
+// on width) so the value can update mid-month without a layout thrash.
+function MonthlyContentProgress({ team, count }) {
+  const TARGET = 12;
+  // Clamp the bar's visible width at 100% — anything above target
+  // surfaces as a glow/chip rather than overflowing the rail.
+  const pct = Math.min(100, (count / TARGET) * 100);
+  const aboveTarget = count > TARGET;
+
+  // Month label for the header — "April 2026" feels right at this
+  // density; we already have a year-aware date elsewhere on the page.
+  const now = new Date();
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  // Color band — empty/dim early, team color in the middle, gold-glow
+  // once we cross target. Gradient pulled from the team palette so
+  // every team page reads visually consistent with its hero.
+  const barColor = aboveTarget
+    ? `linear-gradient(90deg, ${team.color}, #FFD700, ${team.color})`
+    : `linear-gradient(90deg, ${team.color}, ${team.dark || team.color})`;
+  const glow = aboveTarget
+    ? `0 0 12px ${team.color}66, 0 0 24px ${team.color}33, 0 0 32px rgba(255,215,0,0.35)`
+    : 'none';
+
+  return (
+    <Card>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        gap: 8, flexWrap: 'wrap', marginBottom: 10,
+      }}>
+        <div>
+          <SectionHeading style={{ margin: 0 }}>Content this month</SectionHeading>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted,
+            letterSpacing: 0.5, marginTop: 2,
+          }}>{monthLabel} · target {TARGET} posts · resets 1st of every month</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{
+            fontFamily: fonts.heading, fontSize: 32, fontWeight: 400,
+            color: aboveTarget ? team.dark || team.color : colors.text,
+            letterSpacing: 0.5, lineHeight: 1,
+          }}>{count}</span>
+          <span style={{
+            fontFamily: fonts.condensed, fontSize: 12, color: colors.textMuted,
+            fontWeight: 700, letterSpacing: 0.5,
+          }}>/ {TARGET}</span>
+          {aboveTarget && (
+            <span style={{
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+              letterSpacing: 0.6, textTransform: 'uppercase',
+              padding: '3px 8px', borderRadius: radius.sm,
+              background: 'rgba(255,215,0,0.14)',
+              color: team.dark || team.color,
+              border: `1px solid rgba(255,215,0,0.45)`,
+              boxShadow: '0 0 12px rgba(255,215,0,0.3)',
+            }}>🔥 Above target</span>
+          )}
+        </div>
+      </div>
+
+      {/* Track + fill. Track is a thin neutral; fill is the team-color
+          gradient, glow when above target. Tick marks under the rail
+          give visual reference for where 6 (mid) and 12 (target) land. */}
+      <div style={{
+        position: 'relative',
+        height: 14, borderRadius: 999,
+        background: colors.bg,
+        border: `1px solid ${colors.borderLight}`,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, left: 0,
+          width: `${pct}%`,
+          background: barColor,
+          boxShadow: glow,
+          transition: 'width 600ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 400ms ease',
+          borderRadius: 999,
+        }} />
+      </div>
+      <div style={{
+        position: 'relative', height: 12, marginTop: 4,
+        fontFamily: fonts.condensed, fontSize: 9, color: colors.textMuted,
+        letterSpacing: 0.5, fontWeight: 700,
+      }}>
+        <span style={{ position: 'absolute', left: 0 }}>0</span>
+        <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>6</span>
+        <span style={{ position: 'absolute', right: 0 }}>{TARGET}</span>
+      </div>
+    </Card>
   );
 }

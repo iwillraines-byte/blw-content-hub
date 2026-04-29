@@ -342,6 +342,46 @@ export async function refreshFromCloud({ force = false } = {}) {
   return report;
 }
 
+// Focused overlay refresh — used by Generate when the user picks a team
+// (or hits the manual "↻" button next to the overlay panel) so a fresh
+// overlay uploaded by another user appears WITHOUT waiting for the
+// global 10-minute hydrate throttle. Pulls only the `overlay` kind,
+// downloads any new blobs into IDB, and returns a count summary the
+// caller can toast on.
+//
+// Cheap: one round trip + N blob downloads (N = new overlays since
+// last sync). Skips when Supabase isn't configured. Always force-fresh,
+// no throttle — the user explicitly asked for this.
+export async function refreshOverlaysFromCloud() {
+  if (!supabaseConfigured) return { skipped: 'not-configured', fetched: 0, newBlobs: 0 };
+  const summary = { fetched: 0, newBlobs: 0, errors: [] };
+  try {
+    const rows = await fetchKind('overlay');
+    summary.fetched = rows.length;
+    for (const r of rows) {
+      const mapped = rowToOverlay(r);
+      const existing = await idbGet('overlays', r.id).catch(() => null);
+      const needBlob = !existing?.imageBlob;
+      if (needBlob && r.signedUrl) {
+        try {
+          const blob = await blobFromSignedUrl(r.signedUrl);
+          mapped.imageBlob = blob;
+          summary.newBlobs++;
+        } catch (err) {
+          summary.errors.push({ id: r.id, error: err.message });
+          continue;
+        }
+      } else if (existing) {
+        mapped.imageBlob = existing.imageBlob;
+      }
+      await idbPut('overlays', mapped).catch(err => summary.errors.push({ id: r.id, error: err.message }));
+    }
+  } catch (err) {
+    summary.errors.push({ error: err.message });
+  }
+  return summary;
+}
+
 // Merge two arrays by id, preferring whichever record looks newer based on
 // status/priority/note change. For now, simply prefer the cloud record if
 // present — conflict resolution gets smarter when auth lands in Phase 5.

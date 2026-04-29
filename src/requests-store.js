@@ -109,6 +109,15 @@ export function extractIdeaFromNote(note) {
 // Idea card both use the same routing logic. Empty values are skipped
 // so the URL stays clean. Mirrors buildLink() in ContentStudio.jsx —
 // hoisted here so any caller (Requests, Idea card, etc.) shares it.
+//
+// Includes:
+//   - flat prefill fields → individual URL params (existing behavior)
+//   - `?ideaId=X` so Generate can recover the full idea (headline,
+//     narrative, captions) from the session-scoped stash and surface
+//     it as a "Brief context" drawer next to the canvas
+//   - `?fromRequest=Y` when the idea came from a tracked Request, so
+//     Generate can also fall back to extracting the idea straight from
+//     the request's note column if the stash was cleared
 export function buildGenerateLinkFromIdea(idea) {
   if (!idea) return '/generate';
   const params = new URLSearchParams();
@@ -119,9 +128,7 @@ export function buildGenerateLinkFromIdea(idea) {
       if (v != null && v !== '') params.set(k, String(v));
     }
   }
-  // Tag the link so the Generate page can show a one-time "loaded from
-  // Request X" banner if we want to wire that later. Cheap to include
-  // and ignored by the page today.
+  if (idea.id) params.set('ideaId', idea.id);
   if (idea.requestId) params.set('fromRequest', idea.requestId);
   const qs = params.toString();
   return qs ? `/generate?${qs}` : '/generate';

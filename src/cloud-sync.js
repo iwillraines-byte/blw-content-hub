@@ -325,6 +325,35 @@ export async function fetchRecentGenerates(limit = 10) {
   }
 }
 
+// Per-team monthly post count. Powers the content-calendar progress
+// bar on each team page. Counts entries in `generate_log` for `team`
+// since the first day of the current calendar month. Auto-resets at
+// month rollover by virtue of asking for the dynamic since-date.
+//
+// Returns a number (0+). Soft-fails to 0 when Supabase isn't
+// configured or the request errors — the bar just renders an empty
+// state in that case, which is correct.
+export async function fetchTeamMonthlyPostCount(team) {
+  if (!supabaseConfigured || !team) return 0;
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const params = new URLSearchParams({
+      kind: 'generate-log',
+      team,
+      since: monthStart,
+      fields: 'id,team,created_at',
+      limit: '500',
+    });
+    const res = await fetch(`/api/cloud-sync?${params.toString()}`);
+    if (!res.ok) return 0;
+    const data = await res.json();
+    return Array.isArray(data.records) ? data.records.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Lightweight cloud-side existence check. Returns a Set of IDs that
 // already have a storage_path (i.e. the blob is fully uploaded). Used
 // by the backup runner to skip media/overlays/effects that are already

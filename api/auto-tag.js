@@ -135,19 +135,46 @@ YOUR TASK:
 Look at the photo. Identify (when visible with reasonable certainty):
 1. team — BLW team abbreviation (e.g. "LAN", "AZS"). Look at jersey colors, logos, uniform details. Match to the TEAMS list above.
 2. num — Jersey number, as 2-digit string (e.g. "03", "27"). OCR the number on the jersey if visible.
-3. lastName — Player's last name in UPPERCASE (e.g. "JASO"). Use the team + jersey number to look up the name from the roster above. DO NOT guess from face — only infer via team+jersey.
+3. lastName — Player's last name in UPPERCASE (e.g. "JASO"). Use the team + jersey number to look up the name from the roster above.
 4. assetType — One of: HEADSHOT (close-up portrait of a face, typically indoor/studio), ACTION (gameplay: batting, pitching, fielding, running), PORTRAIT (posed, not close-up), HIGHLIGHT (video thumbnail or cinematic composite), INTERVIEW (player being interviewed or talking to media), TEAMPHOTO (group photo of team), VENUE (stadium / field / ballpark with no player focus), LOGO_PRIMARY / LOGO_DARK / LOGO_LIGHT (logo graphic), WORDMARK (team text/wordmark graphic).
 5. confidence — "high" if certain, "medium" if probable, "low" if best guess.
+6. candidates — When you can't identify a single player but partial signals
+   are present, return a short list of up to 5 plausible roster matches.
+   Each candidate is { "team": "LAN", "lastName": "JASO", "num": "03",
+   "score": 0–1, "why": "one short reason" }. The score reflects how
+   confident you are this is the player; the top candidate should mirror
+   the top-level fields when confidence is medium+.
 
-RULES:
-- Use null for any field you cannot determine confidently.
-- If the jersey number is legible but the team is ambiguous, return num but leave team/lastName null.
-- If team is visible but jersey is not, return team only.
-- NEVER identify a player from face alone — only via team+jersey+roster.
-- Prefer null over a wrong guess.
+INTUITION RULES (this is what makes you useful — use them):
+- If the jersey NUMBER is legible but the TEAM is ambiguous, list ALL
+  roster entries league-wide who wear that number as candidates. Use
+  uniform color, hat style, background, or any partial logo glimpse to
+  rank them. The team field at the top level can stay null if uncertain;
+  candidates carries the breadth.
+- If the TEAM is visible (clear logo, uniform color, hat) but the
+  jersey number is occluded, return the team and list a small candidate
+  set of the most prominent players on that roster — favor pitchers if
+  the photo is a pitching action, batters if batting, etc. Don't list
+  every roster member; cap at 5.
+- If the photo is a HEADSHOT with a clear team uniform but no number,
+  scan the team's roster for anyone whose face you've seen before
+  ONLY through media context (the photo itself); never invent an
+  identity from facial features alone — but you CAN suggest candidates
+  the team's roster has, with low scores, so the user can pick.
+- When no partial info is present (e.g. a stadium-only shot with no
+  uniforms), candidates can be empty.
+- Always prefer null + candidates over a wrong concrete guess. The user
+  can pick from candidates faster than they can correct a wrong tag.
+
+GENERAL RULES:
+- Use null for any top-level field you cannot determine confidently.
+- The top-level (team, num, lastName) should ONLY be filled when
+  confidence is medium or high. Candidates exists for everything else.
+- The reasoning string is one sentence — what you saw and why it
+  pointed you to those candidates.
 
 Return ONLY this JSON shape (no markdown, no code fence):
-{"team": "LAN"|null, "num": "03"|null, "lastName": "JASO"|null, "assetType": "HEADSHOT"|null, "confidence": "high"|"medium"|"low", "reasoning": "one-sentence summary of what you saw"}`;
+{"team": "LAN"|null, "num": "03"|null, "lastName": "JASO"|null, "assetType": "HEADSHOT"|null, "confidence": "high"|"medium"|"low", "reasoning": "one-sentence summary", "candidates": [{"team":"LAN","lastName":"JASO","num":"03","score":0.85,"why":"matches"}]}`;
 
   // ─── Build Messages API request with prompt caching on system prompt ────
   const anthropicBody = {
@@ -215,6 +242,40 @@ Return ONLY this JSON shape (no markdown, no code fence):
       return;
     }
 
+    // Normalize candidates: clamp score to [0,1], uppercase lastName,
+    // pad jersey number, drop entries that don't match a real roster
+    // record (the model occasionally hallucinates a number that isn't
+    // on the team). Falling out of the result keeps downstream UIs
+    // honest about which candidates the user can actually pick.
+    const rosterLookup = new Set(
+      roster.map(p => `${p.team}|${(p.lastName || '').toUpperCase()}|${(p.num || '').padStart(2, '0')}`)
+    );
+    const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];
+    const candidates = rawCandidates
+      .map(c => ({
+        team: c.team || null,
+        lastName: c.lastName ? String(c.lastName).toUpperCase() : null,
+        num: c.num ? String(c.num).padStart(2, '0') : null,
+        score: typeof c.score === 'number' ? Math.max(0, Math.min(1, c.score)) : 0,
+        why: typeof c.why === 'string' ? c.why : '',
+      }))
+      .filter(c => {
+        // Keep candidates that match a real roster row when team/last
+        // are present. Allow team-or-num-only candidates through (the
+        // user can complete them in the tag editor).
+        if (c.team && c.lastName) {
+          const key = `${c.team}|${c.lastName}|${c.num || ''}`;
+          // Allow num to be missing on a real lastname match — some
+          // candidates are "this looks like Jaso, jersey unclear."
+          for (const rosterKey of rosterLookup) {
+            if (rosterKey.startsWith(`${c.team}|${c.lastName}|`)) return true;
+          }
+          return false;
+        }
+        return true;
+      })
+      .slice(0, 5);
+
     // Normalize + return with usage stats
     res.status(200).json({
       team: parsed.team || null,
@@ -223,6 +284,7 @@ Return ONLY this JSON shape (no markdown, no code fence):
       assetType: parsed.assetType || null,
       confidence: parsed.confidence || 'low',
       reasoning: parsed.reasoning || '',
+      candidates,
       usage: {
         input_tokens: data.usage?.input_tokens || 0,
         output_tokens: data.usage?.output_tokens || 0,

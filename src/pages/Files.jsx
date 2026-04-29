@@ -165,11 +165,36 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
   const confidenceColor = confidence === 'high' ? '#15803D' : confidence === 'medium' ? '#92400E' : '#991B1B';
   const aiError = confidence === 'error' ? reasoning : '';
 
+  // Candidate suggestions returned by the vision API when the photo
+  // had partial signals (e.g. a clearly-visible jersey number but
+  // ambiguous team). Filter out anything that already matches the
+  // active tags so we don't suggest "what you've already picked."
+  const aiCandidates = Array.isArray(tagHint?.candidates) ? tagHint.candidates : [];
+  const visibleCandidates = aiCandidates.filter(c =>
+    !(c.team === tagTeam && c.lastName === tagName && (!c.num || c.num === tagNum))
+  ).slice(0, 5);
+
+  // One-click apply for a candidate row — populates team/num/lastName.
+  // Marks hintSource as 'ai-pick' so the badge updates to reflect the
+  // user committed to a suggestion (vs. raw AI top result).
+  const applyCandidate = (c) => {
+    if (c.team) setTagTeam(c.team);
+    if (c.num) setTagNum(c.num);
+    if (c.lastName) setTagName(c.lastName);
+    setHintSource('ai-pick');
+    setConfidence('medium');
+    setReasoning(c.why || `Picked from AI candidates: ${c.team || ''} ${c.lastName || ''} #${c.num || ''}`);
+    setAmbiguous(false);
+  };
+
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+      display: 'flex', flexDirection: 'column',
       background: colors.white, border: `1px solid ${hintSource ? confidenceColor + '40' : colors.border}`,
       borderRadius: radius.base, marginBottom: 6,
+    }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
     }}>
       {/* Thumbnail — click to open at full size so you can identify
           who's in the photo before tagging. */}
@@ -326,6 +351,54 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
         background: 'none', border: 'none', color: colors.textMuted,
         cursor: 'pointer', fontSize: 14, padding: '0 4px',
       }}>✕</button>
+    </div>
+
+    {/* Candidate strip — shown when the AI returned multiple plausible
+        roster matches (typically when only the jersey number was
+        legible). One-click apply fills in team + lastName + num so the
+        user doesn't have to type. Sorted by score, top first. */}
+    {visibleCandidates.length > 0 && (
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: 4,
+        padding: '0 10px 8px 66px',
+        borderTop: `1px dashed ${colors.borderLight}`,
+        marginTop: -2,
+      }}>
+        <span style={{
+          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+          color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase',
+          alignSelf: 'center', marginRight: 4, paddingTop: 6,
+        }}>AI suggests:</span>
+        {visibleCandidates.map((c, i) => {
+          const label = `${c.team || '??'} #${c.num || '??'} · ${c.lastName || '???'}`;
+          const score = Math.round((c.score || 0) * 100);
+          return (
+            <button
+              key={`${c.team || ''}-${c.lastName || ''}-${c.num || ''}-${i}`}
+              onClick={() => applyCandidate(c)}
+              title={c.why ? `${c.why} (${score}% confident)` : `${score}% confident`}
+              style={{
+                marginTop: 6,
+                background: colors.bg,
+                border: `1px solid ${colors.border}`,
+                color: colors.textSecondary,
+                borderRadius: radius.sm,
+                padding: '3px 8px',
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                letterSpacing: 0.3, cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              {label}
+              <span style={{
+                fontSize: 9, color: colors.textMuted, fontWeight: 600,
+              }}>{score}%</span>
+            </button>
+          );
+        })}
+      </div>
+    )}
     </div>
   );
 }
