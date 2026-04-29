@@ -99,6 +99,15 @@ export function requireRole(res, profile, allowedRoles) {
 }
 
 // Shorthand for admin-only endpoints.
+//
+// Policy: in the simplified role model, "admin-only" === "master_admin".
+// The legacy 'admin' tier is dormant — kept in the enum so a future
+// operator can revive it, but no live account holds it. Endpoints that
+// previously accepted both now collapse to master-only, matching the
+// UI gating in Settings + PeopleAdmin. If you ever revive the admin
+// tier, switch this back to ['master_admin', 'admin'] and audit each
+// caller — some endpoints (people management, role escalation) should
+// stay master-only regardless.
 export function requireAdmin(res, profile) {
-  return requireRole(res, profile, ['master_admin', 'admin']);
+  return requireRole(res, profile, ['master_admin']);
 }

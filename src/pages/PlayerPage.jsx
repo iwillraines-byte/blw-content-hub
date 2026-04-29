@@ -7,7 +7,7 @@ import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
-import { useAuth, isAdminRole } from '../auth';
+import { useAuth, isStaffRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
@@ -1243,7 +1243,11 @@ export default function PlayerPage() {
   const team = getTeam(slug);
   const toast = useToast();
   const { role } = useAuth();
-  const isAdmin = isAdminRole(role);
+  // Photo-edit + pan/zoom buttons surface for ANY staff user (master +
+  // content). Picking a player's headshot is daily content work, not a
+  // data-management task — locking it to master-only would block the
+  // social-media team from doing their job.
+  const isAdmin = isStaffRole(role);
 
   const [player, setPlayer] = useState(null);
   const [media, setMedia] = useState([]);

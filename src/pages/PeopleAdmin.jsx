@@ -1,12 +1,11 @@
-// People admin card — rendered inside Settings for admin-level roles.
-// Handles listing all profiles, inviting new users, and changing roles /
-// teams. Talks to /api/admin-people which enforces role guards server-side.
+// People admin card — master_admin only. Lists all profiles, invites new
+// users, and changes roles/teams. Talks to /api/admin-people which
+// enforces role guards server-side.
 //
-// Two distinct admin tiers:
-//   - master_admin: can create/edit ANY role, including other admins
-//   - admin: can only create/edit content + athlete roles
-// (Server rejects disallowed actions with 403 — UI mirrors this by disabling
-// inputs we know will fail.)
+// Roles in the picker: master_admin, content, athlete. The "admin" tier
+// is dormant — kept in the DB enum so a future operator can revive it,
+// but never granted today (master_admin handles trades, bio import, and
+// people management directly).
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
@@ -16,8 +15,12 @@ import { useAuth, ROLE_LABELS, isAdminRole } from '../auth';
 import { authedJson } from '../authed-fetch';
 import { useToast } from '../toast';
 
+// What a given admin tier is allowed to assign on invite. Master can
+// assign any non-admin role (admin is omitted on purpose — see header
+// comment). The legacy 'admin' tier is left in the map in case anyone
+// still has it on their profile; they can only invite content/athlete.
 const INVITABLE_ROLES_BY_ADMIN = {
-  master_admin: ['master_admin', 'admin', 'content', 'athlete'],
+  master_admin: ['master_admin', 'content', 'athlete'],
   admin: ['content', 'athlete'],
 };
 
@@ -75,12 +78,7 @@ export default function PeopleAdminCard() {
       </div>
 
       <p style={{ fontSize: 12, color: colors.textSecondary, margin: '0 0 14px', lineHeight: 1.5 }}>
-        Send a magic-link invitation and set their role + team. Invited emails will receive a link that takes them to the login page and signs them in automatically.
-        {myTier === 'admin' && (
-          <span style={{ display: 'block', marginTop: 4 }}>
-            As an <strong>admin</strong>, you can manage content creators and athletes. Only <strong>master_admin</strong> can manage other admins.
-          </span>
-        )}
+        Send a magic-link invitation and set their role + team. Invited emails will receive a link that takes them to the login page and signs them in automatically. Pick <strong>Content</strong> for your social-media team and <strong>Athlete</strong> for players.
       </p>
 
       {error && (
@@ -132,8 +130,11 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam }) {
     ? true
     : myTier === 'admin' && !['master_admin', 'admin'].includes(p.role);
 
+  // Master gets master/content/athlete; legacy 'admin' tier (if anyone
+  // still has it) gets content/athlete. Plain 'admin' is intentionally
+  // not assignable from the UI — see header comment for the rationale.
   const roleOptions = myTier === 'master_admin'
-    ? ['master_admin', 'admin', 'content', 'athlete']
+    ? ['master_admin', 'content', 'athlete']
     : ['content', 'athlete'];
 
   return (

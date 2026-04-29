@@ -6,7 +6,7 @@ import { colors, fonts, radius } from '../theme';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from '../version';
 import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
 import { fetchRecentGenerates } from '../cloud-sync';
-import { useAuth, isAdminRole } from '../auth';
+import { useAuth } from '../auth';
 import PeopleAdminCard from './PeopleAdmin';
 import TypographyCard from './TypographyCard';
 import ThemeModeCard from './ThemeModeCard';
@@ -43,30 +43,36 @@ export default function Settings() {
     ? `${driveKey.slice(0, 6)}${'•'.repeat(Math.max(0, driveKey.length - 10))}${driveKey.slice(-4)}`
     : '';
 
+  // Master-only Settings cards. The legacy 'admin' tier no longer
+  // surfaces these (collapsed into master_admin per the role-model
+  // simplification — only the master operator handles trades, bio
+  // imports, people management, and raw-API debugging).
+  const isMaster = role === 'master_admin';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="SETTINGS" subtitle="Team colors, integrations, and configuration" />
 
-      {/* People admin — only visible to master_admin / admin roles. */}
-      {isAdminRole(role) && <PeopleAdminCard />}
+      {/* People admin — master_admin only. */}
+      {isMaster && <PeopleAdminCard />}
 
-      {/* Player bio import — admin-only. Pulls a published Google Sheet
-          CSV into manual_players so player pages show vitals. */}
-      {isAdminRole(role) && <PlayerBioImportCard />}
+      {/* Player bio import — master_admin only. Pulls a published Google
+          Sheet CSV into manual_players so player pages show vitals. */}
+      {isMaster && <PlayerBioImportCard />}
 
-      {/* Player team overrides — admin-only. Trades, FA signings,
+      {/* Player team overrides — master_admin only. Trades, FA signings,
           retirements that the source-of-truth API doesn't know about. */}
-      {isAdminRole(role) && <PlayerTradesCard />}
+      {isMaster && <PlayerTradesCard />}
 
-      {/* Roster diagnostic — admin-only. Shows which canonical players
-          are or aren't matching against the API and surfaces likely
-          name mismatches so we can add aliases. */}
-      {isAdminRole(role) && <RosterDiagnosticCard />}
+      {/* Roster diagnostic — master_admin only. Shows which canonical
+          players are or aren't matching against the API and surfaces
+          likely name mismatches so we can add aliases. */}
+      {isMaster && <RosterDiagnosticCard />}
 
-      {/* Raw API inspector — admin-only. Hits GSS endpoints directly with
-          no caching/normalization to verify what the API actually returns
-          for a given player. Use before adding any matching-code fixes. */}
-      {isAdminRole(role) && <RawApiInspectorCard />}
+      {/* Raw API inspector — master_admin only. Hits GSS endpoints
+          directly with no caching/normalization to verify what the API
+          actually returns for a given player. */}
+      {isMaster && <RawApiInspectorCard />}
 
       {/* Appearance + Typography — personal preferences, visible to everyone */}
       <ThemeModeCard />
