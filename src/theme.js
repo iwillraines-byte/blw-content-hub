@@ -50,16 +50,31 @@ export const colors = {
   borderLight:     'var(--color-borderLight, #EBEDF0)',
   divider:         'var(--color-divider, #F0F1F3)',
 
-  // Status
+  // Status — three flavors, three shapes each:
+  //   {name}      — the saturated mid-tone (good for text on a NEUTRAL bg,
+  //                 dot fills, focus rings)
+  //   {name}Bg    — soft tinted background (8% alpha)
+  //   {name}Border — soft tinted border (20% alpha)
+  //   {name}Text  — dark text variant for legibility ON {name}Bg surfaces
+  //                 (status badges, alert chrome, callouts)
+  // The *Text token is the one that was previously hardcoded inline in
+  // StatusBadge / PriorityDot — exposing it here so every status surface
+  // pulls from the same palette and dark-mode flips reach all of them.
   success:         'var(--color-success, #22C55E)',
   successBg:       'var(--color-successBg, rgba(34, 197, 94, 0.08))',
   successBorder:   'var(--color-successBorder, rgba(34, 197, 94, 0.2))',
+  successText:     'var(--color-successText, #065F46)',
   warning:         'var(--color-warning, #F59E0B)',
   warningBg:       'var(--color-warningBg, rgba(245, 158, 11, 0.08))',
   warningBorder:   'var(--color-warningBorder, rgba(245, 158, 11, 0.2))',
+  warningText:     'var(--color-warningText, #92400E)',
   info:            'var(--color-info, #3B82F6)',
   infoBg:          'var(--color-infoBg, rgba(59, 130, 246, 0.08))',
   infoBorder:      'var(--color-infoBorder, rgba(59, 130, 246, 0.2))',
+  infoText:        'var(--color-infoText, #1E40AF)',
+  // Danger reuses the brand red surface for body text. Same shape as the
+  // other status flavors so callers can address it identically.
+  dangerText:      'var(--color-dangerText, #991B1B)',
 };
 
 // All three font slots resolve via CSS custom properties so the user

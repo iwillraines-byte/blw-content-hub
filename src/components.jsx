@@ -311,14 +311,18 @@ export const TeamChip = ({ teamId, small, withLogo }) => {
 };
 
 export const StatusBadge = ({ status }) => {
+  // Token-driven palette — bg/text colors come from the theme so dark-
+  // mode flips and any future palette tweaks reach every status badge
+  // automatically. Previously hardcoded hex; see theme.js {name}Bg /
+  // {name}Text tokens for the source of truth.
   const map = {
-    pending: { bg: '#FEF3C7', c: '#92400E', l: 'Pending' },
-    'in-progress': { bg: '#DBEAFE', c: '#1E40AF', l: 'In Progress' },
-    approved: { bg: '#D1FAE5', c: '#065F46', l: 'Approved' },
-    revision: { bg: '#FEE2E2', c: '#991B1B', l: 'Revision' },
-    completed: { bg: '#D1FAE5', c: '#065F46', l: 'Completed' },
+    pending:        { bg: colors.warningBg, c: colors.warningText, l: 'Pending' },
+    'in-progress':  { bg: colors.infoBg,    c: colors.infoText,    l: 'In Progress' },
+    approved:       { bg: colors.successBg, c: colors.successText, l: 'Approved' },
+    revision:       { bg: colors.redLight,  c: colors.dangerText,  l: 'Revision' },
+    completed:      { bg: colors.successBg, c: colors.successText, l: 'Completed' },
   };
-  const s = map[status] || { bg: '#F3F4F6', c: '#374151', l: status };
+  const s = map[status] || { bg: colors.bg, c: colors.textSecondary, l: status };
   return (
     <span style={{
       background: s.bg, color: s.c,
@@ -331,9 +335,11 @@ export const StatusBadge = ({ status }) => {
 };
 
 export const PriorityDot = ({ p }) => (
+  // Pulls from theme tokens too — high → red brand, medium → warning
+  // amber, low → success green, unknown → muted text gray.
   <span style={{
     display: 'inline-block', width: 12, height: 12, borderRadius: '50%',
-    background: { high: '#EF4444', medium: '#F59E0B', low: '#22C55E' }[p] || '#9CA3AF',
+    background: { high: colors.red, medium: colors.warning, low: colors.success }[p] || colors.textMuted,
     marginRight: 4
   }} />
 );

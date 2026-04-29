@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.2.1',
+    date: '2026-04-29',
+    kind: 'patch',
+    summary: 'Status badge + priority dot palette pulls from theme tokens',
+    items: [
+      'StatusBadge (Pending / In Progress / Approved / Revision / Completed) and PriorityDot (high / medium / low) no longer hardcode hex colors — they read from theme tokens just like every other surface.',
+      'Added successText / warningText / infoText / dangerText tokens to theme.js so dark-mode flips and any future palette tweaks reach every status surface automatically.',
+    ],
+  },
+  {
     version: '4.2.0',
     date: '2026-04-29',
     kind: 'minor',
