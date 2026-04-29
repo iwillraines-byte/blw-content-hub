@@ -14,6 +14,7 @@ import { useToast } from '../toast';
 import { cloud } from '../cloud-sync';
 import { TemplatePreview } from '../template-preview';
 import { useAuth, isAthleteRole } from '../auth';
+import { localFontsReady } from '../local-fonts';
 
 function hexToRgba(hex, alpha = 1) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -560,7 +561,19 @@ export default function Generate() {
     renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform });
   }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion]);
 
-  useEffect(() => { render(); }, [render]);
+  // Run render whenever any of its inputs change. Wrapped to also
+  // re-run once local fonts finish preloading on first mount —
+  // otherwise the very first paint can land before Gotham/Press
+  // Gothic/United Sans are in document.fonts and any field that
+  // references them falls back to Times for one frame.
+  useEffect(() => {
+    render();
+    let cancelled = false;
+    localFontsReady().then(() => {
+      if (!cancelled) render();
+    });
+    return () => { cancelled = true; };
+  }, [render]);
 
   const download = () => {
     const canvas = canvasRef.current;
@@ -1320,9 +1333,16 @@ export default function Generate() {
                                 onChange={e => patchFieldOverride(f.key, { font: e.target.value })}
                                 style={{ ...selectStyle, fontSize: 12, marginTop: 0 }}
                               >
-                                <option value="heading">Heading (Bebas Neue)</option>
-                                <option value="body">Body (Barlow)</option>
-                                <option value="condensed">Condensed (Barlow Condensed)</option>
+                                <optgroup label="Default">
+                                  <option value="heading">Heading (Bebas Neue)</option>
+                                  <option value="body">Body (Barlow)</option>
+                                  <option value="condensed">Condensed (Barlow Condensed)</option>
+                                </optgroup>
+                                <optgroup label="Display (local)">
+                                  <option value="gotham">Gotham Bold</option>
+                                  <option value="press">Press Gothic</option>
+                                  <option value="united">United Sans Bold</option>
+                                </optgroup>
                               </select>
                             </div>
                           </div>

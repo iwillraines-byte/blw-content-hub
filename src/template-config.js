@@ -259,11 +259,22 @@ export const TEMPLATE_TYPES = {
   },
 };
 
-// Font map for canvas rendering
+// Font map for canvas rendering. Three canonical slots (heading/body/
+// condensed) plus three local-loaded display faces (gotham/press/united)
+// served from /public/fonts and registered via src/local-fonts.js. The
+// canvas reads from this map by `field.font` key, so any template field
+// can opt into a specific face by setting e.g. `font: 'press'`.
 export const FONT_MAP = {
-  heading: "'Bebas Neue', 'Arial Black', sans-serif",
-  body: "'Barlow', Arial, sans-serif",
+  heading:   "'Bebas Neue', 'Arial Black', sans-serif",
+  body:      "'Barlow', Arial, sans-serif",
   condensed: "'Barlow Condensed', Arial, sans-serif",
+  // Local fonts — must be present in /public/fonts AND registered by
+  // src/local-fonts.js. Bold weight is the only one we ship today; the
+  // canvas references the family name and weight is implicit via the
+  // FontFace rule loaded at boot.
+  gotham:    "'Gotham', 'Arial Black', sans-serif",
+  press:     "'Press Gothic', 'Impact', sans-serif",
+  united:    "'United Sans', 'Arial Black', sans-serif",
 };
 
 // Get field config for a template type + platform
