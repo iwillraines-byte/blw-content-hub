@@ -1356,6 +1356,79 @@ export default function PlayerPage() {
     }
   }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
 
+  // ─── Hooks below MUST stay above the early returns (Rules of Hooks). ─────
+  // They all tolerate null/undefined `team` and `player` so calling them
+  // before the data has loaded is safe.
+
+  // Teammate prev/next nav — locate this player in the alphabetical roster,
+  // surface link chips + ←/→ keyboard shortcuts. Returns nulls until data is
+  // loaded, so the early-return paths above don't see partial state.
+  const teammateNav = useMemo(() => {
+    if (!teammates.length || !player?.lastName || !team?.slug) {
+      return { prev: null, next: null, idx: -1, total: teammates.length || 0 };
+    }
+    const norm = (s) => String(s || '').toLowerCase();
+    const targetName = norm(player.name);
+    const targetLast = norm(player.lastName);
+    const idx = teammates.findIndex(t =>
+      norm(t.name) === targetName || norm(t.lastName) === targetLast
+    );
+    if (idx < 0) return { prev: null, next: null, idx: -1, total: teammates.length };
+    const prev = idx > 0 ? teammates[idx - 1] : null;
+    const next = idx < teammates.length - 1 ? teammates[idx + 1] : null;
+    const toLink = (t) => {
+      if (!t) return null;
+      const slug = playerSlug({
+        firstName: t.firstName,
+        firstInitial: t.firstInitial,
+        lastName: t.lastName,
+      });
+      return {
+        name: t.name,
+        firstName: t.firstName,
+        lastName: t.lastName,
+        href: `/teams/${team.slug}/players/${slug}`,
+      };
+    };
+    return { prev: toLink(prev), next: toLink(next), idx, total: teammates.length };
+  }, [teammates, player?.name, player?.lastName, team?.slug]);
+
+  // Keyboard shortcuts: ← prev, → next. Skip when focus is in an input/
+  // textarea so typing in caption editors / search bars stays unaffected.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+      if (e.key === 'ArrowLeft' && teammateNav.prev) {
+        e.preventDefault();
+        navigate(teammateNav.prev.href);
+      } else if (e.key === 'ArrowRight' && teammateNav.next) {
+        e.preventDefault();
+        navigate(teammateNav.next.href);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [teammateNav.prev, teammateNav.next, navigate]);
+
+  // Sticky mini-hero — fades in once the full hero scrolls out of view.
+  // The ref attaches to the hero card further down in the JSX, but we
+  // declare the hook up here so it stays in a stable position relative
+  // to the early returns below.
+  const heroRef = useRef(null);
+  const [heroOutOfView, setHeroOutOfView] = useState(false);
+  useEffect(() => {
+    const node = heroRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return undefined;
+    const obs = new IntersectionObserver(
+      ([entry]) => setHeroOutOfView(!entry.isIntersecting),
+      { rootMargin: '-80px 0px 0px 0px', threshold: 0 }
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [player?.name]);
+
   if (!team) {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
@@ -1477,77 +1550,6 @@ export default function PlayerPage() {
   } : null;
 
   const playerRank = player.ranking?.currentRank || null;
-
-  // ─── Teammate prev/next nav ───────────────────────────────────────────────
-  // Locate this player in the alphabetical roster, then surface link chips
-  // (and ←/→ keyboard shortcuts) that walk to the previous and next teammate.
-  const teammateNav = useMemo(() => {
-    if (!teammates.length || !player?.lastName) return { prev: null, next: null };
-    const norm = (s) => String(s || '').toLowerCase();
-    const targetName = norm(player.name);
-    const targetLast = norm(player.lastName);
-    const idx = teammates.findIndex(t =>
-      norm(t.name) === targetName || norm(t.lastName) === targetLast
-    );
-    if (idx < 0) return { prev: null, next: null };
-    const prev = idx > 0 ? teammates[idx - 1] : null;
-    const next = idx < teammates.length - 1 ? teammates[idx + 1] : null;
-    const toLink = (t) => {
-      if (!t) return null;
-      const slug = playerSlug({
-        firstName: t.firstName,
-        firstInitial: t.firstInitial,
-        lastName: t.lastName,
-      });
-      return {
-        name: t.name,
-        firstName: t.firstName,
-        lastName: t.lastName,
-        href: `/teams/${team.slug}/players/${slug}`,
-      };
-    };
-    return { prev: toLink(prev), next: toLink(next), idx, total: teammates.length };
-  }, [teammates, player?.name, player?.lastName, team?.slug]);
-
-  // Keyboard shortcuts: ← prev, → next. Skip when focus is in an input/
-  // textarea so typing in caption editors / search bars stays unaffected.
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const tag = (e.target?.tagName || '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
-      if (e.key === 'ArrowLeft' && teammateNav.prev) {
-        e.preventDefault();
-        navigate(teammateNav.prev.href);
-      } else if (e.key === 'ArrowRight' && teammateNav.next) {
-        e.preventDefault();
-        navigate(teammateNav.next.href);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [teammateNav.prev, teammateNav.next, navigate]);
-
-  // Sticky mini-hero — fades in once the full hero scrolls out of view.
-  // We attach the observer to the hero card via a ref further down.
-  const heroRef = useRef(null);
-  const [heroOutOfView, setHeroOutOfView] = useState(false);
-  useEffect(() => {
-    const node = heroRef.current;
-    if (!node || typeof IntersectionObserver === 'undefined') return undefined;
-    const obs = new IntersectionObserver(
-      ([entry]) => setHeroOutOfView(!entry.isIntersecting),
-      // Trigger when the BOTTOM of the hero crosses the top of the
-      // viewport (rootMargin shifts the trigger line down by ~80px so
-      // the mini hero appears just AFTER the real hero leaves the
-      // visible area, not the moment its bottom edge clips). The
-      // negative bottom margin makes the bar reappear as soon as the
-      // hero comes back into view from below on a scroll-up.
-      { rootMargin: '-80px 0px 0px 0px', threshold: 0 }
-    );
-    obs.observe(node);
-    return () => obs.disconnect();
-  }, [player?.name]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
