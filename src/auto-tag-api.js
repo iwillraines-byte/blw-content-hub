@@ -108,7 +108,19 @@ async function getContextPayload() {
   const now = Date.now();
   if (!_rosterCache || now - _rosterCacheAt > ROSTER_CACHE_TTL) {
     const all = await getAllPlayersDirectory();
-    _rosterCache = all.map(p => ({ team: p.team, lastName: p.lastName, num: p.num || '' }));
+    // Send firstInitial + firstName too — without these the vision API
+    // can't disambiguate cousin pairs (Logan/Luke Rose, Paul/Will
+    // Marshall) and never returns a firstInitial in its response. We
+    // keep the payload tight by sending the initial as a single char
+    // and only the first 12 chars of firstName (more than enough for
+    // visual disambiguation hints).
+    _rosterCache = all.map(p => ({
+      team: p.team,
+      lastName: p.lastName,
+      num: p.num || '',
+      firstInitial: p.firstInitial || (p.firstName || '').charAt(0).toUpperCase() || '',
+      firstName: (p.firstName || '').slice(0, 12),
+    }));
     _rosterCacheAt = now;
   }
   return {

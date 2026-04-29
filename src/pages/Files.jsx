@@ -174,16 +174,19 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
     !(c.team === tagTeam && c.lastName === tagName && (!c.num || c.num === tagNum))
   ).slice(0, 5);
 
-  // One-click apply for a candidate row — populates team/num/lastName.
-  // Marks hintSource as 'ai-pick' so the badge updates to reflect the
-  // user committed to a suggestion (vs. raw AI top result).
+  // One-click apply for a candidate row — populates team / num /
+  // lastName / firstInitial in the tag inputs. The first initial
+  // resolves cousin pairs (Logan/Luke Rose, Paul/Will Marshall) without
+  // making the user type it.
   const applyCandidate = (c) => {
     if (c.team) setTagTeam(c.team);
     if (c.num) setTagNum(c.num);
     if (c.lastName) setTagName(c.lastName);
+    if (c.firstInitial) setTagInitial(c.firstInitial);
     setHintSource('ai-pick');
     setConfidence('medium');
-    setReasoning(c.why || `Picked from AI candidates: ${c.team || ''} ${c.lastName || ''} #${c.num || ''}`);
+    const fiLabel = c.firstInitial ? `${c.firstInitial}.` : '';
+    setReasoning(c.why || `Picked from AI candidates: ${c.team || ''} ${fiLabel}${c.lastName || ''} #${c.num || ''}`);
     setAmbiguous(false);
   };
 
@@ -370,11 +373,16 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
           alignSelf: 'center', marginRight: 4, paddingTop: 6,
         }}>AI suggests:</span>
         {visibleCandidates.map((c, i) => {
-          const label = `${c.team || '??'} #${c.num || '??'} · ${c.lastName || '???'}`;
+          // Show first initial when present so cousin pairs read as
+          // distinct chips (e.g. "DAL #07 · L.ROSE 84%" vs
+          // "DAL #14 · C.ROSE 62%"). Falls back to lastname-only when
+          // no FI was returned.
+          const fiPrefix = c.firstInitial ? `${c.firstInitial}.` : '';
+          const label = `${c.team || '??'} #${c.num || '??'} · ${fiPrefix}${c.lastName || '???'}`;
           const score = Math.round((c.score || 0) * 100);
           return (
             <button
-              key={`${c.team || ''}-${c.lastName || ''}-${c.num || ''}-${i}`}
+              key={`${c.team || ''}-${c.firstInitial || ''}-${c.lastName || ''}-${c.num || ''}-${i}`}
               onClick={() => applyCandidate(c)}
               title={c.why ? `${c.why} (${score}% confident)` : `${score}% confident`}
               style={{

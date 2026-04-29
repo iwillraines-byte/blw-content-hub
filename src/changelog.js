@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.1.1',
+    date: '2026-04-29',
+    kind: 'patch',
+    summary: 'AI tagging now returns first initial + jersey number',
+    items: [
+      'Auto-tag API was missing firstInitial in both its prompt and its response shape — vision results never carried it through. Schema now requires firstInitial alongside lastName/num; roster context sent to the model includes "K.JASO #03 (Konnor)" so the model can pick the right initial for cousin pairs.',
+      'Server-side roster lookup fills in firstInitial AND num when the model returns a confident lastName but forgets the disambiguator (or the photo cropped the jersey). Single-record lastname matches auto-resolve.',
+      'Jersey-number OCR prompt strengthened: explicit instruction to attempt every jersey location (chest, back, sleeves, hat, helmet), pad to 2 digits, and surface partial reads as candidates.',
+      'Files candidate chips now show the first initial (e.g. "DAL #07 · L.ROSE 84%") so cousin pairs are distinguishable at a glance, and one-click apply fills in the initial too.',
+    ],
+  },
+  {
     version: '4.1.0',
     date: '2026-04-29',
     kind: 'minor',
