@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug } from '../data';
+import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { ContentIdeasSection } from '../content-ideas-section';
 import { colors, fonts, radius } from '../theme';
@@ -11,6 +11,8 @@ import { useAuth, isAdminRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
+import { useLeagueContext } from '../league-context';
+import IdeaCard from '../idea-card';
 
 // Shared style for the teammate prev/next chips on the breadcrumb row.
 // Disabled state (no neighbor in that direction) renders as a muted chip
@@ -799,7 +801,7 @@ function ExtrasDropdown({ instagramHandle, funFacts }) {
   );
 }
 
-function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, generateHref, generateChips = [], canEditPhoto, onEditPhoto, onAdjustPhoto, prevPlayer = null, nextPlayer = null }) {
+function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, onGenerate, generating = false, canEditPhoto, onEditPhoto, onAdjustPhoto, prevPlayer = null, nextPlayer = null }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
   const height = formatHeight(v.heightIn);
@@ -1105,39 +1107,19 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               </div>
             )}
 
-            {/* Generate CTAs — primary stat post + secondary template
-                chips (Highlight, Hype) so the user can pick the angle
-                without having to think about which template id it maps
-                to. Each chip is a deep-link into Generate with the
-                template + team + player pre-filled. */}
+            {/* Generate Content — single CTA. Click triggers an AI idea
+                generation scoped to this player; the resulting card pops
+                up in a modal with the IdeaCard's existing "Open in
+                Generate" path so the user gets a drafted idea (headline +
+                story + captions) before landing in the canvas. */}
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Link to={generateHref} style={{ textDecoration: 'none' }}>
-                <RedButton style={{ padding: '8px 16px', fontSize: 12 }}>
-                  ✦ Generate Stat Post
-                </RedButton>
-              </Link>
-              {generateChips.map(chip => (
-                <Link
-                  key={chip.template}
-                  to={chip.href}
-                  title={chip.title}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '7px 12px', borderRadius: radius.full,
-                    background: 'transparent',
-                    color: colors.textSecondary,
-                    border: `1px solid ${colors.border}`,
-                    cursor: 'pointer',
-                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                    letterSpacing: 0.4, textTransform: 'uppercase',
-                    textDecoration: 'none',
-                    transition: 'background 120ms ease, border-color 120ms ease',
-                  }}
-                >
-                  <span aria-hidden="true" style={{ fontSize: 13 }}>{chip.icon}</span>
-                  {chip.label}
-                </Link>
-              ))}
+              <RedButton
+                onClick={onGenerate}
+                disabled={generating}
+                style={{ padding: '8px 16px', fontSize: 12 }}
+              >
+                {generating ? '…GENERATING' : '✦ Generate content'}
+              </RedButton>
             </div>
           </div>
         </div>
@@ -1263,6 +1245,17 @@ export default function PlayerPage() {
   // so we don't need a new index. Soft-fails to an empty list when cloud
   // isn't configured.
   const [recentPosts, setRecentPosts] = useState([]);
+  // Generate-content modal state. Clicking the hero CTA fires
+  // /api/ideas with a player-scoped seed and shows the resulting
+  // single idea in a modal — same IdeaCard that lives on the
+  // dashboard, so the user can edit captions or jump into Generate
+  // from the popup. Loading state disables the button while waiting
+  // for the API. Replacing the legacy direct deep-link with this
+  // flow gives the user an AI-drafted idea to work from instead of
+  // dropping them into Generate with empty fields.
+  const [pendingIdea, setPendingIdea] = useState(null);
+  const [generatingIdea, setGeneratingIdea] = useState(false);
+  const leagueCtx = useLeagueContext();
   // Teammate roster (alphabetical by lastName) — drives prev/next navigation.
   // Populated in the same mount effect that loads `player`. We don't need
   // media here, just the names → slugs mapping for the nav links.
@@ -1564,39 +1557,61 @@ export default function PlayerPage() {
     return acc;
   }, {});
 
-  // Build Generate CTA URL with pre-filled fields
-  const generateParams = new URLSearchParams();
-  generateParams.set('template', 'player-stat');
-  generateParams.set('team', team.id);
-  generateParams.set('platform', 'feed');
-  generateParams.set('playerName', player.name);
-  if (player.num) generateParams.set('number', player.num);
-  const statLine = buildStatLine(player);
-  if (statLine) generateParams.set('statLine', statLine);
+  // ── Generate-content flow ──────────────────────────────────────────────
+  // The hero CTA used to be a direct deep-link into Generate with the
+  // player's name + stat line pre-filled into legacy params. Now it
+  // calls /api/ideas with a player-scoped seed and shows the resulting
+  // SINGLE idea in a modal — the IdeaCard on the dashboard. From the
+  // modal the user can edit captions, queue as a request, or open in
+  // Generate (the IdeaCard's own "Open in Generate" deep-link). This
+  // means every player-page generation starts from an AI-drafted idea
+  // instead of dropping the user into the canvas with empty fields.
+  const generateIdea = useCallback(async () => {
+    if (!player) return;
+    setGeneratingIdea(true);
+    try {
+      const res = await fetch('/api/ideas', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          // Same context shape the dashboard sends so the model has the
+          // full BLW state to draw on (team table, batting/pitching
+          // leaderboards, rankings). Slices match the dashboard cap.
+          context: {
+            teams: TEAMS.map(t => ({ id: t.id, name: t.name, record: t.record, rank: t.rank, color: t.color, accent: t.accent })),
+            batting: battingLeaders.slice(0, 60),
+            pitching: pitchingLeaders.slice(0, 60),
+          },
+          // Lock the generation to this team + player via the seed-scope
+          // mechanism. The API's existing seed-scope block requires every
+          // idea in the batch to be about ${player.name} or their
+          // teammates. count=1 because we only need a single popup idea.
+          count: 1,
+          seedIdea: {
+            id: `playerpage-seed-${Date.now()}`,
+            team: player.team || team.id,
+            headline: `${player.name} — content seed`,
+            prefill: { playerName: player.name },
+          },
+          team: player.team || team.id,
+          leagueContext: leagueCtx.notes || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const idea = (data.ideas || [])[0];
+      if (!idea) throw new Error('No idea returned');
+      setPendingIdea(idea);
+    } catch (err) {
+      toast.error('Couldn\'t generate idea', { detail: err.message?.slice(0, 80) });
+    } finally {
+      setGeneratingIdea(false);
+    }
+  }, [player, team, battingLeaders, pitchingLeaders, leagueCtx.notes, toast]);
 
-  // Secondary quick-action chips — one-click deep-links into Generate
-  // with the right template selected and the player pre-filled. Skipped
-  // for templates that don't apply to this player (e.g., Hype's quote
-  // text needs a player; Highlight wants a stat line).
-  const buildChipHref = (templateId, extra = {}) => {
-    const p = new URLSearchParams();
-    p.set('template', templateId);
-    p.set('team', team.id);
-    p.set('platform', 'feed');
-    p.set('playerName', player.name);
-    if (player.num) p.set('number', player.num);
-    if (extra.statLine && statLine) p.set('statLine', statLine);
-    return `/generate?${p.toString()}`;
-  };
-  const generateChips = [
-    {
-      template: 'highlight',
-      label: 'Highlight',
-      icon: '✶',
-      title: `Open Generate with the Highlight template pre-filled for ${player.name}`,
-      href: buildChipHref('highlight', { statLine: true }),
-    },
-  ];
+  // Stat line is still useful for the IdeaCard's "Open in Generate"
+  // path — kept here so the existing helper still resolves.
+  const statLine = buildStatLine(player);
 
   // Avatar resolution — delegate to the canonical resolver in
   // media-store.js so the player hero and team-page roster card always
@@ -1726,8 +1741,8 @@ export default function PlayerPage() {
           pitchingRanks={pitchingRanks}
           bTotal={bTotal}
           pTotal={pTotal}
-          generateHref={`/generate?${generateParams.toString()}`}
-          generateChips={generateChips}
+          onGenerate={generateIdea}
+          generating={generatingIdea}
           canEditPhoto={isAdmin}
           onEditPhoto={openPhotoPicker}
           onAdjustPhoto={() => setPositionEditorOpen(true)}
@@ -1735,7 +1750,7 @@ export default function PlayerPage() {
       </div>
 
       {/* Sticky mini-hero — fades in once the full hero scrolls out of
-          view so the primary "Generate Stat Post" CTA stays one click
+          view so the primary "Generate content" CTA stays one click
           away while you're reading down the page. Tucks itself just below
           the topbar (which is sticky at top:0 with z-index 40 in App.jsx),
           so it sits at top:60 with z-index 30 — under modals/banners. */}
@@ -1747,7 +1762,8 @@ export default function PlayerPage() {
         profileOffsetX={player.profileOffsetX}
         profileOffsetY={player.profileOffsetY}
         profileZoom={player.profileZoom}
-        generateHref={`/generate?${generateParams.toString()}`}
+        onGenerate={generateIdea}
+        generating={generatingIdea}
       />
 
       {/* Admin-only profile-picture picker modal. Shows the full set of
@@ -1780,6 +1796,38 @@ export default function PlayerPage() {
           onClose={() => !savingPosition && setPositionEditorOpen(false)}
           onSave={savePosition}
           saving={savingPosition}
+        />
+      )}
+
+      {/* Generated-content modal — opens when "✦ Generate content" pops
+          a fresh AI idea for this player. Renders the same IdeaCard the
+          dashboard uses, so the user can edit captions, queue as a
+          request, or hit "Open in Generate" to drop into the canvas
+          with the idea's prefill. Backdrop click + ESC close. The
+          IdeaCard's onIdeaUpdate path patches the local pendingIdea so
+          caption regen / edits stay in sync inside the modal. */}
+      {pendingIdea && (
+        <GeneratedIdeaModal
+          idea={pendingIdea}
+          player={player}
+          team={team}
+          leagueContext={leagueCtx.notes || ''}
+          onClose={() => setPendingIdea(null)}
+          onIdeaUpdate={(id, patch) => setPendingIdea(prev => prev && prev.id === id ? { ...prev, ...patch } : prev)}
+          onOpenInGenerate={(idea) => {
+            const params = new URLSearchParams();
+            if (idea.templateId) params.set('template', idea.templateId);
+            if (idea.team && idea.team !== 'BLW') params.set('team', idea.team);
+            if (idea.prefill) {
+              for (const [k, v] of Object.entries(idea.prefill)) {
+                if (v != null && v !== '') params.set(k, String(v));
+              }
+            }
+            navigate(`/generate?${params.toString()}`);
+            setPendingIdea(null);
+          }}
+          onRegenerate={generateIdea}
+          regenerating={generatingIdea}
         />
       )}
 
@@ -1963,11 +2011,118 @@ export default function PlayerPage() {
   );
 }
 
+// ─── Generated-idea modal ──────────────────────────────────────────────────
+// Wraps the dashboard's IdeaCard in a centered modal so the player-page
+// "Generate content" CTA can show one AI-drafted idea without leaving the
+// page. Backdrop click + ESC close. A footer row carries Re-roll (calls
+// generateIdea() again) and Open in Generate (handled by IdeaCard itself).
+function GeneratedIdeaModal({ idea, player, team, leagueContext, onClose, onIdeaUpdate, onOpenInGenerate, onRegenerate, regenerating }) {
+  // ESC-to-close. Mirrors the keyboard pattern used by the photo picker
+  // and position editor so all PlayerPage modals dismiss the same way.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+        zIndex: 250,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+        backdropFilter: 'blur(2px)',
+      }}
+    >
+      <div
+        style={{
+          background: colors.white, borderRadius: radius.lg,
+          maxWidth: 640, width: '100%',
+          maxHeight: '88vh', overflowY: 'auto',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.30), 0 4px 12px rgba(0,0,0,0.14)',
+          padding: 18,
+          display: 'flex', flexDirection: 'column', gap: 14,
+        }}
+      >
+        {/* Header — small, identifies the surface and lets the user close. */}
+        <div style={{
+          display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+          gap: 12, flexWrap: 'wrap',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+              letterSpacing: 0.8, color: colors.textMuted, textTransform: 'uppercase',
+            }}>Generated content</div>
+            <div style={{
+              fontFamily: fonts.heading, fontSize: 22, color: colors.text,
+              letterSpacing: 0.3, marginTop: 2,
+            }}>
+              {player.firstName ? `${player.firstName} ` : ''}{player.lastName}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: 'transparent', border: `1px solid ${colors.borderLight}`,
+              color: colors.textSecondary, borderRadius: radius.sm,
+              padding: '4px 10px', fontFamily: fonts.condensed,
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+              cursor: 'pointer',
+            }}
+          >Close (Esc)</button>
+        </div>
+
+        {/* The actual idea — full IdeaCard so the user can edit captions,
+            queue as a request, or open in Generate from here. */}
+        <IdeaCard
+          idea={idea}
+          queuedRequestId={null}
+          ideasLoading={false}
+          leagueContext={leagueContext}
+          onQueue={() => { /* queue from modal — handled outside if needed */ }}
+          onOpenInGenerate={onOpenInGenerate}
+          onIdeaUpdate={onIdeaUpdate}
+          // Intentionally NO onMoreLikeThis here — the modal has a single
+          // dedicated Re-roll button below that owns regen.
+        />
+
+        {/* Footer — Re-roll for "give me another angle on this player".
+            Open in Generate is wired into the IdeaCard above. */}
+        <div style={{
+          display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap',
+          paddingTop: 4,
+          borderTop: `1px solid ${colors.borderLight}`,
+        }}>
+          <button
+            type="button"
+            onClick={onRegenerate}
+            disabled={regenerating}
+            title="Generate a different idea about this player"
+            style={{
+              background: 'transparent', color: colors.textSecondary,
+              border: `1px solid ${colors.borderLight}`,
+              borderRadius: radius.sm, padding: '6px 12px',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+              letterSpacing: 0.4, cursor: regenerating ? 'wait' : 'pointer',
+              marginTop: 8,
+            }}
+          >{regenerating ? '…ROLLING' : '↻ Re-roll'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sticky mini-hero ───────────────────────────────────────────────────────
 // Compact strip that slides down from below the topbar once the full hero
 // scrolls out of view. Carries the avatar + name + team chip + the primary
 // Generate CTA so the user never has to scroll back up to start a post.
-function StickyMiniHero({ active, player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, generateHref }) {
+function StickyMiniHero({ active, player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, onGenerate, generating = false }) {
   const playerFirst = player.firstName || (player.name || '').split(' ')[0] || '';
   const playerLast = player.lastName || '';
   return (
@@ -2027,11 +2182,13 @@ function StickyMiniHero({ active, player, team, avatarUrl, profileOffsetX, profi
             fontFamily: fonts.body, fontSize: 11, color: colors.textSecondary, fontWeight: 600,
           }}>{team.name}{player.num ? ` · #${player.num}` : ''}</span>
         </div>
-        <Link to={generateHref} style={{ textDecoration: 'none', flexShrink: 0 }}>
-          <RedButton style={{ padding: '6px 14px', fontSize: 11 }}>
-            ✦ Generate Stat Post
-          </RedButton>
-        </Link>
+        <RedButton
+          onClick={onGenerate}
+          disabled={generating}
+          style={{ padding: '6px 14px', fontSize: 11, flexShrink: 0 }}
+        >
+          {generating ? '…GENERATING' : '✦ Generate content'}
+        </RedButton>
       </div>
     </div>
   );
