@@ -30,6 +30,9 @@
 //   "usage": { input_tokens, output_tokens, cache_read_tokens }
 // }
 
+import { getServiceClient } from './_supabase.js';
+import { persistIdeas } from './content-ideas.js';
+
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 // Bumped from 1200 — each idea now ships a narrative paragraph, stat pills,
 // and three caption variants. Six ideas at the new shape lands around
@@ -276,8 +279,33 @@ Generate ${count} fresh content ideas drawing on the BLW state above. Lean heavi
       return;
     }
 
+    const ideasOut = Array.isArray(parsed.ideas) ? parsed.ideas : [];
+
+    // Stamp every idea with a globally unique id (the AI-emitted slug like
+    // "leader-jaso-ops" can collide across batches) and tag as AI-sourced.
+    // Then persist to content_ideas so the dashboard, team pages, and
+    // player pages can read them back. Soft-fail: persistence errors don't
+    // bounce the user — the ideas still come back in the response.
+    const stamped = ideasOut.map((i, idx) => ({
+      ...i,
+      id: i.id ? `ai-${Date.now()}-${i.id}` : `ai-${Date.now()}-${idx}`,
+      source: 'ai',
+      aiGenerated: true,
+    }));
+    try {
+      const sb = getServiceClient();
+      if (sb && stamped.length) {
+        const result = await persistIdeas(sb, stamped, { createdBy: 'ai-generator' });
+        if (result.errors.length) {
+          console.warn('[content-ideas] persist soft-failed', result.errors[0]);
+        }
+      }
+    } catch (err) {
+      console.warn('[content-ideas] persist threw', err?.message);
+    }
+
     res.status(200).json({
-      ideas: Array.isArray(parsed.ideas) ? parsed.ideas : [],
+      ideas: stamped,
       usage: {
         input_tokens: data.usage?.input_tokens || 0,
         output_tokens: data.usage?.output_tokens || 0,

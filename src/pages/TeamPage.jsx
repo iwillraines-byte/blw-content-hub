@@ -8,6 +8,7 @@ import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, P
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
+import { ContentIdeasSection } from '../content-ideas-section';
 
 export default function TeamPage() {
   const { slug } = useParams();
@@ -949,6 +950,15 @@ export default function TeamPage() {
           </>
         );
       })()}
+
+      {/* Content ideas — same surface as the dashboard but filtered to this
+          team. Anything generated about this team in the last 14 days
+          shows here too. Empty state shows a soft prompt to generate. */}
+      <ContentIdeasSection
+        team={team.id}
+        title={`Content ideas · ${team.name}`}
+        emptyMessage={`No ${team.name} ideas in the last 14 days. Generate fresh ideas from the dashboard — anything tagged for ${team.id} will land here automatically.`}
+      />
 
       {/* Recently Uploaded Player Media */}
       <Card>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
+import { ContentIdeasSection } from '../content-ideas-section';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
@@ -1341,6 +1342,17 @@ export default function PlayerPage() {
           </Card>
         )}
       </div>
+
+      {/* Content ideas about this player — only shows when there are
+          actually ideas tagged for this player (matched server-side via
+          player_last_name extracted from prefill.playerName). The section
+          self-hides when empty so it doesn't clutter pages for less
+          frequently-spotlighted players. */}
+      <ContentIdeasSection
+        team={team.id}
+        player={player.lastName}
+        title={`Content ideas about ${player.firstName || player.name?.split(' ')[0] || ''} ${player.lastName}`.trim()}
+      />
 
       {/* Media Gallery */}
       <Card>

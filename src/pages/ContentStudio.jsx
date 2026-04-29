@@ -13,6 +13,7 @@ import { fetchRecentGenerates } from '../cloud-sync';
 import IdeaCard from '../idea-card';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
 import { ViewAsPicker } from '../view-as';
+import { useContentIdeas } from '../content-ideas-store';
 
 export default function ContentStudio() {
   const navigate = useNavigate();
@@ -29,10 +30,12 @@ export default function ContentStudio() {
   const [batting, setBatting] = useState([]);
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
-  // AI-generated content ideas — populated via /api/ideas. Falls back to the
-  // deterministic `suggestions` list when empty so the dashboard still works
-  // without the Anthropic key configured.
-  const [aiIdeas, setAiIdeas] = useState([]);
+  // AI-generated content ideas — persisted server-side via /api/content-ideas
+  // and fetched here. The store handles fetch/refetch/patch/dismiss with
+  // optimistic updates. Falls back to the deterministic `suggestions` list
+  // when empty so the dashboard still works without the Anthropic key.
+  const ideasStore = useContentIdeas({ team: null, limit: 24 });
+  const aiIdeas = ideasStore.ideas;
   const [ideasLoading, setIdeasLoading] = useState(false);
   const [ideasError, setIdeasError] = useState(null);
   // Most recently queued idea id → request id. Flashes a "✓ Queued" state
@@ -111,8 +114,16 @@ export default function ContentStudio() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      const tagged = (data.ideas || []).map((i, idx) => ({ ...i, id: i.id || `ai-${Date.now()}-${idx}`, aiGenerated: true }));
-      setAiIdeas(seedIdea ? [...tagged, ...aiIdeas] : tagged);
+      // Server now stamps id + aiGenerated; we only normalise defensively.
+      const tagged = (data.ideas || []).map((i, idx) => ({
+        ...i,
+        id: i.id || `ai-${Date.now()}-${idx}`,
+        aiGenerated: true,
+      }));
+      // Optimistic prepend — the server has already persisted these, so
+      // the dashboard reflects them immediately and a refresh will see
+      // the same list from /api/content-ideas.
+      ideasStore.prependIdeas(tagged);
       // One AI call generated N ideas — track both so the counter reflects
       // reality. `ideas` is the headline number; `ideasCalls` is invocations
       // (useful if you want to reason about API spend later).
@@ -187,10 +198,14 @@ export default function ContentStudio() {
   };
 
   // Patch a single idea's fields (e.g., when /api/captions returns drafts).
-  // Looks the idea up in whichever list it belongs to and replaces it with
-  // a merged copy. Keeps list ordering stable.
+  // For AI ideas (in the persistent store), the store handles optimistic
+  // local update + cloud PATCH. For deterministic suggestions (local-only),
+  // we patch the suggestions array directly.
   const patchIdea = (ideaId, patch) => {
-    setAiIdeas(prev => prev.map(i => i.id === ideaId ? { ...i, ...patch } : i));
+    if (aiIdeas.some(i => i.id === ideaId)) {
+      ideasStore.patchIdea(ideaId, patch);
+      return;
+    }
     setSuggestions(prev => prev.map(i => i.id === ideaId ? { ...i, ...patch } : i));
   };
 
