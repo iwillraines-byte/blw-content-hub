@@ -25,6 +25,26 @@ export const NEWS_SHADOWS = [
   { offsetX: 0, offsetY: 1, blur: 2,  color: 'rgba(0, 0, 0, 0.80)' },
 ];
 
+// Locked layout for the Team/Player News template. Same triplet of
+// lines ships across all platform variants — we don't fork by export
+// size, the design is intentionally identical. If you need to change
+// the position/size for ALL News templates at once, update this builder
+// (single source of truth). For per-platform variants, fork the
+// template instead of drifting these values.
+//
+// Locked values (per design call 2026-04-29):
+//   x        = 540
+//   fontSize = 120
+//   y        = 1010 / 1138 / 1266
+//   font     = 'press'
+function makeNewsLines() {
+  return [
+    { key: 'line1', label: 'Line 1', x: 540, y: 1010, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+    { key: 'line2', label: 'Line 2', x: 540, y: 1138, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+    { key: 'line3', label: 'Line 3', x: 540, y: 1266, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+  ];
+}
+
 export const TEMPLATE_TYPES = {
   'gameday': {
     name: 'Game Day',
@@ -77,44 +97,25 @@ export const TEMPLATE_TYPES = {
     description: 'Three-line news / stat post stacked symmetrically inside the overlay',
     playerCentric: true,
     fields: {
-      // Three centered lines per platform. The portrait layout matches the
-      // Saguaros reference overlay (green panel below the SAGUAROS banner)
-      // — lines stacked symmetrically and vertically centered in that panel.
-      // Line spacing scales with font size (~ 1.6× lineHeight) so a future
-      // size bump still reads cleanly.
+      // Three centered lines, locked per the Saguaros overlay reference.
+      // Locked values (do NOT drift these without an explicit design call):
+      //   x        = 540      (every platform, every line)
+      //   fontSize = 120      (every platform, every line)
+      //   y        = 1010 / 1138 / 1266   (line 1 / 2 / 3)
+      //   font     = 'press'  (Press Gothic, 60pt-equivalent display weight)
+      //   color    = #FFFFFF
+      //   shadows  = NEWS_SHADOWS (three-layer drop)
       //
-      // SHADOW STACK — every line carries the same three-layer drop shadow
-      // for legibility against textured/gradient backgrounds:
-      //   1. wide soft shadow (12 blur, 6 offset, 40% opacity) — depth
-      //   2. medium contact shadow (6 blur, 3 offset, 60%) — separation
-      //   3. tight contact shadow (2 blur, 1 offset, 80%) — edge crispness
-      // Defined once via NEWS_SHADOWS and spread into each field.
-      feed: [
-        // 1080×1080 — center the three lines around y=540 (middle of canvas).
-        { key: 'line1', label: 'Line 1', x: 540, y: 460, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-        { key: 'line2', label: 'Line 2', x: 540, y: 560, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-        { key: 'line3', label: 'Line 3', x: 540, y: 660, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-      ],
-      portrait: [
-        // 1080×1350 — green overlay panel runs ~y=800 → y=1350.
-        // Center the three lines around y=1075 with 110px line spacing.
-        { key: 'line1', label: 'Line 1', x: 540, y: 965,  fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-        { key: 'line2', label: 'Line 2', x: 540, y: 1075, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-        { key: 'line3', label: 'Line 3', x: 540, y: 1185, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-      ],
-      story: [
-        // 1080×1920 — keep the lines anchored in the lower half but with
-        // story-friendly vertical breathing room. Center around y=1400.
-        { key: 'line1', label: 'Line 1', x: 540, y: 1290, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-        { key: 'line2', label: 'Line 2', x: 540, y: 1400, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-        { key: 'line3', label: 'Line 3', x: 540, y: 1510, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-      ],
-      landscape: [
-        // 1200×675 — three short lines centered around y=337 with 90px gap.
-        { key: 'line1', label: 'Line 1', x: 600, y: 247, fontSize: 50, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1100, shadows: NEWS_SHADOWS },
-        { key: 'line2', label: 'Line 2', x: 600, y: 337, fontSize: 50, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1100, shadows: NEWS_SHADOWS },
-        { key: 'line3', label: 'Line 3', x: 600, y: 427, fontSize: 50, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1100, shadows: NEWS_SHADOWS },
-      ],
+      // The same triplet ships across feed / portrait / story / landscape
+      // so the design stays consistent regardless of which platform export
+      // the user picks. If a future overlay variant needs a different
+      // layout we'll either fork the template or add per-platform position
+      // overrides via the field-overrides store — but the default lives
+      // here and is intentionally identical across exports.
+      feed:      makeNewsLines(),
+      portrait:  makeNewsLines(),
+      story:     makeNewsLines(),
+      landscape: makeNewsLines(),
     },
   },
 
