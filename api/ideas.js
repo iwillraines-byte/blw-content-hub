@@ -40,7 +40,8 @@ const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 3200;
 
 const TEMPLATE_CATALOG = `TEMPLATE CATALOG (map each idea to exactly one templateId):
-- player-stat   → single-player stat card. Prefill: playerName, number, statLine, teamName
+- player-stat   → "Team/Player News" — three centered lines stacked symmetrically. Prefill: line1, line2, line3.
+                  Convention: line1 = the WHO (player name, team name, or short subject), line2 = the WHAT (the news / stat / verb), line3 = optional context (jersey + team, date, supporting note). Each line should fit under ~28 characters in ALL CAPS for typographic balance — keep lines punchy and roughly equal length so they read as a stacked headline.
 - gameday       → pre-game matchup hype. Prefill: homeTeam, awayTeam, homeRecord, awayRecord, date, time, venue
 - score         → final score graphic. Prefill: homeTeam, awayTeam, homeScore, awayScore, result, mvp
 - hype          → motivational/hype graphic, often a player quote. Prefill: playerName, number

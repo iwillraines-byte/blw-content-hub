@@ -2,8 +2,28 @@
 // Designers create overlay PNGs that match these layouts.
 // Dynamic text is rendered at the positions defined here.
 //
-// Font keys: 'heading' = Bebas Neue, 'body' = Barlow, 'condensed' = Barlow Condensed
+// Font keys (FONT_MAP at the bottom of this file):
+//   'heading'   = Bebas Neue        'body'      = Barlow
+//   'condensed' = Barlow Condensed  'gotham'    = Gotham Bold
+//   'press'     = Press Gothic      'united'    = United Sans Bold
+//
 // All coordinates are in pixels at the native canvas resolution.
+//
+// SHADOWS — fields can carry an optional `shadows` array with one or more
+// drop-shadow layers. Each layer is { offsetX, offsetY, blur, color }
+// applied in order before the final clean text pass. Use NEWS_SHADOWS
+// (below) for the standard three-layer Team/Player News stack; define a
+// new constant if a template needs a different look.
+
+// Three-layer drop shadow used by the Team/Player News template. Wide
+// soft layer for ambient depth, medium contact layer for separation,
+// tight near-edge layer for crispness. Tuned for white text on the
+// green Saguaros overlay; reads cleanly on darker backgrounds too.
+export const NEWS_SHADOWS = [
+  { offsetX: 0, offsetY: 6, blur: 12, color: 'rgba(0, 0, 0, 0.40)' },
+  { offsetX: 0, offsetY: 3, blur: 6,  color: 'rgba(0, 0, 0, 0.60)' },
+  { offsetX: 0, offsetY: 1, blur: 2,  color: 'rgba(0, 0, 0, 0.80)' },
+];
 
 export const TEMPLATE_TYPES = {
   'gameday': {
@@ -52,34 +72,48 @@ export const TEMPLATE_TYPES = {
   },
 
   'player-stat': {
-    name: 'Player Stat Card',
-    icon: '⭐',
-    description: 'Individual player stat spotlight',
+    name: 'Team/Player News',
+    icon: '📰',
+    description: 'Three-line news / stat post stacked symmetrically inside the overlay',
     playerCentric: true,
     fields: {
+      // Three centered lines per platform. The portrait layout matches the
+      // Saguaros reference overlay (green panel below the SAGUAROS banner)
+      // — lines stacked symmetrically and vertically centered in that panel.
+      // Line spacing scales with font size (~ 1.6× lineHeight) so a future
+      // size bump still reads cleanly.
+      //
+      // SHADOW STACK — every line carries the same three-layer drop shadow
+      // for legibility against textured/gradient backgrounds:
+      //   1. wide soft shadow (12 blur, 6 offset, 40% opacity) — depth
+      //   2. medium contact shadow (6 blur, 3 offset, 60%) — separation
+      //   3. tight contact shadow (2 blur, 1 offset, 80%) — edge crispness
+      // Defined once via NEWS_SHADOWS and spread into each field.
       feed: [
-        { key: 'playerName', label: 'Player Name', x: 540, y: 160, fontSize: 64, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900 },
-        { key: 'number', label: 'Jersey #', x: 880, y: 380, fontSize: 220, font: 'heading', color: 'rgba(255,255,255,0.12)', align: 'center', maxWidth: 300 },
-        { key: 'teamName', label: 'Team', x: 540, y: 220, fontSize: 20, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 400 },
-        { key: 'statLine', label: 'Stat Line', x: 540, y: 860, fontSize: 30, font: 'body', color: '#FFFFFF', align: 'center', maxWidth: 950 },
+        // 1080×1080 — center the three lines around y=540 (middle of canvas).
+        { key: 'line1', label: 'Line 1', x: 540, y: 460, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+        { key: 'line2', label: 'Line 2', x: 540, y: 560, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+        { key: 'line3', label: 'Line 3', x: 540, y: 660, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
       ],
       portrait: [
-        { key: 'playerName', label: 'Player Name', x: 540, y: 200, fontSize: 64, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900 },
-        { key: 'number', label: 'Jersey #', x: 880, y: 500, fontSize: 220, font: 'heading', color: 'rgba(255,255,255,0.12)', align: 'center', maxWidth: 300 },
-        { key: 'teamName', label: 'Team', x: 540, y: 260, fontSize: 20, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 400 },
-        { key: 'statLine', label: 'Stat Line', x: 540, y: 1100, fontSize: 30, font: 'body', color: '#FFFFFF', align: 'center', maxWidth: 950 },
+        // 1080×1350 — green overlay panel runs ~y=800 → y=1350.
+        // Center the three lines around y=1075 with 110px line spacing.
+        { key: 'line1', label: 'Line 1', x: 540, y: 965,  fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+        { key: 'line2', label: 'Line 2', x: 540, y: 1075, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+        { key: 'line3', label: 'Line 3', x: 540, y: 1185, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
       ],
       story: [
-        { key: 'playerName', label: 'Player Name', x: 540, y: 320, fontSize: 64, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900 },
-        { key: 'number', label: 'Jersey #', x: 880, y: 700, fontSize: 220, font: 'heading', color: 'rgba(255,255,255,0.12)', align: 'center', maxWidth: 300 },
-        { key: 'teamName', label: 'Team', x: 540, y: 380, fontSize: 20, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 400 },
-        { key: 'statLine', label: 'Stat Line', x: 540, y: 1560, fontSize: 30, font: 'body', color: '#FFFFFF', align: 'center', maxWidth: 950 },
+        // 1080×1920 — keep the lines anchored in the lower half but with
+        // story-friendly vertical breathing room. Center around y=1400.
+        { key: 'line1', label: 'Line 1', x: 540, y: 1290, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+        { key: 'line2', label: 'Line 2', x: 540, y: 1400, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+        { key: 'line3', label: 'Line 3', x: 540, y: 1510, fontSize: 60, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
       ],
       landscape: [
-        { key: 'playerName', label: 'Player Name', x: 800, y: 160, fontSize: 52, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 600 },
-        { key: 'number', label: 'Jersey #', x: 1050, y: 350, fontSize: 180, font: 'heading', color: 'rgba(255,255,255,0.12)', align: 'center', maxWidth: 250 },
-        { key: 'teamName', label: 'Team', x: 800, y: 210, fontSize: 18, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 350 },
-        { key: 'statLine', label: 'Stat Line', x: 800, y: 520, fontSize: 24, font: 'body', color: '#FFFFFF', align: 'center', maxWidth: 600 },
+        // 1200×675 — three short lines centered around y=337 with 90px gap.
+        { key: 'line1', label: 'Line 1', x: 600, y: 247, fontSize: 50, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1100, shadows: NEWS_SHADOWS },
+        { key: 'line2', label: 'Line 2', x: 600, y: 337, fontSize: 50, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1100, shadows: NEWS_SHADOWS },
+        { key: 'line3', label: 'Line 3', x: 600, y: 427, fontSize: 50, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1100, shadows: NEWS_SHADOWS },
       ],
     },
   },

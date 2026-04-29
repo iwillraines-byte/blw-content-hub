@@ -206,6 +206,13 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
 // Placeholder text shown in the preview when a field is empty.
 // Picked so character width roughly matches expected filled value.
 const FIELD_PLACEHOLDERS = {
+  // Team/Player News template (renamed from player-stat) — three lines.
+  line1:       'TEXT HERE LINE ONE',
+  line2:       'TEXT HERE LINE TWO',
+  line3:       'TEXT HERE LINE THREE',
+  // Other templates — kept verbatim. Some legacy placeholders that
+  // referenced the old player-stat fields stay in case anyone re-adds
+  // them via field overrides; harmless when the keys don't exist.
   playerName:  'PLAYER NAME',
   number:      '00',
   teamName:    'TEAM NAME',
@@ -349,10 +356,35 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
       ctx.font = `${f.fontSize}px ${FONT_MAP[f.font] || FONT_MAP.body}`;
       ctx.textAlign = f.align || 'center';
       if (!hasValue) ctx.globalAlpha = 0.32;
-      if (f.maxWidth) {
-        ctx.fillText(text, f.x, f.y, f.maxWidth);
+
+      const draw = () => {
+        if (f.maxWidth) ctx.fillText(text, f.x, f.y, f.maxWidth);
+        else ctx.fillText(text, f.x, f.y);
+      };
+
+      // Multi-layer drop-shadow stack. Each shadow is applied as its
+      // own fillText pass via canvas's shadow* properties, so layers
+      // composite naturally underneath the final text. The text gets
+      // drawn N+1 times — once per shadow layer plus once shadowless
+      // on top — but for solid-color text the result reads as a
+      // single glyph with N stacked shadows.
+      const shadows = Array.isArray(f.shadows) ? f.shadows : null;
+      if (shadows && shadows.length) {
+        for (const s of shadows) {
+          ctx.shadowColor   = s.color   || 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur    = s.blur    || 0;
+          ctx.shadowOffsetX = s.offsetX || 0;
+          ctx.shadowOffsetY = s.offsetY || 0;
+          draw();
+        }
+        // Final clean pass on top to crisp the glyph edges.
+        ctx.shadowColor   = 'transparent';
+        ctx.shadowBlur    = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        draw();
       } else {
-        ctx.fillText(text, f.x, f.y);
+        draw();
       }
       ctx.restore();
     });
@@ -459,11 +491,40 @@ export default function Generate() {
   // links pass { template, team, playerName, number, statLine, ... }. Template
   // and team are consumed via the useState initializers above; anything else
   // flows into customFields so the template renders with the right copy.
+  //
+  // Back-compat for the player-stat → "Team/Player News" rename: legacy URLs
+  // (player page CTAs, old saved ideas, bookmarks) carry playerName / statLine
+  // / number / teamName but the template now uses line1 / line2 / line3.
+  // When we detect the legacy keys AND the template is player-stat, fold
+  // them into the new line slots in priority order so the deep link still
+  // produces a sensible rendered post.
   useEffect(() => {
+    const tmpl = searchParams.get('template');
     const params = {};
     for (const [key, value] of searchParams.entries()) {
       if (key !== 'team' && key !== 'template') params[key] = value;
     }
+
+    // Legacy → new mapping for the renamed Team/Player News template.
+    if (tmpl === 'player-stat') {
+      const legacyChain = [
+        params.playerName,                                   // Line 1: who
+        params.statLine,                                     // Line 2: the news
+        params.number ? `#${params.number}` : params.teamName, // Line 3: tag
+      ];
+      const cleaned = legacyChain.filter(s => s && String(s).trim().length > 0);
+      if (cleaned.length && !params.line1 && !params.line2 && !params.line3) {
+        if (cleaned[0]) params.line1 = cleaned[0];
+        if (cleaned[1]) params.line2 = cleaned[1];
+        if (cleaned[2]) params.line3 = cleaned[2];
+      }
+      // Drop the legacy keys so they don't sit in customFields as orphans.
+      delete params.playerName;
+      delete params.statLine;
+      delete params.number;
+      delete params.teamName;
+    }
+
     if (Object.keys(params).length > 0) {
       setCustomFields(prev => ({ ...prev, ...params }));
     }
@@ -534,9 +595,28 @@ export default function Generate() {
     const pitcher = pitchingPool.find(b => b.name === p.name && b.team === p.team);
     const teamObj = getTeam(p.team);
     const mediaJersey = playerMedia.find(m => m.num)?.num || p.num || '';
-    const newFields = { playerName: p.name, number: mediaJersey, teamName: teamObj?.name || p.team };
-    if (batter) newFields.statLine = `OPS+ ${batter.ops_plus} | AVG ${batter.avg} | HR ${batter.hr} | OBP ${batter.obp}`;
-    else if (pitcher) newFields.statLine = `FIP ${pitcher.fip.toFixed(2)} | IP ${pitcher.ip} | W ${pitcher.w} | K/4 ${pitcher.k4}`;
+    const statLine = batter
+      ? `OPS+ ${batter.ops_plus} | AVG ${batter.avg} | HR ${batter.hr} | OBP ${batter.obp}`
+      : pitcher
+        ? `FIP ${pitcher.fip.toFixed(2)} | IP ${pitcher.ip} | W ${pitcher.w} | K/4 ${pitcher.k4}`
+        : '';
+
+    // Per-template field shape:
+    //   player-stat (Team/Player News) — three free-form lines, populate
+    //     line1=name, line2=stat, line3=#jersey · team
+    //   highlight / hype — legacy keys (playerName/number/teamName/statLine)
+    //     so the existing field positions and AI prefills keep working.
+    let newFields;
+    if (customType === 'player-stat') {
+      newFields = {
+        line1: p.name,
+        line2: statLine || (teamObj?.name || p.team),
+        line3: mediaJersey ? `#${mediaJersey} · ${teamObj?.name || p.team}` : (teamObj?.name || p.team),
+      };
+    } else {
+      newFields = { playerName: p.name, number: mediaJersey, teamName: teamObj?.name || p.team };
+      if (statLine) newFields.statLine = statLine;
+    }
     setCustomFields(prev => ({ ...prev, ...newFields }));
 
     // Build "Suggested stat lines" — a handful of pre-formatted variants the
@@ -1350,7 +1430,7 @@ export default function Generate() {
                       )}
                       {/* Suggested stat lines — player-specific, computed against
                           the full league. Click to insert into the stat line. */}
-                      {f.key === 'statLine' && !isHidden && recommendedStatLines.length > 0 && (
+                      {(f.key === 'statLine' || f.key === 'line2') && !isHidden && recommendedStatLines.length > 0 && (
                         <div style={{ marginTop: 6 }}>
                           <div style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 4 }}>
                             ✨ SUGGESTED STAT LINES
