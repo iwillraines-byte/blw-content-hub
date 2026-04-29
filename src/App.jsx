@@ -4,7 +4,7 @@ import { TEAMS, API_CONFIG } from './data';
 import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './theme';
 import { TeamThemeScope } from './team-theme';
 import { GlobalStyles } from './global-styles';
-import { APP_VERSION, GIT_COMMIT, formattedBuildDate } from './version';
+import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from './version';
 import ContentStudio from './pages/ContentStudio';
 import Generate from './pages/Generate';
 import Requests from './pages/Requests';
@@ -224,35 +224,27 @@ function Sidebar({ isMobile, open, onClose }) {
           <TeamsDropdown location={location} />
         </nav>
 
-        {/* Footer — version + commit are live at build time (see
-            src/version.js + vite.config.js). Hovering the version row
-            shows the build date so we can correlate a bug report to a
-            specific deploy. The commit is a clickable link to the GitHub
-            commit page, so future-me can jump from "user reported X on
-            v2.1.0 · a3f8c2b" straight to that ref. */}
+        {/* Footer — build label is live at build time (see src/version.js
+            + vite.config.js). On Vercel the SHA is taken from
+            VERCEL_GIT_COMMIT_SHA per deploy, so the footer auto-rolls
+            every push without us having to remember to bump
+            package.json. Format: "Apr 29 · a3f8c2b". Hover shows the
+            full build date. The SHA isn't linked anymore — it's just a
+            fingerprint for correlating a bug report to a deploy. */}
         <div style={{
           padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,0.06)',
           fontFamily: fonts.condensed, fontSize: 10,
           color: 'rgba(255,255,255,0.25)', textAlign: 'center', lineHeight: 1.5,
         }}>
           <div>Created by Savant Media</div>
-          <div style={{ opacity: 0.7 }} title={`Built ${formattedBuildDate()}`}>
-            v{APP_VERSION}
-            {GIT_COMMIT !== 'dev' && (
-              <>
-                {' · '}
-                <a
-                  href={`https://github.com/iwillraines-byte/blw-content-hub/commit/${GIT_COMMIT}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    color: 'inherit', textDecoration: 'none',
-                    fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-                  }}
-                >{GIT_COMMIT}</a>
-              </>
-            )}
-            {GIT_COMMIT === 'dev' && ' · dev'}
+          <div
+            style={{
+              opacity: 0.7,
+              fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+            }}
+            title={`Built ${formattedBuildDate()}`}
+          >
+            {GIT_COMMIT === 'dev' ? 'dev build' : BUILD_LABEL}
             {' · prowiffleball.com'}
           </div>
         </div>

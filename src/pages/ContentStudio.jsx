@@ -4,7 +4,7 @@ import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, a
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
-import { getRequests, saveRequests, countByStatus, oldestPendingDays } from '../requests-store';
+import { getRequests, saveRequests, countByStatus, oldestPendingDays, embedIdeaInNote } from '../requests-store';
 import { getAllMedia } from '../media-store';
 import { isAlreadyTagged } from '../tag-heuristics';
 import { getUsageToday, recordUsage } from '../ai-usage-store';
@@ -185,17 +185,24 @@ export default function ContentStudio() {
       return;
     }
     const now = new Date();
-    const noteLines = [
+    // Human-readable prose at the top of the note. Below it (separated
+    // by the idea-payload sentinel) we stash a JSON copy of the FULL
+    // idea so the Requests detail panel can render the full context
+    // (narrative, captions, prefill) and offer a one-click jump back
+    // into Generate with everything pre-populated.
+    const prose = [
       s.headline,
       s.description,
-      s.templateId ? `Template: ${s.templateId}` : null,
-      s.prefill && Object.keys(s.prefill).length > 0
-        ? `Prefill: ${Object.entries(s.prefill).map(([k, v]) => `${k}=${v}`).join(' · ')}`
-        : null,
       s.aiGenerated ? 'Source: ✨ AI content idea' : 'Source: Dashboard content idea',
     ].filter(Boolean).join('\n');
+    const requestId = crypto.randomUUID();
+    // Stamp the requestId on the embedded payload too so deep-links from
+    // Requests → Generate carry a `?fromRequest=...` tag. Useful for
+    // future surfaces (e.g., showing a "filed under request 1234" hint
+    // on the canvas) and harmless if nothing reads it.
+    const ideaWithRequestId = { ...s, requestId };
     const newRequest = {
-      id: crypto.randomUUID(),
+      id: requestId,
       team: s.team && s.team !== 'BLW' ? s.team : 'BLW',
       template: s.templateId || '',
       status: 'pending',
@@ -203,7 +210,7 @@ export default function ContentStudio() {
       date: now.toLocaleString(undefined, { month: 'short', day: 'numeric' }),
       createdAt: now.getTime(),
       priority: 'medium',
-      note: noteLines,
+      note: embedIdeaInNote(prose, ideaWithRequestId),
     };
     const updated = [newRequest, ...existing];
     saveRequests(updated);

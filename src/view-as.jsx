@@ -24,11 +24,14 @@ import { Card, SectionHeading, TeamLogo } from './components';
 import { colors, fonts, radius } from './theme';
 
 // Roles available for impersonation. Master admin obviously isn't here —
-// no point impersonating yourself. Admin is omitted because the surface
-// for admin and master_admin is functionally identical (no useful preview).
+// no point impersonating yourself. Admin IS in the list now because we're
+// onboarding real admin accounts and need to verify their surface (People
+// tab works, league context is read-only, etc.) before handing out the
+// keys.
 const VIEW_AS_ROLES = [
-  { id: 'athlete', label: 'Athlete',  description: 'Locked to one team. Lands on My Stats. Full content tools for that team only.', requiresTeam: true },
+  { id: 'admin',   label: 'Admin',    description: 'Full app access including the People admin tab. Cannot edit league context. Use to QA the surface before granting access to a real admin.', requiresTeam: false },
   { id: 'content', label: 'Content',  description: 'Full app access except the People admin tab.', requiresTeam: false },
+  { id: 'athlete', label: 'Athlete',  description: 'Locked to one team. Lands on My Stats. Full content tools for that team only.', requiresTeam: true },
 ];
 
 // ─── Picker (master_admin only) ────────────────────────────────────────────

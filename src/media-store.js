@@ -462,6 +462,25 @@ export function resolvePlayerAvatar(player, allMedia, opts = {}) {
       if (hit) return hit;
     }
   }
+  // 9. EMERGENCY fallback — any lastname match in priority order, even
+  //    if FI on the file doesn't agree with the roster's FI. Only used
+  //    when the lastname is unique on the team. This catches files
+  //    parsed with a stale or wrong FI (typo in filename, manual edit
+  //    drift) AND players whose `firstInitial` field never made it into
+  //    the roster object. Caleb Jeter on LAN was the canonical repro:
+  //    his photo had the right player but the parsed FI didn't agree
+  //    with what the API returned, so steps 5–8 all missed.
+  if (lastnameUnique) {
+    for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
+      const hit = lastnameMatches.find(m => isType(m, t));
+      if (hit) return hit;
+    }
+    // Also accept anything whose normalized assetType isn't on the
+    // priority list — better than nothing for legacy uploads where
+    // the type was left unset or stamped as 'FILE'.
+    const anyHit = lastnameMatches.find(m => m.blob || m.id);
+    if (anyHit) return anyHit;
+  }
   return null;
 }
 

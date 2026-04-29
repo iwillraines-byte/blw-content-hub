@@ -279,11 +279,29 @@ function SeasonStatsSubCard({ team, label, tiles }) {
                 fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
                 color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
               }}>{t.label}</div>
-              <div style={{
-                fontFamily: fonts.heading, fontSize: 34,
-                color: t.highlight ? colors.accent : colors.text,
-                lineHeight: 1, letterSpacing: 0.5,
-              }}>{t.value ?? '—'}</div>
+              {/* Stat value font size auto-shrinks for longer numbers
+                  (3.50 fits at 34, 12.45 needs to drop) so pitching
+                  ERAs / WHIPs / K/4 ratios never overflow the tile.
+                  Lookup table is cheaper than a measure pass and the
+                  result is identical at every viewport. Letter-spacing
+                  also dialed down at smaller sizes to keep numbers
+                  readable. */}
+              {(() => {
+                const raw = t.value == null ? '—' : String(t.value);
+                const len = raw.length;
+                const fontSize = len >= 6 ? 22 : len === 5 ? 26 : len === 4 ? 30 : 34;
+                const letterSpacing = len >= 5 ? 0 : 0.5;
+                return (
+                  <div style={{
+                    fontFamily: fonts.heading, fontSize,
+                    color: t.highlight ? colors.accent : colors.text,
+                    lineHeight: 1, letterSpacing,
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%',
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>{raw}</div>
+                );
+              })()}
               <div style={{
                 fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
                 color: colors.textMuted, letterSpacing: 0.4,
@@ -413,17 +431,22 @@ function PositionEditor({ team, src, initial, onClose, onSave, saving }) {
   const onPointerMove = useCallback((e) => {
     const drag = dragRef.current;
     if (!drag) return;
-    // Pan range available at this zoom level. At zoom=1 the cover-cropped
-    // image fully fills the circle; pan can only reveal the hidden margin.
-    // At zoom>1 the same image is larger so more pan range opens up.
-    // We approximate by tying display-pixel deltas to fractional offset
-    // through PREVIEW/2 — feels right at any zoom level.
-    const range = (PREVIEW / 2) * Math.max(0.5, zoom - 0.5);
+    // New pan math (matches PositionedAvatar's translate+scale transform):
+    //   visible_dx_px = (offsetX * 50% × PREVIEW) × zoom
+    //                 = offsetX × PREVIEW/2 × zoom
+    // So a 1-display-pixel drag should change offsetX by:
+    //   Δoffset = 2 / (PREVIEW × zoom)
+    // Sign: drag RIGHT → image follows the cursor → offsetX increases.
+    // (Earlier code subtracted the delta because it was thinking in
+    // object-position terms; the new translate transform is the
+    // opposite convention.)
+    const z = Math.max(1, zoom);
+    const range = (PREVIEW / 2) * z;
     const dx = (e.clientX - drag.startX) / range;
     const dy = (e.clientY - drag.startY) / range;
     const clamp = (v) => Math.max(-1, Math.min(1, v));
-    setOffsetX(clamp(drag.offsetX0 - dx)); // drag right → image moves right → offset decreases
-    setOffsetY(clamp(drag.offsetY0 - dy));
+    setOffsetX(clamp(drag.offsetX0 + dx));
+    setOffsetY(clamp(drag.offsetY0 + dy));
   }, [zoom]);
 
   const onPointerUp = useCallback((e) => {
@@ -511,9 +534,13 @@ function PositionEditor({ team, src, initial, onClose, onSave, saving }) {
               style={{
                 width: '100%', height: '100%',
                 objectFit: 'cover',
-                objectPosition: `${50 + offsetX * 50}% ${50 + offsetY * 50}%`,
-                transform: `scale(${zoom})`,
-                transformOrigin: 'center',
+                objectPosition: 'center center',
+                // Same transform PositionedAvatar uses everywhere — single
+                // translate+scale so pan and zoom apply uniformly on both
+                // axes. Object-position is anchored at center so the
+                // transform is the only thing moving the image.
+                transform: `translate(${offsetX * 50}%, ${offsetY * 50}%) scale(${zoom})`,
+                transformOrigin: 'center center',
                 display: 'block',
                 pointerEvents: 'none', // wrapper owns pointer events
                 userSelect: 'none',
@@ -989,7 +1016,6 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                 overflow: 'hidden', textOverflow: 'ellipsis',
               }}
             >
-              <span aria-hidden="true">◉</span>
               @{player.instagramHandle}
             </a>
           )}
@@ -1615,8 +1641,15 @@ export default function PlayerPage() {
   // here — the lookup is already scoped by FI + num to this specific
   // player — so we leave lastnameUnique at its default of true.
   const avatarPool = allMediaPool.length > 0 ? allMediaPool : [...media, ...teamMedia];
+  // candidateCount > 1 means a cousin pair shares this lastname on the
+  // team — the resolver must NOT fall back to lastname-only matches in
+  // that case (would hand the wrong cousin's photo to whichever player
+  // happens to render first). Single-Jeter players (Caleb on LAN) get
+  // the relaxed fallback so a stale FI mismatch doesn't blank the avatar.
+  const lastnameUnique = !player.candidateCount || player.candidateCount === 1;
   const headshot = resolvePlayerAvatar(player, avatarPool, {
     profileMediaId: player.profileMediaId,
+    lastnameUnique,
   });
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
 

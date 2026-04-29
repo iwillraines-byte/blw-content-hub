@@ -14,6 +14,16 @@ export default function TeamPage() {
   const { slug } = useParams();
   const team = getTeam(slug);
 
+  // Force a scroll-to-top on every team change so the page never opens
+  // halfway down (which can happen when the previous route's scroll
+  // position carries over, or when an in-page anchor on the prior team
+  // route was active). Behavior 'instant' so the team header is what
+  // the user sees first — no smooth-scroll trail.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [slug]);
+
   const [media, setMedia] = useState([]);
   const [roster, setRoster] = useState([]);
   const [manualPlayers, setManualPlayers] = useState([]);

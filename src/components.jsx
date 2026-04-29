@@ -438,8 +438,14 @@ export const selectStyle = { ...inputStyle, cursor: 'pointer' };
 // an inner image scaled + offset per the manual_players profile_offset_*
 // + profile_zoom values. NULL/undefined values render plain object-fit:cover.
 //
-// Pan math matches the modal editor: object-position shifts the visible
-// region within the cover-cropped frame; transform: scale() zooms in.
+// Pan math: a single transform combines translate + scale so both axes
+// pan and zoom uniformly. We deliberately DON'T use object-position
+// because in cover-fit mode it only has slack on the constrained axis,
+// which is what made the editor feel "axis-locked" before. Translate
+// happens in pre-transform pixel space, so a positive ox always moves
+// the image right by the same display amount regardless of zoom; pan
+// range scales naturally with zoom because the image's visible content
+// is z× larger on screen.
 //
 // Use case: anywhere a player avatar appears (player hero, team roster card,
 // trade history, content calendar, etc) — passing the same offset/zoom values
@@ -453,7 +459,11 @@ export const PositionedAvatar = ({
   rounded = '50%',
   style,
 }) => {
-  const ox = (offsetX ?? 0) * 50; // -1 to 1 → -50% to 50% within cover frame
+  // -1..1 → -50%..50% translate of the original (pre-scale) box. With
+  // scale applied AFTER translate (read right-to-left in CSS), the
+  // visible displacement is `ox% × scale_factor` — i.e. pan range grows
+  // with zoom, which is exactly what feels right when zoomed in.
+  const ox = (offsetX ?? 0) * 50;
   const oy = (offsetY ?? 0) * 50;
   const z  = Math.max(1, zoom ?? 1);
   const wrap = {
@@ -477,9 +487,9 @@ export const PositionedAvatar = ({
         style={{
           width: '100%', height: '100%',
           objectFit: 'cover',
-          objectPosition: `${50 + ox}% ${50 + oy}%`,
-          transform: `scale(${z})`,
-          transformOrigin: 'center',
+          objectPosition: 'center center',
+          transform: `translate(${ox}%, ${oy}%) scale(${z})`,
+          transformOrigin: 'center center',
           display: 'block',
           userSelect: 'none',
         }}

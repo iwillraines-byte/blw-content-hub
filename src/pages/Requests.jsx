@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { TEAMS, TEMPLATES, getTeam } from '../data';
-import { Card, PageHeader, SectionHeading, TeamChip, StatusBadge, PriorityDot, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
+import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { TEAMS, TEMPLATES, getTeam, playerSlug } from '../data';
+import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, StatusBadge, PriorityDot, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { getRequests, saveRequests, getComments, saveComments } from '../requests-store';
+import { getRequests, saveRequests, getComments, saveComments, extractIdeaFromNote, buildGenerateLinkFromIdea, suggestAssetTypesForIdea } from '../requests-store';
 
 const STATUS_LABELS = {
   pending: 'Pending',
@@ -35,6 +35,12 @@ export default function Requests() {
   const [requests, setRequestsState] = useState(() => getRequests());
   const [comments, setCommentsState] = useState(() => getComments());
   const [showNew, setShowNew] = useState(false);
+  // Detail-panel expansion is independent of the comments thread because
+  // the two surfaces are visually different and serve different jobs:
+  // detail = "what does the brief actually ask for", comments = "what
+  // are we saying about it." Both default to closed; deep-linked
+  // requests auto-open the detail panel on first paint.
+  const [expandedDetail, setExpandedDetail] = useState({});
   const [expandedComments, setExpandedComments] = useState({});
   const [commentInputs, setCommentInputs] = useState({});
   const [newTeam, setNewTeam] = useState('');
@@ -59,7 +65,11 @@ export default function Requests() {
       next.delete('status');
       setSearchParams(next, { replace: true });
     }
-    // Scroll + flash on the next tick once the row is rendered.
+    // Scroll + flash on the next tick once the row is rendered. We
+    // also auto-open the detail panel so the linked request lands
+    // already-expanded (the user clicked an in-app deep-link, so they
+    // very likely want to read the full brief, not just the headline).
+    setExpandedDetail(prev => prev[targetRequestId] ? prev : { ...prev, [targetRequestId]: true });
     const t = setTimeout(() => {
       const node = cardRefs.current[targetRequestId];
       if (node) {
@@ -87,6 +97,7 @@ export default function Requests() {
 
   const updateStatus = (id, status) => setRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r));
   const toggleComments = (id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleDetail = (id) => setExpandedDetail(prev => ({ ...prev, [id]: !prev[id] }));
 
   const addComment = (requestId) => {
     const text = commentInputs[requestId]?.trim();
@@ -208,6 +219,23 @@ export default function Requests() {
         const reqComments = comments.filter(c => c.requestId === r.id);
         const expanded = expandedComments[r.id];
         const isFlashing = flashingId === r.id;
+        // Pull the structured idea-payload out of the note (if any).
+        // Old requests without a payload fall back to plain prose +
+        // a degraded detail panel that just shows what we have.
+        const { prose, idea } = extractIdeaFromNote(r.note);
+        const detailOpen = !!expandedDetail[r.id];
+        const teamMeta = getTeam(r.team);
+        // Build a /generate?... URL from the request. If we have the
+        // structured idea, use it directly. Otherwise fall back to a
+        // partial URL with whatever flat fields the request carries.
+        const generateLink = idea
+          ? buildGenerateLinkFromIdea({ ...idea, requestId: r.id })
+          : buildGenerateLinkFromIdea({
+              templateId: r.template,
+              team: r.team,
+              prefill: {},
+              requestId: r.id,
+            });
 
         return (
           <div key={r.id} ref={node => { if (node) cardRefs.current[r.id] = node; }}>
@@ -224,11 +252,84 @@ export default function Requests() {
               <StatusBadge status={r.status} />
             </div>
 
-            <div style={{ fontSize: 14, color: colors.textSecondary, marginBottom: 10, paddingLeft: 20, lineHeight: 1.5 }}>{r.note}</div>
+            {/* Plain-prose summary — no JSON sentinel, no Prefill: line.
+                Stays compact (3-line clamp) so the card preview reads
+                like a brief, not a wall of metadata. The full detail
+                lives in the disclosure below. */}
+            {prose && (
+              <div style={{
+                fontSize: 14, color: colors.textSecondary,
+                marginBottom: 10, paddingLeft: 20,
+                lineHeight: 1.5,
+                display: '-webkit-box',
+                WebkitLineClamp: detailOpen ? 'unset' : 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: detailOpen ? 'visible' : 'hidden',
+                whiteSpace: 'pre-wrap',
+              }}>{prose}</div>
+            )}
+
+            {/* Detail-panel disclosure — opens an editorial brief view:
+                narrative, suggested template/photos, structured prefill,
+                and a one-click jump back into Generate. */}
+            <div style={{ paddingLeft: 20, marginBottom: detailOpen ? 12 : 6 }}>
+              <button
+                onClick={() => toggleDetail(r.id)}
+                style={{
+                  background: detailOpen ? colors.bg : 'transparent',
+                  border: `1px solid ${detailOpen ? colors.border : 'transparent'}`,
+                  borderRadius: radius.sm,
+                  padding: '5px 10px',
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  letterSpacing: 0.5, textTransform: 'uppercase',
+                  color: colors.textSecondary, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {detailOpen ? '▾' : '▸'} {idea ? 'Brief details' : 'Details'}
+                {idea?.aiGenerated && (
+                  <span style={{
+                    fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                    background: 'rgba(124,58,237,0.10)',
+                    color: '#7C3AED',
+                    border: '1px solid rgba(124,58,237,0.30)',
+                    padding: '1px 6px', borderRadius: radius.sm,
+                    letterSpacing: 0.5,
+                  }}>AI</span>
+                )}
+              </button>
+            </div>
+
+            {detailOpen && (
+              <RequestDetailPanel
+                request={r}
+                idea={idea}
+                template={tp}
+                team={teamMeta}
+                generateLink={generateLink}
+              />
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 20, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: colors.textMuted }}>{r.requester} · {r.date}</span>
               <div style={{ flex: 1 }} />
+
+              {/* Always-visible primary CTA — the Requests page exists
+                  to feed Generate, so the jump back is permanent on
+                  every card. Idea-powered links carry full prefill;
+                  flat fallbacks just pre-select team + template. */}
+              <Link
+                to={generateLink}
+                style={{
+                  background: colors.red, color: '#fff',
+                  border: 'none', borderRadius: radius.sm,
+                  padding: '7px 14px', textDecoration: 'none',
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                  letterSpacing: 0.6, textTransform: 'uppercase',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+                title={idea ? 'Open Generate with team, template, and all idea fields pre-filled' : 'Open Generate pre-selected to this team + template'}
+              >Open in Generate →</Link>
 
               <button onClick={() => toggleComments(r.id)} style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
@@ -298,6 +399,277 @@ export default function Requests() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Request detail panel ──────────────────────────────────────────────────
+// Editorial brief view that opens when a request card's "Brief details"
+// disclosure is expanded. Renders the structured idea (when one is
+// embedded) as four readable sections: narrative, suggested template,
+// suggested photo asset types, and the prefill that will land in
+// Generate. Older requests without an embedded idea fall back to a
+// minimal version that still lists the template + team.
+function RequestDetailPanel({ request, idea, template, team, generateLink }) {
+  const r = request;
+  const i = idea;
+  const teamColor = team?.color || colors.text;
+  const teamDark  = team?.dark  || colors.text;
+
+  // Player surfaced from the prefill (if any). Drives the "look for
+  // photos of X" prompt below and a deep-link chip back to the player
+  // page so the user can grab a stat refresher in one click.
+  const playerName = i?.prefill?.playerName ? String(i.prefill.playerName).trim() : '';
+  const playerLast = playerName ? playerName.split(/\s+/).pop() : '';
+  const playerHref = (team?.slug && playerLast)
+    ? `/teams/${team.slug}/players/${playerSlug({ name: playerName, lastName: playerLast })}`
+    : null;
+
+  // Asset-type suggestions: e.g. ['HEADSHOT','PORTRAIT','ACTION'].
+  // Combined with the player chip below, this answers "what photos
+  // should I be reaching for?" — the original ask from the user.
+  const assetTypes = useMemo(() => suggestAssetTypesForIdea(i || { templateId: r.template }), [i, r.template]);
+
+  // Stat pills — only present when the AI surfaced concrete numbers.
+  const stats = Array.isArray(i?.dataPoints) ? i.dataPoints.filter(Boolean) : [];
+
+  // Prefill key/value listing — power-user mode. Hidden when empty.
+  const prefillEntries = i?.prefill && typeof i.prefill === 'object'
+    ? Object.entries(i.prefill).filter(([, v]) => v != null && v !== '')
+    : [];
+
+  return (
+    <div style={{
+      margin: '0 0 14px 20px',
+      padding: 14,
+      background: colors.bg,
+      border: `1px solid ${colors.borderLight}`,
+      borderRadius: radius.base,
+      display: 'flex', flexDirection: 'column', gap: 12,
+    }}>
+      {/* Headline strip — only renders when the embedded idea has one.
+          Tinted with the team color so the panel reads as "this is a
+          brief about {team}." */}
+      {i?.headline && (
+        <div>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+            color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+            marginBottom: 4,
+          }}>Headline</div>
+          <div style={{
+            fontFamily: fonts.heading, fontSize: 18, lineHeight: 1.25,
+            color: teamDark,
+            letterSpacing: 0.4,
+          }}>{i.headline}</div>
+        </div>
+      )}
+
+      {/* Narrative — the AI's reasoning for why this idea matters.
+          Falls back to description when narrative is missing. */}
+      {(i?.narrative || i?.description) && (
+        <div>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+            color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+            marginBottom: 4,
+          }}>Narrative</div>
+          <div style={{
+            fontFamily: fonts.body, fontSize: 13, color: colors.textSecondary,
+            lineHeight: 1.55, whiteSpace: 'pre-wrap', maxWidth: '70ch',
+          }}>{i.narrative || i.description}</div>
+        </div>
+      )}
+
+      {/* Stat pills — surface the data points the AI cited. Helpful
+          context for whoever picks up the request days later. */}
+      {stats.length > 0 && (
+        <div>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+            color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+            marginBottom: 6,
+          }}>Stats cited</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {stats.map((s, idx) => (
+              <span
+                key={idx}
+                className="tnum"
+                style={{
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  letterSpacing: 0.3, color: teamDark,
+                  background: `${teamColor}1A`,
+                  border: `1px solid ${teamColor}33`,
+                  padding: '3px 8px', borderRadius: radius.sm,
+                }}
+              >{s}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Suggestions row — what to reach for. Three grouped suggestions:
+          template, photos, player. Together these answer "what should
+          I open in Generate, and which assets should I drop in?" */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: 10,
+      }}>
+        {/* Template suggestion */}
+        <div style={{
+          background: colors.white,
+          border: `1px solid ${colors.borderLight}`,
+          borderRadius: radius.sm,
+          padding: '10px 12px',
+        }}>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+            color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+            marginBottom: 6,
+          }}>Suggested template</div>
+          {template ? (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
+              color: colors.text,
+            }}>
+              <span aria-hidden="true">{template.icon}</span>
+              {template.name}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic' }}>
+              No template specified — pick one in Generate.
+            </div>
+          )}
+        </div>
+
+        {/* Photo-asset suggestion */}
+        <div style={{
+          background: colors.white,
+          border: `1px solid ${colors.borderLight}`,
+          borderRadius: radius.sm,
+          padding: '10px 12px',
+        }}>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+            color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+            marginBottom: 6,
+          }}>Photos to reach for</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {assetTypes.map(t => (
+              <span key={t} style={{
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                letterSpacing: 0.6, textTransform: 'uppercase',
+                background: colors.bg,
+                border: `1px solid ${colors.border}`,
+                color: colors.textSecondary,
+                padding: '2px 7px', borderRadius: radius.sm,
+              }}>{t}</span>
+            ))}
+          </div>
+          {playerLast && (
+            <div style={{
+              marginTop: 6, fontSize: 12, color: colors.textSecondary,
+            }}>
+              of <strong>{playerName}</strong>
+            </div>
+          )}
+        </div>
+
+        {/* Player suggestion (only when the idea targets a player) */}
+        {playerLast && (
+          <div style={{
+            background: colors.white,
+            border: `1px solid ${colors.borderLight}`,
+            borderRadius: radius.sm,
+            padding: '10px 12px',
+          }}>
+            <div style={{
+              fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+              color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+              marginBottom: 6,
+            }}>Featured player</div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              {team && <TeamLogo teamId={team.id} size={18} rounded="square" />}
+              {playerHref ? (
+                <Link to={playerHref} style={{
+                  fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
+                  color: teamDark, textDecoration: 'none',
+                  borderBottom: `1px dotted ${colors.border}`,
+                }}>{playerName}</Link>
+              ) : (
+                <span style={{
+                  fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
+                  color: colors.text,
+                }}>{playerName}</span>
+              )}
+              {i?.prefill?.number && (
+                <span style={{
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  color: colors.textMuted,
+                }}>#{i.prefill.number}</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Generate prefill — a flat key/value list so the user can see at
+          a glance exactly what's about to land in the canvas fields.
+          Power-user reassurance more than a primary surface. */}
+      {prefillEntries.length > 0 && (
+        <div>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+            color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+            marginBottom: 6,
+          }}>Generate prefill</div>
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px',
+            fontSize: 12,
+          }}>
+            {prefillEntries.map(([k, v]) => (
+              <Fragment key={k}>
+                <span style={{
+                  fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                  color: colors.textMuted, fontSize: 11,
+                  paddingTop: 2,
+                }}>{k}</span>
+                <span style={{
+                  fontFamily: fonts.body, color: colors.text,
+                  fontWeight: 600, wordBreak: 'break-word',
+                }}>{String(v)}</span>
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CTA — the same primary action as the request card row, repeated
+          in the panel so the user doesn't have to scroll back up to act.
+          Caption "with prefill" only when we actually have one. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 4 }}>
+        <Link
+          to={generateLink}
+          style={{
+            background: colors.red, color: '#fff',
+            border: 'none', borderRadius: radius.sm,
+            padding: '8px 16px', textDecoration: 'none',
+            fontFamily: fonts.condensed, fontSize: 12, fontWeight: 800,
+            letterSpacing: 0.6, textTransform: 'uppercase',
+          }}
+        >
+          {prefillEntries.length > 0 ? 'Open Generate (auto-populate)' : 'Open in Generate'} →
+        </Link>
+        <span style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.body }}>
+          {prefillEntries.length > 0
+            ? 'Team, template, and every prefill field will land pre-set on the canvas.'
+            : 'Team and template will be pre-selected; fill in the rest yourself.'}
+        </span>
+      </div>
     </div>
   );
 }

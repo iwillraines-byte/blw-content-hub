@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { TEAMS, API_CONFIG, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { APP_VERSION, GIT_COMMIT, formattedBuildDate } from '../version';
+import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from '../version';
 import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth, isAdminRole } from '../auth';
@@ -226,8 +226,9 @@ export default function Settings() {
         <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
           <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <strong style={{ color: colors.red }}>BLW Content Hub</strong>
-            {/* Live version + commit. Hovering the chip shows the build
-                date; clicking the SHA jumps to the GitHub commit. */}
+            {/* Live build label — auto-rolls every Vercel deploy via
+                VERCEL_GIT_COMMIT_SHA. Hover for the full build date.
+                The SHA is just a fingerprint, not a clickable link. */}
             <span
               title={`Built ${formattedBuildDate()}`}
               style={{
@@ -238,19 +239,7 @@ export default function Settings() {
                 color: colors.textSecondary,
               }}
             >
-              v{APP_VERSION}
-              {GIT_COMMIT !== 'dev' && (
-                <>
-                  <span style={{ opacity: 0.5 }}>·</span>
-                  <a
-                    href={`https://github.com/iwillraines-byte/blw-content-hub/commit/${GIT_COMMIT}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: colors.accent, textDecoration: 'none', fontWeight: 600 }}
-                  >{GIT_COMMIT}</a>
-                </>
-              )}
-              {GIT_COMMIT === 'dev' && <span style={{ color: colors.textMuted }}>· dev</span>}
+              {GIT_COMMIT === 'dev' ? 'dev build' : BUILD_LABEL}
             </span>
           </div>
           <div>Content management and graphic generation tool for Big League Wiffle Ball.</div>

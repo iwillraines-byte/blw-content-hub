@@ -35,3 +35,23 @@ export function formattedBuildDate() {
     return BUILD_DATE;
   }
 }
+
+// Compact build date — "Apr 29" — for the sidebar footer where a year
+// would just be noise (it's almost always the current year). Falls back
+// to the raw ISO string if Intl chokes.
+export function shortBuildDate() {
+  try {
+    return new Date(BUILD_DATE).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric',
+    });
+  } catch {
+    return BUILD_DATE;
+  }
+}
+
+// Build label that auto-rolls every deploy without anyone having to
+// remember to bump package.json. Format: "Apr 29 · a3f8c2b". The SHA
+// comes from VERCEL_GIT_COMMIT_SHA on prod (set per deployment), so
+// each push produces a visibly-different footer. No GitHub link —
+// the SHA is just a fingerprint, not a clickable destination.
+export const BUILD_LABEL = `${shortBuildDate()} · ${GIT_COMMIT}`;

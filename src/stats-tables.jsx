@@ -428,9 +428,11 @@ export function PitchingTable({
               <SortHeader label="HR"     sortKey="hrAllowed"   currentSort={sort} setSort={setSort} />
               <SortHeader label="ERA"    sortKey="era"         currentSort={sort} setSort={setSort} />
               <SortHeader label="WHIP"   sortKey="whip"        currentSort={sort} setSort={setSort} />
-              <SortHeader label="FIP"    sortKey="fip"         currentSort={sort} setSort={setSort} />
               <SortHeader label="K/4"    sortKey="k4"          currentSort={sort} setSort={setSort} />
               <SortHeader label="BB/4"   sortKey="bb4"         currentSort={sort} setSort={setSort} />
+              {/* FIP is the marquee — anchored at the end so the eye lands
+                  on it last and the table reads "results, then quality." */}
+              <SortHeader label="FIP"    sortKey="fip"         currentSort={sort} setSort={setSort} />
             </tr>
           </thead>
           <tbody>
@@ -452,9 +454,9 @@ export function PitchingTable({
                 <td title={titleForCell(percentiles, 'hrAllowed', p)} style={{ ...cellFor(sort, 'hrAllowed'), background: bgForCell(percentiles, 'hrAllowed', p) }}>{p.hrAllowed ?? '—'}</td>
                 <td title={titleForCell(percentiles, 'era', p)}       style={{ ...cellFor(sort, 'era'),       background: bgForCell(percentiles, 'era', p) }}>{p.era}</td>
                 <td title={titleForCell(percentiles, 'whip', p)}      style={{ ...cellFor(sort, 'whip'),      background: bgForCell(percentiles, 'whip', p) }}>{p.whip}</td>
-                <td title={titleForCell(percentiles, 'fip', p)}       style={{ ...cellFor(sort, 'fip'),       background: bgForCell(percentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
                 <td title={titleForCell(percentiles, 'k4', p)}        style={{ ...cellFor(sort, 'k4'),        background: bgForCell(percentiles, 'k4', p) }}>{p.k4}</td>
                 <td title={titleForCell(percentiles, 'bb4', p)}       style={{ ...cellFor(sort, 'bb4'),       background: bgForCell(percentiles, 'bb4', p) }}>{p.bb4}</td>
+                <td title={titleForCell(percentiles, 'fip', p)}       style={{ ...cellFor(sort, 'fip'),       background: bgForCell(percentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
