@@ -2,6 +2,15 @@
 // cloud" operation the app needs — media, overlays, effects, requests,
 // comments, manual players, field overrides, AI usage.
 //
+// SCHEMA NOTE — `generate_log.posted` (added v4.2.0):
+//   The team-page "posted?" toggle requires a boolean column. Run this
+//   one-time SQL in Supabase before relying on the toggle:
+//     ALTER TABLE generate_log
+//       ADD COLUMN IF NOT EXISTS posted BOOLEAN NOT NULL DEFAULT TRUE;
+//   Without it, the PATCH endpoint will 500 on update and the team
+//   carousel will treat every post as "posted" (the default the UI
+//   assumes when the field is absent).
+//
 // Request shape (POST, JSON):
 // {
 //   kind:    'media' | 'overlay' | 'effect' | 'request' | 'request-comment'
@@ -115,31 +124,29 @@ export default async function handler(req, res) {
       // the full history.
       let q = sb.from(table).select('*');
       if (kind === 'generate-log') {
-        // Optional team + since filters drive the team-page monthly
-        // progress bar without needing a separate endpoint. Both are
-        // ignored when absent so existing dashboard / settings reads
-        // behave the same as before.
+        // Optional team + since + posted filters drive the team-page
+        // monthly progress bar + carousel without needing a separate
+        // endpoint. All ignored when absent so existing dashboard /
+        // settings reads behave the same as before.
         const teamFilter = (req.query.team || '').trim();
         const sinceParam = (req.query.since || '').trim();
-        if (teamFilter) q = q.eq('team', teamFilter);
-        if (sinceParam) {
-          const sinceDate = new Date(sinceParam);
-          if (!isNaN(sinceDate.getTime())) q = q.gte('created_at', sinceDate.toISOString());
-        }
+        const postedParam = (req.query.posted || '').trim();
         // Lightweight projection — when the caller only needs counts
         // (the team progress bar) they pass `fields=id,team,created_at`
         // so the server skips the full record + signed-URL generation.
         const fieldsParam = (req.query.fields || '').trim();
         if (fieldsParam) {
-          const allowed = new Set(['id', 'team', 'template_type', 'platform', 'created_at']);
+          const allowed = new Set(['id', 'team', 'template_type', 'platform', 'created_at', 'posted', 'settings']);
           const cols = fieldsParam.split(',').map(s => s.trim()).filter(c => allowed.has(c));
           if (cols.length > 0) q = sb.from(table).select(cols.join(','));
-          if (teamFilter) q = q.eq('team', teamFilter);
-          if (sinceParam) {
-            const sinceDate = new Date(sinceParam);
-            if (!isNaN(sinceDate.getTime())) q = q.gte('created_at', sinceDate.toISOString());
-          }
         }
+        if (teamFilter) q = q.eq('team', teamFilter);
+        if (sinceParam) {
+          const sinceDate = new Date(sinceParam);
+          if (!isNaN(sinceDate.getTime())) q = q.gte('created_at', sinceDate.toISOString());
+        }
+        if (postedParam === 'true' || postedParam === '1') q = q.eq('posted', true);
+        if (postedParam === 'false' || postedParam === '0') q = q.eq('posted', false);
         const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
         q = q.order('created_at', { ascending: false }).limit(limit);
       }
@@ -174,8 +181,69 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── PATCH: partial update of a single record ────────────────────────────
+  // Used by the team-page "posted?" toggle on generate_log entries
+  // and any future surgical metadata flips. Body: { kind, id, fields }.
+  // Cheaper than re-upserting the whole record (no thumbnail re-upload,
+  // no risk of accidentally clobbering server-managed columns like
+  // created_at).
+  //
+  // Field allow-list per kind keeps this surface tight — callers can
+  // only flip pre-approved columns. Athletes are blocked from
+  // patching anything; staff (master/admin/content) can patch any
+  // allowed field.
+  if (req.method === 'PATCH') {
+    if (isAthlete) {
+      res.status(403).json({ error: 'Athletes cannot patch records' });
+      return;
+    }
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch { body = {}; }
+    }
+    const { kind: pKind, id, fields } = body || {};
+    const pTable = TABLE_FOR[pKind];
+    if (!pTable) {
+      res.status(400).json({ error: `Unknown kind: ${pKind}` });
+      return;
+    }
+    if (!id) {
+      res.status(400).json({ error: 'patch requires id' });
+      return;
+    }
+    if (!fields || typeof fields !== 'object') {
+      res.status(400).json({ error: 'patch requires fields object' });
+      return;
+    }
+    const PATCHABLE = {
+      'generate-log': new Set(['posted']),
+    };
+    const allowed = PATCHABLE[pKind];
+    if (!allowed) {
+      res.status(403).json({ error: `Kind '${pKind}' is not patchable` });
+      return;
+    }
+    const payload = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (allowed.has(k)) payload[k] = v;
+    }
+    if (Object.keys(payload).length === 0) {
+      res.status(400).json({ error: 'no patchable fields supplied' });
+      return;
+    }
+    try {
+      const { error } = await sb.from(pTable).update(payload).eq('id', id);
+      if (error) throw error;
+      res.status(200).json({ ok: true, patched: payload });
+    } catch (err) {
+      console.error('[cloud-sync PATCH]', pKind, id, err);
+      res.status(500).json({ error: 'patch failed', detail: err.message });
+    }
+    return;
+  }
+
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'POST or GET' });
+    res.status(405).json({ error: 'POST, PATCH, or GET' });
     return;
   }
 

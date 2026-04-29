@@ -319,6 +319,10 @@ export async function fetchRecentGenerates(limit = 10) {
       settings: r.settings || {},
       thumbnailUrl: r.signedUrl || null,
       createdAt: r.created_at ? new Date(r.created_at) : null,
+      // Same semantics as fetchTeamMonthlyPosts: null/undefined → true
+      // (matches the column default + the UI's optimistic assumption
+      // that anything generated was posted unless explicitly marked).
+      posted: r.posted == null ? true : !!r.posted,
     }));
   } catch {
     return [];
@@ -327,8 +331,11 @@ export async function fetchRecentGenerates(limit = 10) {
 
 // Per-team monthly post count. Powers the content-calendar progress
 // bar on each team page. Counts entries in `generate_log` for `team`
-// since the first day of the current calendar month. Auto-resets at
-// month rollover by virtue of asking for the dynamic since-date.
+// since the first day of the current calendar month, filtered to
+// posts that have been MARKED AS POSTED (posted=true). The master
+// admin can toggle posts to "not posted" from the team carousel,
+// which removes them from this count without deleting the entry.
+// Auto-resets at month rollover via the dynamic since-date.
 //
 // Returns a number (0+). Soft-fails to 0 when Supabase isn't
 // configured or the request errors — the bar just renders an empty
@@ -342,6 +349,7 @@ export async function fetchTeamMonthlyPostCount(team) {
       kind: 'generate-log',
       team,
       since: monthStart,
+      posted: 'true',
       fields: 'id,team,created_at',
       limit: '500',
     });
@@ -351,6 +359,63 @@ export async function fetchTeamMonthlyPostCount(team) {
     return Array.isArray(data.records) ? data.records.length : 0;
   } catch {
     return 0;
+  }
+}
+
+// Per-team monthly post records (with thumbnails). Powers the team-page
+// carousel rendered below the progress bar. Returns ALL posts for the
+// team this month — both posted and unposted — so the carousel can
+// render unposted ones in a greyed state. Caller filters / sorts as
+// needed.
+//
+// Records carry: { id, team, templateType, platform, settings,
+// thumbnailUrl, createdAt, posted }.
+export async function fetchTeamMonthlyPosts(team) {
+  if (!supabaseConfigured || !team) return [];
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const params = new URLSearchParams({
+      kind: 'generate-log',
+      team,
+      since: monthStart,
+      limit: '500',
+    });
+    const res = await fetch(`/api/cloud-sync?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.records || []).map(r => ({
+      id: r.id,
+      team: r.team,
+      templateType: r.template_type,
+      platform: r.platform,
+      settings: r.settings || {},
+      thumbnailUrl: r.signedUrl || null,
+      createdAt: r.created_at ? new Date(r.created_at) : null,
+      // Default to true when the column is absent (pre-migration). The
+      // counter and the carousel both treat null/undefined as "posted"
+      // so behavior is identical to the column's default.
+      posted: r.posted == null ? true : !!r.posted,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// Toggle whether a generate-log entry is "posted." Authed PATCH against
+// /api/cloud-sync. Returns true on success. Caller is responsible for
+// the optimistic local update + counter recompute.
+export async function setGenerateLogPosted(id, posted) {
+  if (!supabaseConfigured || !id) return false;
+  try {
+    const res = await authedFetch('/api/cloud-sync', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'generate-log', id, fields: { posted: !!posted } }),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

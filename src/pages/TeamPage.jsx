@@ -4,7 +4,8 @@ import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromA
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
-import { fetchTeamMonthlyPostCount } from '../cloud-sync';
+import { fetchTeamMonthlyPostCount, fetchTeamMonthlyPosts, setGenerateLogPosted } from '../cloud-sync';
+import { useAuth } from '../auth';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, Skeleton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
@@ -44,17 +45,33 @@ export default function TeamPage() {
   const [newPlayerLast, setNewPlayerLast] = useState('');
   const [newPlayerNum, setNewPlayerNum] = useState('');
   const [newPlayerPosition, setNewPlayerPosition] = useState('');
-  // Monthly post count — drives the team-page content-calendar progress
-  // bar. Resets on the 1st of each calendar month (the API filters on
-  // `since=startOfMonth` server-side). Re-fetched whenever the team
-  // changes; one round trip per visit, ~12kb transfer for ~12 records.
-  const [monthlyPosts, setMonthlyPosts] = useState(0);
+  // Monthly post records — drives BOTH the progress bar and the
+  // carousel below it. We pull the full list (posted + unposted) once
+  // per team-page mount so the carousel can render unposted entries
+  // greyed out. The counter derives from `posted` alone — toggling a
+  // post off in the carousel updates this list optimistically and the
+  // bar reflects immediately.
+  const { role: authRole } = useAuth();
+  const isMaster = authRole === 'master_admin';
+  const [monthlyPostList, setMonthlyPostList] = useState([]);
   useEffect(() => {
     if (!team?.id) return;
     let cancel = false;
-    fetchTeamMonthlyPostCount(team.id).then(n => { if (!cancel) setMonthlyPosts(n); });
+    fetchTeamMonthlyPosts(team.id).then(list => { if (!cancel) setMonthlyPostList(list); });
     return () => { cancel = true; };
   }, [team?.id]);
+  const monthlyPostedCount = monthlyPostList.filter(p => p.posted).length;
+  // Master-admin toggle handler. Optimistic local flip + cloud PATCH
+  // in the background; on failure we roll back the local state and
+  // surface a quiet error toast.
+  const togglePosted = useCallback(async (postId, nextPosted) => {
+    setMonthlyPostList(prev => prev.map(p => p.id === postId ? { ...p, posted: nextPosted } : p));
+    const ok = await setGenerateLogPosted(postId, nextPosted);
+    if (!ok) {
+      // Revert
+      setMonthlyPostList(prev => prev.map(p => p.id === postId ? { ...p, posted: !nextPosted } : p));
+    }
+  }, []);
 
   const rebuildRoster = useCallback((apiRoster, teamMedia, manualList, allManual = manualList) => {
     // Identity key: "FI|LASTNAME" (uppercase) — lets Logan Rose and Carson Rose
@@ -1021,14 +1038,29 @@ export default function TeamPage() {
         )}
       </Card>
 
-      {/* Monthly content progress — counts every generate-log entry
-          for this team since the 1st of the current month. Goal is
-          12 posts/month (M/W/F default cadence × ~4 weeks). Past 12
-          the bar glows + a "🔥 Above target" chip surfaces so the
-          team gets credit for over-shipping. Re-derives from server
-          on every team-page mount; auto-resets at month rollover via
-          the dynamic `since` filter. */}
-      <MonthlyContentProgress team={team} count={monthlyPosts} />
+      {/* Monthly content progress — counts every POSTED generate-log
+          entry for this team since the 1st of the current month.
+          Master admin can toggle posts to "not posted" via the carousel
+          below, which decrements this counter without deleting the
+          underlying record. Goal is 12 posts/month (M/W/F default
+          cadence × ~4 weeks). Past 12 the bar glows + a "🔥 Above
+          target" chip surfaces. Re-derives from server on every
+          team-page mount; auto-resets at month rollover via the
+          dynamic `since` filter. */}
+      <MonthlyContentProgress team={team} count={monthlyPostedCount} />
+
+      {/* Per-team monthly carousel — every generation for this team
+          this month, posted + unposted. Master admin can toggle the
+          posted flag with one click. Unposted posts are greyed out
+          and excluded from the counter above. */}
+      {monthlyPostList.length > 0 && (
+        <TeamMonthlyCarousel
+          team={team}
+          posts={monthlyPostList}
+          canToggle={isMaster}
+          onToggle={togglePosted}
+        />
+      )}
 
       {/* Content calendar — 4-week posting cadence. Baseline M/W/F; game weeks
           bump to game-day × 3 posts; the week after goes light. Pulls games
@@ -1132,5 +1164,192 @@ function MonthlyContentProgress({ team, count }) {
         <span style={{ position: 'absolute', right: 0 }}>{TARGET}</span>
       </div>
     </Card>
+  );
+}
+
+// ─── Team monthly carousel ─────────────────────────────────────────────────
+// Horizontal scroller of every post created for this team since the 1st
+// of the current month. Two-state per tile: "posted" (full color, normal
+// opacity) vs "not posted" (greyscale + dimmed). Master admin can flip
+// the state via a small toggle in the corner of each tile; everyone else
+// sees the state read-only.
+//
+// Click a tile (anywhere except the toggle) to re-open Generate with
+// the original composition restored — same handoff RecentPostsStrip
+// uses on the dashboard, just scoped to this team's monthly window.
+function TeamMonthlyCarousel({ team, posts, canToggle, onToggle }) {
+  const sorted = [...posts].sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+  const postedCount = sorted.filter(p => p.posted).length;
+  const unpostedCount = sorted.length - postedCount;
+
+  return (
+    <Card>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        gap: 8, flexWrap: 'wrap', marginBottom: 12,
+      }}>
+        <div>
+          <SectionHeading style={{ margin: 0 }}>Posts this month</SectionHeading>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted,
+            letterSpacing: 0.5, marginTop: 2,
+          }}>
+            {postedCount} posted{unpostedCount > 0 ? ` · ${unpostedCount} drafted but not posted` : ''}
+            {canToggle && ' · click ✓/✕ to toggle'}
+          </div>
+        </div>
+      </div>
+
+      {/* Horizontal scroller — fixed-height row, snap-x for clean
+          scroll positions on touch. Falls back to multi-row wrap on
+          narrow viewports for fat-thumb friendliness. */}
+      <div style={{
+        display: 'grid',
+        gridAutoFlow: 'column',
+        gridAutoColumns: 'minmax(150px, 170px)',
+        gap: 10,
+        overflowX: 'auto',
+        scrollSnapType: 'x mandatory',
+        paddingBottom: 6,
+      }}>
+        {sorted.map(post => (
+          <PostTile
+            key={post.id}
+            post={post}
+            team={team}
+            canToggle={canToggle}
+            onToggle={onToggle}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function PostTile({ post, team, canToggle, onToggle }) {
+  const buildRegenerateLink = (p) => {
+    const params = new URLSearchParams();
+    if (p.templateType) params.set('template', p.templateType);
+    if (p.team) params.set('team', p.team);
+    if (p.settings?.fields) {
+      for (const [k, v] of Object.entries(p.settings.fields)) {
+        if (v != null && v !== '') params.set(k, v);
+      }
+    }
+    return `/generate?${params.toString()}`;
+  };
+  const created = post.createdAt
+    ? post.createdAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : '';
+
+  // Greyed state for unposted: desaturate the thumbnail + soften the
+  // tile chrome so the eye lands on posted ones. Hover reverses the
+  // desaturation so the user can preview the photo in color before
+  // toggling — quality-of-life nudge so you don't have to flip the
+  // state to confirm what's in the image.
+  const dimmed = !post.posted;
+
+  return (
+    <div
+      style={{
+        scrollSnapAlign: 'start',
+        position: 'relative',
+        borderRadius: radius.base,
+        background: '#1A1A22',
+        border: `1px solid ${dimmed ? colors.borderLight : (team.color + '33')}`,
+        overflow: 'hidden',
+        opacity: dimmed ? 0.55 : 1,
+        transition: 'opacity 200ms ease, border-color 200ms ease',
+      }}
+    >
+      <Link
+        to={buildRegenerateLink(post)}
+        title={`${post.templateType || 'template'} · ${post.platform || ''} · click to re-open in Generate`}
+        style={{ display: 'block', textDecoration: 'none' }}
+      >
+        <div style={{
+          width: '100%',
+          aspectRatio: '1 / 1',
+          background: post.thumbnailUrl ? `url(${post.thumbnailUrl}) center/cover` : `linear-gradient(135deg, ${team.color}, ${team.dark})`,
+          // CSS filter on the wrapper desaturates unposted thumbs.
+          // Cheaper than re-rendering greyscale variants and respects
+          // the user's preference for thumbnails staying as the
+          // original PNG.
+          filter: dimmed ? 'grayscale(0.85) brightness(0.85)' : 'none',
+          transition: 'filter 240ms ease',
+        }} />
+      </Link>
+
+      {/* Footer caption — template + date so the carousel reads as
+          "what got made when," not just a wall of thumbnails. */}
+      <div style={{
+        padding: '6px 8px',
+        background: dimmed ? colors.bg : colors.white,
+        borderTop: `1px solid ${colors.borderLight}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 6,
+      }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+            color: colors.textSecondary, letterSpacing: 0.4,
+            textTransform: 'uppercase',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{post.templateType || 'template'}</div>
+          <div style={{
+            fontFamily: fonts.condensed, fontSize: 9, color: colors.textMuted,
+            letterSpacing: 0.3,
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            {created}
+            {!post.posted && (
+              <span style={{
+                fontWeight: 800,
+                color: colors.textMuted,
+                background: colors.bg,
+                border: `1px solid ${colors.border}`,
+                padding: '0 4px', borderRadius: radius.sm,
+                fontSize: 8, letterSpacing: 0.5,
+              }}>DRAFT</span>
+            )}
+          </div>
+        </div>
+
+        {/* Posted/Not posted toggle — master admin only. Single
+            button that flips between the two states. The chip is
+            small + lives in the footer so it never competes with
+            the thumbnail visually. */}
+        {canToggle ? (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(post.id, !post.posted); }}
+            title={post.posted ? 'Mark this as NOT posted (will dim and decrement the counter)' : 'Mark this as posted (will brighten and increment the counter)'}
+            style={{
+              flexShrink: 0,
+              width: 22, height: 22,
+              borderRadius: '50%',
+              border: `1px solid ${post.posted ? team.color : colors.border}`,
+              background: post.posted ? team.color : colors.white,
+              color: post.posted ? '#fff' : colors.textMuted,
+              cursor: 'pointer',
+              fontSize: 11, fontWeight: 800,
+              lineHeight: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 0,
+            }}
+          >
+            {post.posted ? '✓' : '✕'}
+          </button>
+        ) : (
+          <span
+            title={post.posted ? 'Posted' : 'Not posted'}
+            style={{
+              flexShrink: 0,
+              width: 8, height: 8, borderRadius: '50%',
+              background: post.posted ? team.color : colors.border,
+            }}
+          />
+        )}
+      </div>
+    </div>
   );
 }

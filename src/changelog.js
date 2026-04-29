@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.2.0',
+    date: '2026-04-29',
+    kind: 'minor',
+    summary: 'Per-team monthly carousel + posted/draft toggle',
+    items: [
+      'New "Posts this month" carousel under the progress bar on every team page. Horizontal scroller of every generation for that team this month with thumbnails, template, and date.',
+      'Master admin can toggle each post between Posted (✓) and Draft (✕). Drafts grey out + decrement the counter on the progress bar; flip back and they brighten + increment. Optimistic local update with a background PATCH so toggles feel instant.',
+      'Dashboard "Recent posts" strip now ALWAYS renders (with empty state) so the surface is visible from a cold install. Unposted entries are greyscale + carry a "DRAFT" tag, mirroring the team carousel for visual consistency.',
+      'New PATCH endpoint on /api/cloud-sync for partial record updates. Field allow-list per kind keeps the surface tight; `generate-log.posted` is the first patchable field.',
+      'Counter on the progress bar derives from posted=true entries only. The 12-post target is the publishing goal — drafted-but-not-posted work no longer inflates the number.',
+      'SCHEMA: requires a one-time `ALTER TABLE generate_log ADD COLUMN posted BOOLEAN NOT NULL DEFAULT TRUE;` in Supabase. Without it, every post stays in the "posted" state by default and the toggle no-ops.',
+    ],
+  },
+  {
     version: '4.1.1',
     date: '2026-04-29',
     kind: 'patch',

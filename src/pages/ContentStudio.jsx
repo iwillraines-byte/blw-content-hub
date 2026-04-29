@@ -60,11 +60,20 @@ export default function ContentStudio() {
   // on that card's button for a few seconds and surfaces a "View request →"
   // link so the user can jump straight to the newly-created request.
   const [queuedIdeas, setQueuedIdeas] = useState({}); // { [ideaId]: requestId }
-  // Public recent-posts strip — last 10 downloads across all users. Populates
-  // asynchronously; stays empty until someone generates something.
+  // Public recent-posts strip — last 12 downloads across all teams.
+  // Populates asynchronously; renders ALWAYS (with empty state) so the
+  // surface is visible from a cold install — the previous "hide when
+  // empty" behavior made the strip disappear on fresh tenants and the
+  // user thought we'd dropped the feature. Unposted (master-admin
+  // toggled) entries render greyed out, matching the team-page
+  // carousel semantics — easier to reason about cross-surface.
   const [recentPosts, setRecentPosts] = useState([]);
+  const [recentPostsLoaded, setRecentPostsLoaded] = useState(false);
   useEffect(() => {
-    fetchRecentGenerates(10).then(setRecentPosts);
+    fetchRecentGenerates(12).then(list => {
+      setRecentPosts(list);
+      setRecentPostsLoaded(true);
+    });
   }, []);
   // Daily usage counter surfaced in the Content Ideas header so the user
   // has a running tally of AI calls today (cost proxy). Re-read whenever
@@ -557,9 +566,7 @@ export default function ContentStudio() {
           shipping" row instead of competing with the live-state cards
           and content ideas at the top of the page. Empty state hides
           the whole row until someone has actually posted. */}
-      {recentPosts.length > 0 && (
-        <RecentPostsStrip posts={recentPosts} />
-      )}
+      <RecentPostsStrip posts={recentPosts} loaded={recentPostsLoaded} />
     </div>
   );
 }
@@ -572,9 +579,14 @@ function truncate(str, n) {
 }
 
 // Single live-state card at the top of the dashboard
-// Public recent-posts feed — the last 10 downloads rendered as a horizontal
-// thumbnail strip. Clicking a thumbnail restores its composition in Generate.
-function RecentPostsStrip({ posts }) {
+// Public recent-posts feed — the last 12 downloads across all teams,
+// rendered as a thumbnail grid. Clicking a thumbnail restores its
+// composition in Generate. Unposted entries (master-admin toggled) are
+// rendered greyscale with a "DRAFT" tag so the dashboard tells the
+// truth about which posts actually shipped vs. which are sitting on
+// the shelf. Always renders, even when empty — the empty state is the
+// indicator that the surface exists for users on cold installs.
+function RecentPostsStrip({ posts, loaded }) {
   const timeAgo = (d) => {
     if (!d) return '';
     const diff = Date.now() - d.getTime();
@@ -601,73 +613,109 @@ function RecentPostsStrip({ posts }) {
     return `/generate?${params.toString()}`;
   };
 
+  const postedCount = posts.filter(p => p.posted !== false).length;
+  const draftCount = posts.length - postedCount;
+
   return (
     <Card style={{ padding: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
         <SectionHeading style={{ margin: 0 }}>Recent posts</SectionHeading>
         <span style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.5 }}>
-          LAST {posts.length} · PUBLIC
+          {posts.length === 0
+            ? (loaded ? 'NO POSTS YET · PUBLIC' : 'LOADING…')
+            : `LAST ${posts.length} · PUBLIC${draftCount ? ` · ${draftCount} DRAFT` : ''}`}
         </span>
       </div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-        gap: 10,
-      }}>
-        {posts.map(post => {
-          const team = post.team ? getTeam(post.team) : null;
-          return (
-            <Link
-              key={post.id}
-              to={buildRegenerateLink(post)}
-              title={`${post.team || 'BLW'} · ${post.templateType || 'template'} · ${post.platform || ''} · click to re-open in Generate`}
-              style={{ textDecoration: 'none', display: 'block' }}
-            >
-              <div style={{
-                borderRadius: radius.base, overflow: 'hidden',
-                border: `1px solid ${colors.borderLight}`,
-                background: '#1A1A22',
-                aspectRatio: '1 / 1',
-                position: 'relative',
-              }}>
-                {post.thumbnailUrl ? (
-                  <img
-                    src={post.thumbnailUrl}
-                    alt=""
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                ) : (
-                  <div style={{
-                    width: '100%', height: '100%',
-                    background: team ? `linear-gradient(135deg, ${team.color}, ${team.dark})` : colors.bg,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: fonts.heading, fontSize: 24, color: team?.accent || colors.textMuted,
-                    letterSpacing: 1,
-                  }}>{post.team || '—'}</div>
-                )}
-                {team && (
-                  <span style={{
-                    position: 'absolute', top: 6, left: 6,
-                    background: team.color, color: team.accent,
-                    padding: '2px 6px', borderRadius: 3,
-                    fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                  }}>{team.id}</span>
-                )}
-              </div>
-              <div style={{ padding: '6px 2px 0' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {post.templateType || 'post'}
+      {posts.length === 0 ? (
+        <div style={{
+          padding: 28, textAlign: 'center',
+          color: colors.textMuted, fontFamily: fonts.condensed, fontSize: 12,
+          letterSpacing: 0.4,
+        }}>
+          {loaded
+            ? 'Generate any template and download the PNG — it\'ll show up here for the whole team to see.'
+            : ' '}
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+          gap: 10,
+        }}>
+          {posts.map(post => {
+            const team = post.team ? getTeam(post.team) : null;
+            const dimmed = post.posted === false;
+            return (
+              <Link
+                key={post.id}
+                to={buildRegenerateLink(post)}
+                title={`${post.team || 'BLW'} · ${post.templateType || 'template'} · ${post.platform || ''}${dimmed ? ' · marked NOT POSTED' : ''} · click to re-open in Generate`}
+                style={{
+                  textDecoration: 'none', display: 'block',
+                  opacity: dimmed ? 0.55 : 1,
+                  transition: 'opacity 200ms ease',
+                }}
+              >
+                <div style={{
+                  borderRadius: radius.base, overflow: 'hidden',
+                  border: `1px solid ${colors.borderLight}`,
+                  background: '#1A1A22',
+                  aspectRatio: '1 / 1',
+                  position: 'relative',
+                }}>
+                  {post.thumbnailUrl ? (
+                    <img
+                      src={post.thumbnailUrl}
+                      alt=""
+                      style={{
+                        width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                        // Same desaturation as the team carousel for
+                        // visual consistency between surfaces.
+                        filter: dimmed ? 'grayscale(0.85) brightness(0.85)' : 'none',
+                        transition: 'filter 240ms ease',
+                      }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: '100%', height: '100%',
+                      background: team ? `linear-gradient(135deg, ${team.color}, ${team.dark})` : colors.bg,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: fonts.heading, fontSize: 24, color: team?.accent || colors.textMuted,
+                      letterSpacing: 1,
+                    }}>{post.team || '—'}</div>
+                  )}
+                  {team && (
+                    <span style={{
+                      position: 'absolute', top: 6, left: 6,
+                      background: team.color, color: team.accent,
+                      padding: '2px 6px', borderRadius: 3,
+                      fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                    }}>{team.id}</span>
+                  )}
+                  {dimmed && (
+                    <span style={{
+                      position: 'absolute', top: 6, right: 6,
+                      background: 'rgba(0,0,0,0.65)', color: '#fff',
+                      padding: '2px 6px', borderRadius: 3,
+                      fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                    }}>DRAFT</span>
+                  )}
                 </div>
-                <div style={{ fontSize: 10, fontFamily: fonts.condensed, color: colors.textMuted, letterSpacing: 0.3, display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{post.platform || '—'}</span>
-                  <span>{timeAgo(post.createdAt)}</span>
+                <div style={{ padding: '6px 2px 0' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {post.templateType || 'post'}
+                  </div>
+                  <div style={{ fontSize: 10, fontFamily: fonts.condensed, color: colors.textMuted, letterSpacing: 0.3, display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{post.platform || '—'}</span>
+                    <span>{timeAgo(post.createdAt)}</span>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
