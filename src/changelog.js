@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.1',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Fixed manual_players collision (Roses sharing About-me records)',
+    items: [
+      'Tightened upsertManualPlayer matching rules. The OLD logic matched on (team, lastName, firstInitial) which collapsed every Rose with initial "L" into a single record — editing Logan\'s About-me overwrote Luke\'s. Same trap caught Marshalls and any future twin pair sharing an initial.',
+      'New matching priority: (1) firstName + lastName + team [exact identity, used by every UI form], (2) jersey + lastName + team, (3) firstInitial + lastName + team but ONLY if unique on team, (4) lastName + team but ONLY if unique. Ambiguous matches now create a new record instead of overwriting an existing one — losing data is worse than a duplicate an admin can clean up.',
+      'Existing collided records still need a one-time cleanup in Supabase — the code fix prevents future collisions but can\'t un-merge data that\'s already been overwritten. See post-deploy notes for cleanup SQL.',
+    ],
+  },
+  {
     version: '4.5.0',
     date: '2026-04-30',
     kind: 'minor',

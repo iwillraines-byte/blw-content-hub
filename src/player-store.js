@@ -69,26 +69,73 @@ export async function getManualPlayersByTeam(teamId) {
   return all.filter(p => p.team === teamId);
 }
 
-// Upsert a manual_players row from a "team + lastName (+ firstInitial)"
-// key — used by admin tools that want to attach a setting to a player
-// who may only exist in API data (batting/pitching) and therefore has
+// Upsert a manual_players row from a "team + lastName (+ firstInitial / num /
+// firstName)" key — used by admin tools that want to attach a setting to a
+// player who may only exist in API data (batting/pitching) and therefore has
 // no manual row yet. Returns the merged record after save.
 //
-// Matching rule: case-insensitive lastName on the team, optionally
-// narrowed by firstInitial. If no row matches, a new one is created.
+// v4.5.1: Tightened matching rules to prevent the Logan/Luke Rose collision.
+// The OLD logic matched on (team, lastName, firstInitial) which collapsed
+// every Rose with initial "L" into a single record — editing Logan's
+// About-me overwrote Luke's. The Marshall pair on AZS and any future
+// twins-with-same-initial hit the same trap.
+//
+// New matching priority (most specific wins):
+//   1. (team, lastName, firstName)   — exact identity, used by canonical
+//                                      roster + every UI form that knows
+//                                      both names
+//   2. (team, lastName, num)         — when caller has jersey but not full
+//                                      first name (rare, but the AI
+//                                      tagging path used to do this)
+//   3. (team, lastName, firstInitial) — only when there is EXACTLY ONE
+//                                      record on this team with that
+//                                      (lastName, initial). If multiple,
+//                                      we refuse to merge — see below.
+//   4. (team, lastName)              — only when EXACTLY ONE record on
+//                                      this team has that lastName.
+//
+// If the matching rule is ambiguous (rule 3 or 4 matches multiple records),
+// we create a NEW record instead of overwriting one of them — losing data
+// is worse than having a duplicate that an admin can clean up.
 export async function upsertManualPlayer({ team, lastName, firstInitial, firstName, num, updates = {} }) {
   if (!team || !lastName) throw new Error('team + lastName required');
   const all = await getAllManualPlayers();
   const lnNorm = String(lastName).toLowerCase();
-  const finNorm = firstInitial ? String(firstInitial).toUpperCase() : null;
-  const match = all.find(p => {
-    if (p.team !== team) return false;
-    const pLn = String(p.lastName || '').toLowerCase();
-    if (pLn !== lnNorm) return false;
-    if (!finNorm) return true;
-    const pFn = String(p.firstName || p.name || '').trim();
-    return pFn.charAt(0).toUpperCase() === finNorm;
-  });
+  const fnNorm = firstName ? String(firstName).trim().toLowerCase() : null;
+  const finNorm = firstInitial ? String(firstInitial).toUpperCase().slice(0, 1) : null;
+  const numNorm = num ? String(num).replace(/^0+/, '') : null;
+
+  const sameTeamLast = all.filter(p =>
+    p.team === team && String(p.lastName || '').toLowerCase() === lnNorm
+  );
+
+  // Rule 1: exact firstName + lastName + team
+  let match = null;
+  if (fnNorm) {
+    match = sameTeamLast.find(p => {
+      const pFn = String(p.firstName || '').trim().toLowerCase();
+      return pFn && pFn === fnNorm;
+    });
+  }
+  // Rule 2: jersey + lastName + team
+  if (!match && numNorm) {
+    match = sameTeamLast.find(p => {
+      const pNum = String(p.num || '').replace(/^0+/, '');
+      return pNum && pNum === numNorm;
+    });
+  }
+  // Rule 3: firstInitial + lastName + team — but ONLY if unique on team
+  if (!match && finNorm) {
+    const candidates = sameTeamLast.filter(p => {
+      const pFn = String(p.firstName || p.name || '').trim();
+      return pFn.charAt(0).toUpperCase() === finNorm;
+    });
+    if (candidates.length === 1) match = candidates[0];
+  }
+  // Rule 4: lastName + team — but ONLY if unique on team
+  if (!match && !fnNorm && !numNorm && !finNorm && sameTeamLast.length === 1) {
+    match = sameTeamLast[0];
+  }
 
   const db = await openDB();
   if (match) {
