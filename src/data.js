@@ -1338,6 +1338,10 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     // JSON object — defaults to {} when absent so the AthleteVoiceCard
     // can read keys without nullchecks.
     athleteVoice:    manual?.athlete_voice ?? manual?.athleteVoice ?? {},
+    // Strict 1:1 link between this player and an athlete's auth user
+    // (v4.4.1). NULL when no account is bound yet. Drives the
+    // "athletes can only edit THEIR OWN About-me" gating.
+    userId:          manual?.user_id ?? manual?.userId ?? null,
     ambiguous,
     candidateCount: candidateNames.size,
   };

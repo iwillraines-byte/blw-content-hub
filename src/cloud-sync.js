@@ -182,6 +182,11 @@ function mapPlayerToRow(p) {
     // can structure it (vibes, references, walkup music, etc.) without
     // a schema change every time a new field gets added.
     athlete_voice:    p.athleteVoice ?? p.athlete_voice ?? null,
+    // Strict 1:1 binding to a profiles.id. NULL means no athlete
+    // account is linked to this player yet. Master admin manages the
+    // linkage; athletes can edit their own About-me only when this
+    // field equals their auth user.id.
+    user_id:          p.userId ?? p.user_id ?? null,
   };
 }
 

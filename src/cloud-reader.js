@@ -119,6 +119,10 @@ function rowToPlayer(r) {
     // to {} when the column is absent. Read by PlayerPage's About-me
     // card + fed into /api/ideas as additional player context.
     athleteVoice: r.athlete_voice || {},
+    // v4.4.1 — strict 1:1 binding to a profiles.id. Drives athlete
+    // edit gating on the AthleteVoiceCard so they can only edit THEIR
+    // OWN player's About-me, not every teammate's.
+    userId: r.user_id || null,
     // Vitals (db/004) — without these, the bio importer's data wouldn't
     // survive a round-trip from Supabase back into local IDB cache,
     // making the PlayerPage show "—" for everything imported.

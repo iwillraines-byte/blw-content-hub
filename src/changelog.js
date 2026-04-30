@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.4.1',
+    date: '2026-04-29',
+    kind: 'patch',
+    summary: 'Athletes can only edit THEIR OWN player About-me',
+    items: [
+      'New strict 1:1 link between a player record and an athlete profile via manual_players.user_id. Athletes can edit the About-me block ONLY when this matches their auth user.id — no more "any teammate can edit any teammate" leakage.',
+      'Master admin gets a "Link athlete account" picker inside the AthleteVoiceCard: pick which athlete profile owns this player. Picker fetches /api/admin-people, filters to athlete-role accounts, groups by team. ✓ LINKED chip surfaces when the binding is set.',
+      'Athletes whose account isn\'t linked to a player yet still see other players\' About-me cards (read-only) but can\'t edit anything. Master admin links them via the picker on their player page.',
+    ],
+  },
+  {
     version: '4.4.0',
     date: '2026-04-29',
     kind: 'major',

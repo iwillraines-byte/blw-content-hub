@@ -36,6 +36,17 @@
 //     ALTER TABLE manual_players
 //       ADD COLUMN IF NOT EXISTS athlete_voice JSONB DEFAULT '{}'::jsonb;
 //
+// SCHEMA NOTE — `manual_players.user_id` (added v4.4.1):
+//   Strict 1:1 link between a player record and an athlete's profile,
+//   so an athlete can ONLY edit their own About-me block (not every
+//   teammate on their roster). Master admin owns the linkage from the
+//   AthleteVoiceCard's "Linked to" picker. NULL means "no athlete
+//   account is bound to this player yet."
+//     ALTER TABLE manual_players
+//       ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+//     CREATE INDEX IF NOT EXISTS idx_manual_players_user
+//       ON manual_players(user_id);
+//
 // Request shape (POST, JSON):
 // {
 //   kind:    'media' | 'overlay' | 'effect' | 'request' | 'request-comment'

@@ -10,6 +10,7 @@ import { TierBadge } from '../tier-badges';
 import { useAuth, isStaffRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
+import { authedJson } from '../authed-fetch';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
 import { useLeagueContext } from '../league-context';
 import IdeaCard from '../idea-card';
@@ -1247,7 +1248,7 @@ export default function PlayerPage() {
   const navigate = useNavigate();
   const team = getTeam(slug);
   const toast = useToast();
-  const { role, teamId: viewerTeamId } = useAuth();
+  const { user, role } = useAuth();
   // Photo-edit + pan/zoom buttons surface for ANY staff user (master +
   // content). Picking a player's headshot is daily content work, not a
   // data-management task — locking it to master-only would block the
@@ -1983,20 +1984,18 @@ export default function PlayerPage() {
       )}
 
       {/* Athlete voice — self-authored "About me" block that feeds the
-          AI ideas generator. Editable by master_admin always, AND by
-          athletes whose profile is pinned to this team (one-team-one-
-          account assumption — works until we add a strict player ↔
-          user_id mapping). Read-only for everyone else, but visible
-          when there's any content so the team sees what the AI is
-          drafting against.
-
-          Hides entirely when read-only AND the voice block is empty —
-          no point showing an empty editorial card to staff who can't
-          fill it in. */}
+          AI ideas generator.
+            • master_admin → always editable + sees the linker
+            • athlete → editable only when player.userId equals their
+              auth user.id (strict 1:1 binding via manual_players.user_id)
+            • everyone else → read-only
+          Hides entirely when read-only AND the voice block is empty so
+          this card doesn't surface as an empty box for staff. */}
       <AthleteVoiceCard
         player={player}
         team={team}
-        canEdit={isMaster || (isAthlete && viewerTeamId === team.id)}
+        isMaster={isMaster}
+        canEdit={isMaster || (isAthlete && !!user?.id && player.userId === user.id)}
       />
 
       {/* Content ideas about this player — only shows when there are
@@ -2375,7 +2374,7 @@ function PlayerRecentPosts({ posts, team, player }) {
 // when their profile is pinned to this team). When the viewer can't
 // edit AND the voice block is empty, we render nothing so this card
 // doesn't surface as an empty box for staff.
-function AthleteVoiceCard({ player, team, canEdit }) {
+function AthleteVoiceCard({ player, team, canEdit, isMaster }) {
   const initial = player?.athleteVoice && typeof player.athleteVoice === 'object'
     ? player.athleteVoice
     : {};
@@ -2383,17 +2382,27 @@ function AthleteVoiceCard({ player, team, canEdit }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
+  // Local mirror of the player's userId binding so the linker can
+  // optimistically update without a re-render of the parent. Synced
+  // back from the prop whenever the player slug changes.
+  const [linkedUserId, setLinkedUserId] = useState(player?.userId || null);
   const toast = useToast();
 
   // Hydrate when the player record changes (slug navigation between
   // teammates) so the form reflects the active player's data.
   useEffect(() => {
     setVoice(player?.athleteVoice && typeof player.athleteVoice === 'object' ? player.athleteVoice : {});
+    setLinkedUserId(player?.userId || null);
     setEditing(false);
   }, [player?.id]);
 
   const hasContent = Object.values(voice).some(v => v && String(v).trim().length > 0);
-  if (!hasContent && !canEdit) return null;
+  // Master admin always sees the card (so they can link the athlete
+  // account even when no About-me has been written yet). Athletes see
+  // it when they're the linked owner OR when the section already has
+  // content (their own page; static read-only). Staff sees it only
+  // when there's content to read.
+  if (!hasContent && !canEdit && !isMaster) return null;
 
   const setField = (key, value) => setVoice(prev => ({ ...prev, [key]: value }));
 
@@ -2448,6 +2457,38 @@ function AthleteVoiceCard({ player, team, canEdit }) {
           ? 'Tell the AI more about you. Vibe, references, fun facts. The more honest, the better the captions and ideas it drafts.'
           : `${player.firstName || player.lastName}'s self-authored notes. Drives the AI's caption + idea drafting for posts about them.`}
       </p>
+
+      {/* Master-admin only — link this player record to a specific
+          athlete profile so that one (and only one) athlete can edit
+          this About-me. Without this binding, the prior "any athlete
+          on the team can edit any teammate" model was too permissive.
+          The picker fetches /api/admin-people to render every athlete
+          profile + a "(unlinked)" option to clear the binding. */}
+      {isMaster && (
+        <LinkAthleteAccount
+          player={player}
+          team={team}
+          linkedUserId={linkedUserId}
+          onLink={async (newUserId) => {
+            const prev = linkedUserId;
+            setLinkedUserId(newUserId); // optimistic
+            try {
+              await upsertManualPlayer({
+                team: player.team,
+                lastName: player.lastName,
+                firstInitial: player.firstInitial,
+                firstName: player.firstName,
+                num: player.num,
+                updates: { userId: newUserId || null },
+              });
+              toast.success(newUserId ? 'Linked athlete account' : 'Unlinked athlete account');
+            } catch (err) {
+              setLinkedUserId(prev); // roll back
+              toast.error('Couldn\'t update link', { detail: err.message?.slice(0, 80) });
+            }
+          }}
+        />
+      )}
 
       {!editing ? (
         // Read mode — only show fields that have content. Empty fields
@@ -2537,3 +2578,121 @@ function AthleteVoiceCard({ player, team, canEdit }) {
     </Card>
   );
 }
+
+// ─── Link athlete account picker (master-admin only) ──────────────────────
+// Tiny strip rendered inside the AthleteVoiceCard that lets the master
+// admin bind ONE athlete profile to ONE player record. Once bound,
+// only that athlete (plus master_admin) can edit the About-me block —
+// teammates with athlete role can still SEE it but can't edit it.
+//
+// Fetches /api/admin-people lazily on mount (master-admin endpoint that
+// returns every profile). Filters to athlete-role profiles to keep the
+// picker focused on the people who'd actually claim a player. Falls
+// back gracefully if the endpoint 401s.
+function LinkAthleteAccount({ player, team, linkedUserId, onLink }) {
+  const [profiles, setProfiles] = useState(null); // null = loading
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let cancel = false;
+    authedJson('/api/admin-people')
+      .then(data => {
+        if (cancel) return;
+        // Only show athletes — content/admin profiles aren't bound to
+        // player records. Sort by team for ergonomic scanning.
+        const list = (data.profiles || [])
+          .filter(p => p.role === 'athlete')
+          .sort((a, b) => {
+            const tCmp = (a.team_id || '').localeCompare(b.team_id || '');
+            if (tCmp !== 0) return tCmp;
+            return (a.email || '').localeCompare(b.email || '');
+          });
+        setProfiles(list);
+      })
+      .catch(err => { if (!cancel) setError(err.message); });
+    return () => { cancel = true; };
+  }, []);
+
+  const linked = profiles?.find(p => p.id === linkedUserId);
+  const teamProfiles = (profiles || []).filter(p => !p.team_id || p.team_id === team.id);
+  const otherProfiles = (profiles || []).filter(p => p.team_id && p.team_id !== team.id);
+
+  return (
+    <div style={{
+      marginBottom: 14,
+      padding: 10,
+      background: colors.bg,
+      border: `1px solid ${colors.borderLight}`,
+      borderRadius: radius.sm,
+      display: 'flex', alignItems: 'center', gap: 10,
+      flexWrap: 'wrap',
+    }}>
+      <div style={{
+        fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+        color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+      }}>MASTER ADMIN</div>
+      <div style={{
+        fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body,
+        flex: 1, minWidth: 200,
+      }}>
+        Link this player record to ONE athlete account so only that person can edit their About-me.
+      </div>
+      {profiles === null && !error && (
+        <span style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed }}>Loading…</span>
+      )}
+      {error && (
+        <span style={{ fontSize: 11, color: '#991B1B', fontFamily: fonts.condensed }} title={error}>
+          Couldn't load profiles
+        </span>
+      )}
+      {profiles !== null && !error && (
+        <select
+          value={linkedUserId || ''}
+          onChange={e => onLink(e.target.value || null)}
+          style={{
+            fontSize: 12, fontFamily: fonts.body,
+            padding: '5px 8px',
+            background: colors.white,
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.sm,
+            color: colors.text,
+            minWidth: 220,
+            cursor: 'pointer',
+          }}
+        >
+          <option value="">— Not linked —</option>
+          {teamProfiles.length > 0 && (
+            <optgroup label={`${team.id} athletes`}>
+              {teamProfiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.email}{p.display_name ? ` · ${p.display_name}` : ''}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {otherProfiles.length > 0 && (
+            <optgroup label="Other teams (uncommon)">
+              {otherProfiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.team_id || '?'} · {p.email}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+      )}
+      {linked && (
+        <span
+          title={`Currently linked: ${linked.email}`}
+          style={{
+            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+            letterSpacing: 0.5, color: colors.success,
+            background: colors.successBg,
+            border: `1px solid ${colors.successBorder}`,
+            padding: '3px 8px', borderRadius: radius.sm,
+          }}
+        >✓ LINKED</span>
+      )}
+    </div>
+  );
+}
+
