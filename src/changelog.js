@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.8',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Hotfix: 403 on protected endpoints when role_expires_at column missing',
+    items: [
+      'v4.5.7 added a SELECT for profiles.role_expires_at on every authed request. If the column hadn\'t been added via the migration SQL yet, the SELECT errored, profile resolved to null, and every requireRole / requireAdmin call 403\'d — including usage meter, ideas generator, and other admin surfaces.',
+      'Server now mirrors the client\'s graceful two-step fallback: if the SELECT errors with "role_expires_at", retry without the column. Expiry enforcement just no-ops until the migration is run.',
+      'Apologies for the brief outage — the column-missing path is now tested.',
+    ],
+  },
+  {
     version: '4.5.7',
     date: '2026-04-30',
     kind: 'minor',

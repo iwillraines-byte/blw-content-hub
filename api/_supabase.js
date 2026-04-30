@@ -78,27 +78,39 @@ export async function requireUser(req, res) {
   // When that timestamp is in the past, we demote the role to null so
   // requireRole / requireAdmin reject the request — even if the JWT
   // is still valid. Self-revoking by design.
+  // v4.5.8: graceful fallback when role_expires_at column hasn't been
+  // added yet. Without this, every protected endpoint 403s on a deploy
+  // that ran the code update before the SQL migration. Mirror the
+  // client's two-step retry pattern.
   let profile = null;
   try {
-    const { data: p } = await sb
+    let { data: p, error } = await sb
       .from('profiles')
       .select('id, email, role, team_id, display_name, role_expires_at')
       .eq('id', user.id)
       .maybeSingle();
-    profile = p || null;
-    if (profile?.role_expires_at) {
-      const expired = new Date(profile.role_expires_at).getTime() <= Date.now();
-      if (expired) {
-        // Strip elevated role. Surface the demotion via an `expired_role`
-        // field for any caller that wants to log it.
-        profile = { ...profile, expired_role: profile.role, role: null };
+    if (error && /role_expires_at/i.test(error.message || '')) {
+      const fallback = await sb
+        .from('profiles')
+        .select('id, email, role, team_id, display_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      p = fallback.data;
+      error = fallback.error;
+    }
+    if (!error) {
+      profile = p || null;
+      if (profile?.role_expires_at) {
+        const expired = new Date(profile.role_expires_at).getTime() <= Date.now();
+        if (expired) {
+          // Strip elevated role. Surface the demotion via an `expired_role`
+          // field for any caller that wants to log it.
+          profile = { ...profile, expired_role: profile.role, role: null };
+        }
       }
     }
   } catch {
     // Profile table may not exist yet in a fresh deploy — don't fail auth.
-    // role_expires_at column may also be absent on pre-migration deploys;
-    // a select error means we just don't get expiry enforcement until
-    // the column is added.
   }
   return { user, profile, sb };
 }
