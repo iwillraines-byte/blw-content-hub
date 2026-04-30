@@ -63,6 +63,13 @@ export default function Login() {
   if (!supabaseConfigured) {
     return (
       <LoginShell>
+        <img
+          src="/brand/blw-mark.svg"
+          alt=""
+          width={56}
+          height={56}
+          style={{ display: 'block', borderRadius: radius.base, marginBottom: 14, opacity: 0.6 }}
+        />
         <h1 style={styles.title}>Cloud not configured</h1>
         <p style={styles.muted}>
           This deployment is missing <code>VITE_SUPABASE_URL</code> or
@@ -94,8 +101,16 @@ export default function Login() {
 
   return (
     <LoginShell>
-      <div style={styles.logoMark}>B</div>
-      <h1 style={styles.title}>BLW Content Hub</h1>
+      {/* v4.5.0: branded mark from /public/brand replaces the plain "B" tile.
+          Drop a new SVG at the same path to refresh the lockup app-wide. */}
+      <img
+        src="/brand/blw-mark.svg"
+        alt=""
+        width={56}
+        height={56}
+        style={{ display: 'block', borderRadius: radius.base, marginBottom: 14 }}
+      />
+      <h1 style={styles.title}>BLW Studio</h1>
       <p style={styles.muted}>Sign in with your email to continue.</p>
 
       <form onSubmit={sendLink} style={{ width: '100%', marginTop: 20 }}>

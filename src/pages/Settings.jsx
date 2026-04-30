@@ -234,7 +234,7 @@ export default function Settings() {
         <SectionHeading>About</SectionHeading>
         <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.7 }}>
           <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <strong style={{ color: colors.red }}>BLW Content Hub</strong>
+            <strong style={{ color: colors.red }}>BLW Studio</strong>
             {/* Version chip — semver + build date. Click to open the
                 full changelog. The chip stays small + monospace so it
                 reads as a build fingerprint, not a primary CTA, but

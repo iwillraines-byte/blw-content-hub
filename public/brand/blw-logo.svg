@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 80" role="img" aria-label="BLW Studio">
+  <defs>
+    <linearGradient id="blwBall" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F2F2F2"/>
+    </linearGradient>
+  </defs>
+  <!-- Brand mark: red rounded square with stylized BLW monogram -->
+  <rect x="4" y="10" width="60" height="60" rx="10" fill="#DD3C3C"/>
+  <text x="34" y="52" text-anchor="middle"
+        font-family="'Bebas Neue','Oswald','Impact',sans-serif"
+        font-weight="700" font-size="34" fill="#FFFFFF" letter-spacing="2">BLW</text>
+  <!-- Stitched ball accent -->
+  <circle cx="56" cy="22" r="6" fill="url(#blwBall)" stroke="#DD3C3C" stroke-width="1.2"/>
+  <path d="M51.5 19.5 Q56 22 60.5 19.5 M51.5 24.5 Q56 22 60.5 24.5"
+        fill="none" stroke="#DD3C3C" stroke-width="0.8" stroke-linecap="round"/>
+  <!-- Wordmark: "BLW STUDIO" stacked condensed -->
+  <text x="78" y="42"
+        font-family="'Bebas Neue','Oswald','Impact',sans-serif"
+        font-weight="700" font-size="30" fill="#0A1628" letter-spacing="3">BLW</text>
+  <text x="78" y="62"
+        font-family="'Bebas Neue','Oswald','Impact',sans-serif"
+        font-weight="500" font-size="16" fill="#0A1628" letter-spacing="6" opacity="0.78">STUDIO</text>
+</svg>

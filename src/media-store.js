@@ -315,23 +315,30 @@ export async function findPlayerMedia(team, lastName, optsOrJersey = null) {
   const allByName = playerRecords.filter(matchesByLastName);
 
   // Disambiguate by first-initial when the caller provides one.
-  // If any record carries a firstInitial we restrict to matches; if
-  // none of the matches have an initial we keep the lastname set
-  // (legacy records, no way to disambiguate).
+  // Includes records with matching initial AND records with no initial
+  // tagged (legacy / un-tagged uploads). Records with a DIFFERENT initial
+  // are excluded — that's an explicit "not this player" signal.
   let matches = allByName;
   if (wantInitial) {
-    const withInitial = matches.filter(f => (f.firstInitial || '').toUpperCase() === wantInitial);
-    const anyHaveInitial = matches.some(f => f.firstInitial);
-    if (withInitial.length) matches = withInitial;
-    else if (anyHaveInitial) matches = [];
+    matches = matches.filter(f => {
+      const fi = (f.firstInitial || '').toUpperCase();
+      return !fi || fi === wantInitial;
+    });
   }
 
-  // Disambiguate by jersey number when supplied. Strongest signal so
-  // it overrides all else.
+  // Disambiguate by jersey number when supplied. Same shape as initial:
+  // matching num OR untagged (no num) passes; a DIFFERENT num is rejected.
+  // v4.5.0: this fixes the Logan/Luke Rose, James/Justin Lee, and Marshall
+  // collisions — both share initial, jersey is the unambiguous separator.
+  // Untagged-num records still surface so legacy uploads aren't lost.
   if (wantNum != null && wantNum !== '') {
     const padded = String(wantNum).padStart(2, '0');
-    const byNum = matches.filter(f => f.num === padded || f.num === String(wantNum));
-    if (byNum.length) matches = byNum;
+    const wantNumStr = String(wantNum);
+    matches = matches.filter(f => {
+      const num = f.num;
+      if (!num) return true; // legacy / untagged — can't be ruled out
+      return num === padded || num === wantNumStr;
+    });
   }
 
   // Sort: prefer media tagged for the requested team first (typical case

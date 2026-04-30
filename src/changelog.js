@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.5.0',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'Demo prep · Round 1: mobile overlay sync, name-collision fixes, brand chrome',
+    items: [
+      'Mobile overlay sync — overlays uploaded by one admin now show up on every other admin\'s device within 60 seconds, not 10 minutes. Three fixes compounded: lowered the global hydrate throttle from 10 min → 60 sec, retriggered hydrate when the auth session lands (closing a JWT race that silently 401\'d on first mobile mount), and force-refreshed overlays on every Generate-page mount instead of only on team-select.',
+      'Name collision fixes — Logan/Luke Rose, James/Justin Lee, and the Marshall pair on AZS no longer cross-wire each other\'s media or trap users on prev/next teammate nav. Disambiguation now uses lastName + firstInitial + jersey in combination, with legacy untagged records still surfacing rather than being silently dropped.',
+      'Top-bar brand chrome — the page H1 no longer duplicates in the workspace header. The chrome reads "BLW Studio" everywhere, with the actual page title still driving the browser tab via document.title.',
+      'BLW + ProWiffleball logos — branded marks land in the sidebar header, login screen, and footer credit. Drop replacement SVGs at /public/brand/blw-logo.svg, blw-mark.svg, or prowiffleball-logo.svg to swap them across the app without touching code.',
+      'Renamed app from "BLW Content Hub" to "BLW Studio" everywhere it appeared (window title, sidebar, login, settings about, file manifest, changelog modal).',
+    ],
+  },
+  {
     version: '4.4.2',
     date: '2026-04-29',
     kind: 'patch',

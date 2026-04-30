@@ -1543,9 +1543,28 @@ export default function PlayerPage() {
     const norm = (s) => String(s || '').toLowerCase();
     const targetName = norm(player.name);
     const targetLast = norm(player.lastName);
-    const idx = teammates.findIndex(t =>
-      norm(t.name) === targetName || norm(t.lastName) === targetLast
-    );
+    const targetFi = norm(player.firstInitial);
+    const targetNum = String(player.num || '');
+    // v4.5.0: when teammates share a lastName (Marshalls on AZS, Roses on
+    // DAL, Lees on LV) we must match the full identity, not lastName alone.
+    // Try full-name first; then lastName + firstInitial; then lastName +
+    // jersey; then lastName alone (legacy single-occurrence case). Without
+    // this the OLD code did findIndex(lastName-only) which returned the
+    // FIRST occurrence and trapped users on the second twin.
+    let idx = teammates.findIndex(t => norm(t.name) === targetName);
+    if (idx < 0 && targetFi) {
+      idx = teammates.findIndex(t => norm(t.lastName) === targetLast && norm(t.firstInitial) === targetFi);
+    }
+    if (idx < 0 && targetNum) {
+      idx = teammates.findIndex(t => norm(t.lastName) === targetLast && String(t.num || '') === targetNum);
+    }
+    if (idx < 0) {
+      // Last resort — only safe when the lastName is unique on this roster.
+      const sameLastCount = teammates.filter(t => norm(t.lastName) === targetLast).length;
+      if (sameLastCount === 1) {
+        idx = teammates.findIndex(t => norm(t.lastName) === targetLast);
+      }
+    }
     if (idx < 0) return { prev: null, next: null, idx: -1, total: teammates.length };
     const prev = idx > 0 ? teammates[idx - 1] : null;
     const next = idx < teammates.length - 1 ? teammates[idx + 1] : null;

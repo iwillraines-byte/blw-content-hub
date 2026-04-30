@@ -192,7 +192,11 @@ function rowToComment(r) {
 // ─── Main hydrate ────────────────────────────────────────────────────────────
 
 const LS_HYDRATED_AT = 'blw_cloud_hydrated_at_v1';
-const HYDRATE_MIN_INTERVAL_MS = 10 * 60 * 1000; // once per 10 minutes by default
+// Lowered from 10 min → 60 sec in v4.5.0 to fix cross-device overlay sync on
+// mobile. Admin uploads on desktop, the next admin opens mobile within seconds
+// — the old 10-minute throttle made them wait or hard-refresh. 60 sec is the
+// minimum that still prevents re-pulling on every router transition.
+const HYDRATE_MIN_INTERVAL_MS = 60 * 1000;
 
 export function lastHydratedAt() {
   try {

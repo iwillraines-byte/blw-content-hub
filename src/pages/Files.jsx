@@ -1175,7 +1175,7 @@ export default function Files() {
     const manifest = {
       manifestVersion: 1,
       exportedAt: new Date().toISOString(),
-      app: 'BLW Content Hub',
+      app: 'BLW Studio',
       totalFiles: storedMedia.length,
       notes: 'Drive-sourced files can be re-imported via driveFileId from the same shared folder. Drag-drop files must be re-uploaded manually.',
       files: storedMedia.map(m => ({

@@ -186,19 +186,21 @@ function Sidebar({ isMobile, open, onClose }) {
         zIndex: isMobile ? 100 : 50,
         boxShadow: isMobile ? '4px 0 24px rgba(0,0,0,0.3)' : 'none',
       }}>
-        {/* Logo — compact single line */}
+        {/* Logo — branded mark + wordmark. v4.5.0: replaced text-only "B" tile
+            with the actual BLW square mark from /public/brand. Designers
+            can swap the SVG file in place to update without touching code. */}
         <Link to="/dashboard" style={{ textDecoration: 'none', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: radius.base,
-            background: colors.red,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, fontFamily: fonts.heading, color: '#fff',
-            letterSpacing: 1
-          }}>B</div>
+          <img
+            src="/brand/blw-mark.svg"
+            alt=""
+            width={32}
+            height={32}
+            style={{ display: 'block', borderRadius: radius.base, flexShrink: 0 }}
+          />
           <div style={{
             fontFamily: fonts.heading, fontSize: 18, color: '#fff',
             letterSpacing: 1.5, lineHeight: 1,
-          }}>BLW Content Hub</div>
+          }}>BLW Studio</div>
         </Link>
 
         {/* Nav */}
@@ -260,7 +262,27 @@ function Sidebar({ isMobile, open, onClose }) {
             {GIT_COMMIT === 'dev' ? 'dev build' : BUILD_LABEL}
             <span style={{ opacity: 0.5, marginLeft: 4 }}>↗</span>
           </button>
-          <div>prowiffleball.com</div>
+          {/* Stats credit — links to the ProWiffleball stats platform that
+              feeds this tool's live batting/pitching/rankings. v4.5.0:
+              wordmark SVG instead of plain text. */}
+          <a
+            href="https://app.grandslamsystems.com"
+            target="_blank"
+            rel="noreferrer"
+            title="Stats data source — ProWiffleball"
+            style={{
+              display: 'block', margin: '8px auto 0',
+              opacity: 0.6, transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+            onMouseLeave={e => e.currentTarget.style.opacity = 0.6}
+          >
+            <img
+              src="/brand/prowiffleball-logo.svg"
+              alt="ProWiffleball"
+              style={{ height: 11, display: 'block', margin: '0 auto', filter: 'invert(1)' }}
+            />
+          </a>
         </div>
       </aside>
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
@@ -280,7 +302,7 @@ function getPageTitle(pathname) {
     }
     return team?.name || 'Team';
   }
-  return 'BLW Content Hub';
+  return 'BLW Studio';
 }
 
 // Small chip that shows how long ago the app last pulled from Supabase.
@@ -308,7 +330,18 @@ function TopBar({ isMobile, onMenuToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentTeam = useCurrentTeamFromUrl();
-  const title = getPageTitle(location.pathname);
+  // v4.5.0: top bar is the persistent app brand, not a duplicate of the
+  // page H1. The page itself already shows its own heading via PageHeader,
+  // so showing the same text in the chrome was redundant and made the
+  // workspace feel unbranded. Page title still drives document.title via
+  // useEffect below for tab labels and history. */
+  const pageTitle = getPageTitle(location.pathname);
+  const title = 'BLW Studio';
+  useEffect(() => {
+    document.title = pageTitle === 'BLW Studio'
+      ? 'BLW Studio'
+      : `${pageTitle} · BLW Studio`;
+  }, [pageTitle]);
   const syncedAgo = useSyncedAgoLabel();
   const [resyncing, setResyncing] = useState(false);
   const forceResync = async () => {
@@ -769,13 +802,23 @@ function AppShell() {
   // and player routes. Other routes get null and the brand red baseline
   // wins through the theme.js fallbacks.
   const currentTeam = useCurrentTeamFromUrl();
+  const { user } = useAuth();
 
   // Phase 4: on app mount, pull latest records from Supabase into the local
-  // IDB / localStorage cache. Throttled to once per 10 min so navigation
-  // between pages doesn't spam the API. Silently no-ops if not configured.
+  // IDB / localStorage cache. v4.5.0: re-trigger when the user id transitions
+  // from null → set, because on mobile the JWT often isn't ready yet on first
+  // mount — the initial fetch 401s silently and we never re-pull. Watching
+  // user.id closes that race. force: true on the post-login pull bypasses
+  // the throttle so a fresh sign-in always gets fresh data.
   useEffect(() => {
-    refreshFromCloud().catch(err => console.warn('[cloud-reader] hydrate failed', err));
-  }, []);
+    if (!user?.id) {
+      // Still try a non-forced pull on mount in case the session is already
+      // hydrated from local storage but the user.id change won't fire.
+      refreshFromCloud().catch(err => console.warn('[cloud-reader] hydrate failed', err));
+      return;
+    }
+    refreshFromCloud({ force: true }).catch(err => console.warn('[cloud-reader] post-login hydrate failed', err));
+  }, [user?.id]);
 
   return (
     <div style={{

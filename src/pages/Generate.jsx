@@ -591,6 +591,21 @@ export default function Generate() {
     setOverlays(list);
     setOverlayRefreshing(false);
   }, [customTeam]);
+  // v4.5.0: pull overlays from cloud on EVERY Generate page mount, not only
+  // on team-change. Mobile users were missing fresh overlays uploaded by
+  // desktop admins because the focused refresh was gated on customTeam being
+  // set — anyone who landed on the page in a non-Custom template (or with no
+  // team picked yet) never triggered a pull.
+  useEffect(() => {
+    let cancelled = false;
+    refreshOverlaysFromCloud().then(async () => {
+      if (cancelled) return;
+      const fresh = await getOverlays();
+      if (!cancelled && customTeam) setOverlays(fresh);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []); // mount-only — fires once when entering /generate
+
   useEffect(() => {
     if (!customTeam) { setOverlays([]); return; }
     // Render the local list immediately, then refresh from cloud in the
@@ -633,11 +648,14 @@ export default function Generate() {
       if (selectedPlayer) {
         const p = allPlayers.find(pl => `${pl.team}_${pl.name}` === selectedPlayer);
         if (p) {
-          // Pass first initial to disambiguate when two players on the team
-          // share a lastname (e.g. Logan Rose vs Carson Rose). Legacy media
-          // records without an initial still surface — see findPlayerMedia.
+          // v4.5.0: pass BOTH firstInitial and jerseyNum from the canonical
+          // roster. First-initial alone fails when both players start with
+          // the same letter (Logan/Luke Rose, James/Justin Lee, both
+          // Marshalls). Jersey number is the unambiguous key — every
+          // canonical entry has it. Legacy records without firstInitial or
+          // num still surface via the fallthrough in findPlayerMedia.
           const firstInitial = (p.firstName || (p.name || '').split(' ')[0] || '').charAt(0);
-          mediaItems = await findPlayerMedia(p.team, p.lastName, { firstInitial });
+          mediaItems = await findPlayerMedia(p.team, p.lastName, { firstInitial, jerseyNum: p.num });
         }
       } else if (customTeam) {
         // No player selected — show all team media (player-scoped only; team

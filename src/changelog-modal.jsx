@@ -127,7 +127,7 @@ export default function ChangelogModal({ open, onClose }) {
           gap: 12, flexWrap: 'wrap',
         }}>
           <span>
-            BLW Content Hub release log · curated, not auto-generated.
+            BLW Studio release log · curated, not auto-generated.
           </span>
           <span style={{ fontFamily: fonts.condensed, letterSpacing: 0.5 }}>
             ESC to close
