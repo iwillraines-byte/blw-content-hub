@@ -74,16 +74,31 @@ export async function requireUser(req, res) {
   const user = data.user;
   // Load the profile for role + team_id. If missing, continue with null
   // profile — some endpoints may still work (e.g. logging own activity).
+  // v4.5.7: also pull role_expires_at for time-boxed elevated access.
+  // When that timestamp is in the past, we demote the role to null so
+  // requireRole / requireAdmin reject the request — even if the JWT
+  // is still valid. Self-revoking by design.
   let profile = null;
   try {
     const { data: p } = await sb
       .from('profiles')
-      .select('id, email, role, team_id, display_name')
+      .select('id, email, role, team_id, display_name, role_expires_at')
       .eq('id', user.id)
       .maybeSingle();
     profile = p || null;
+    if (profile?.role_expires_at) {
+      const expired = new Date(profile.role_expires_at).getTime() <= Date.now();
+      if (expired) {
+        // Strip elevated role. Surface the demotion via an `expired_role`
+        // field for any caller that wants to log it.
+        profile = { ...profile, expired_role: profile.role, role: null };
+      }
+    }
   } catch {
     // Profile table may not exist yet in a fresh deploy — don't fail auth.
+    // role_expires_at column may also be absent on pre-migration deploys;
+    // a select error means we just don't get expiry enforcement until
+    // the column is added.
   }
   return { user, profile, sb };
 }

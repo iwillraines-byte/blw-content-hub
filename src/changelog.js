@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.7',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'Time-boxed elevated access (auto-revoking master grants)',
+    items: [
+      'New profiles.role_expires_at column. When set, the elevated role auto-revokes the moment the timestamp passes — no cleanup script needed. Server-side enforcement: requireUser() in api/_supabase.js demotes the role to null when expired, so every protected endpoint rejects the request even on a still-valid JWT. Client mirror in auth.jsx so the UI also reflects the demotion.',
+      'New <TempAccessBanner /> at the top of the app — renders only for users with an active expiry. Shows "MASTER ACCESS · expires in 5h 23m" with a live countdown. Color drifts from amber (>1h) to red (<1h) as the timer winds down. When zero hits, the user sees "MASTER ACCESS EXPIRED" and the profile auto-refreshes so the demotion takes effect immediately.',
+      'Use case: granting a temporary master grant to a tester, a contractor, or a second account without having to remember to revoke it manually.',
+    ],
+  },
+  {
     version: '4.5.6',
     date: '2026-04-30',
     kind: 'patch',

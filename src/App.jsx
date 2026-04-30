@@ -25,6 +25,7 @@ import { ToastProvider } from './toast';
 import { QuickSwitcher } from './quick-switcher';
 import { AuthProvider, useAuth, ROLE_LABELS, isAthleteRole, isAdminRole } from './auth';
 import { ImpersonationBanner } from './view-as';
+import { TempAccessBanner } from './temp-access';
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -835,6 +836,10 @@ function AppShell() {
       <Sidebar isMobile={isMobile} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Time-boxed access countdown — renders null unless the current
+            user has a role_expires_at on their profile. Shown ABOVE the
+            impersonation banner so the timer is the first thing they see. */}
+        <TempAccessBanner />
         {/* Impersonation banner — sticky strip across the top whenever a
             master admin is viewing the app as another role. Renders null
             when not impersonating. Sits above TopBar so it doesn't fight

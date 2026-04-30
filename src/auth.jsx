@@ -72,18 +72,39 @@ const AuthContext = createContext({
 async function fetchProfile(userId) {
   if (!supabaseConfigured || !userId) return null;
   try {
-    const { data, error } = await supabase
+    // v4.5.7: pull role_expires_at for time-boxed elevated access.
+    // The select includes the new column; if the column doesn't exist
+    // yet (pre-migration deploys), Postgrest 400s and we retry without
+    // it so the app keeps working.
+    let { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, team_id, display_name, created_at, updated_at')
+      .select('id, email, role, team_id, display_name, created_at, updated_at, role_expires_at')
       .eq('id', userId)
       .maybeSingle();
+    if (error && /role_expires_at/i.test(error.message || '')) {
+      const fallback = await supabase
+        .from('profiles')
+        .select('id, email, role, team_id, display_name, created_at, updated_at')
+        .eq('id', userId)
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error) {
-      // Most likely cause: the profiles table doesn't exist yet (migration 003
-      // hasn't been applied). Log and return null so the app still works.
       console.warn('[auth] profile fetch failed', error.message);
       return null;
     }
-    return data || null;
+    if (!data) return null;
+    // Demote when the elevated role has expired. Keep the original role
+    // available as expiredRole so the UI can render an "access expired"
+    // state instead of a generic "no permissions" screen.
+    if (data.role_expires_at) {
+      const expired = new Date(data.role_expires_at).getTime() <= Date.now();
+      if (expired) {
+        return { ...data, expiredRole: data.role, role: null };
+      }
+    }
+    return data;
   } catch (err) {
     console.warn('[auth] profile fetch threw', err);
     return null;
@@ -180,6 +201,15 @@ export function AuthProvider({ children }) {
   const effectiveRole = viewingAs?.role || realRole;
   const effectiveTeamId = viewingAs?.teamId ?? realTeamId;
 
+  // v4.5.7: surface time-boxed-access metadata for the countdown banner.
+  // roleExpiresAt is a Date when set, null otherwise. expiredRole is the
+  // role the user HAD before the timer ran out (so the "access expired"
+  // UI can name what they lost, not just say "you have no role").
+  const roleExpiresAt = profile?.role_expires_at
+    ? new Date(profile.role_expires_at)
+    : null;
+  const expiredRole = profile?.expiredRole || null;
+
   const value = {
     user: session?.user || null,
     session,
@@ -195,6 +225,8 @@ export function AuthProvider({ children }) {
     signOut,
     refreshProfile,
     isConfigured: supabaseConfigured,
+    roleExpiresAt,
+    expiredRole,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
