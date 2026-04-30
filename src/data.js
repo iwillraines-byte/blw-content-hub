@@ -1250,17 +1250,28 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
   // Source picks. Three cases:
   //   1. narrow has a hit → use it. (Always preferred.)
   //   2. strict mode (WANT_FN or WANT_FI set) AND narrow is empty: only
-  //      fall back to all[0] if there's exactly ONE candidate row. With
-  //      a single row, ambiguity is impossible — it can't be a cousin
-  //      collision, just a data-shape quirk (e.g. a manual_players row
-  //      where firstName came in as "L." or empty so narrow missed
-  //      it). With 2+ rows we MUST stay strict, otherwise we'd serve
-  //      Carson Rose's bio under Logan's URL.
+  //      fall back to all[0] if there's exactly ONE candidate row AND
+  //      that row has NO firstName at all (legacy data-shape quirk).
+  //      v4.5.2: tightened — the old "1 row = no ambiguity" rule served
+  //      Carson Rose's manual_players row to Logan and Luke when neither
+  //      had their own row. A row with an explicit firstName that
+  //      doesn't match the URL is an "I'm a different player" signal,
+  //      NOT a quirk to swallow.
   //   3. legacy mode (no WANT_FN/FI): grab first match for the lastname.
   const strict = Boolean(WANT_FN || WANT_FI);
   const pickStrict = (narrowed, all) => {
     if (narrowed[0]) return narrowed[0];
-    if (strict) return all.length === 1 ? all[0] : null;
+    if (strict) {
+      if (all.length !== 1) return null;
+      const only = all[0];
+      // Only fall back if the single record has no firstName / name
+      // information at all — that's the legacy-quirk case the fallback
+      // was designed for. If it has a firstName and narrow already
+      // ruled it out, it's a different player; respect that.
+      const hasFn = (only.firstName && String(only.firstName).trim()) ||
+                    (only.name && String(only.name).trim().split(/\s+/).length > 1);
+      return hasFn ? null : only;
+    }
     return all[0] || null;
   };
   const batting = pickStrict(battingMatches, battingAll);

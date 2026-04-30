@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.2',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Read-path: stop serving Carson Rose\'s About-me to Logan and Luke',
+    items: [
+      'getPlayerByTeamLastName had a "if exactly 1 manual_players row matches the lastName, use it" fallback that was meant to handle legacy rows with blank firstName. With Carson Rose being the only DAL Rose with a manual_players row, the fallback served his About-me block under Logan AND Luke\'s URLs. That\'s the root cause of the "all Roses share the same About section" bug.',
+      'Tightened: the fallback now only fires when the single candidate has NO firstName at all (the actual legacy-quirk case). A row with an explicit firstName that doesn\'t match the URL is treated as a different player — no cross-contamination.',
+      'Pair this with the v4.5.1 write-path fix and the Rose pages now resolve cleanly: Carson sees Carson, Logan sees an empty card (no manual record yet), Luke sees an empty card (his data is sitting under the "Luke Ross" typo row).',
+    ],
+  },
+  {
     version: '4.5.1',
     date: '2026-04-30',
     kind: 'patch',
