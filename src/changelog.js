@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.3',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Server-side: fix the same collision in CSV bio-import path',
+    items: [
+      'api/players-sheet-sync.js had the same "if exactly 1 manual_players row matches the lastName, use it" fallback as the client-side getPlayerByTeamLastName. With Carson being the only DAL Rose row, a CSV row for Logan or Luke would overwrite Carson\'s bio. Same trap was lying in wait for any future CSV import where one cousin had a record and others didn\'t.',
+      'Tightened: server now only falls back when the existing single row has NO first_name at all (legacy quirk case). Multi-row + no firstName match → INSERT a new row, never overwrite an unrelated cousin.',
+      'No code path remains that can silently merge one Rose/Lee/Marshall into another. Three-Rose collision is now closed end-to-end (write path v4.5.1, read path v4.5.2, CSV import v4.5.3).',
+    ],
+  },
+  {
     version: '4.5.2',
     date: '2026-04-30',
     kind: 'patch',

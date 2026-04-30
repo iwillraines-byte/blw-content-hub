@@ -352,10 +352,14 @@ function parseBoolean(raw) {
 //      cousin pairs like Logan vs Luke Rose where both share initial 'L'
 //      and the old "first initial only" check would collide them into a
 //      single row, overwriting one cousin's bio with the other's.
-//   2. first initial match — when full-name doesn't hit, e.g. CSV used
-//      "Logan" but DB has "Logan A." or similar minor variant.
-//   3. lone match by lastname — if there's only one row with this
-//      lastname on this team, it's almost certainly the one.
+//   2. lone match by lastname — ONLY when the existing row has no
+//      first_name at all (legacy data-shape quirk). Previously this
+//      fired whenever there was a single row, which meant a CSV row for
+//      Logan Rose would overwrite Carson's record if Carson was the
+//      only existing Rose. v4.5.3: tightened to mirror the client-side
+//      fix in getPlayerByTeamLastName.
+//   3. first initial match — multi-row case only, when full-name didn't
+//      hit (CSV said "Logan" but DB has "Logan A." or similar variant).
 //   4. nothing — caller will INSERT a new row.
 async function resolveExistingPlayer(sb, teamId, lastName, firstName) {
   const { data, error } = await sb.from('manual_players')
@@ -372,10 +376,16 @@ async function resolveExistingPlayer(sb, teamId, lastName, firstName) {
     if (exact) return exact;
   }
 
-  // Single row for the (team, lastname) — safe to use even without
-  // a firstName match. Avoids creating duplicate Carson Rose rows
-  // every time the CSV is re-imported with a slightly different name.
-  if (data.length === 1) return data[0];
+  // Single row + no first_name on existing row → legacy quirk fallback.
+  // Without the firstName check this used to overwrite whoever happened
+  // to be the only DAL Rose in the table whenever a CSV row landed for
+  // a different Rose. With the check, the only way this fires is if the
+  // existing row genuinely has no firstName — the data-shape case the
+  // fallback was intended for.
+  if (data.length === 1) {
+    const onlyHasFn = data[0].first_name && String(data[0].first_name).trim();
+    if (!onlyHasFn) return data[0];
+  }
 
   // Multiple rows AND no full-name match: try first-initial as last
   // resort. This is what the old code did unconditionally; now it's
