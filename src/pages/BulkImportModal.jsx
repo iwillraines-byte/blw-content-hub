@@ -18,7 +18,10 @@ import { compressImageBlob, getCompressPreference, formatSavings } from '../imag
 import { PreviewLightbox } from '../preview-lightbox';
 import { downloadFileAsBlob } from '../drive-api';
 
-const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
+// v4.3.0: ACTION → HITTING, ACTION2 → PITCHING, HIGHLIGHT2 → HYPE.
+// GROUP added for multi-player shots. Old strings still resolve in
+// the avatar lookup + photo picker so legacy media continues to work.
+const PLAYER_ASSET_TYPES = ['HEADSHOT', 'HITTING', 'PITCHING', 'PORTRAIT', 'HIGHLIGHT', 'HYPE', 'INTERVIEW', 'GROUP'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
 const LEAGUE_ASSET_TYPES = ['ALLSTAR', 'EVENT', 'MULTI_TEAM', 'TROPHY', 'BANNER', 'BRANDING', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
 

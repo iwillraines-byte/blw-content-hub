@@ -165,7 +165,22 @@ Look at the photo. Identify (when visible with reasonable certainty):
    Two players on a team can share a lastName (cousin pairs), so the
    firstInitial is what disambiguates them. NEVER omit this when
    lastName is present and the team's roster list above has it.
-5. assetType — One of: HEADSHOT (close-up portrait of a face, typically indoor/studio), ACTION (gameplay: batting, pitching, fielding, running), PORTRAIT (posed, not close-up), HIGHLIGHT (video thumbnail or cinematic composite), INTERVIEW (player being interviewed or talking to media), TEAMPHOTO (group photo of team), VENUE (stadium / field / ballpark with no player focus), LOGO_PRIMARY / LOGO_DARK / LOGO_LIGHT (logo graphic), WORDMARK (team text/wordmark graphic).
+5. assetType — Pick the BEST match from this list:
+   - HEADSHOT (close-up portrait of a face, typically indoor/studio)
+   - HITTING (batter at the plate: swing, contact, follow-through, batting stance)
+   - PITCHING (pitcher: windup, release, mound, throwing motion)
+   - PORTRAIT (posed shot, not close-up; full-body or 3/4 length)
+   - HIGHLIGHT (video thumbnail, cinematic composite, in-game moment)
+   - HYPE (hero / intro / walkup graphic — stylized, often dark dramatic background)
+   - INTERVIEW (player being interviewed or talking to media)
+   - GROUP (multi-player shot: position group, infield/outfield duo or trio)
+   - TEAMPHOTO (full-roster team photo)
+   - VENUE (stadium / field / ballpark with no player focus)
+   - LOGO_PRIMARY / LOGO_DARK / LOGO_LIGHT (logo graphic on light/dark background)
+   - WORDMARK (team text/wordmark graphic)
+   Note: legacy strings ACTION / ACTION2 / HIGHLIGHT2 still appear in
+   the existing media corpus — for NEW tags always use HITTING /
+   PITCHING / HYPE respectively.
 6. confidence — "high" if certain, "medium" if probable, "low" if best guess.
 7. candidates — When you can't identify a single player but partial signals
    are present, return a short list of up to 5 plausible roster matches.

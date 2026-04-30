@@ -607,7 +607,10 @@ function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, s
     (groups[k] = groups[k] || []).push(m);
   }
   // Preferred order so headshots surface first
-  const orderedKeys = ['HEADSHOT', 'PORTRAIT', 'ACTION', 'ACTION2', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW', 'TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK', 'FILE'];
+  // New (v4.3.0) names listed first; legacy values (ACTION/ACTION2/
+  // HIGHLIGHT2) kept further down so existing media still groups
+  // correctly until the master admin runs the rename SQL.
+  const orderedKeys = ['HEADSHOT', 'PORTRAIT', 'HITTING', 'ACTION', 'PITCHING', 'ACTION2', 'HIGHLIGHT', 'HYPE', 'HIGHLIGHT2', 'INTERVIEW', 'GROUP', 'TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK', 'FILE'];
   const sortedKeys = [
     ...orderedKeys.filter(k => groups[k]?.length),
     ...Object.keys(groups).filter(k => !orderedKeys.includes(k)),

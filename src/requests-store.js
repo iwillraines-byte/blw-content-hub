@@ -141,17 +141,20 @@ export function buildGenerateLinkFromIdea(idea) {
 // anything more specific.
 export function suggestAssetTypesForIdea(idea) {
   const t = String(idea?.templateId || '').toLowerCase();
-  if (!t) return ['HEADSHOT', 'ACTION'];
+  // v4.3.0 names — HITTING / PITCHING / HYPE replace ACTION /
+  // ACTION2 / HIGHLIGHT2. Suggestions reflect the new vocabulary so
+  // the Requests detail panel reads as the team would talk about it.
+  if (!t) return ['HEADSHOT', 'HITTING'];
   if (t.includes('news') || t.includes('player-stat') || t.includes('quote')) {
-    return ['HEADSHOT', 'PORTRAIT', 'ACTION'];
+    return ['HEADSHOT', 'PORTRAIT', 'HITTING'];
   }
   if (t.includes('highlight') || t.includes('recap') || t.includes('moment')) {
-    return ['ACTION', 'ACTION2', 'HIGHLIGHT'];
+    return ['HITTING', 'PITCHING', 'HIGHLIGHT'];
   }
   if (t.includes('team') || t.includes('schedule') || t.includes('matchup')) {
-    return ['TEAMPHOTO', 'LOGO_PRIMARY', 'WORDMARK'];
+    return ['TEAMPHOTO', 'GROUP', 'LOGO_PRIMARY'];
   }
-  return ['HEADSHOT', 'ACTION'];
+  return ['HEADSHOT', 'HITTING'];
 }
 
 // ─── Helpers used by dashboard card ─────────────────────────────────────────

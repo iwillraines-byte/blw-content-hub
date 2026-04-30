@@ -29,10 +29,22 @@ for (const t of TEAMS) {
 
 const ASSET_TYPE_KEYWORDS = {
   HEADSHOT:     ['headshot', 'headshots', 'portrait', 'profile', 'mugshot', 'photo'],
-  ACTION:       ['action', 'batting', 'bat', 'hit', 'hitting', 'swing', 'pitch', 'pitching', 'throw', 'field', 'fielding', 'run', 'catch', 'gameaction'],
+  // Split the old "ACTION" bucket: hitting-flavored words go to HITTING,
+  // pitching-flavored words go to PITCHING. "Action" alone is ambiguous —
+  // we route it to HITTING by default since most action shots in our
+  // corpus are batting. Filenames carrying both still resolve to the
+  // first match in the iteration order, which is HITTING.
+  HITTING:      ['hitting', 'batting', 'bat', 'hit', 'swing', 'gameaction', 'action', 'field', 'fielding', 'run', 'catch'],
+  PITCHING:     ['pitching', 'pitch', 'pitcher', 'mound', 'throw'],
   HIGHLIGHT:    ['highlight', 'highlights', 'reel', 'clip'],
+  // HYPE replaces HIGHLIGHT2 — short hero/intro/walkup-vibe assets.
+  HYPE:         ['hype', 'intro', 'hero', 'walkup', 'walk-up'],
   INTERVIEW:    ['interview', 'mic', 'presser', 'press', 'talk'],
-  TEAMPHOTO:    ['team', 'teamphoto', 'group', 'roster'],
+  // GROUP — multi-player shots scoped to a player record (e.g. infield
+  // group, position-group photos). TEAMPHOTO covers full-roster shots
+  // and stays team-scoped.
+  GROUP:        ['group', 'squad', 'crew', 'duo', 'trio'],
+  TEAMPHOTO:    ['team', 'teamphoto', 'roster'],
   VENUE:        ['venue', 'stadium', 'ballpark', 'park'],
   LOGO_PRIMARY: ['logo', 'primary'],
   LOGO_DARK:    ['dark', 'logo-dark', 'logodark'],

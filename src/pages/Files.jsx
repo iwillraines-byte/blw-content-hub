@@ -20,14 +20,38 @@ import { compressImageBlob, getCompressPreference, setCompressPreference, format
 import BulkImportModal from './BulkImportModal';
 import { PreviewLightbox } from '../preview-lightbox';
 
-const PLAYER_ASSET_TYPES = ['HEADSHOT', 'ACTION', 'ACTION2', 'PORTRAIT', 'HIGHLIGHT', 'HIGHLIGHT2', 'INTERVIEW'];
+// Player-scoped asset types. Renamed v4.3.0:
+//   ACTION    → HITTING   (batting / hitting shots)
+//   ACTION2   → PITCHING  (pitching / mound shots)
+//   HIGHLIGHT2 → HYPE     (hero / intro / hype assets)
+// Added GROUP for multi-player shots.
+// Old values still resolve everywhere they're read (avatar resolver,
+// photo picker, idea suggester) so existing media tagged with the
+// legacy strings continues to work — a one-time SQL migration can
+// flip them in Supabase whenever the master admin is ready.
+const PLAYER_ASSET_TYPES = ['HEADSHOT', 'HITTING', 'PITCHING', 'PORTRAIT', 'HIGHLIGHT', 'HYPE', 'INTERVIEW', 'GROUP'];
 const TEAM_ASSET_TYPES = ['TEAMPHOTO', 'VENUE', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
 // League-scoped asset types — for BLW-wide media that doesn't belong
 // to any one team (All-Star events, championships, multi-team photos,
 // league branding). Stored under the literal "BLW" team prefix.
 const LEAGUE_ASSET_TYPES = ['ALLSTAR', 'EVENT', 'MULTI_TEAM', 'TROPHY', 'BANNER', 'BRANDING', 'LOGO_PRIMARY', 'LOGO_DARK', 'LOGO_LIGHT', 'LOGO_ICON', 'WORDMARK'];
 const ASSET_TYPES = [...PLAYER_ASSET_TYPES, ...TEAM_ASSET_TYPES, ...LEAGUE_ASSET_TYPES];
-const typeIcons = { HEADSHOT: '👤', ACTION: '📸', ACTION2: '📸', HIGHLIGHT: '🎬', HIGHLIGHT2: '🎬', LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨', PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️', TEAMPHOTO: '👥', VENUE: '🏟️', ALLSTAR: '⭐', EVENT: '🎉', MULTI_TEAM: '🏟️', TROPHY: '🏆', BANNER: '🎌', BRANDING: '🎨', FILE: '📄', LINK: '🔗' };
+// Icon map covers BOTH new (HITTING/PITCHING/HYPE/GROUP) and legacy
+// (ACTION/ACTION2/HIGHLIGHT2) strings so existing files keep their
+// glyphs in the picker even before any DB migration.
+const typeIcons = {
+  HEADSHOT: '👤',
+  // New v4.3.0 names
+  HITTING: '🏏', PITCHING: '⚾', HYPE: '🔥', GROUP: '👥',
+  // Legacy aliases
+  ACTION: '🏏', ACTION2: '⚾', HIGHLIGHT2: '🔥',
+  HIGHLIGHT: '🎬',
+  LOGO_PRIMARY: '🎨', LOGO_DARK: '🎨', LOGO_LIGHT: '🎨', LOGO_ICON: '🎨',
+  PORTRAIT: '🖼️', INTERVIEW: '🎤', WORDMARK: '✏️',
+  TEAMPHOTO: '👥', VENUE: '🏟️',
+  ALLSTAR: '⭐', EVENT: '🎉', MULTI_TEAM: '🏟️', TROPHY: '🏆',
+  BANNER: '🎌', BRANDING: '🎨', FILE: '📄', LINK: '🔗',
+};
 const sourceLabels = { local: 'Local', gdrive: 'Google Drive' };
 const sourceColors = { local: colors.red, gdrive: '#34A853' };
 
@@ -170,9 +194,38 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
   // ambiguous team). Filter out anything that already matches the
   // active tags so we don't suggest "what you've already picked."
   const aiCandidates = Array.isArray(tagHint?.candidates) ? tagHint.candidates : [];
-  const visibleCandidates = aiCandidates.filter(c =>
+  const aiCandidatesFiltered = aiCandidates.filter(c =>
     !(c.team === tagTeam && c.lastName === tagName && (!c.num || c.num === tagNum))
   ).slice(0, 5);
+
+  // Roster-fallback chips. Whenever the team is known (either the AI
+  // identified it OR the user picked it manually) we surface the FULL
+  // roster of that team as a one-click chip strip — even when the AI
+  // didn't return any candidates. The user said this in plain English:
+  // "if a team is identified, show all 7 players unless certain some
+  // can be ruled out, so I can populate number / first initial / last
+  // name with one click." Keys aiCandidates for de-dupe so we don't
+  // double up on suggestions the AI already surfaced.
+  const knownTeam = tagTeam || tagHint?.team || null;
+  const rosterChips = (knownTeam && Array.isArray(roster))
+    ? roster
+        .filter(p => p.team === knownTeam)
+        .filter(p => !aiCandidates.some(c => c.team === p.team && c.lastName === p.lastName && (c.num || '') === (p.num || '')))
+        .filter(p => !(p.team === tagTeam && p.lastName === tagName && (p.num || '') === (tagNum || '')))
+        .map(p => ({
+          team: p.team,
+          firstInitial: p.firstInitial || (p.firstName || '').charAt(0).toUpperCase() || '',
+          lastName: p.lastName,
+          num: p.num || '',
+          score: null,        // null score = "from roster, not AI ranked"
+          why: 'On roster',
+        }))
+    : [];
+
+  // Final candidate list: AI suggestions first (ranked, scored), then
+  // roster-fallback chips. Keeping AI on top respects the model's
+  // confidence judgment when it has one to share.
+  const visibleCandidates = [...aiCandidatesFiltered, ...rosterChips];
 
   // One-click apply for a candidate row — populates team / num /
   // lastName / firstInitial in the tag inputs. The first initial
@@ -371,7 +424,7 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
           fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
           color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase',
           alignSelf: 'center', marginRight: 4, paddingTop: 6,
-        }}>AI suggests:</span>
+        }}>{aiCandidatesFiltered.length > 0 ? 'AI + Roster:' : 'Pick a player:'}</span>
         {visibleCandidates.map((c, i) => {
           // Show first initial when present so cousin pairs read as
           // distinct chips (e.g. "DAL #07 · L.ROSE 84%" vs
@@ -379,17 +432,27 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
           // no FI was returned.
           const fiPrefix = c.firstInitial ? `${c.firstInitial}.` : '';
           const label = `${c.team || '??'} #${c.num || '??'} · ${fiPrefix}${c.lastName || '???'}`;
-          const score = Math.round((c.score || 0) * 100);
+          // Two flavors of chip:
+          //   AI-ranked (c.score != null) → score badge + tinted by
+          //   confidence; the user reads "the model thinks 84% this
+          //   is who's in the photo."
+          //   Roster fallback (c.score == null) → quieter, neutral
+          //   chrome, "ROSTER" badge so the user knows they're being
+          //   handed a manual override list, not an AI ranking.
+          const isRoster = c.score == null;
+          const score = isRoster ? null : Math.round((c.score || 0) * 100);
           return (
             <button
               key={`${c.team || ''}-${c.firstInitial || ''}-${c.lastName || ''}-${c.num || ''}-${i}`}
               onClick={() => applyCandidate(c)}
-              title={c.why ? `${c.why} (${score}% confident)` : `${score}% confident`}
+              title={isRoster
+                ? `On ${c.team} roster — click to apply`
+                : (c.why ? `${c.why} (${score}% confident)` : `${score}% confident`)}
               style={{
                 marginTop: 6,
-                background: colors.bg,
-                border: `1px solid ${colors.border}`,
-                color: colors.textSecondary,
+                background: isRoster ? colors.white : colors.bg,
+                border: `1px solid ${isRoster ? colors.borderLight : colors.border}`,
+                color: isRoster ? colors.textMuted : colors.textSecondary,
                 borderRadius: radius.sm,
                 padding: '3px 8px',
                 fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
@@ -399,9 +462,18 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
               }}
             >
               {label}
-              <span style={{
-                fontSize: 9, color: colors.textMuted, fontWeight: 600,
-              }}>{score}%</span>
+              {isRoster ? (
+                <span style={{
+                  fontSize: 8, color: colors.textMuted, fontWeight: 800,
+                  background: colors.bg,
+                  padding: '1px 4px', borderRadius: 3,
+                  letterSpacing: 0.4,
+                }}>ROSTER</span>
+              ) : (
+                <span style={{
+                  fontSize: 9, color: colors.textMuted, fontWeight: 600,
+                }}>{score}%</span>
+              )}
             </button>
           );
         })}
@@ -1329,16 +1401,42 @@ export default function Files() {
         </Card>
       )}
 
-      {/* Upload Zone */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'stretch' }}>
-        <label style={{ cursor: 'pointer' }}>
+      {/* Upload Zone — drop zone + bulk import side by side. The grid
+          uses `align-items: stretch` so both children fill the row
+          height equally. The <label> needs `display: flex` (not the
+          default inline) for that stretch to actually reach the inner
+          dropzone div — otherwise the label collapses to its own
+          baseline and the dashed-border box renders shorter than the
+          neighboring "Bulk import" card, which is what was producing
+          the visible misalignment in the screenshot. `box-sizing:
+          border-box` on both ensures the 2px borders don't push the
+          children past their grid cell. */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr auto', gap: 10,
+        alignItems: 'stretch',
+      }}>
+        <label style={{
+          cursor: 'pointer',
+          display: 'flex', flexDirection: 'column',
+          minWidth: 0,
+        }}>
           <input type="file" multiple accept="image/*,video/*" onChange={handleFileInput} style={{ display: 'none' }} />
-          <div onDrop={handleDrop} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} style={{
-            border: `2px dashed ${dragging ? colors.red : colors.border}`,
-            borderRadius: radius.lg, padding: 32, textAlign: 'center',
-            background: dragging ? colors.redLight : colors.white, transition: 'all 0.2s',
-            height: '100%',
-          }}>
+          <div
+            onDrop={handleDrop}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            style={{
+              flex: 1,
+              boxSizing: 'border-box',
+              border: `2px dashed ${dragging ? colors.red : colors.border}`,
+              borderRadius: radius.lg, padding: 32, textAlign: 'center',
+              background: dragging ? colors.redLight : colors.white,
+              transition: 'border-color 0.2s, background 0.2s',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              minHeight: 140,
+            }}
+          >
             <div style={{ fontSize: 32, marginBottom: 6, opacity: 0.4 }}>📂</div>
             <div style={{ fontFamily: fonts.body, fontSize: 16, fontWeight: 700, color: colors.text }}>
               {dragging ? 'Drop files here' : 'Drag & drop files'}
@@ -1348,13 +1446,18 @@ export default function Files() {
             </div>
           </div>
         </label>
-        {/* Bulk import — drag a folder, eyeball a checklist, commit. */}
+        {/* Bulk import — drag a folder, eyeball a checklist, commit.
+            box-sizing keeps the 2px border inside the grid cell so it
+            visually aligns with the dropzone above. */}
         <button onClick={() => setBulkOpen(true)} style={{
+          boxSizing: 'border-box',
           padding: '24px 20px', borderRadius: radius.lg,
           background: colors.white, color: colors.text,
           border: `2px solid ${colors.border}`, cursor: 'pointer',
           textAlign: 'center', minWidth: 180,
           transition: 'all 0.15s',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
         }}
         onMouseEnter={e => { e.currentTarget.style.borderColor = colors.red; e.currentTarget.style.color = colors.red; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.text; }}

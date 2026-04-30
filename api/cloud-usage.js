@@ -39,26 +39,51 @@ export default async function handler(req, res) {
   const sb = ctx.sb;
   if (!sb) return missingConfigResponse(res);
 
-  // Team-prefix parser. Filenames in the media bucket follow
-  //   "{TEAM}_{NUM}_{LASTNAME}_{ASSETTYPE}.png"   (player-scoped)
-  //   "{TEAM}_{ASSETTYPE}.png"                    (team-scoped)
-  // The team prefix is the first underscore-segment. We only count toward
-  // a team if the prefix matches one of our BLW codes; anything else
-  // (legacy, ad-hoc) lands in "OTHER" so the chart stays accurate.
+  // Per-team rollup. Source of truth is the `media` TABLE — we read
+  // each row's stamped `team` column AND its `size_bytes` so the
+  // breakdown reflects how each photo was tagged at upload time, not
+  // how its filename happens to look. The previous implementation
+  // parsed team from the storage object NAME (e.g. "LAN_03_JASO_…"),
+  // but Supabase stores objects under "{uuid}.{ext}" — there's no team
+  // prefix in the path — so every file landed in OTHER. The table
+  // path is authoritative AND fast (one indexed query instead of
+  // listing the whole bucket page-by-page).
+  //
+  // Fallback safety: rows with a missing or non-canonical team code
+  // still land in OTHER so the chart never silently drops bytes.
   const BLW_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO']);
-  // BLW prefix is the league sentinel — its own bucket, separate from
-  // any team's archive, so league-wide assets show up as their own row.
-  const teamFromPath = (path) => {
-    if (!path) return 'OTHER';
-    const filename = path.split('/').pop() || path;
-    const prefix = filename.split('_')[0]?.toUpperCase();
-    if (prefix === 'BLW') return 'BLW';
-    return BLW_TEAMS.has(prefix) ? prefix : 'OTHER';
-  };
+  const byTeam = {};
+  try {
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+      const { data, error } = await sb
+        .from('media')
+        .select('team, size_bytes')
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      for (const r of data) {
+        const raw = String(r.team || '').toUpperCase();
+        const teamKey = raw === 'BLW' ? 'BLW'
+          : BLW_TEAMS.has(raw) ? raw
+          : 'OTHER';
+        const sz = Number(r.size_bytes) || 0;
+        if (!byTeam[teamKey]) byTeam[teamKey] = { bytes: 0, count: 0 };
+        byTeam[teamKey].bytes += sz;
+        byTeam[teamKey].count += 1;
+      }
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+  } catch (err) {
+    // Soft-fail — the rest of the storage panel still renders even
+    // if the per-team query 500s. Errors surface as a single OTHER
+    // bucket carrying the bytes from the storage list pass below.
+    byTeam.__error = err.message;
+  }
 
   const storage = { total: { bytes: 0, count: 0 } };
-  // Per-team rollup keyed by team code; each entry is { bytes, count }.
-  const byTeam = {};
   for (const bucket of BUCKETS) {
     try {
       // Supabase list returns pages; 1000 is the default max. Most setups
@@ -75,15 +100,6 @@ export default async function handler(req, res) {
           if (obj.metadata?.size != null) {
             bytes += obj.metadata.size;
             count += 1;
-            // Only the media bucket carries team-tagged filenames; the
-            // overlays/effects buckets are league-wide assets and roll
-            // up under the bucket label rather than a team.
-            if (bucket === 'media') {
-              const team = teamFromPath(obj.name);
-              if (!byTeam[team]) byTeam[team] = { bytes: 0, count: 0 };
-              byTeam[team].bytes += obj.metadata.size;
-              byTeam[team].count += 1;
-            }
           }
         }
         if (data.length < 1000) break;

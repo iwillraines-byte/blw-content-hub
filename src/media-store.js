@@ -411,7 +411,14 @@ export async function findLeagueMedia(opts = {}) {
 //
 // Returns the media record (or null). Caller is responsible for
 // generating an object URL from .blob if it needs a string URL.
-export const AVATAR_ASSET_TYPES_PRIORITY = ['HEADSHOT', 'PORTRAIT', 'ACTION'];
+// Avatar lookup priority. v4.3.0 adds HITTING + PITCHING (the new
+// names for ACTION / ACTION2) while keeping the legacy strings in the
+// list so existing media tagged with the old values still resolves.
+// HEADSHOT > PORTRAIT > HITTING > ACTION > PITCHING — most-headshot-y
+// first, fall back through hitting variants, then pitching as a last
+// resort (a pitching shot rarely makes a good circular avatar but is
+// better than no photo).
+export const AVATAR_ASSET_TYPES_PRIORITY = ['HEADSHOT', 'PORTRAIT', 'HITTING', 'ACTION', 'PITCHING', 'ACTION2'];
 
 export function resolvePlayerAvatar(player, allMedia, opts = {}) {
   if (!player || !Array.isArray(allMedia)) return null;

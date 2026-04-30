@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.3.0',
+    date: '2026-04-29',
+    kind: 'minor',
+    summary: 'Asset-type rename + per-team storage breakdown + roster-fallback AI chips',
+    items: [
+      'Asset types renamed: ACTION → HITTING, ACTION2 → PITCHING, HIGHLIGHT2 → HYPE. Added GROUP for multi-player shots. Old strings still resolve everywhere they\'re read (avatar resolver, photo picker, idea suggester) so existing media tagged with the legacy names continues to work — a one-time SQL migration is optional.',
+      'Cloud storage "Breakdown by team" now reads team from the media table\'s `team` column instead of trying to parse it from object filenames (storage paths are `{uuid}.png`, no team prefix). Every team that has uploaded media now appears with its own bar + color.',
+      'Drag-and-drop and Bulk import card alignment fixed: label was collapsing to inline baseline, leaving the dropzone shorter than the neighboring card. Both children now flex-stretch and use border-box so the 2px borders sit inside the grid cell.',
+      'AI candidate chips now include a roster fallback: whenever the team is identified (by AI or user pick), the FULL roster of that team surfaces as one-click chips so you can pick the right player even when the AI returned no specific candidate. ROSTER badge distinguishes these from AI-ranked suggestions.',
+      'tag-heuristics.js learns the new vocabulary: "batting" / "swing" → HITTING, "pitching" / "mound" → PITCHING, "hype" / "intro" / "walkup" → HYPE, "group" / "squad" → GROUP.',
+      'auto-tag system prompt updated with the new asset-type list + a note keeping the legacy strings recognizable so the model returns the new names even on photos labeled with old conventions.',
+    ],
+  },
+  {
     version: '4.2.1',
     date: '2026-04-29',
     kind: 'patch',
