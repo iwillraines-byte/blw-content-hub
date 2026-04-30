@@ -218,10 +218,14 @@ export const TEMPLATE_TYPES = {
     },
   },
 
+  // Internal id stays `batting-leaders` so existing requests, idea
+  // payloads, generate_log entries, and bookmarks keep resolving.
+  // Display label renamed v4.4.2 to reflect the broader use case
+  // (any single-stat leader, not just OPS+).
   'batting-leaders': {
-    name: 'Batting Leaders',
+    name: 'Stat Leader',
     icon: '🏏',
-    description: 'Top hitters leaderboard by OPS+',
+    description: 'Single-stat spotlight — pick a stat and feature its leader',
     playerCentric: false,
     fields: {
       feed: [
@@ -243,10 +247,14 @@ export const TEMPLATE_TYPES = {
     },
   },
 
+  // Internal id stays `pitching-leaders` to preserve backward compat
+  // for existing requests + bookmarks. Renamed v4.4.2 from "Pitching
+  // Leaders" — used now as a single-game player spotlight rather than
+  // a season-long leaderboard.
   'pitching-leaders': {
-    name: 'Pitching Leaders',
-    icon: '💨',
-    description: 'Top pitchers leaderboard by FIP',
+    name: 'Player of the Game',
+    icon: '🏆',
+    description: 'Spotlight a single player coming off a standout game',
     playerCentric: false,
     fields: {
       feed: [

@@ -556,8 +556,10 @@ export const TEMPLATES = [
   { id: "gameday", name: "Game Day Graphic", icon: "🏟️", desc: "Pre-game matchup hype", fields: ["opponent","date","time","venue"] },
   { id: "score", name: "Final Score", icon: "📊", desc: "Post-game score card", fields: ["opponent","teamScore","oppScore","mvp"] },
   { id: "player-stat", name: "Player Stat Card", icon: "⭐", desc: "Individual stat spotlight", fields: ["playerName","number","statLine"] },
-  { id: "batting-leaders", name: "Batting Leaders", icon: "🏏", desc: "Top hitters by OPS+", fields: [] },
-  { id: "pitching-leaders", name: "Pitching Leaders", icon: "💨", desc: "Top pitchers by FIP", fields: [] },
+  // Display labels renamed v4.4.2; ids stay stable so existing
+  // requests / generate-log / bookmarks keep resolving.
+  { id: "batting-leaders", name: "Stat Leader", icon: "🏏", desc: "Single-stat spotlight", fields: [] },
+  { id: "pitching-leaders", name: "Player of the Game", icon: "🏆", desc: "Standout-game spotlight", fields: [] },
   { id: "standings", name: "Standings", icon: "📈", desc: "Current league standings", fields: [] },
 ];
 
@@ -1457,9 +1459,10 @@ export function generateContentSuggestions(batting, pitching, rankings) {
     }
   }
 
-  // Leaderboard graphics
-  suggestions.push({ id: 'batting-leaderboard', type: 'leader-change', headline: 'Updated Batting Leaders graphic', description: 'Post the latest OPS+ leaderboard', team: 'BLW', templateId: 'batting-leaders', prefill: {} });
-  suggestions.push({ id: 'pitching-leaderboard', type: 'leader-change', headline: 'Updated Pitching Leaders graphic', description: 'Post the latest FIP leaderboard', team: 'BLW', templateId: 'pitching-leaders', prefill: {} });
+  // Stat leader / player of the game spotlights — names mirror the
+  // renamed templates (ids stay stable for backwards compat).
+  suggestions.push({ id: 'stat-leader-spotlight', type: 'leader-change', headline: 'Stat Leader spotlight', description: 'Pick a single stat and feature its current leader', team: 'BLW', templateId: 'batting-leaders', prefill: {} });
+  suggestions.push({ id: 'player-of-the-game', type: 'leader-change', headline: 'Player of the Game', description: 'Spotlight a player coming off a standout game', team: 'BLW', templateId: 'pitching-leaders', prefill: {} });
 
   return suggestions;
 }

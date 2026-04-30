@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.4.2',
+    date: '2026-04-29',
+    kind: 'patch',
+    summary: 'Renamed templates: Batting Leaders → Stat Leader, Pitching Leaders → Player of the Game',
+    items: [
+      'Batting Leaders → Stat Leader (🏏). Repositioned for any single-stat spotlight, not just OPS+.',
+      'Pitching Leaders → Player of the Game (🏆). Repositioned as a standout-game spotlight.',
+      'Internal template ids stay stable (`batting-leaders`, `pitching-leaders`) so existing requests, generate-log entries, content ideas, and bookmarks keep resolving.',
+    ],
+  },
+  {
     version: '4.4.1',
     date: '2026-04-29',
     kind: 'patch',
