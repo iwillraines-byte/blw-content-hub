@@ -1112,15 +1112,25 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
       }
     });
 
-  // v4.5.5: dedup entries that share a lastName when one lacks a
-  // firstName. The live API sometimes returns a bare "Ledet" stat row
-  // (no firstName), which the addStatPlayer key fullNameKey('', 'ledet')
-  // creates as a SEPARATE entry from the canonical "Andrew Ledet"
-  // entry under fullNameKey('andrew', 'ledet'). The result was a
-  // ghost teammate showing up next to the real one in roster pills.
-  // Safe merge: if a no-firstName entry shares a lastName with exactly
-  // one named entry (or with multiple but jersey numbers match), fold
-  // its hasStats / hasMedia / num into the named entry and drop it.
+  // v4.5.5/4.5.6: roster dedup. Two failure modes covered:
+  //   (a) Ghost rows from the live API: bare "Ledet" stat row with
+  //       no firstName collides with the canonical "Andrew Ledet"
+  //       under different fullNameKey() values, surfacing as a
+  //       phantom teammate.
+  //   (b) Malformed CSV imports: a manual_players row with first_name
+  //       set to the FULL NAME ("Andrew Ledet") and last_name set to
+  //       just the lastName ("Ledet") renders as "Andrew Ledet Ledet"
+  //       and lives under a different key from the canonical row.
+  //       Same problem hits "Nick Martinez" (canonical) vs "Eddie
+  //       'Nick' Martinez" (richer CSV data) on AZS.
+  //
+  // Merge rule (most-trusted wins):
+  //   1. lastName + jersey match → SAME PLAYER. Jerseys are unique
+  //      per team. Pick the entry with the cleanest name (shortest
+  //      that contains the lastName once and isn't "Andrew Ledet
+  //      Ledet"). Merge stats/media into the keeper.
+  //   2. lastName + one entry has no firstName → no-firstName entry
+  //      folds into the named one (v4.5.5 behavior, still applies).
   const entries = Array.from(roster.values());
   const byLast = new Map();
   for (const e of entries) {
@@ -1128,15 +1138,60 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     if (!byLast.has(k)) byLast.set(k, []);
     byLast.get(k).push(e);
   }
-  const ghostsToDrop = new Set();
+
+  // Score a name for "cleanliness" — lower is cleaner. Penalises
+  // duplicated lastName ("Andrew Ledet Ledet"), embedded quotes
+  // ("Eddie \"Nick\" Martinez" → still readable but the canonical
+  // entry usually wins since it scores cleaner). Empty firstName is
+  // worst.
+  const nameScore = (e) => {
+    if (!e.firstName) return 999;
+    const fn = String(e.firstName).toLowerCase();
+    const ln = String(e.lastName).toLowerCase();
+    const dupeLn = (fn.match(new RegExp(`\\b${ln}\\b`, 'g')) || []).length;
+    let score = 0;
+    score += dupeLn * 50;        // "Andrew Ledet" w/ lastName "Ledet" → 50
+    score += (fn.match(/["']/g) || []).length * 5;  // quoted nicknames
+    score += Math.max(0, fn.split(/\s+/).length - 1) * 2; // long firstNames
+    return score;
+  };
+
+  const droppedIds = new Set();
   for (const [, group] of byLast) {
     if (group.length < 2) continue;
-    const named = group.filter(e => e.firstName);
-    const ghosts = group.filter(e => !e.firstName);
+
+    // Pass 1: jersey-based merge. Group entries by normalized jersey;
+    // any group of 2+ on the same jersey are the same player.
+    const byJersey = new Map();
+    for (const e of group) {
+      const num = String(e.num || '').replace(/^0+/, '').trim();
+      if (!num) continue;
+      if (!byJersey.has(num)) byJersey.set(num, []);
+      byJersey.get(num).push(e);
+    }
+    for (const [, jgroup] of byJersey) {
+      if (jgroup.length < 2) continue;
+      // Keep the cleanest-named entry; merge others into it.
+      const sorted = [...jgroup].sort((a, b) => nameScore(a) - nameScore(b));
+      const keeper = sorted[0];
+      for (let i = 1; i < sorted.length; i++) {
+        const drop = sorted[i];
+        keeper.hasStats = keeper.hasStats || drop.hasStats;
+        keeper.hasMedia = keeper.hasMedia || drop.hasMedia;
+        if (!keeper.num && drop.num) keeper.num = drop.num;
+        keeper.stats = Array.from(new Set([...(keeper.stats || []), ...(drop.stats || [])]));
+        droppedIds.add(drop);
+      }
+    }
+
+    // Pass 2: no-firstName ghost merge (v4.5.5 path). Skip entries we
+    // already merged in pass 1.
+    const remaining = group.filter(e => !droppedIds.has(e));
+    if (remaining.length < 2) continue;
+    const named = remaining.filter(e => e.firstName);
+    const ghosts = remaining.filter(e => !e.firstName);
     if (!ghosts.length || !named.length) continue;
     for (const ghost of ghosts) {
-      // Pick the named entry to merge into. If multiple, prefer the one
-      // whose jersey matches the ghost's; else give up and leave both.
       const ghostNum = String(ghost.num || '').replace(/^0+/, '');
       let target = null;
       if (named.length === 1) {
@@ -1145,16 +1200,15 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
         target = named.find(n => String(n.num || '').replace(/^0+/, '') === ghostNum);
       }
       if (!target) continue;
-      // Merge the ghost's signals into the named entry.
       target.hasStats = target.hasStats || ghost.hasStats;
       target.hasMedia = target.hasMedia || ghost.hasMedia;
       if (!target.num && ghost.num) target.num = ghost.num;
       target.stats = Array.from(new Set([...(target.stats || []), ...(ghost.stats || [])]));
-      ghostsToDrop.add(ghost);
+      droppedIds.add(ghost);
     }
   }
   return entries
-    .filter(e => !ghostsToDrop.has(e))
+    .filter(e => !droppedIds.has(e))
     .sort((a, b) => a.lastName.localeCompare(b.lastName));
 }
 

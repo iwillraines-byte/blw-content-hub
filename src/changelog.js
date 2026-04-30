@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.6',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Roster dedup by lastName + jersey (handles malformed CSV-imported rows)',
+    items: [
+      'The team dashboard / roster surface was showing duplicate teammates whose firstNames differed but who were the same person — e.g. "Andrew Ledet" #34 (canonical) AND "Andrew Ledet Ledet" #34 (CSV row with first_name set to the full name), or "Nick Martinez" (no num) AND "Eddie \"Nick\" Martinez" #10 (richer CSV data).',
+      'Strengthened the v4.5.5 roster dedup with a jersey-first merge pass. Two entries that share lastName + jersey are treated as the same player. The cleaner-named one (lower duplicate-lastName score, fewer embedded quotes, shorter firstName) is kept; the other folds its hasStats / hasMedia / num signals in.',
+      'Companion cleanup SQL is in this release\'s notes — find any manual_players row whose first_name contains its last_name twice (the "Andrew Ledet Ledet" shape) and either fix or delete it.',
+    ],
+  },
+  {
     version: '4.5.5',
     date: '2026-04-30',
     kind: 'patch',
