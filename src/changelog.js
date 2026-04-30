@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.4',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Jersey safety net + roster-pill labels show first initial',
+    items: [
+      'CSV bio-import: jersey number is now a secondary disambiguator. Resolver hierarchy is exact firstName → exact jersey → legacy quirk fallback → first-initial multi-row fallback. Catches CSV variants like "Luke A." vs "Luke" that would otherwise miss the exact-name path on a same-team cousin pair.',
+      'Roster pills (top-right teammate prev/next on player pages) now read "A. LEDET" instead of just "LEDET". On rosters with multiple Ledets / Roses / Marshalls / Lees, the next pill used to look like a self-reference because both pills displayed only the lastName. First initial is included whenever available; legacy entries without a firstName still fall back to lastName-only.',
+    ],
+  },
+  {
     version: '4.5.3',
     date: '2026-04-30',
     kind: 'patch',

@@ -346,24 +346,27 @@ function parseBoolean(raw) {
   return null;
 }
 
-// Find an existing manual_players row matching (team, lastName, firstName).
-// Disambiguation hierarchy:
+// Find an existing manual_players row matching (team, lastName, firstName, num).
+// Disambiguation hierarchy (most specific wins):
 //   1. exact full-name match (case-insensitive on first_name) — handles
 //      cousin pairs like Logan vs Luke Rose where both share initial 'L'
 //      and the old "first initial only" check would collide them into a
 //      single row, overwriting one cousin's bio with the other's.
-//   2. lone match by lastname — ONLY when the existing row has no
-//      first_name at all (legacy data-shape quirk). Previously this
-//      fired whenever there was a single row, which meant a CSV row for
-//      Logan Rose would overwrite Carson's record if Carson was the
-//      only existing Rose. v4.5.3: tightened to mirror the client-side
-//      fix in getPlayerByTeamLastName.
-//   3. first initial match — multi-row case only, when full-name didn't
-//      hit (CSV said "Logan" but DB has "Logan A." or similar variant).
-//   4. nothing — caller will INSERT a new row.
-async function resolveExistingPlayer(sb, teamId, lastName, firstName) {
+//   2. exact jersey match — v4.5.4 safety net. Catches CSV rows with
+//      fuzzy firstName variants ("Luke A." vs "Luke", "Andrew" vs
+//      "Andrew Allan") that would slip past step 1 but still be the
+//      same person. Jersey numbers are unique per team.
+//   3. lone match by lastname — ONLY when the existing row has no
+//      first_name at all (legacy data-shape quirk). Without the
+//      firstName check this used to overwrite whoever happened to be
+//      the only DAL Rose in the table whenever a CSV row landed for a
+//      different Rose.
+//   4. first initial match — multi-row case only, when full-name and
+//      jersey both missed.
+//   5. nothing — caller will INSERT a new row.
+async function resolveExistingPlayer(sb, teamId, lastName, firstName, num) {
   const { data, error } = await sb.from('manual_players')
-    .select('id, first_name, last_name, team')
+    .select('id, first_name, last_name, team, num')
     .eq('team', teamId)
     .ilike('last_name', lastName);
   if (error) throw error;
@@ -376,28 +379,35 @@ async function resolveExistingPlayer(sb, teamId, lastName, firstName) {
     if (exact) return exact;
   }
 
+  // Jersey match — v4.5.4 safety net. Strips leading zeros so "08" and
+  // "8" compare equal. Only fires when a non-empty num is supplied.
+  const numNorm = num != null ? String(num).replace(/^0+/, '').trim() : '';
+  if (numNorm) {
+    const jerseyHit = data.find(r => {
+      const rNum = String(r.num || '').replace(/^0+/, '').trim();
+      return rNum && rNum === numNorm;
+    });
+    if (jerseyHit) return jerseyHit;
+  }
+
   // Single row + no first_name on existing row → legacy quirk fallback.
-  // Without the firstName check this used to overwrite whoever happened
-  // to be the only DAL Rose in the table whenever a CSV row landed for
-  // a different Rose. With the check, the only way this fires is if the
-  // existing row genuinely has no firstName — the data-shape case the
-  // fallback was intended for.
   if (data.length === 1) {
     const onlyHasFn = data[0].first_name && String(data[0].first_name).trim();
     if (!onlyHasFn) return data[0];
   }
 
-  // Multiple rows AND no full-name match: try first-initial as last
-  // resort. This is what the old code did unconditionally; now it's
-  // a fallback only.
+  // Multiple rows AND no full-name match AND no jersey match: try
+  // first-initial as last resort. This is what the old code did
+  // unconditionally; now it's a fallback only.
   const fi = fnLower.charAt(0).toUpperCase();
   if (fi) {
     const initialHit = data.find(r => (r.first_name || '').charAt(0).toUpperCase() === fi);
     if (initialHit) return initialHit;
   }
 
-  // Multiple rows, no firstName signal — return null so caller creates
-  // a NEW row instead of arbitrarily overwriting one of the cousins.
+  // Multiple rows, no firstName / jersey signal — return null so caller
+  // creates a NEW row instead of arbitrarily overwriting one of the
+  // cousins.
   return null;
 }
 
@@ -617,9 +627,12 @@ export default async function handler(req, res) {
 
     // Upsert
     try {
-      // Pass full firstName so cousins (Logan vs Luke Rose) resolve to
-      // their own rows instead of colliding on shared first initial.
-      const existing = await resolveExistingPlayer(sb, teamId, lastName, firstName);
+      // Pass full firstName + jersey so cousins (Logan vs Luke Rose)
+      // resolve to their own rows instead of colliding on shared first
+      // initial. Jersey is the v4.5.4 safety net for fuzzy firstName
+      // variants ("Luke A." vs "Luke") that would otherwise miss the
+      // exact-name path.
+      const existing = await resolveExistingPlayer(sb, teamId, lastName, firstName, updates.num);
       if (existing) {
         if (!dryRun) {
           const { error } = await sb.from('manual_players').update(updates).eq('id', existing.id);

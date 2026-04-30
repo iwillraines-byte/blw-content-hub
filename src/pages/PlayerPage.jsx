@@ -1578,6 +1578,7 @@ export default function PlayerPage() {
       return {
         name: t.name,
         firstName: t.firstName,
+        firstInitial: t.firstInitial,
         lastName: t.lastName,
         href: `/teams/${team.slug}/players/${slug}`,
       };
@@ -1739,7 +1740,21 @@ export default function PlayerPage() {
           <TeamLogo teamId={team.id} size={20} rounded="square" />
           {team.name.toUpperCase()}
         </Link>
-        {(teammateNav.prev || teammateNav.next) && (
+        {(teammateNav.prev || teammateNav.next) && (() => {
+          // v4.5.4: pills used to show only lastName. On rosters with
+          // multiple players sharing a lastName (Ledets on AZS,
+          // Marshalls on AZS, Roses on DAL, Lees on LV) the user would
+          // see "LEDET ›" while standing on Ledet's page — looking like
+          // the next pill pointed at themselves. Always include first
+          // initial when we have one so "A. LEDET" vs "B. LEDET" reads
+          // clearly. Falls back to lastName-only for legacy roster
+          // entries without a firstName / firstInitial.
+          const pillLabel = (t) => {
+            if (!t) return '';
+            const fi = (t.firstInitial || (t.firstName || '').charAt(0) || '').toUpperCase();
+            return fi ? `${fi}. ${t.lastName.toUpperCase()}` : t.lastName.toUpperCase();
+          };
+          return (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             fontFamily: fonts.condensed,
@@ -1751,8 +1766,8 @@ export default function PlayerPage() {
                 style={teammateNavBtnStyle(true)}
               >
                 <span aria-hidden="true">‹</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
-                  {teammateNav.prev.lastName}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
+                  {pillLabel(teammateNav.prev)}
                 </span>
               </Link>
             ) : (
@@ -1773,8 +1788,8 @@ export default function PlayerPage() {
                 title={`Next teammate: ${teammateNav.next.name} (→ key)`}
                 style={teammateNavBtnStyle(true)}
               >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
-                  {teammateNav.next.lastName}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
+                  {pillLabel(teammateNav.next)}
                 </span>
                 <span aria-hidden="true">›</span>
               </Link>
@@ -1785,7 +1800,8 @@ export default function PlayerPage() {
               </span>
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Player Header — ESPN-style 4-column layout.
