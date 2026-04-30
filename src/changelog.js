@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.5',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Roster pills: drop the ghost-Ledet duplicate + harder fallback labels',
+    items: [
+      'Root cause of the persistent "Next: LEDET" pill on Andrew Ledet\'s page: the live API was returning a bare "Ledet" stat row with no firstName alongside the canonical "Andrew Ledet" row. getTeamRoster keyed them separately (fullNameKey \'\' vs \'andrew\') and emitted two roster entries — a real one and a ghost. The ghost showed up as the "next teammate" because both lastNames were identical.',
+      'Fix: dedup pass at the end of getTeamRoster. When two entries share a lastName and one has no firstName, the no-firstName ghost folds its signals (hasStats / hasMedia / num) into the named entry and is dropped. Safe merge — only fires when the named entry is unambiguous OR the ghost\'s jersey number matches a specific named entry.',
+      'Also hardened the pill label resolver: when no firstInitial / firstName is available, falls back to "#34 LEDET" using jersey before giving up to lastName-only.',
+    ],
+  },
+  {
     version: '4.5.4',
     date: '2026-04-30',
     kind: 'patch',

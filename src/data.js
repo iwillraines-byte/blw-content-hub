@@ -1112,7 +1112,50 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
       }
     });
 
-  return Array.from(roster.values()).sort((a, b) => a.lastName.localeCompare(b.lastName));
+  // v4.5.5: dedup entries that share a lastName when one lacks a
+  // firstName. The live API sometimes returns a bare "Ledet" stat row
+  // (no firstName), which the addStatPlayer key fullNameKey('', 'ledet')
+  // creates as a SEPARATE entry from the canonical "Andrew Ledet"
+  // entry under fullNameKey('andrew', 'ledet'). The result was a
+  // ghost teammate showing up next to the real one in roster pills.
+  // Safe merge: if a no-firstName entry shares a lastName with exactly
+  // one named entry (or with multiple but jersey numbers match), fold
+  // its hasStats / hasMedia / num into the named entry and drop it.
+  const entries = Array.from(roster.values());
+  const byLast = new Map();
+  for (const e of entries) {
+    const k = e.lastName.toLowerCase();
+    if (!byLast.has(k)) byLast.set(k, []);
+    byLast.get(k).push(e);
+  }
+  const ghostsToDrop = new Set();
+  for (const [, group] of byLast) {
+    if (group.length < 2) continue;
+    const named = group.filter(e => e.firstName);
+    const ghosts = group.filter(e => !e.firstName);
+    if (!ghosts.length || !named.length) continue;
+    for (const ghost of ghosts) {
+      // Pick the named entry to merge into. If multiple, prefer the one
+      // whose jersey matches the ghost's; else give up and leave both.
+      const ghostNum = String(ghost.num || '').replace(/^0+/, '');
+      let target = null;
+      if (named.length === 1) {
+        target = named[0];
+      } else if (ghostNum) {
+        target = named.find(n => String(n.num || '').replace(/^0+/, '') === ghostNum);
+      }
+      if (!target) continue;
+      // Merge the ghost's signals into the named entry.
+      target.hasStats = target.hasStats || ghost.hasStats;
+      target.hasMedia = target.hasMedia || ghost.hasMedia;
+      if (!target.num && ghost.num) target.num = ghost.num;
+      target.stats = Array.from(new Set([...(target.stats || []), ...(ghost.stats || [])]));
+      ghostsToDrop.add(ghost);
+    }
+  }
+  return entries
+    .filter(e => !ghostsToDrop.has(e))
+    .sort((a, b) => a.lastName.localeCompare(b.lastName));
 }
 
 // Parse a player slug. Supports three forms:

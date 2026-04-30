@@ -1580,6 +1580,7 @@ export default function PlayerPage() {
         firstName: t.firstName,
         firstInitial: t.firstInitial,
         lastName: t.lastName,
+        num: t.num,
         href: `/teams/${team.slug}/players/${slug}`,
       };
     };
@@ -1745,14 +1746,30 @@ export default function PlayerPage() {
           // multiple players sharing a lastName (Ledets on AZS,
           // Marshalls on AZS, Roses on DAL, Lees on LV) the user would
           // see "LEDET ›" while standing on Ledet's page — looking like
-          // the next pill pointed at themselves. Always include first
-          // initial when we have one so "A. LEDET" vs "B. LEDET" reads
-          // clearly. Falls back to lastName-only for legacy roster
-          // entries without a firstName / firstInitial.
+          // the next pill pointed at themselves.
+          //
+          // v4.5.5: harden the label resolver. Some teammates come from
+          // the live API with only a lastName (no firstName / initial).
+          // The fix tries firstInitial → firstName.charAt(0) → jersey
+          // (#34) → first letter of name field. Only if EVERY signal is
+          // empty does it fall back to lastName-only — a true legacy
+          // edge case.
           const pillLabel = (t) => {
             if (!t) return '';
-            const fi = (t.firstInitial || (t.firstName || '').charAt(0) || '').toUpperCase();
-            return fi ? `${fi}. ${t.lastName.toUpperCase()}` : t.lastName.toUpperCase();
+            const ln = String(t.lastName || '').toUpperCase();
+            // Try every available signal in order: explicit firstInitial,
+            // firstName initial, first word of name field, jersey. Only
+            // returns lastName-only when EVERY identity signal is empty.
+            const fi = (
+              t.firstInitial ||
+              (t.firstName || '').charAt(0) ||
+              (t.name && !t.firstName ? String(t.name).trim().split(/\s+/)[0]?.charAt(0) : '') ||
+              ''
+            ).toUpperCase();
+            if (fi) return `${fi}. ${ln}`;
+            const num = String(t.num || '').replace(/^0+/, '').trim();
+            if (num) return `#${num} ${ln}`;
+            return ln;
           };
           return (
           <div style={{
