@@ -127,6 +127,39 @@ export default async function handler(req, res) {
     `- ${p.name} (${p.team}): FIP ${typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}, ${p.era} ERA, ${p.w || 0}-${p.l || 0}, ${p.ip} IP${p.currentRank != null ? `, overall rank #${p.currentRank}` : ''}`
   ).join('\n');
 
+  // ─── Athlete voice — self-authored vibe / references / content prefs ───
+  // The AthleteVoiceCard on the player page lets athletes (and master
+  // admin) author free-form notes that should color any content
+  // featuring that player. Only renders for players actually in the
+  // batting/pitching sample so we don't dump every voice block on
+  // every call (token cost). Pulled by lookup against the keyed map
+  // the client sends as context.athleteVoices.
+  const athleteVoices = context.athleteVoices && typeof context.athleteVoices === 'object'
+    ? context.athleteVoices
+    : {};
+  const sampledPlayers = [...battingSample, ...pitchingSample];
+  const voiceLines = [];
+  const seenVoiceKeys = new Set();
+  for (const p of sampledPlayers) {
+    const last = (p.name || '').split(/\s+/).pop().toUpperCase();
+    const key = `${(p.team || '').toUpperCase()}|${last}`;
+    if (seenVoiceKeys.has(key)) continue;
+    seenVoiceKeys.add(key);
+    const v = athleteVoices[key];
+    if (!v || typeof v !== 'object') continue;
+    const summary = [
+      v.vibe && `vibe: ${String(v.vibe).slice(0, 200)}`,
+      v.references && `references: ${String(v.references).slice(0, 200)}`,
+      v.walkupMusic && `walkup: ${String(v.walkupMusic).slice(0, 100)}`,
+      v.funFacts && `fun facts: ${String(v.funFacts).slice(0, 240)}`,
+      v.contentPrefs && `content notes: ${String(v.contentPrefs).slice(0, 240)}`,
+    ].filter(Boolean).join('; ');
+    if (summary) voiceLines.push(`- ${p.name} (${p.team}): ${summary}`);
+  }
+  const athleteVoiceBlock = voiceLines.length
+    ? `ATHLETE VOICE — self-authored notes from the players themselves (their vibe, the references they love, what they DO and DON'T want on their accounts). Use these to color captions and angle choices for the relevant player. They're a stronger signal than stats alone because they capture the player's IDENTITY:\n${voiceLines.join('\n')}\n`
+    : '';
+
   const rankMovers = (context.rankings || [])
     .filter(r => Math.abs(r.rankChange || 0) >= 3)
     .slice(0, 6)
@@ -252,7 +285,7 @@ ${topPitchers || '(none)'}
 BIGGEST RANK MOVERS:
 ${rankMovers || '(none notable this week)'}
 
-${leagueNarrativesBlock}`;
+${athleteVoiceBlock}${leagueNarrativesBlock}`;
 
   // Extract the seed's scoping signals so we can lock follow-up ideas to
   // the SAME team (and same player when the seed is player-scoped). The

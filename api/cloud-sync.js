@@ -11,6 +11,31 @@
 //   carousel will treat every post as "posted" (the default the UI
 //   assumes when the field is absent).
 //
+// SCHEMA NOTE — `requests` makeover (added v4.4.0):
+//   The new request types (content / bug / profile-update / template /
+//   feature / integration), athlete role-gating, and email
+//   notifications need extra columns. Run this once in Supabase:
+//     ALTER TABLE requests
+//       ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'content',
+//       ADD COLUMN IF NOT EXISTS title TEXT,
+//       ADD COLUMN IF NOT EXISTS need_by DATE,
+//       ADD COLUMN IF NOT EXISTS requester_email TEXT,
+//       ADD COLUMN IF NOT EXISTS requester_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+//       ADD COLUMN IF NOT EXISTS player_last_name TEXT,
+//       ADD COLUMN IF NOT EXISTS player_first_initial TEXT,
+//       ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+//     CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(requester_user_id);
+//     CREATE INDEX IF NOT EXISTS idx_requests_type ON requests(type);
+//   Without it, request upserts containing the new fields will 400 on
+//   the unknown columns. The UI assumes default 'content' type for old
+//   rows so existing requests continue to render.
+//
+// SCHEMA NOTE — `manual_players.athlete_voice` (added v4.4.0):
+//   Athletes can now self-author a free-form "About me" block that
+//   feeds the AI ideas prompt. Stored as JSON for flexibility:
+//     ALTER TABLE manual_players
+//       ADD COLUMN IF NOT EXISTS athlete_voice JSONB DEFAULT '{}'::jsonb;
+//
 // Request shape (POST, JSON):
 // {
 //   kind:    'media' | 'overlay' | 'effect' | 'request' | 'request-comment'
@@ -123,6 +148,19 @@ export default async function handler(req, res) {
       // dashboard doesn't over-fetch; extend via ?limit= if a caller needs
       // the full history.
       let q = sb.from(table).select('*');
+
+      // Athletes only see their OWN requests. Server-side filter so a
+      // crafted client can't bypass it. Staff (master/admin/content)
+      // sees everything. We compare on requester_user_id when set,
+      // and (legacy fallback) on requester_email so older rows authored
+      // before the column existed still surface for the original sender.
+      if (kind === 'request' && isAthlete) {
+        q = q.or(
+          `requester_user_id.eq.${user.id}` +
+          (user.email ? `,requester_email.eq.${user.email}` : '')
+        );
+      }
+
       if (kind === 'generate-log') {
         // Optional team + since + posted filters drive the team-page
         // monthly progress bar + carousel without needing a separate
@@ -217,6 +255,11 @@ export default async function handler(req, res) {
     }
     const PATCHABLE = {
       'generate-log': new Set(['posted']),
+      // Staff (master/admin/content) can patch a request's status,
+      // priority, and the notified_at timestamp from the "Notify
+      // requester" button. Athletes are blocked from PATCH entirely
+      // by the early-return above.
+      'request': new Set(['status', 'priority', 'notified_at']),
     };
     const allowed = PATCHABLE[pKind];
     if (!allowed) {
@@ -336,6 +379,22 @@ export default async function handler(req, res) {
     const HAS_OWNER = new Set(['media', 'overlay', 'effect', 'request', 'request-comment', 'manual-player', 'generate-log']);
     if (HAS_OWNER.has(kind)) {
       payload.owner_id = user.id;
+    }
+
+    // Requests: ALWAYS overwrite requester_user_id + requester_email
+    // for athletes (so they can't impersonate someone else's request).
+    // For staff, fall back to the JWT identity when the client didn't
+    // explicitly set it — avoids null email columns on master-created
+    // requests AND keeps the "notify requester" mailto working from a
+    // sensible default.
+    if (kind === 'request') {
+      if (isAthlete) {
+        payload.requester_user_id = user.id;
+        payload.requester_email = user.email || payload.requester_email || null;
+      } else {
+        payload.requester_user_id = payload.requester_user_id || user.id;
+        payload.requester_email = payload.requester_email || user.email || null;
+      }
     }
 
     // Upload blob first if this kind carries one.

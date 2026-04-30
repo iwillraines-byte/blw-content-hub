@@ -115,6 +115,10 @@ function rowToPlayer(r) {
     num: r.num || '',
     position: r.position || '',
     notes: r.notes || '',
+    // v4.4.0 — athlete self-authored vibe block. JSON shape, defaults
+    // to {} when the column is absent. Read by PlayerPage's About-me
+    // card + fed into /api/ideas as additional player context.
+    athleteVoice: r.athlete_voice || {},
     // Vitals (db/004) — without these, the bio importer's data wouldn't
     // survive a round-trip from Supabase back into local IDB cache,
     // making the PlayerPage show "—" for everything imported.
@@ -154,6 +158,17 @@ function rowToRequest(r) {
       ? new Date(r.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric' })
       : '',
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    // v4.4.0 fields. Type flows in from the new RequestModal type
+    // picker; older rows lacking it default to 'content' so the rest
+    // of the UI doesn't have to special-case missing values.
+    type: r.type || 'content',
+    title: r.title || '',
+    needBy: r.need_by || null,
+    requesterEmail: r.requester_email || '',
+    requesterUserId: r.requester_user_id || null,
+    playerLastName: r.player_last_name || '',
+    playerFirstInitial: r.player_first_initial || '',
+    notifiedAt: r.notified_at || null,
   };
 }
 

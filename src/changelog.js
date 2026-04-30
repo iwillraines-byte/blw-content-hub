@@ -18,6 +18,22 @@
 
 export const RELEASES = [
   {
+    version: '4.4.0',
+    date: '2026-04-29',
+    kind: 'major',
+    summary: 'Requests overhaul + athlete role + athlete voice for AI ideas',
+    items: [
+      'Requests have TYPES now: Content, Profile update, Bug, Template, Feature, Integration. Each type opens a tailored form so a bug request asks for repro steps, a profile-update asks what to change, a content request asks for player + template + athlete input.',
+      'New RequestModal — single progressive form with type picker, polished chrome, priority chips (added CRITICAL), needed-by date, and a confirmation that shows where notifications will land. Replaces the inline three-field form.',
+      'Athlete role gets first-class treatment: athletes see ONLY their own requests (server-enforced via requester_user_id, with email fallback for legacy rows). Their team auto-pins on the form, status-flip buttons hide, and the page header switches to a personal "your requests" voice.',
+      '"Notify requester" button on completed requests opens a pre-filled mailto: with subject + body, then stamps notified_at so a follow-up click reads "Re-notify". Real Resend/SendGrid pipeline lands later — the mailto path covers v1.',
+      'Type filter chips above the existing status chips so you can scope by "show me all bugs" or "show me high-priority profile updates."',
+      'New per-card layout: type badge tinted by category, priority dot (with explicit CRITICAL chip when relevant), team chip, player chip, needBy countdown ("Due in 3d", "Overdue 2d"), then the title + status — reads at a glance without opening Brief details.',
+      'Athletes get an editable "About me" card on their player page (master_admin can edit anyone\'s). Free-form fields: vibe, references, walk-up music, fun facts, content notes. Stored as JSON on manual_players.athlete_voice.',
+      '/api/ideas reads the athlete voice for any sampled player and weaves it into its prompt as an "ATHLETE VOICE" block. Stronger signal than stats alone — captions get the player\'s actual identity, not just generic stat lines.',
+    ],
+  },
+  {
     version: '4.3.0',
     date: '2026-04-29',
     kind: 'minor',

@@ -116,6 +116,18 @@ function mapRequestToRow(r) {
     priority: r.priority || 'medium',
     requester: r.requester || null,
     note: r.note || null,
+    // v4.4.0 fields. Sent on every upsert; columns added via the
+    // schema migration in /api/cloud-sync.js header. If the columns
+    // are absent (pre-migration), Supabase upsert ignores unknown
+    // keys silently — no breakage.
+    type: r.type || 'content',
+    title: r.title || null,
+    need_by: r.needBy || null,
+    requester_email: r.requesterEmail || null,
+    requester_user_id: r.requesterUserId || null,
+    player_last_name: r.playerLastName || null,
+    player_first_initial: r.playerFirstInitial || null,
+    notified_at: r.notifiedAt || null,
     // createdAt is a ms epoch on the local record — Supabase has its own
     // created_at default + updated_at, so we don't force it here.
   };
@@ -164,6 +176,12 @@ function mapPlayerToRow(p) {
     instagram_handle: p.instagramHandle ?? p.instagram_handle ?? null,
     fun_facts:        p.funFacts ?? p.fun_facts ?? null,
     is_rookie:        p.isRookie ?? p.is_rookie ?? null,
+    // Athlete self-authored "About me" — free-form vibe / references /
+    // backstory the player wants the AI to know about them. Fed into
+    // the /api/ideas prompt as a per-player context block. JSON so we
+    // can structure it (vibes, references, walkup music, etc.) without
+    // a schema change every time a new field gets added.
+    athlete_voice:    p.athleteVoice ?? p.athlete_voice ?? null,
   };
 }
 

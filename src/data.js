@@ -1334,6 +1334,10 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     instagramHandle: manual?.instagram_handle ?? manual?.instagramHandle ?? null,
     funFacts:        manual?.fun_facts ?? manual?.funFacts ?? null,
     isRookie:        Boolean(manual?.is_rookie ?? manual?.isRookie ?? false),
+    // Athlete self-authored vibe / references / content prefs (v4.4.0).
+    // JSON object — defaults to {} when absent so the AthleteVoiceCard
+    // can read keys without nullchecks.
+    athleteVoice:    manual?.athlete_voice ?? manual?.athleteVoice ?? {},
     ambiguous,
     candidateCount: candidateNames.size,
   };

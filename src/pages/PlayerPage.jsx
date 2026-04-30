@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
-import { Card, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
+import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { ContentIdeasSection } from '../content-ideas-section';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
@@ -1247,12 +1247,14 @@ export default function PlayerPage() {
   const navigate = useNavigate();
   const team = getTeam(slug);
   const toast = useToast();
-  const { role } = useAuth();
+  const { role, teamId: viewerTeamId } = useAuth();
   // Photo-edit + pan/zoom buttons surface for ANY staff user (master +
   // content). Picking a player's headshot is daily content work, not a
   // data-management task — locking it to master-only would block the
   // social-media team from doing their job.
   const isAdmin = isStaffRole(role);
+  const isMaster = role === 'master_admin';
+  const isAthlete = role === 'athlete';
 
   const [player, setPlayer] = useState(null);
   const [media, setMedia] = useState([]);
@@ -1496,6 +1498,13 @@ export default function PlayerPage() {
             teams: TEAMS.map(t => ({ id: t.id, name: t.name, record: t.record, rank: t.rank, color: t.color, accent: t.accent })),
             batting: battingLeaders.slice(0, 60),
             pitching: pitchingLeaders.slice(0, 60),
+            // Pass THIS player's voice block so the modal-generated
+            // idea actually reads it. Server keys on TEAM|LASTNAME
+            // and only renders for sampled players, so we send a
+            // single-key map keyed to the active player.
+            athleteVoices: player.athleteVoice && Object.values(player.athleteVoice).some(v => v)
+              ? { [`${player.team}|${player.lastName.toUpperCase()}`]: player.athleteVoice }
+              : {},
           },
           count: 1,
           seedIdea: {
@@ -1973,6 +1982,23 @@ export default function PlayerPage() {
         <PlayerRecentPosts posts={recentPosts} team={team} player={player} />
       )}
 
+      {/* Athlete voice — self-authored "About me" block that feeds the
+          AI ideas generator. Editable by master_admin always, AND by
+          athletes whose profile is pinned to this team (one-team-one-
+          account assumption — works until we add a strict player ↔
+          user_id mapping). Read-only for everyone else, but visible
+          when there's any content so the team sees what the AI is
+          drafting against.
+
+          Hides entirely when read-only AND the voice block is empty —
+          no point showing an empty editorial card to staff who can't
+          fill it in. */}
+      <AthleteVoiceCard
+        player={player}
+        team={team}
+        canEdit={isMaster || (isAthlete && viewerTeamId === team.id)}
+      />
+
       {/* Content ideas about this player — only shows when there are
           actually ideas tagged for this player (matched server-side via
           player_last_name extracted from prefill.playerName). The section
@@ -2328,6 +2354,186 @@ function PlayerRecentPosts({ posts, team, player }) {
           </Link>
         ))}
       </div>
+    </Card>
+  );
+}
+
+// ─── Athlete voice card ────────────────────────────────────────────────────
+// Self-authored "About me" block — feeds the AI ideas generator with
+// per-player vibe, references, and content preferences. Stored as a
+// flexible JSON object on manual_players.athlete_voice so we can add
+// new fields without a schema migration.
+//
+// Fields:
+//   vibe         — short tagline / personality summary
+//   references   — pop-culture / sports references the player loves
+//   walkupMusic  — at-bat song or vibe
+//   funFacts     — anecdotes, "did you know" lines
+//   contentPrefs — what they want / don't want on their accounts
+//
+// Edit gating is decided by the parent (master_admin always; athletes
+// when their profile is pinned to this team). When the viewer can't
+// edit AND the voice block is empty, we render nothing so this card
+// doesn't surface as an empty box for staff.
+function AthleteVoiceCard({ player, team, canEdit }) {
+  const initial = player?.athleteVoice && typeof player.athleteVoice === 'object'
+    ? player.athleteVoice
+    : {};
+  const [voice, setVoice] = useState(initial);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+  const toast = useToast();
+
+  // Hydrate when the player record changes (slug navigation between
+  // teammates) so the form reflects the active player's data.
+  useEffect(() => {
+    setVoice(player?.athleteVoice && typeof player.athleteVoice === 'object' ? player.athleteVoice : {});
+    setEditing(false);
+  }, [player?.id]);
+
+  const hasContent = Object.values(voice).some(v => v && String(v).trim().length > 0);
+  if (!hasContent && !canEdit) return null;
+
+  const setField = (key, value) => setVoice(prev => ({ ...prev, [key]: value }));
+
+  const save = async () => {
+    if (!player?.lastName) return;
+    setSaving(true);
+    try {
+      await upsertManualPlayer({
+        team: player.team,
+        lastName: player.lastName,
+        firstInitial: player.firstInitial,
+        firstName: player.firstName,
+        num: player.num,
+        updates: { athleteVoice: voice },
+      });
+      setSavedAt(Date.now());
+      setEditing(false);
+      toast.success('About-me saved', { detail: 'AI will use this on the next idea generation' });
+    } catch (err) {
+      toast.error('Couldn\'t save', { detail: err.message?.slice(0, 80) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const FIELDS = [
+    { key: 'vibe',         label: 'Vibe',           placeholder: 'A one-liner that captures who you are. e.g. "Loose, loud, swings hard."' },
+    { key: 'references',   label: 'References',     placeholder: 'Movies, TV, athletes, music, memes you reference. The AI will weave these in.' },
+    { key: 'walkupMusic',  label: 'Walk-up music',  placeholder: 'Song or artist that plays when you step in. Helps the AI capture vibe.' },
+    { key: 'funFacts',     label: 'Fun facts',      placeholder: 'Backstory / anecdotes / "did you know" lines. Surfaces in posts.' },
+    { key: 'contentPrefs', label: 'Content notes',  placeholder: 'What you DO and DON\'T want on your accounts. e.g. "Lean into stats; skip locker-room shots."' },
+  ];
+
+  return (
+    <Card>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 10,
+        flexWrap: 'wrap', marginBottom: 4,
+      }}>
+        <SectionHeading style={{ margin: 0 }}>About {player.firstName || player.name?.split(' ')[0] || player.lastName}</SectionHeading>
+        <span style={{
+          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+          letterSpacing: 0.5, color: colors.textMuted,
+        }}>FEEDS THE AI · {canEdit ? 'EDITABLE' : 'READ ONLY'}</span>
+      </div>
+      <p style={{
+        fontSize: 12, color: colors.textSecondary,
+        margin: '4px 0 14px', lineHeight: 1.5,
+        maxWidth: '60ch',
+      }}>
+        {canEdit
+          ? 'Tell the AI more about you. Vibe, references, fun facts. The more honest, the better the captions and ideas it drafts.'
+          : `${player.firstName || player.lastName}'s self-authored notes. Drives the AI's caption + idea drafting for posts about them.`}
+      </p>
+
+      {!editing ? (
+        // Read mode — only show fields that have content. Empty fields
+        // collapse out so the card reads like a brief, not a form.
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {FIELDS.filter(f => voice[f.key] && String(voice[f.key]).trim()).map(f => (
+            <div key={f.key}>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+                marginBottom: 3,
+              }}>{f.label}</div>
+              <div style={{
+                fontFamily: fonts.body, fontSize: 13, color: colors.text,
+                lineHeight: 1.55, whiteSpace: 'pre-wrap',
+              }}>{voice[f.key]}</div>
+            </div>
+          ))}
+          {!hasContent && (
+            <div style={{
+              fontSize: 12, color: colors.textMuted,
+              fontFamily: fonts.condensed, fontStyle: 'italic',
+            }}>
+              Nothing here yet — click Edit to add a vibe, references, fun facts.
+            </div>
+          )}
+          {canEdit && (
+            <div style={{ marginTop: 4 }}>
+              <OutlineButton onClick={() => setEditing(true)} style={{ fontSize: 12 }}>
+                {hasContent ? '✎ Edit' : '+ Add about-me'}
+              </OutlineButton>
+              {savedAt && (
+                <span style={{
+                  marginLeft: 10, fontSize: 11, color: '#15803D',
+                  fontFamily: fonts.condensed, fontWeight: 700, letterSpacing: 0.4,
+                }}>✓ Saved · AI will use this next time</span>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        // Edit mode — every field rendered as a textarea so the user
+        // can pour in as much detail as they want. No required fields:
+        // partial completion is fine.
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {FIELDS.map(f => (
+            <div key={f.key}>
+              <Label>{f.label}</Label>
+              <textarea
+                value={voice[f.key] || ''}
+                onChange={e => setField(f.key, e.target.value)}
+                placeholder={f.placeholder}
+                style={{
+                  width: '100%',
+                  marginTop: 4,
+                  padding: '10px 12px',
+                  background: colors.white,
+                  border: `1px solid ${colors.borderLight}`,
+                  borderRadius: radius.sm,
+                  fontFamily: fonts.body, fontSize: 13,
+                  color: colors.text, lineHeight: 1.5,
+                  minHeight: f.key === 'vibe' || f.key === 'walkupMusic' ? 50 : 80,
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+                maxLength={1000}
+              />
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+            <RedButton onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : 'Save about-me'}
+            </RedButton>
+            <OutlineButton onClick={() => { setVoice(initial); setEditing(false); }} disabled={saving}>
+              Cancel
+            </OutlineButton>
+            <span style={{ flex: 1 }} />
+            <span style={{
+              fontSize: 11, color: colors.textMuted,
+              fontFamily: fonts.condensed, letterSpacing: 0.3,
+            }}>
+              The AI ideas generator will read this on its next run.
+            </span>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

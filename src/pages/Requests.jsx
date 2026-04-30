@@ -1,10 +1,13 @@
 import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { TEAMS, TEMPLATES, getTeam, playerSlug } from '../data';
+import { TEAMS, TEMPLATES, getTeam, getAllPlayersDirectory, playerSlug } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, StatusBadge, PriorityDot, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getRequests, saveRequests, getComments, saveComments, extractIdeaFromNote, buildGenerateLinkFromIdea, suggestAssetTypesForIdea } from '../requests-store';
 import { stashIdeaForGenerate } from '../idea-context-store';
+import { useAuth } from '../auth';
+import { REQUEST_TYPES, getRequestType, getPriority } from '../request-types';
+import { RequestModal } from '../request-modal';
 
 const STATUS_LABELS = {
   pending: 'Pending',
@@ -24,7 +27,24 @@ const roleColors = {
 export default function Requests() {
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFilter = searchParams.get('status') || 'ALL';
+  const typeFilter = searchParams.get('type') || 'ALL';
   const targetRequestId = searchParams.get('id');
+  const { user, role } = useAuth();
+  const isAthlete = role === 'athlete';
+  // Roster for the player picker in the modal — fetched once on mount.
+  // The store hits IDB so this is fast even on first render.
+  const [roster, setRoster] = useState([]);
+  useEffect(() => {
+    getAllPlayersDirectory().then(list => {
+      setRoster(list.map(p => ({
+        team: p.team,
+        firstInitial: p.firstInitial || (p.firstName || '').charAt(0).toUpperCase(),
+        firstName: p.firstName || '',
+        lastName: p.lastName,
+        num: p.num || '',
+      })));
+    });
+  }, []);
   // Maps request id → DOM node so we can scroll the deep-linked request
   // into view once it's rendered. Ref bag pattern so refs survive re-renders.
   const cardRefs = useRef({});
@@ -85,14 +105,36 @@ export default function Requests() {
   const setRequests = (updater) => setRequestsState(prev => typeof updater === 'function' ? updater(prev) : updater);
   const setComments = (updater) => setCommentsState(prev => typeof updater === 'function' ? updater(prev) : updater);
 
-  const filtered = statusFilter === 'ALL'
-    ? requests
-    : requests.filter(r => r.status === statusFilter);
+  // Athletes see only their own requests — server already enforces
+  // this on cloud reads, but we double-check client-side so a stale
+  // localStorage cache from a different user doesn't leak. We compare
+  // on requesterUserId first (authoritative), then fall back to email
+  // for legacy rows that pre-date the user-id column.
+  const visibleRequests = useMemo(() => {
+    if (!isAthlete) return requests;
+    return requests.filter(r =>
+      (user?.id && r.requesterUserId === user.id) ||
+      (user?.email && r.requesterEmail === user.email)
+    );
+  }, [requests, isAthlete, user?.id, user?.email]);
+
+  const filteredByStatus = statusFilter === 'ALL'
+    ? visibleRequests
+    : visibleRequests.filter(r => r.status === statusFilter);
+  const filtered = typeFilter === 'ALL'
+    ? filteredByStatus
+    : filteredByStatus.filter(r => (r.type || 'content') === typeFilter);
 
   const setStatusFilter = (status) => {
     const next = new URLSearchParams(searchParams);
     if (!status || status === 'ALL') next.delete('status');
     else next.set('status', status);
+    setSearchParams(next, { replace: true });
+  };
+  const setTypeFilter = (type) => {
+    const next = new URLSearchParams(searchParams);
+    if (!type || type === 'ALL') next.delete('type');
+    else next.set('type', type);
     setSearchParams(next, { replace: true });
   };
 
@@ -131,20 +173,66 @@ export default function Requests() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <PageHeader title="REQUESTS" subtitle="Content requests from athletes, owners, managers, and internal team">
-        <OutlineButton onClick={() => setShowNew(!showNew)} style={showNew ? { background: '#FEE2E2', color: '#DC2626', borderColor: '#FECACA' } : {}}>
-          {showNew ? 'Cancel' : '+ New Request'}
-        </OutlineButton>
+      <PageHeader
+        title="REQUESTS"
+        subtitle={isAthlete
+          ? 'Your requests — content, profile updates, bug reports, and feature ideas. We\'ll email you when they\'re done.'
+          : 'Requests across the league — content, profile updates, bugs, templates, features.'}
+      >
+        <RedButton onClick={() => setShowNew(true)}>+ New request</RedButton>
       </PageHeader>
 
-      {/* Status filter chips — reflect / drive the ?status= URL param */}
-      {requests.length > 0 && (
+      {/* Type filter chips — first row. Drives ?type= URL param so a
+          status × type combo is bookmarkable. Athletes see fewer chips
+          since their queue is smaller and types they can't pick are
+          filtered upstream. */}
+      {visibleRequests.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {[
-            { key: 'ALL', label: `All (${requests.length})` },
+            { key: 'ALL', icon: '☰', label: `All (${visibleRequests.length})`, palette: null },
+            ...REQUEST_TYPES
+              .map(t => ({
+                key: t.id,
+                icon: t.icon,
+                label: `${t.label} (${visibleRequests.filter(r => (r.type || 'content') === t.id).length})`,
+                palette: t.palette,
+              }))
+              .filter(c => isAthlete ? c.label.match(/\(\s*[1-9]\d*\s*\)/) || c.key === 'ALL' : true),
+          ].map(chip => {
+            const active = typeFilter === chip.key;
+            const palette = chip.palette;
+            return (
+              <button
+                key={chip.key}
+                onClick={() => setTypeFilter(chip.key)}
+                style={{
+                  background: active && palette ? palette.bg : (active ? colors.text : colors.white),
+                  color: active && palette ? palette.fg : (active ? '#fff' : colors.textSecondary),
+                  border: `1px solid ${active && palette ? palette.border : (active ? colors.text : colors.borderLight)}`,
+                  borderRadius: radius.full, padding: '6px 12px',
+                  fontFamily: fonts.condensed, fontSize: 12, fontWeight: 700,
+                  letterSpacing: 0.4,
+                  cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  transition: 'background 160ms ease, color 160ms ease',
+                }}
+              >
+                <span aria-hidden="true">{chip.icon}</span>
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Status filter chips — second row. Same UX, different axis. */}
+      {visibleRequests.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[
+            { key: 'ALL', label: `All status` },
             ...['pending', 'in-progress', 'revision', 'approved', 'completed'].map(s => ({
               key: s,
-              label: `${STATUS_LABELS[s]} (${requests.filter(r => r.status === s).length})`,
+              label: `${STATUS_LABELS[s]} (${visibleRequests.filter(r => r.status === s).length})`,
             })),
           ].map(chip => {
             const active = statusFilter === chip.key;
@@ -155,9 +243,9 @@ export default function Requests() {
                 style={{
                   background: active ? colors.red : colors.white,
                   color: active ? '#fff' : colors.textSecondary,
-                  border: `1px solid ${active ? colors.red : colors.border}`,
-                  borderRadius: radius.full, padding: '7px 16px',
-                  fontFamily: fonts.condensed, fontSize: 13, fontWeight: 700,
+                  border: `1px solid ${active ? colors.red : colors.borderLight}`,
+                  borderRadius: radius.full, padding: '6px 12px',
+                  fontFamily: fonts.condensed, fontSize: 12, fontWeight: 700,
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}
               >{chip.label}</button>
@@ -166,57 +254,41 @@ export default function Requests() {
         </div>
       )}
 
-      {showNew && (
-        <Card style={{ border: `1px solid ${colors.redBorder}` }}>
-          <SectionHeading>New request</SectionHeading>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 }}>Team</label>
-              <select value={newTeam} onChange={e => setNewTeam(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-                <option value="">Select...</option>
-                {TEAMS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 }}>Type</label>
-              <select value={newTemplate} onChange={e => setNewTemplate(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-                <option value="">Select...</option>
-                {TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, color: colors.textSecondary, fontFamily: fonts.body, fontWeight: 600 }}>Priority</label>
-              <select value={newPriority} onChange={e => setNewPriority(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
-          </div>
-          <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Notes..." style={{ ...inputStyle, minHeight: 60, resize: 'vertical', marginBottom: 12 }} />
-          <RedButton onClick={submit} disabled={!newTeam || !newTemplate}>Submit Request</RedButton>
-        </Card>
-      )}
+      {/* New request modal — replaces the inline form. Single
+          progressive form with type picker at the top so the user
+          sees the whole shape of what they're submitting at a glance. */}
+      <RequestModal
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        onSubmitted={(req) => setRequests(rs => [req, ...rs])}
+        roster={roster}
+      />
 
       {filtered.length === 0 && !showNew && (
         <Card style={{ padding: 36, textAlign: 'center' }}>
           <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.3 }}>☰</div>
           <div style={{ fontFamily: fonts.body, fontSize: 18, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
-            {statusFilter === 'ALL' ? 'No open requests' : `No ${(STATUS_LABELS[statusFilter] || statusFilter).toLowerCase()} requests`}
+            {statusFilter === 'ALL' && typeFilter === 'ALL'
+              ? (isAthlete ? 'No requests yet' : 'No open requests')
+              : `No matching requests`}
           </div>
-          <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14 }}>
-            {statusFilter === 'ALL'
-              ? 'When athletes, owners, or team managers ask for content, their requests land here.'
-              : `Nothing matching that status right now.`}
+          <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14, maxWidth: '50ch', marginInline: 'auto' }}>
+            {statusFilter === 'ALL' && typeFilter === 'ALL'
+              ? (isAthlete
+                  ? 'Submit a request — content you want made, a profile update, a bug, or a feature idea. You\'ll be emailed when it\'s done.'
+                  : 'When athletes, owners, or staff ask for content, profile updates, bug fixes, or new features, their requests land here.')
+              : 'Nothing matches that combo right now.'}
           </div>
-          {statusFilter === 'ALL'
-            ? <OutlineButton onClick={() => setShowNew(true)}>+ New Request</OutlineButton>
-            : <OutlineButton onClick={() => setStatusFilter('ALL')}>Clear filter</OutlineButton>}
+          {statusFilter === 'ALL' && typeFilter === 'ALL'
+            ? <RedButton onClick={() => setShowNew(true)}>+ New request</RedButton>
+            : <OutlineButton onClick={() => { setStatusFilter('ALL'); setTypeFilter('ALL'); }}>Clear filters</OutlineButton>}
         </Card>
       )}
 
       {filtered.map(r => {
         const tp = TEMPLATES.find(t => t.id === r.template);
+        const reqType = getRequestType(r.type || 'content');
+        const priorityMeta = getPriority(r.priority);
         const reqComments = comments.filter(c => c.requestId === r.id);
         const expanded = expandedComments[r.id];
         const isFlashing = flashingId === r.id;
@@ -226,6 +298,20 @@ export default function Requests() {
         const { prose, idea } = extractIdeaFromNote(r.note);
         const detailOpen = !!expandedDetail[r.id];
         const teamMeta = getTeam(r.team);
+        // needBy date relative to today — "5 days" / "tomorrow" / "OVERDUE"
+        const needByLabel = (() => {
+          if (!r.needBy) return null;
+          const target = new Date(r.needBy);
+          if (isNaN(target.getTime())) return null;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+          if (diffDays < 0) return { label: `Overdue by ${Math.abs(diffDays)}d`, color: '#991B1B' };
+          if (diffDays === 0) return { label: 'Due today', color: '#92400E' };
+          if (diffDays === 1) return { label: 'Due tomorrow', color: '#92400E' };
+          if (diffDays <= 7) return { label: `Due in ${diffDays}d`, color: colors.textSecondary };
+          return { label: `Due ${target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, color: colors.textMuted };
+        })();
         // Build a /generate?... URL from the request. If we have the
         // structured idea, use it directly AND stash it for the brief
         // context drawer in Generate. Otherwise fall back to a partial
@@ -250,12 +336,77 @@ export default function Requests() {
               boxShadow: isFlashing ? '0 0 0 4px rgba(220,38,38,0.15)' : undefined,
               transition: 'outline 0.3s ease, box-shadow 0.3s ease',
             }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <PriorityDot p={r.priority} />
-              <TeamChip teamId={r.team} withLogo />
-              <span style={{ fontSize: 16, fontWeight: 700, color: colors.text }}>{tp?.icon} {tp?.name || r.template}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              {/* Type badge — anchored left so the eye reads category
+                  before anything else. Tinted with the type's palette
+                  so similar requests cluster visually. */}
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                background: reqType.palette.bg,
+                color: reqType.palette.fg,
+                border: `1px solid ${reqType.palette.border}`,
+                padding: '3px 9px', borderRadius: radius.sm,
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                letterSpacing: 0.5, textTransform: 'uppercase',
+              }}>
+                <span aria-hidden="true">{reqType.icon}</span>
+                {reqType.label}
+              </span>
+              {/* Priority dot now reads against a critical-aware palette */}
+              <span
+                title={`${priorityMeta.label} priority — ${priorityMeta.description}`}
+                style={{
+                  display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+                  background: priorityMeta.dotColor,
+                }}
+              />
+              {/* Critical priority gets a literal label too — too consequential to encode in just a dot color */}
+              {r.priority === 'critical' && (
+                <span style={{
+                  fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                  letterSpacing: 0.6, color: '#7C2D12',
+                  background: 'rgba(124, 45, 18, 0.10)',
+                  border: '1px solid rgba(124, 45, 18, 0.30)',
+                  padding: '2px 6px', borderRadius: radius.sm,
+                  textTransform: 'uppercase',
+                }}>CRITICAL</span>
+              )}
+              {r.team && r.team !== 'BLW' && <TeamChip teamId={r.team} withLogo />}
+              {r.playerLastName && (
+                <span style={{
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  color: colors.textSecondary, letterSpacing: 0.4,
+                }}>
+                  {r.playerFirstInitial && `${r.playerFirstInitial}.`}{r.playerLastName}
+                </span>
+              )}
               <div style={{ flex: 1 }} />
+              {needByLabel && (
+                <span style={{
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  color: needByLabel.color,
+                  letterSpacing: 0.4,
+                }}>{needByLabel.label}</span>
+              )}
               <StatusBadge status={r.status} />
+            </div>
+
+            {/* Title — second line, headline weight. Falls back to the
+                template name for legacy rows that pre-date the title
+                column (every old row has a template field). */}
+            <div style={{
+              fontSize: 16, fontWeight: 700, color: colors.text,
+              marginBottom: 6,
+              display: 'flex', alignItems: 'baseline', gap: 6,
+              flexWrap: 'wrap',
+            }}>
+              {r.title || (tp?.name ? `${tp?.icon || ''} ${tp.name}` : r.template || 'Untitled')}
+              {tp && r.title && (
+                <span style={{
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  color: colors.textMuted, letterSpacing: 0.4,
+                }}>· {tp.icon} {tp.name}</span>
+              )}
             </div>
 
             {/* Plain-prose summary — no JSON sentinel, no Prefill: line.
@@ -317,25 +468,45 @@ export default function Requests() {
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 20, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: colors.textMuted }}>{r.requester} · {r.date}</span>
+              <span style={{ fontSize: 12, color: colors.textMuted }}>
+                {r.requester} · {r.date}
+                {r.requesterEmail && !isAthlete && <> · <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{r.requesterEmail}</span></>}
+              </span>
               <div style={{ flex: 1 }} />
 
-              {/* Always-visible primary CTA — the Requests page exists
-                  to feed Generate, so the jump back is permanent on
-                  every card. Idea-powered links carry full prefill;
-                  flat fallbacks just pre-select team + template. */}
-              <Link
-                to={generateLink}
-                style={{
-                  background: colors.red, color: '#fff',
-                  border: 'none', borderRadius: radius.sm,
-                  padding: '7px 14px', textDecoration: 'none',
-                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-                  letterSpacing: 0.6, textTransform: 'uppercase',
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                }}
-                title={idea ? 'Open Generate with team, template, and all idea fields pre-filled' : 'Open Generate pre-selected to this team + template'}
-              >Open in Generate →</Link>
+              {/* "Open in Generate" only renders for content requests —
+                  bug / feature / template / integration requests don't
+                  have a meaningful Generate target. Athletes never see
+                  this since the Files / Generate flow is staff-side. */}
+              {(r.type || 'content') === 'content' && !isAthlete && (
+                <Link
+                  to={generateLink}
+                  style={{
+                    background: colors.red, color: '#fff',
+                    border: 'none', borderRadius: radius.sm,
+                    padding: '7px 14px', textDecoration: 'none',
+                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                    letterSpacing: 0.6, textTransform: 'uppercase',
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}
+                  title={idea ? 'Open Generate with team, template, and all idea fields pre-filled' : 'Open Generate pre-selected to this team + template'}
+                >Open in Generate →</Link>
+              )}
+
+              {/* Notify requester — surfaces ONLY when status='completed'
+                  AND we have an email on the row AND the user isn't an
+                  athlete (athletes see only their own requests, no need
+                  to notify themselves). Opens a pre-filled mailto: so
+                  the master can send the "your request is done" email
+                  in one click. notified_at gets stamped when clicked so
+                  duplicate sends are avoided. Real Resend/SendGrid
+                  pipeline lands later. */}
+              {!isAthlete && r.status === 'completed' && r.requesterEmail && (
+                <NotifyButton
+                  request={r}
+                  onMarkNotified={() => setRequests(rs => rs.map(x => x.id === r.id ? { ...x, notifiedAt: new Date().toISOString() } : x))}
+                />
+              )}
 
               <button onClick={() => toggleComments(r.id)} style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
@@ -345,19 +516,22 @@ export default function Requests() {
                 {reqComments.length} comment{reqComments.length !== 1 ? 's' : ''}
               </button>
 
-              {r.status === 'pending' && (
+              {/* Status-flip buttons — staff-only. Athletes see status
+                  updates (via the badge above) but can't drive the
+                  workflow forward themselves. */}
+              {!isAthlete && r.status === 'pending' && (
                 <>
                   <button onClick={() => updateStatus(r.id, 'in-progress')} style={btnStyle('#3B82F6')}>Start</button>
                   <button onClick={() => updateStatus(r.id, 'approved')} style={btnStyle('#22C55E')}>Approve</button>
                 </>
               )}
-              {r.status === 'in-progress' && (
+              {!isAthlete && r.status === 'in-progress' && (
                 <>
                   <button onClick={() => updateStatus(r.id, 'revision')} style={btnStyle('#EF4444')}>Revision</button>
                   <button onClick={() => updateStatus(r.id, 'completed')} style={btnStyle('#22C55E')}>Complete</button>
                 </>
               )}
-              {r.status === 'revision' && (
+              {!isAthlete && r.status === 'revision' && (
                 <button onClick={() => updateStatus(r.id, 'in-progress')} style={btnStyle('#3B82F6')}>Resume</button>
               )}
             </div>
@@ -677,5 +851,50 @@ function RequestDetailPanel({ request, idea, template, team, generateLink }) {
         </span>
       </div>
     </div>
+  );
+}
+
+// ─── Notify requester button ───────────────────────────────────────────────
+// Opens the user's default mail client with a pre-filled "Your request
+// is done" email and stamps `notifiedAt` on the request so a follow-up
+// click reads as "Re-notify" instead of fresh. Resend/SendGrid pipeline
+// can land later; this gets the master admin a one-click path to the
+// requester's inbox today.
+function NotifyButton({ request, onMarkNotified }) {
+  const r = request;
+  const subject = encodeURIComponent(`✅ Your BLW Studio request is done — ${r.title || r.template || 'request'}`);
+  const greeting = r.requester || 'there';
+  const teamLine = r.team && r.team !== 'BLW' ? `\nTeam: ${r.team}` : '';
+  const titleLine = r.title ? `\nWhat: ${r.title}` : '';
+  const body = encodeURIComponent(
+    `Hey ${greeting},\n\n` +
+    `Your request is complete and live in the BLW Studio.\n` +
+    teamLine + titleLine + `\n\n` +
+    `Let me know if anything needs to be tweaked — happy to revise.\n\n` +
+    `— BLW Studio`
+  );
+  const href = `mailto:${r.requesterEmail}?subject=${subject}&body=${body}`;
+  const alreadyNotified = !!r.notifiedAt;
+  return (
+    <a
+      href={href}
+      onClick={() => onMarkNotified?.()}
+      title={alreadyNotified
+        ? `Already notified ${new Date(r.notifiedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} — click to send again`
+        : `Open mail client to email ${r.requesterEmail}`}
+      style={{
+        background: alreadyNotified ? colors.bg : '#22C55E',
+        color: alreadyNotified ? colors.textSecondary : '#fff',
+        border: alreadyNotified ? `1px solid ${colors.border}` : 'none',
+        borderRadius: radius.sm,
+        padding: '7px 14px',
+        textDecoration: 'none',
+        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+        letterSpacing: 0.6, textTransform: 'uppercase',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}
+    >
+      ✉ {alreadyNotified ? 'Re-notify' : 'Notify requester'}
+    </a>
   );
 }

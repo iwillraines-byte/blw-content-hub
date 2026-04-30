@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats } from '../data';
+import { getAllManualPlayers } from '../player-store';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
@@ -65,8 +66,8 @@ export default function ContentStudio() {
   // surface is visible from a cold install — the previous "hide when
   // empty" behavior made the strip disappear on fresh tenants and the
   // user thought we'd dropped the feature. Unposted (master-admin
-  // toggled) entries render greyed out, matching the team-page
-  // carousel semantics — easier to reason about cross-surface.
+  // toggled) entries render greyscale + carry a "DRAFT" tag, mirroring
+  // the team carousel for visual consistency.
   const [recentPosts, setRecentPosts] = useState([]);
   const [recentPostsLoaded, setRecentPostsLoaded] = useState(false);
   useEffect(() => {
@@ -74,6 +75,28 @@ export default function ContentStudio() {
       setRecentPosts(list);
       setRecentPostsLoaded(true);
     });
+  }, []);
+
+  // Athlete voices keyed by "{TEAM}|{LASTNAME}" so the AI can pull a
+  // self-authored vibe / references / fun-facts block for any player
+  // it picks for a content idea. Loaded once on mount; payload is
+  // small (most players have empty voice blocks). Sent to /api/ideas
+  // as `context.athleteVoices`.
+  const [athleteVoices, setAthleteVoices] = useState({});
+  useEffect(() => {
+    getAllManualPlayers().then(list => {
+      const map = {};
+      for (const p of list) {
+        const v = p.athleteVoice || p.athlete_voice;
+        if (!v || typeof v !== 'object') continue;
+        const hasContent = Object.values(v).some(x => x && String(x).trim());
+        if (!hasContent) continue;
+        const key = `${(p.team || '').toUpperCase()}|${(p.lastName || '').toUpperCase()}`;
+        if (key === '|') continue;
+        map[key] = v;
+      }
+      setAthleteVoices(map);
+    }).catch(() => {});
   }, []);
   // Daily usage counter surfaced in the Content Ideas header so the user
   // has a running tally of AI calls today (cost proxy). Re-read whenever
@@ -127,6 +150,11 @@ export default function ContentStudio() {
             batting: batting.slice(0, 60),
             pitching: pitching.slice(0, 60),
             rankings: rankings.slice(0, 60),
+            // Per-player self-authored vibe / references / content prefs.
+            // Keyed by "{TEAM}|{LASTNAME}" so the server can match on
+            // whichever players it samples. Empty object skips the
+            // ATHLETE VOICE block in the prompt entirely.
+            athleteVoices,
           },
           count,
           seedIdea,
