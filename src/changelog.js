@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.14',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Fix canonical names: Drew Baalman, Michael Stiles (player-confirmed)',
+    items: [
+      'Per the master\'s player-self-reported roster: CHI\'s "Drew Balmaan" → "Drew Baalman", MIA\'s "Mike Stiles" → "Michael Stiles". Canonical roster names now match how the players themselves spell them.',
+      'Reverse aliases added: any legacy media or stat row tagged with the old spelling still resolves to the same record. No data lost.',
+      'admin-player-trades.js preset list updated to match (was hardcoded to "Mike Stiles" and "Kyle Vonschleusingen").',
+    ],
+  },
+  {
     version: '4.5.13',
     date: '2026-04-30',
     kind: 'patch',

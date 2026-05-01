@@ -621,7 +621,7 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'CHI', name: 'Justin Hall', num: '99' },
   { team: 'CHI', name: 'Bryson Livingston', num: '74' },
   { team: 'CHI', name: "Ryan O'Rear", num: '03' },
-  { team: 'CHI', name: 'Drew Balmaan', num: '77' },
+  { team: 'CHI', name: 'Drew Baalman', num: '77' },
   { team: 'CHI', name: 'Jeff Lopes', num: '07' },
   { team: 'CHI', name: 'Grant Miller', num: '00' },
   // Dallas Pandas
@@ -660,7 +660,7 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'MIA', name: 'Jeremy Adams', num: '05' },
   { team: 'MIA', name: 'Jackson Albers', num: '04' },
   { team: 'MIA', name: 'Johnny Gunn' },
-  { team: 'MIA', name: 'Mike Stiles', num: '07' },
+  { team: 'MIA', name: 'Michael Stiles', num: '07' },
   { team: 'MIA', name: 'Sean Hornberger', num: '11' },
   // New York Green Apples
   { team: 'NYG', name: 'Will Smithey', num: '08' },
@@ -709,6 +709,14 @@ const NAME_ALIASES_RAW = {
   // MIA's "Johnny Gunn" appears as "John Paul Gunn" in some sources.
   'john paul gunn':   'Johnny Gunn',
   'john gunn':        'Johnny Gunn',
+  // CHI's Drew Baalman: per the player's self-reported spelling. Older
+  // imports / stat rows had "Balmaan" as a typo — alias preserves
+  // matches against any media or generate-log entries tagged that way.
+  'drew balmaan':     'Drew Baalman',
+  // MIA's Michael Stiles: player goes by Michael, not Mike. Some legacy
+  // stat rows + media files use "Mike Stiles" — alias keeps them
+  // resolving to the same canonical record.
+  'mike stiles':      'Michael Stiles',
 };
 
 // Normalize a player name for comparison. Strips:

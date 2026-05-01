@@ -24,11 +24,11 @@ const PRESET_TRADES_2026 = [
   { name: 'Cael Foreman',          team: 'SDO' },
   { name: 'Jeff Lopes',            team: 'CHI' },
   { name: 'Brody Livingston',      team: 'PHI' },
-  { name: 'Mike Stiles',           team: 'MIA' },
+  { name: 'Michael Stiles',        team: 'MIA' },
   { name: 'Caleb Jeter',           team: 'DAL' },
   { name: 'Ben Dulin',             team: 'DAL' },
   { name: 'Jackson Richardson',    team: 'AZS' },
-  { name: 'Kyle Vonschleusingen',  team: 'BOS' },     // canonical spelling
+  { name: 'Kyle VonSchleusingen',  team: 'BOS' },     // canonical spelling
   { name: 'Connor Smith',          team: 'SDO' },
   { name: 'Grant Miller',          team: 'CHI' },
   { name: 'Jimmy Cole',            team: 'PHI' },
