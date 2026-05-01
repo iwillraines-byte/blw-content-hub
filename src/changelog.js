@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.11',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Drive cloud-sync: auto-push for masters with pre-existing local config',
+    items: [
+      'v4.5.10 introduced cloud-sync but the Update button was greyed out when the saved key matched the draft, so masters with a previously-saved key couldn\'t trigger the initial cloud push without first changing the value.',
+      'New: Settings auto-pushes once when the master loads the page, the cloud config is empty, and they have a key in localStorage. Idempotent — never overwrites a non-empty cloud config from another master session.',
+      'Also added a manual "Sync now" button next to Save / Remove so master admins can force a re-push at any time without editing the key.',
+    ],
+  },
+  {
     version: '4.5.10',
     date: '2026-04-30',
     kind: 'minor',

@@ -5,7 +5,8 @@ import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inpu
 import { colors, fonts, radius } from '../theme';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from '../version';
 import ChangelogModal from '../changelog-modal';
-import { getApiKey, setApiKey, clearApiKey, pushDriveToCloud } from '../drive-api';
+import { getApiKey, setApiKey, clearApiKey, pushDriveToCloud, getSavedFolders } from '../drive-api';
+import { authedFetch } from '../authed-fetch';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth } from '../auth';
 import PeopleAdminCard from './PeopleAdmin';
@@ -30,6 +31,38 @@ export default function Settings() {
     setDriveKey(k);
     setDriveKeyDraft(k);
   }, []);
+
+  // v4.5.11: one-time auto-push for master accounts that already had
+  // a key saved locally before cloud-sync existed. Without this, the
+  // Update button stays disabled (draft === saved) so they can't
+  // trigger a manual push, and cloud stays empty for new admins. We
+  // only push when cloud is genuinely empty so we never overwrite a
+  // newer config from another master session.
+  useEffect(() => {
+    if (role !== 'master_admin') return;
+    const localKey = getApiKey();
+    const localFolders = getSavedFolders();
+    if (!localKey && !localFolders.length) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authedFetch('/api/app-settings?key=drive');
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        const cloud = json?.value || null;
+        const cloudEmpty = !cloud
+          || (!cloud.apiKey && (!Array.isArray(cloud.folders) || !cloud.folders.length));
+        if (!cloudEmpty) return;
+        // Cloud is empty + we have local data → push.
+        setCloudSyncStatus('syncing');
+        const result = await pushDriveToCloud();
+        if (cancelled) return;
+        setCloudSyncStatus(result.ok ? 'synced' : 'error');
+        if (result.ok) setTimeout(() => setCloudSyncStatus(null), 3000);
+      } catch { /* silent — UI shows the static cloud-shared chip */ }
+    })();
+    return () => { cancelled = true; };
+  }, [role]);
 
   // v4.5.10: Drive config is cloud-synced for master_admin. Saving
   // pushes the new key (and current folder list) into Supabase via
@@ -177,6 +210,24 @@ export default function Settings() {
           </RedButton>
           {driveKey && (
             <OutlineButton onClick={removeDriveKey}>Remove</OutlineButton>
+          )}
+          {/* v4.5.11: master can force a re-push at any time, even when
+              the draft matches the saved value. Useful after the
+              v4.5.10 migration to push a previously-saved key into
+              the cloud without having to "tweak then untweak" it. */}
+          {isMaster && driveKey && (
+            <OutlineButton
+              onClick={async () => {
+                setCloudSyncStatus('syncing');
+                const result = await pushDriveToCloud();
+                setCloudSyncStatus(result.ok ? 'synced' : 'error');
+                if (result.ok) setTimeout(() => setCloudSyncStatus(null), 3000);
+              }}
+              disabled={cloudSyncStatus === 'syncing'}
+              title="Push current key + folder list to the shared cloud config"
+            >
+              {cloudSyncStatus === 'syncing' ? 'Syncing…' : 'Sync now'}
+            </OutlineButton>
           )}
         </div>
 
