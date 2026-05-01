@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.10',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'Cloud-synced Drive config — every admin inherits master\'s setup',
+    items: [
+      'Drive API key + folder list now cloud-sync via a new app_settings table. Master admin pastes once in Settings → all other admins (including time-boxed ones like adamskay131@gmail.com) auto-pull on sign-in. No more passing the API key through DMs to every new user.',
+      'New /api/app-settings endpoint (GET = any authed user, POST = master_admin only). Backed by a single key/value JSONB row so future shared config (brand kits, league templates, feature flags) can land here without schema changes.',
+      'Settings → Google Drive card now shows a status pip: "☁ CLOUD-SHARED · MASTER WRITES" for master, "↻ SYNCING TO CLOUD" while the push is in flight, "✓ SYNCED · ALL ADMINS" on success. Non-master users see explanatory copy that the config is inherited.',
+      'Folder add/remove/rename in Files page also push to cloud automatically. Saving propagates to every other admin within ~one auth-state-change cycle (next sign-in or page reload).',
+    ],
+  },
+  {
     version: '4.5.9',
     date: '2026-04-30',
     kind: 'minor',

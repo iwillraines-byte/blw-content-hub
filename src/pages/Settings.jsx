@@ -5,7 +5,7 @@ import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inpu
 import { colors, fonts, radius } from '../theme';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from '../version';
 import ChangelogModal from '../changelog-modal';
-import { getApiKey, setApiKey, clearApiKey } from '../drive-api';
+import { getApiKey, setApiKey, clearApiKey, pushDriveToCloud } from '../drive-api';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth } from '../auth';
 import PeopleAdminCard from './PeopleAdmin';
@@ -31,15 +31,37 @@ export default function Settings() {
     setDriveKeyDraft(k);
   }, []);
 
-  const saveDriveKey = () => {
+  // v4.5.10: Drive config is cloud-synced for master_admin. Saving
+  // pushes the new key (and current folder list) into Supabase via
+  // /api/app-settings so every other admin auto-pulls it on sign-in.
+  // Non-master users save to localStorage only — server enforces the
+  // role gate either way.
+  const [cloudSyncStatus, setCloudSyncStatus] = useState(null); // null | 'syncing' | 'synced' | 'error'
+  const saveDriveKey = async () => {
     setApiKey(driveKeyDraft);
     setDriveKey(driveKeyDraft);
+    if (role === 'master_admin') {
+      setCloudSyncStatus('syncing');
+      const result = await pushDriveToCloud();
+      setCloudSyncStatus(result.ok ? 'synced' : 'error');
+      if (result.ok) {
+        // Auto-clear the synced indicator after a few seconds.
+        setTimeout(() => setCloudSyncStatus(null), 3000);
+      }
+    }
   };
 
-  const removeDriveKey = () => {
+  const removeDriveKey = async () => {
     clearApiKey();
     setDriveKey('');
     setDriveKeyDraft('');
+    if (role === 'master_admin') {
+      // Push the empty state to cloud so other admins also lose access.
+      setCloudSyncStatus('syncing');
+      const result = await pushDriveToCloud();
+      setCloudSyncStatus(result.ok ? 'synced' : 'error');
+      if (result.ok) setTimeout(() => setCloudSyncStatus(null), 3000);
+    }
   };
 
   const maskedKey = driveKey
@@ -105,10 +127,38 @@ export default function Settings() {
 
       {/* Google Drive Connection */}
       <Card>
-        <SectionHeading>Google Drive</SectionHeading>
+        <div style={{
+          display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+          gap: 12, flexWrap: 'wrap', marginBottom: 4,
+        }}>
+          <SectionHeading style={{ margin: 0 }}>Google Drive</SectionHeading>
+          {/* v4.5.10: cloud-sync status pip — only visible to master_admin
+              since they're the only ones who can push to the shared
+              config. Other admins read-only inherit it. */}
+          {isMaster && (
+            <span style={{
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+              letterSpacing: 0.5, padding: '3px 9px', borderRadius: 999,
+              background: cloudSyncStatus === 'syncing' ? 'rgba(14,165,233,0.15)'
+                : cloudSyncStatus === 'synced' ? 'rgba(16,185,129,0.15)'
+                : cloudSyncStatus === 'error' ? 'rgba(220,38,38,0.15)'
+                : 'rgba(14,165,233,0.10)',
+              color: cloudSyncStatus === 'syncing' ? '#0369A1'
+                : cloudSyncStatus === 'synced' ? '#065F46'
+                : cloudSyncStatus === 'error' ? '#991B1B'
+                : '#0369A1',
+            }}>
+              {cloudSyncStatus === 'syncing' ? '↻ SYNCING TO CLOUD'
+                : cloudSyncStatus === 'synced' ? '✓ SYNCED · ALL ADMINS'
+                : cloudSyncStatus === 'error' ? '✕ SYNC FAILED'
+                : '☁ CLOUD-SHARED · MASTER WRITES'}
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 12, lineHeight: 1.6 }}>
-          Connect Google Drive to browse and import assets from publicly-shared folders.
-          Your API key is stored locally in your browser. It never leaves this device.
+          {isMaster
+            ? 'Connect Google Drive to browse and import assets. As master admin, your saved key + folder list auto-syncs to every other admin who signs in — they don\'t need to paste anything themselves.'
+            : 'Drive config is set by the master admin and inherited by every signed-in admin. If you don\'t see folders below, ask the master admin to populate this section.'}
         </div>
 
         <Label>Drive API Key</Label>

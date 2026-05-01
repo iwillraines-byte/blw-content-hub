@@ -5,7 +5,7 @@ import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, Team
 import { colors, fonts, radius } from '../theme';
 import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
 import {
-  getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder,
+  getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder, pushDriveToCloud,
   extractFolderId, listFolderFiles, downloadFileAsBlob,
 } from '../drive-api';
 import { heuristicallyTag, isAlreadyTagged } from '../tag-heuristics';
@@ -1138,14 +1138,19 @@ export default function Files() {
     });
     setDriveFolders(updated);
     setFolderUrlInput('');
+    // v4.5.10: master_admin's folder list cloud-syncs to every admin.
+    // Server enforces the role gate; this fires fire-and-forget.
+    pushDriveToCloud().catch(() => { /* non-master will silently 403, fine */ });
   };
 
   const handleDriveRemove = (folderId) => {
     setDriveFolders(removeFolder(folderId));
+    pushDriveToCloud().catch(() => {});
   };
 
   const handleDriveRename = (folderId, newName) => {
     setDriveFolders(renameFolder(folderId, newName));
+    pushDriveToCloud().catch(() => {});
   };
 
   // Import a single Drive file into the local media store

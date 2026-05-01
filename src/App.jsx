@@ -20,6 +20,7 @@ import MyStats from './pages/MyStats';
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
 import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
+import { hydrateDriveFromCloud } from './drive-api';
 import { supabaseConfigured } from './supabase-client';
 import { ToastProvider } from './toast';
 import { QuickSwitcher } from './quick-switcher';
@@ -819,6 +820,9 @@ function AppShell() {
       return;
     }
     refreshFromCloud({ force: true }).catch(err => console.warn('[cloud-reader] post-login hydrate failed', err));
+    // v4.5.10: also pull the cloud-synced Drive config (api key + folder
+    // list) so every admin inherits the master's setup automatically.
+    hydrateDriveFromCloud().catch(err => console.warn('[drive-api] hydrate failed', err));
   }, [user?.id]);
 
   return (

@@ -4,9 +4,18 @@
 //
 // Setup: user creates a Drive API key in Google Cloud Console, pastes it in
 // Settings. Folders must be shared as "Anyone with the link can view".
+//
+// v4.5.10: API key + folder list are now CLOUD-SYNCED via the
+// /api/app-settings endpoint so every admin who signs in inherits the
+// master's Drive config without having to paste credentials themselves.
+// localStorage stays as a cache for offline use; cloud is source of
+// truth. hydrateFromCloud() is called on auth-ready in App.jsx.
+
+import { authedFetch } from './authed-fetch';
 
 const LS_API_KEY = 'blw_drive_api_key';
 const LS_FOLDERS = 'blw_drive_folders';
+const LS_HYDRATED_AT = 'blw_drive_hydrated_at';
 
 // ─── API key persistence ────────────────────────────────────────────────────
 export function getApiKey() {
@@ -22,6 +31,69 @@ export function setApiKey(key) {
 export function clearApiKey() {
   try { localStorage.removeItem(LS_API_KEY); }
   catch {}
+}
+
+// ─── Cloud sync (v4.5.10) ──────────────────────────────────────────────────
+// Pull the master-saved Drive config (key + folders) from Supabase into
+// localStorage. Called once on auth-ready so every admin gets the shared
+// config without manual setup. Silent-no-op when not configured or
+// unauthenticated.
+export async function hydrateDriveFromCloud() {
+  try {
+    const res = await authedFetch('/api/app-settings?key=drive');
+    if (!res.ok) return { hydrated: false, status: res.status };
+    const json = await res.json();
+    const cloudValue = json?.value;
+    if (!cloudValue) return { hydrated: false, reason: 'empty' };
+
+    let updated = false;
+    if (cloudValue.apiKey && cloudValue.apiKey !== getApiKey()) {
+      setApiKey(cloudValue.apiKey);
+      updated = true;
+    }
+    if (Array.isArray(cloudValue.folders)) {
+      const localFolders = getSavedFolders();
+      // Merge cloud folders with local — cloud wins on id collision.
+      const byId = new Map(localFolders.map(f => [f.folderId, f]));
+      for (const f of cloudValue.folders) {
+        if (!f?.folderId) continue;
+        byId.set(f.folderId, f);
+      }
+      const merged = Array.from(byId.values());
+      try {
+        localStorage.setItem(LS_FOLDERS, JSON.stringify(merged));
+      } catch {}
+      if (merged.length !== localFolders.length) updated = true;
+    }
+    try { localStorage.setItem(LS_HYDRATED_AT, String(Date.now())); } catch {}
+    return { hydrated: true, updated };
+  } catch (err) {
+    console.warn('[drive-api] cloud hydrate failed', err?.message);
+    return { hydrated: false, error: err?.message };
+  }
+}
+
+// Push the current key + folder list to Supabase. Master-admin only —
+// the server enforces the role gate, this just fires the request.
+export async function pushDriveToCloud() {
+  try {
+    const value = {
+      apiKey: getApiKey(),
+      folders: getSavedFolders(),
+    };
+    const res = await authedFetch('/api/app-settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'drive', value }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { ok: false, status: res.status, detail: text.slice(0, 200) };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message };
+  }
 }
 
 // ─── Folder URL parsing ─────────────────────────────────────────────────────
