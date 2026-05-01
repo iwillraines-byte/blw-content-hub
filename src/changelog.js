@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.13',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Jersey numbers populated across the canonical roster',
+    items: [
+      'Added explicit jersey numbers to ~60 canonical roster entries across all 10 teams. AZS / BOS / CHI / DAL / LAN / LV / MIA / NYG / PHI / SDO each now carry the master\'s known jerseys. Players without a confirmed number stay un-numbered until the league-wide directory fills in.',
+      'Effect: auto-tag roster chips on the Files page now read "AZS #34 · A.LEDET · ROSTER" instead of "AZS · A.LEDET · ROSTER". One-click tagging populates the right jersey instead of leaving num blank.',
+      'Cosmetic fix: Kyle VonSchleusingen capitalization corrected. Two pending diffs to confirm with master before changing canonical names: Drew Balmaan vs Baalman, Mike Stiles vs Michael Stiles.',
+    ],
+  },
+  {
     version: '4.5.12',
     date: '2026-04-30',
     kind: 'patch',
