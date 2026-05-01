@@ -251,27 +251,51 @@ export const TEMPLATE_TYPES = {
   // for existing requests + bookmarks. Renamed v4.4.2 from "Pitching
   // Leaders" — used now as a single-game player spotlight rather than
   // a season-long leaderboard.
+  // v4.5.18: now player-centric (auto-fills the spotlit player's
+  // jersey + team via the picker) and reshaped from Title/Subtitle to
+  // three Stat Box fields stacked vertically. Text rendered black with
+  // a soft drop-shadow so the boxes pop on light or dark backgrounds.
   'pitching-leaders': {
     name: 'Player of the Game',
     icon: '🏆',
-    description: 'Spotlight a single player coming off a standout game',
-    playerCentric: false,
+    description: 'Spotlight a single player coming off a standout game — three stacked stat boxes',
+    playerCentric: true,
     fields: {
+      // Three centered stat boxes, generous vertical rhythm. Drop shadow
+      // is a single layer (semi-transparent black 6px blur, 2px down)
+      // so black text reads cleanly against any photo without looking
+      // bevelled or 3D.
       feed: [
-        { key: 'title', label: 'Title', x: 540, y: 80, fontSize: 44, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 800 },
-        { key: 'subtitle', label: 'Subtitle', x: 540, y: 130, fontSize: 18, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 600 },
+        { key: 'statBox1', label: 'Stat Box 1', x: 540, y: 380, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox2', label: 'Stat Box 2', x: 540, y: 540, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox3', label: 'Stat Box 3', x: 540, y: 700, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
       portrait: [
-        { key: 'title', label: 'Title', x: 540, y: 100, fontSize: 44, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 800 },
-        { key: 'subtitle', label: 'Subtitle', x: 540, y: 150, fontSize: 18, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 600 },
+        { key: 'statBox1', label: 'Stat Box 1', x: 540, y: 460, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox2', label: 'Stat Box 2', x: 540, y: 660, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox3', label: 'Stat Box 3', x: 540, y: 860, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
       story: [
-        { key: 'title', label: 'Title', x: 540, y: 200, fontSize: 44, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 800 },
-        { key: 'subtitle', label: 'Subtitle', x: 540, y: 250, fontSize: 18, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 600 },
+        { key: 'statBox1', label: 'Stat Box 1', x: 540, y: 720, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox2', label: 'Stat Box 2', x: 540, y: 920, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox3', label: 'Stat Box 3', x: 540, y: 1120, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
       landscape: [
-        { key: 'title', label: 'Title', x: 600, y: 60, fontSize: 36, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 700 },
-        { key: 'subtitle', label: 'Subtitle', x: 600, y: 100, fontSize: 16, font: 'condensed', color: 'rgba(255,255,255,0.6)', align: 'center', maxWidth: 500 },
+        { key: 'statBox1', label: 'Stat Box 1', x: 600, y: 200, fontSize: 80, font: 'heading', color: '#000000', align: 'center', maxWidth: 1000,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox2', label: 'Stat Box 2', x: 600, y: 340, fontSize: 80, font: 'heading', color: '#000000', align: 'center', maxWidth: 1000,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
+        { key: 'statBox3', label: 'Stat Box 3', x: 600, y: 480, fontSize: 80, font: 'heading', color: '#000000', align: 'center', maxWidth: 1000,
+          shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
     },
   },
@@ -316,19 +340,19 @@ export const TEMPLATE_TYPES = {
     fields: {
       feed: [
         { key: 'headline', label: 'Headline (optional)', x: 540, y: 90, fontSize: 56, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900,
-          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+          shadows: [{ color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 }] },
       ],
       portrait: [
         { key: 'headline', label: 'Headline (optional)', x: 540, y: 130, fontSize: 56, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900,
-          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+          shadows: [{ color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 }] },
       ],
       story: [
         { key: 'headline', label: 'Headline (optional)', x: 540, y: 220, fontSize: 56, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900,
-          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+          shadows: [{ color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 }] },
       ],
       landscape: [
         { key: 'headline', label: 'Headline (optional)', x: 600, y: 70, fontSize: 48, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 1000,
-          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+          shadows: [{ color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 }] },
       ],
     },
   },

@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.5.18',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'Player of the Game template + uploaded-overlay tile redesign',
+    items: [
+      'Player of the Game template now player-centric — picking a player from the team auto-fills three Stat Box fields. Replaces the old Title / Subtitle pair.',
+      'Stat Box copy renders BLACK with a soft drop-shadow (rgba(0,0,0,0.45) blur 6 offset 0/2) so the boxes pop legibly on light or dark backgrounds. Field config carries the shadow declaratively, no special-case render code.',
+      'Auto-fill on player select: Box 1 = name + #jersey, Box 2 = stat line (OPS+ / FIP / etc.), Box 3 = team name uppercase. Each box is freely editable.',
+      'Uploaded-overlay tiles in the Studio overlay picker no longer render as ugly dark text-only tiles. Match the preset tile aesthetic: image-as-background thumbnail, top-right team chip, bottom-gradient caption with the formatted name (extension stripped, underscores → spaces).',
+      'Object URLs allocated for uploaded-overlay thumbnails are revoked on cleanup (team change, template change, unmount) so we don\'t leak blob URL handles.',
+    ],
+  },
+  {
     version: '4.5.17',
     date: '2026-04-30',
     kind: 'minor',

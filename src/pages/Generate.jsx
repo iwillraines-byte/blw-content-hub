@@ -709,16 +709,25 @@ export default function Generate() {
         : '';
 
     // Per-template field shape:
-    //   player-stat (Team/Player News) — three free-form lines, populate
-    //     line1=name, line2=stat, line3=#jersey · team
-    //   highlight / hype — legacy keys (playerName/number/teamName/statLine)
-    //     so the existing field positions and AI prefills keep working.
+    //   player-stat (Team/Player News) — three free-form lines.
+    //   pitching-leaders (Player of the Game) — three stat boxes.
+    //   highlight / hype — legacy keys (playerName/number/teamName/statLine).
     let newFields;
     if (customType === 'player-stat') {
       newFields = {
         line1: p.name,
         line2: statLine || (teamObj?.name || p.team),
         line3: mediaJersey ? `#${mediaJersey} · ${teamObj?.name || p.team}` : (teamObj?.name || p.team),
+      };
+    } else if (customType === 'pitching-leaders') {
+      // v4.5.18: Player of the Game — three stacked stat boxes.
+      // Box 1 = name + jersey, Box 2 = the stat line, Box 3 = team
+      // chrome. Pre-fill with sensible defaults; user can edit each
+      // box freely or wipe it and replace with anything.
+      newFields = {
+        statBox1: mediaJersey ? `${p.name} · #${mediaJersey}` : p.name,
+        statBox2: statLine || '',
+        statBox3: (teamObj?.name || p.team || '').toUpperCase(),
       };
     } else {
       newFields = { playerName: p.name, number: mediaJersey, teamName: teamObj?.name || p.team };
@@ -1110,6 +1119,40 @@ export default function Generate() {
     [customType, customPlatform, overridesVersion]
   );
   const filteredOverlays = overlays.filter(o => o.type === customType && (!o.team || o.team === customTeam));
+
+  // v4.5.18: thumbnail URLs for uploaded overlays. Match the preset
+  // tile aesthetic — image-as-background instead of a dark text tile.
+  // useMemo keyed on the overlay ids so we don't reallocate every
+  // re-render; revoke on cleanup so we don't leak object URLs after
+  // the tile unmounts (e.g., when the user changes team / template).
+  const overlayThumbUrls = useMemo(() => {
+    const map = new Map();
+    for (const o of filteredOverlays) {
+      if (o.imageBlob) {
+        try { map.set(o.id, URL.createObjectURL(o.imageBlob)); }
+        catch { /* blob may be revoked or absent — tile falls back to dark */ }
+      }
+    }
+    return map;
+  }, [filteredOverlays.map(o => o.id).join(',')]);
+  useEffect(() => () => {
+    // Revoke every URL we allocated when the map changes or on unmount.
+    for (const url of overlayThumbUrls.values()) {
+      try { URL.revokeObjectURL(url); } catch {}
+    }
+  }, [overlayThumbUrls]);
+
+  // Format an uploaded overlay's display name. Strip the file extension,
+  // turn underscores / dashes into spaces, title-case the result so a
+  // raw filename like "DAL_GAME_DAY_FEED_v1.png" reads as
+  // "DAL Game Day Feed v1" — much friendlier than the raw filename.
+  const formatOverlayName = (rawName) => {
+    if (!rawName) return 'Overlay';
+    return String(rawName)
+      .replace(/\.[^.]+$/, '')          // drop extension
+      .replace(/[_\-]+/g, ' ')          // _ / - → space
+      .replace(/\s+/g, ' ').trim();
+  };
   // Designer-delivered preset overlays (bundled, not uploaded). Matches team
   // + template type. Empty list when the designer hasn't dropped any for
   // this combination — the uploaded-overlay flow remains as fallback.
@@ -1493,24 +1536,59 @@ export default function Generate() {
                           </div>
                         )}
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {filteredOverlays.map(o => (
+                          {filteredOverlays.map(o => {
+                            const thumbUrl = overlayThumbUrls.get(o.id);
+                            const display = formatOverlayName(o.name);
+                            return (
                             <div key={o.id} style={{ position: 'relative' }}>
-                              <div onClick={() => setSelectedOverlayId(o.id === selectedOverlayId ? null : o.id)} style={{
-                                width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
-                                background: '#1A1A22', border: selectedOverlayId === o.id ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: 9, fontFamily: fonts.condensed, color: colors.textMuted, textAlign: 'center', padding: 4,
-                              }}>
-                                {o.name}
+                              <div
+                                onClick={() => setSelectedOverlayId(o.id === selectedOverlayId ? null : o.id)}
+                                title={display}
+                                style={{
+                                  width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
+                                  background: thumbUrl
+                                    ? `#1A1A22 url(${thumbUrl}) center/cover`
+                                    : '#1A1A22',
+                                  border: selectedOverlayId === o.id ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                                  position: 'relative', overflow: 'hidden',
+                                }}
+                              >
+                                {/* Top-right chip — matches the preset tile so
+                                    uploaded overlays read as the same family
+                                    of object, just with a different source. */}
+                                <div style={{
+                                  position: 'absolute', top: 4, right: 4,
+                                  background: o.team ? 'rgba(220,38,38,0.85)' : 'rgba(0,0,0,0.65)',
+                                  color: '#fff',
+                                  borderRadius: 2, padding: '1px 4px',
+                                  fontSize: 7, fontFamily: fonts.condensed, fontWeight: 800, letterSpacing: 0.5,
+                                }}>
+                                  {o.team ? o.team : 'UPLOAD'}
+                                </div>
+                                {/* Bottom name caption with gradient — same
+                                    pattern as the preset tiles. Friendly
+                                    formatted name (no underscores / extension). */}
+                                <div style={{
+                                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                                  background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)',
+                                  padding: '2px 4px',
+                                  borderRadius: `0 0 ${radius.base}px ${radius.base}px`,
+                                  fontSize: 8, color: '#fff', fontFamily: fonts.condensed, fontWeight: 700,
+                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}>
+                                  {display}
+                                </div>
                               </div>
-                              <button onClick={() => handleDeleteOverlay(o.id)} style={{
+                              <button onClick={() => handleDeleteOverlay(o.id)} title={`Delete ${display}`} style={{
                                 position: 'absolute', top: -4, right: -4, width: 16, height: 16,
                                 borderRadius: '50%', background: '#EF4444', color: '#fff',
                                 border: 'none', fontSize: 8, cursor: 'pointer',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                zIndex: 1,
                               }}>✕</button>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </>
                     )}
