@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.9',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'Bulk overlay upload — multi-select or drag-drop, one set of metadata',
+    items: [
+      'The overlay upload modal now accepts MANY PNGs at once. Multi-select on the file picker, or drag a folder onto the dropzone — every file picked becomes its own overlay record, all sharing the template type / platform / team you set in the modal.',
+      'Each bulk-uploaded overlay is named after its filename (so "DAL_Game1.png" → "DAL_Game1"). Single-file upload still has the editable name field — no behavior change for one-at-a-time flows.',
+      'Live progress bar shows "UPLOADING 3 / 12" as each file syncs to the cloud. The first uploaded overlay auto-selects when done so you see an immediate result instead of digging through the picker.',
+    ],
+  },
+  {
     version: '4.5.8',
     date: '2026-04-30',
     kind: 'patch',

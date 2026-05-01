@@ -445,9 +445,15 @@ export default function Generate() {
   const [playerMediaUrls, setPlayerMediaUrls] = useState([]);
   const [selectedPlayer, setSelectedPlayer] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadFile, setUploadFile] = useState(null);
+  // v4.5.9: bulk overlay upload. Single-file flow still works — uploadFiles
+  // is just an array of length 1 in that case. uploadName only applies to
+  // single-file uploads; bulk uploads auto-derive each name from the
+  // filename so the user can drop a folder of "DAL_Game1.png", "DAL_Game2.png"
+  // etc. and get individual records named for each file.
+  const [uploadFiles, setUploadFiles] = useState([]);
   const [uploadPreview, setUploadPreview] = useState(null);
   const [uploadName, setUploadName] = useState('');
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadType, setUploadType] = useState('player-stat');
   const [uploadTeam, setUploadTeam] = useState('');
   const [uploadPlatform, setUploadPlatform] = useState('feed');
@@ -928,29 +934,66 @@ export default function Generate() {
     return () => node.removeEventListener('wheel', onCanvasWheel);
   }, [onCanvasWheel]);
 
-  // Overlay upload
+  // Overlay upload — supports single OR bulk. e.target.files may carry many
+  // PNGs at once (multi-select on the picker, or drag-drop a folder).
   const handleOverlayFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadFile(file);
-    setUploadPreview(URL.createObjectURL(file));
-    if (!uploadName) setUploadName(file.name.replace(/\.[^.]+$/, ''));
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    setUploadFiles(files);
+    // Preview only the first file when multiple are selected — the rest
+    // are listed by name beneath the dropzone so the user can confirm.
+    setUploadPreview(URL.createObjectURL(files[0]));
+    if (files.length === 1 && !uploadName) {
+      setUploadName(files[0].name.replace(/\.[^.]+$/, ''));
+    }
+  };
+
+  // Drag-drop onto the dropzone. Falls through to the same handler so
+  // the file-list logic stays in one place.
+  const handleOverlayDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    setUploadFiles(files);
+    setUploadPreview(URL.createObjectURL(files[0]));
+    if (files.length === 1 && !uploadName) {
+      setUploadName(files[0].name.replace(/\.[^.]+$/, ''));
+    }
   };
 
   const submitOverlay = async () => {
-    if (!uploadFile) return;
-    const record = await saveOverlay({
-      name: uploadName || uploadFile.name,
-      type: uploadType,
-      team: uploadTeam || null,
-      platform: uploadPlatform,
-      imageBlob: uploadFile,
-      width: 0, height: 0,
-    });
-    setOverlays(prev => [...prev, record]);
+    if (!uploadFiles.length) return;
+    const isBulk = uploadFiles.length > 1;
+    setUploadProgress({ current: 0, total: uploadFiles.length });
+    const saved = [];
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const file = uploadFiles[i];
+      // Single-file: use the (possibly-edited) uploadName. Bulk: derive
+      // from the filename so each record has a distinct, sensible label.
+      const name = isBulk
+        ? file.name.replace(/\.[^.]+$/, '')
+        : (uploadName || file.name.replace(/\.[^.]+$/, ''));
+      const record = await saveOverlay({
+        name,
+        type: uploadType,
+        team: uploadTeam || null,
+        platform: uploadPlatform,
+        imageBlob: file,
+        width: 0, height: 0,
+      });
+      saved.push(record);
+      setUploadProgress({ current: i + 1, total: uploadFiles.length });
+    }
+    setOverlays(prev => [...prev, ...saved]);
     setShowUploadModal(false);
-    setUploadFile(null); setUploadPreview(null); setUploadName('');
-    setSelectedOverlayId(record.id);
+    setUploadFiles([]);
+    setUploadPreview(null);
+    setUploadName('');
+    setUploadProgress({ current: 0, total: 0 });
+    // Auto-select the first uploaded overlay so the user sees an
+    // immediate result instead of having to dig through the picker.
+    if (saved[0]) setSelectedOverlayId(saved[0].id);
   };
 
   const handleDeleteOverlay = async (id) => {
@@ -1848,38 +1891,118 @@ export default function Generate() {
         </div>
       </div>
 
-      {/* UPLOAD OVERLAY MODAL */}
-      {showUploadModal && (
+      {/* UPLOAD OVERLAY MODAL — supports single OR bulk. v4.5.9: drop a
+          folder of PNGs onto the dropzone (or multi-select via picker)
+          and they all share the same template type / platform / team
+          metadata. Each file becomes its own overlay record, named
+          after its filename. */}
+      {showUploadModal && (() => {
+        const isBulk = uploadFiles.length > 1;
+        const isUploading = uploadProgress.total > 0;
+        const closeModal = () => {
+          if (isUploading) return; // don't allow close mid-upload
+          setShowUploadModal(false);
+          setUploadFiles([]);
+          setUploadPreview(null);
+          setUploadName('');
+        };
+        return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: colors.white, borderRadius: radius.lg, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <SectionHeading style={{ margin: 0 }}>Upload overlay</SectionHeading>
-              <button onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadPreview(null); }} style={{
-                background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: colors.textMuted,
+              <SectionHeading style={{ margin: 0 }}>
+                Upload overlay{isBulk ? `s · ${uploadFiles.length}` : ''}
+              </SectionHeading>
+              <button onClick={closeModal} disabled={isUploading} style={{
+                background: 'none', border: 'none', fontSize: 20, cursor: isUploading ? 'wait' : 'pointer', color: colors.textMuted,
+                opacity: isUploading ? 0.4 : 1,
               }}>✕</button>
             </div>
 
-            <label style={{ cursor: 'pointer', display: 'block', marginBottom: 16 }}>
-              <input type="file" accept="image/png" onChange={handleOverlayFile} style={{ display: 'none' }} />
+            <label
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={handleOverlayDrop}
+              style={{ cursor: 'pointer', display: 'block', marginBottom: 16 }}
+            >
+              <input type="file" accept="image/png" multiple onChange={handleOverlayFile} style={{ display: 'none' }} />
               <div style={{
                 border: `2px dashed ${colors.border}`, borderRadius: radius.base,
                 padding: uploadPreview ? 0 : 30, textAlign: 'center',
-                background: colors.bg, overflow: 'hidden', height: uploadPreview ? 160 : 'auto',
+                background: colors.bg, overflow: 'hidden',
+                height: uploadPreview ? 160 : 'auto',
+                position: 'relative',
               }}>
                 {uploadPreview ? (
                   <div style={{ width: '100%', height: '100%', background: `url(${uploadPreview}) center/contain no-repeat`, backgroundColor: '#1A1A22' }} />
                 ) : (
-                  <div style={{ fontSize: 12, color: colors.textMuted }}>Click to select a PNG with transparency</div>
+                  <div>
+                    <div style={{ fontSize: 13, color: colors.text, fontWeight: 600 }}>
+                      Drop PNG files here, or click to select
+                    </div>
+                    <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
+                      Multi-select to bulk-add overlays for the same template
+                    </div>
+                  </div>
+                )}
+                {isBulk && (
+                  <div style={{
+                    position: 'absolute', top: 8, right: 8,
+                    background: colors.red, color: '#fff',
+                    padding: '3px 9px', borderRadius: 999,
+                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                    letterSpacing: 0.5,
+                  }}>
+                    +{uploadFiles.length - 1} MORE
+                  </div>
                 )}
               </div>
             </label>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div>
-                <label style={labelStyle}>Overlay Name</label>
-                <input type="text" value={uploadName} onChange={e => setUploadName(e.target.value)}
-                  placeholder="e.g. DAL Game Day Feed v1" style={{ ...inputStyle, marginTop: 3 }} />
+            {isBulk && (
+              <div style={{
+                marginBottom: 12,
+                background: colors.bg, borderRadius: radius.base,
+                padding: '8px 12px',
+                maxHeight: 110, overflow: 'auto',
+              }}>
+                <div style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                  letterSpacing: 0.5, color: colors.textMuted, marginBottom: 4,
+                }}>FILES TO UPLOAD ({uploadFiles.length})</div>
+                {uploadFiles.map((f, i) => (
+                  <div key={`${f.name}-${i}`} style={{
+                    fontSize: 12, color: colors.textSecondary,
+                    fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                    padding: '2px 0',
+                    display: 'flex', justifyContent: 'space-between', gap: 8,
+                  }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {f.name.replace(/\.[^.]+$/, '')}
+                    </span>
+                    <span style={{ color: colors.textMuted, flexShrink: 0 }}>
+                      {(f.size / 1024).toFixed(0)} KB
+                    </span>
+                  </div>
+                ))}
               </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {!isBulk && (
+                <div>
+                  <label style={labelStyle}>Overlay Name</label>
+                  <input type="text" value={uploadName} onChange={e => setUploadName(e.target.value)}
+                    placeholder="e.g. DAL Game Day Feed v1" style={{ ...inputStyle, marginTop: 3 }} />
+                </div>
+              )}
+              {isBulk && (
+                <div style={{
+                  fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed,
+                  letterSpacing: 0.4,
+                }}>
+                  EACH FILE WILL BE NAMED FROM ITS FILENAME · SAME TEMPLATE / PLATFORM / TEAM APPLIED TO ALL
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1 }}>
                   <label style={labelStyle}>Template Type</label>
@@ -1903,13 +2026,36 @@ export default function Generate() {
               </div>
             </div>
 
+            {isUploading && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  letterSpacing: 0.5, color: colors.textSecondary, marginBottom: 4,
+                }}>UPLOADING {uploadProgress.current} / {uploadProgress.total}</div>
+                <div style={{ height: 6, background: colors.bg, borderRadius: 999, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${(uploadProgress.current / uploadProgress.total) * 100}%`,
+                    height: '100%', background: colors.red,
+                    transition: 'width 0.2s',
+                  }} />
+                </div>
+              </div>
+            )}
+
             <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-              <RedButton onClick={submitOverlay} disabled={!uploadFile} style={{ flex: 1 }}>Save Overlay</RedButton>
-              <OutlineButton onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadPreview(null); }}>Cancel</OutlineButton>
+              <RedButton onClick={submitOverlay} disabled={!uploadFiles.length || isUploading} style={{ flex: 1 }}>
+                {isUploading
+                  ? `Uploading… ${uploadProgress.current}/${uploadProgress.total}`
+                  : isBulk
+                    ? `Save ${uploadFiles.length} Overlays`
+                    : 'Save Overlay'}
+              </RedButton>
+              <OutlineButton onClick={closeModal} disabled={isUploading}>Cancel</OutlineButton>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* UPLOAD EFFECT MODAL */}
       {showEffectUpload && (
