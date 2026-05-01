@@ -6,7 +6,7 @@
 // entirely, on the wrong team, etc.
 
 import { useEffect, useState } from 'react';
-import { Card, SectionHeading } from '../components';
+import { Card, CollapsibleCard, SectionHeading } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { CANONICAL_ROSTER_2026, fetchAllData, fetchAllRosters, invalidateLeagueCaches } from '../data';
 
@@ -113,10 +113,22 @@ export default function RosterDiagnosticCard() {
     nameMismatch: rows.filter(r => !r.inBatting && !r.inPitching && !r.inRankings && !r.inRoster && r.looseHits.length > 0).length,
   };
 
+  // v4.5.16: roster diagnostic is now a collapsible dropdown — defaults
+  // closed so the master settings page isn't dominated by a 70-row
+  // table on every visit. Click to expand when actually debugging an
+  // API mismatch.
+  const summary = rows.length
+    ? `${rows.filter(r => !r.exactBat && !r.exactPit && !r.exactRank).length} mismatches across ${rows.length} canonical players`
+    : 'Click to load';
+
   return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <SectionHeading style={{ marginBottom: 0 }}>Roster diagnostic</SectionHeading>
+    <CollapsibleCard
+      title="Roster diagnostic"
+      summary={summary}
+      defaultOpen={false}
+      storageKey="settings.collapse.rosterDiag"
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8 }}>
         <button onClick={() => run({ force: true })} disabled={loading} style={{
           padding: '6px 12px', borderRadius: radius.sm, fontSize: 11, fontWeight: 700,
           letterSpacing: 0.4, fontFamily: fonts.condensed, textTransform: 'uppercase',
@@ -210,7 +222,7 @@ export default function RosterDiagnosticCard() {
           </tbody>
         </table>
       </div>
-    </Card>
+    </CollapsibleCard>
   );
 }
 

@@ -1,13 +1,13 @@
-// Typography picker — lets the user flip the app's full font theme
-// (heading + body + condensed together) from Settings without a page
-// reload. Shown in Settings for everyone; preference is per-browser
-// (localStorage-backed).
+// Typography picker — v4.5.16: simplified to four named buttons.
 //
-// Each tile previews the theme's three faces in context:
-//   • Heading face rendered as a large "JOSH JUNG" sample
-//   • Body face underneath (a "Outlook Modern" descriptor line)
-//   • Condensed face in a small META chip
-// The currently-active theme gets a red outline + "IN USE" pill.
+// Per the master's request, the previous elaborate preview-tile gallery
+// was overkill — every theme had a JOSH JUNG sample, a body sample, a
+// condensed-face sample, and an explanatory description. Reduced to
+// four big plain-text buttons:
+//   BLW Classic · BLW MVP · Punch · Data Pro
+//
+// The active button gets the brand-red outline + "IN USE" pill. Click
+// to apply live. Preference is per-browser (localStorage-backed).
 
 import { useEffect, useState } from 'react';
 import { Card, SectionHeading } from '../components';
@@ -15,24 +15,28 @@ import { colors, fonts, radius } from '../theme';
 import { FONT_OPTIONS, applyFont, getStoredFontId } from '../fonts';
 import { useToast } from '../toast';
 
+// The four IDs the user wants surfaced. Order is intentional —
+// Classic anchors, then the new MVP default, then Punch (display
+// face for hype graphics), then Data Pro (editorial / analytics).
+const FOUR_FONTS = ['blw-classic', 'mvp', 'punch', 'data-pro'];
+
 export default function TypographyCard() {
   const toast = useToast();
   const [activeId, setActiveId] = useState(() => getStoredFontId());
 
-  // Listen for external font changes (e.g. another tab); keeps the chosen
-  // card highlighted even when the change came from somewhere else.
   useEffect(() => {
     const onChange = (e) => setActiveId(e.detail?.id || getStoredFontId());
     window.addEventListener('blw-font-changed', onChange);
     return () => window.removeEventListener('blw-font-changed', onChange);
   }, []);
 
-  // Pre-load every theme's Google Fonts on first render so every preview
-  // tile shows in its real face without waiting for a click. Dedup by
-  // family string — many themes share the same body/condensed face.
+  // Pre-load Google Fonts only for the four surfaced themes — no point
+  // pulling the rest into the head when they're not selectable.
   useEffect(() => {
     const families = new Set();
-    for (const f of FONT_OPTIONS) {
+    for (const id of FOUR_FONTS) {
+      const f = FONT_OPTIONS.find(x => x.id === id);
+      if (!f) continue;
       if (f.heading?.googleFamily)   families.add(f.heading.googleFamily);
       if (f.body?.googleFamily)      families.add(f.body.googleFamily);
       if (f.condensed?.googleFamily) families.add(f.condensed.googleFamily);
@@ -54,6 +58,10 @@ export default function TypographyCard() {
     toast.success(`Font theme: ${f?.name || id}`, { duration: 2500 });
   };
 
+  const visibleFonts = FOUR_FONTS
+    .map(id => FONT_OPTIONS.find(x => x.id === id))
+    .filter(Boolean);
+
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -66,77 +74,42 @@ export default function TypographyCard() {
         </span>
       </div>
 
-      <p style={{ fontSize: 12, color: colors.textSecondary, margin: '2px 0 16px', lineHeight: 1.5 }}>
-        Each theme swaps the entire font system: headings, body text, and condensed labels all at once. Click a tile to apply live.
-      </p>
-
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-        gap: 12,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gap: 8,
+        marginTop: 12,
       }}>
-        {FONT_OPTIONS.map(f => {
+        {visibleFonts.map(f => {
           const active = f.id === activeId;
           return (
             <button
               key={f.id}
               onClick={() => choose(f.id)}
               style={{
-                display: 'flex', flexDirection: 'column', gap: 6,
-                padding: 16, borderRadius: radius.base,
-                border: `1px solid ${active ? colors.red : colors.borderLight}`,
-                background: active ? colors.redLight : colors.white,
-                cursor: 'pointer', textAlign: 'left',
-                boxShadow: active ? `0 0 0 2px ${colors.redBorder}` : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '14px 16px', borderRadius: radius.base,
+                border: `1px solid ${active ? colors.accent : colors.border}`,
+                background: active ? colors.accentSoft : colors.white,
+                cursor: 'pointer', textAlign: 'center',
+                fontFamily: f.heading.stack,
+                fontSize: 14, fontWeight: 700,
+                letterSpacing: 0.5,
+                color: active ? colors.accent : colors.text,
                 transition: 'all 0.12s',
+                boxShadow: active ? `0 0 0 2px ${colors.accentBorder}` : 'none',
               }}
             >
-              {/* Heading face — big display sample */}
-              <div style={{
-                fontFamily: f.heading.stack,
-                fontSize: 30,
-                letterSpacing: `${f.heading.tracking ?? 1}px`,
-                color: colors.text,
-                lineHeight: 0.95,
-                textTransform: 'uppercase',
-              }}>
-                JOSH JUNG
-              </div>
-
-              {/* Body face — descriptor + theme name */}
-              <div style={{
-                fontFamily: f.body.stack,
-                fontSize: 13,
-                color: colors.text,
-                lineHeight: 1.4,
-                marginTop: 2,
-              }}>
-                <span style={{ fontWeight: 700 }}>{f.name}</span>
-                <span style={{ color: colors.textSecondary, marginLeft: 6 }}>
-                  {f.description}
-                </span>
-              </div>
-
-              {/* Condensed face — meta chip row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <span style={{ textTransform: 'uppercase' }}>{f.name}</span>
+              {active && (
                 <span style={{
-                  fontFamily: f.condensed.stack,
-                  fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
-                  color: colors.textMuted, textTransform: 'uppercase',
-                  padding: '3px 8px', borderRadius: radius.full,
-                  background: colors.bg, border: `1px solid ${colors.borderLight}`,
-                }}>
-                  Record · 12-4 · +28 Diff
-                </span>
-                {active && (
-                  <span style={{
-                    fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
-                    letterSpacing: 0.5, textTransform: 'uppercase',
-                    background: colors.red, color: '#fff',
-                    padding: '2px 8px', borderRadius: radius.full,
-                  }}>In use</span>
-                )}
-              </div>
+                  fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                  letterSpacing: 0.5, textTransform: 'uppercase',
+                  background: colors.accent, color: '#fff',
+                  padding: '2px 6px', borderRadius: radius.full,
+                  marginLeft: 4,
+                }}>In use</span>
+              )}
             </button>
           );
         })}

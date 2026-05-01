@@ -8,6 +8,7 @@ import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from './version';
 import ChangelogModal from './changelog-modal';
 import ContentStudio from './pages/ContentStudio';
 import Generate from './pages/Generate';
+import Resources from './pages/Resources';
 import Requests from './pages/Requests';
 import GameCenter from './pages/GameCenter';
 import Files from './pages/Files';
@@ -36,7 +37,13 @@ const MOBILE_BREAKPOINT = 768;
 const navItems = [
   { path: "/my-stats",    label: "My Team",          icon: "★",  roles: ['athlete'] },
   { path: "/dashboard",   label: "Dashboard",        icon: "⚡", roles: ['master_admin', 'admin', 'content'] },
-  { path: "/generate",    label: "Generate",         icon: "✦" },
+  // v4.5.16: "Generate" renamed to "Studio". Path stays /generate so
+  // existing bookmarks, deep-links from Dashboard idea cards, and
+  // request CTAs still resolve. The animated sparkle on hover (see
+  // global-styles.jsx .nav-link:hover .nav-icon-studio) is the visual
+  // tell that this is the creative-focal surface of the app.
+  { path: "/generate",    label: "Studio",           icon: "✦", iconClass: 'nav-icon-studio' },
+  { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content', 'athlete'] },
   { path: "/requests",    label: "Requests",         icon: "☰",  roles: ['master_admin', 'admin', 'content'] },
   { path: "/game-center", label: "ProWiffle Stats",  icon: "▣" },
   { path: "/files",       label: "Files",            icon: "◫",  roles: ['master_admin', 'admin', 'content'] },
@@ -45,7 +52,8 @@ const navItems = [
 
 const pageTitles = {
   '/dashboard': 'Dashboard',
-  '/generate': 'Generate',
+  '/generate': 'Studio',
+  '/resources': 'Resources',
   '/requests': 'Requests',
   '/game-center': 'ProWiffle Stats',
   '/files': 'Files',
@@ -222,7 +230,10 @@ function Sidebar({ isMobile, open, onClose }) {
                   fontFamily: fonts.body, fontSize: 16,
                   fontWeight: active ? 700 : 500,
                 }}>
-                <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: active ? 1 : 0.6 }}>{n.icon}</span>
+                <span
+                  className={n.iconClass || ''}
+                  style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: active ? 1 : 0.6, display: 'inline-block', transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
+                >{n.icon}</span>
                 {n.label}
               </Link>
             );
@@ -900,6 +911,7 @@ function AppShell() {
               </RequireRole>
             } />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/resources" element={<Resources />} />
             <Route path="/teams/:slug" element={<TeamPage />} />
             <Route path="/teams/:slug/players/:lastName" element={<PlayerPage />} />
             {/* Backward-compatible redirects */}

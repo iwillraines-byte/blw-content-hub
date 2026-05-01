@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.5.16',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'High-value polish: Studio rename, Resources page, social handles, Settings cleanup, athlete DM',
+    items: [
+      '"Generate" renamed to "Studio" everywhere — sidebar nav, page header, browser tab. Path stays /generate so existing bookmarks resolve. Sidebar sparkle icon now rotates with a soft accent-tinted glow on hover and the active state.',
+      'New Resources page (/resources) with a clean shell ready for SOPs / training videos / FAQ / brand guidelines / team assets. Each section has anchor jumps, "coming soon" placeholders for items waiting on copy, and an admin-only Operations section. Athletes see everything but Operations.',
+      'Team page: owner replaced with social handle chips (Instagram / X / TikTok). Each chip is a clickable link — empty handles are hidden. Populate via TEAMS[i].socials in src/data.js.',
+      'Player page: "Start of roster" / "End of roster" placeholder pills removed from the prev/next teammate nav. The position chip ("2 / 9") still anchors center.',
+      'Settings: removed "Team colors" card (was purely informational, replaced by per-team brand guidelines under Resources). Removed "Other integrations" card (redundant with primary integration cards). Roster diagnostic now collapses by default — click to expand. Typography simplified to a 4-button row (BLW Classic, BLW MVP, Punch, Data Pro) — no more elaborate JOSH JUNG previews.',
+      'New Settings card for athletes: "Message the admin" — single textarea + Send button. Routes via the existing Requests pipeline as type=\'message\' so it lands in the master admin\'s inbox without polluting the priority / template / type fields.',
+    ],
+  },
+  {
     version: '4.5.15',
     date: '2026-04-30',
     kind: 'minor',

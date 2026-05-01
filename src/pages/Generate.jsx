@@ -1131,7 +1131,7 @@ export default function Generate() {
   return (
     <TeamThemeScope team={customTeamObjForScope}>
     <div>
-      <PageHeader title="GENERATE" subtitle="Create downloadable graphics for any team. Download and schedule via Metricool." />
+      <PageHeader title="STUDIO" subtitle="Create downloadable graphics for any team. Download and schedule via Metricool." />
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {/* CONTROLS */}

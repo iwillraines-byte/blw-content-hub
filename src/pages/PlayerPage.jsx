@@ -1812,12 +1812,7 @@ export default function PlayerPage() {
                   {pillLabel(teammateNav.prev)}
                 </span>
               </Link>
-            ) : (
-              <span style={teammateNavBtnStyle(false)}>
-                <span aria-hidden="true">‹</span>
-                <span>Start of roster</span>
-              </span>
-            )}
+            ) : null /* v4.5.16: dropped "Start of roster" placeholder pill */}
             <span style={{
               fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
               color: colors.textMuted, letterSpacing: 0.4,
@@ -1835,12 +1830,7 @@ export default function PlayerPage() {
                 </span>
                 <span aria-hidden="true">›</span>
               </Link>
-            ) : (
-              <span style={teammateNavBtnStyle(false)}>
-                <span>End of roster</span>
-                <span aria-hidden="true">›</span>
-              </span>
-            )}
+            ) : null /* v4.5.16: dropped "End of roster" placeholder pill */}
           </div>
           );
         })()}

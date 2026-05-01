@@ -565,16 +565,11 @@ export default function TeamPage() {
                     <span>COMPOSITE</span>
                   </span>
                 )}
-                {team.owner && (
-                  <span style={{ fontFamily: fonts.body, fontSize: 12, color: colors.textSecondary }}>
-                    <span style={{
-                      fontFamily: fonts.body, fontSize: 11, fontWeight: 500,
-                      color: colors.textMuted, letterSpacing: 0,
-                      marginRight: 4,
-                    }}>Owner</span>
-                    {team.owner}
-                  </span>
-                )}
+                {/* v4.5.16: owner replaced with social handles. Each
+                    populated handle renders as a clickable chip linking
+                    to the platform; empty handles are hidden. To add
+                    handles, edit TEAMS[i].socials in src/data.js. */}
+                <TeamSocials socials={team.socials} accent={team.color} />
               </div>
             </div>
           </div>
@@ -1076,6 +1071,50 @@ export default function TeamPage() {
 // glows team-tinted gold when over target so the team gets a visible
 // reward for going above the line. Animation is CSS-only (transition
 // on width) so the value can update mid-month without a layout thrash.
+// Team social handle chips. Renders one chip per populated platform
+// (instagram / twitter / tiktok). Each chip is a clickable link
+// opening the platform URL in a new tab. Empty handles are hidden.
+// Returns null when no handles are set so the row collapses cleanly
+// on teams that haven't published their socials yet.
+function TeamSocials({ socials, accent }) {
+  if (!socials) return null;
+  const platforms = [
+    { id: 'instagram', icon: '📷', label: 'Instagram', urlFor: (h) => `https://instagram.com/${h.replace(/^@/, '')}` },
+    { id: 'twitter',   icon: '𝕏',  label: 'X / Twitter', urlFor: (h) => `https://x.com/${h.replace(/^@/, '')}` },
+    { id: 'tiktok',    icon: '♪',  label: 'TikTok', urlFor: (h) => `https://tiktok.com/@${h.replace(/^@/, '')}` },
+  ];
+  const present = platforms.filter(p => socials[p.id] && socials[p.id].trim());
+  if (!present.length) return null;
+  return (
+    <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+      {present.map(p => {
+        const handle = socials[p.id].replace(/^@/, '');
+        return (
+          <a
+            key={p.id}
+            href={p.urlFor(handle)}
+            target="_blank"
+            rel="noreferrer"
+            title={`${p.label}: @${handle}`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontFamily: fonts.body, fontSize: 11, fontWeight: 700,
+              color: accent || colors.text,
+              padding: '3px 10px', borderRadius: 999,
+              background: `${accent || colors.text}10`,
+              border: `1px solid ${accent || colors.text}33`,
+              textDecoration: 'none', whiteSpace: 'nowrap',
+            }}
+          >
+            <span aria-hidden="true">{p.icon}</span>
+            <span>@{handle}</span>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 function MonthlyContentProgress({ team, count }) {
   const TARGET = 12;
   // Clamp the bar's visible width at 100% — anything above target

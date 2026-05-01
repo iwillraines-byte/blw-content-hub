@@ -116,6 +116,17 @@ const css = `
   color: rgba(255, 255, 255, 0.92) !important;
 }
 
+/* v4.5.16: Studio sparkle — the only nav icon that animates. Rotates
+   with a soft glow on hover and the active link, signalling the
+   creative-focal surface of the app. Glow uses the accent token so
+   it picks up the active team color when one's in scope. */
+.nav-link:hover .nav-icon-studio,
+.nav-link.is-active .nav-icon-studio {
+  transform: rotate(180deg) scale(1.08);
+  filter: drop-shadow(0 0 6px var(--accent, rgba(221,60,60,0.6)));
+  opacity: 1 !important;
+}
+
 /* ─── Form inputs and selects ─────────────────────────────────────────── */
 /* Subtle border tint on focus — pulls toward whatever accent is active. */
 input:focus-visible,

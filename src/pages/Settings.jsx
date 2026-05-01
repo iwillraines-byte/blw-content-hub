@@ -9,6 +9,8 @@ import { getApiKey, setApiKey, clearApiKey, pushDriveToCloud, getSavedFolders } 
 import { authedFetch } from '../authed-fetch';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { useAuth } from '../auth';
+import { getRequests, saveRequests } from '../requests-store';
+import { useToast } from '../toast';
 import PeopleAdminCard from './PeopleAdmin';
 import TypographyCard from './TypographyCard';
 import ThemeModeCard from './ThemeModeCard';
@@ -106,6 +108,7 @@ export default function Settings() {
   // simplification — only the master operator handles trades, bio
   // imports, people management, and raw-API debugging).
   const isMaster = role === 'master_admin';
+  const isAthlete = role === 'athlete';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -135,6 +138,12 @@ export default function Settings() {
       {/* Appearance + Typography — personal preferences, visible to everyone */}
       <ThemeModeCard />
       <TypographyCard />
+
+      {/* v4.5.16: Athlete-only DM card. Routes a message to the master
+          admin via the Requests queue (type='message'). Athletes get a
+          clean form with no priority / template noise — just type and
+          send. Admin sees it land in their existing requests inbox. */}
+      {isAthlete && <AthleteMessageCard />}
 
       <Card>
         <SectionHeading>API status</SectionHeading>
@@ -284,47 +293,14 @@ export default function Settings() {
         )}
       </Card>
 
-      <Card>
-        <SectionHeading>Team colors</SectionHeading>
-        {TEAMS.map(t => (
-          <div key={t.id} style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-            background: colors.bg, borderRadius: radius.base, marginBottom: 4,
-            border: `1px solid ${colors.borderLight}`,
-          }}>
-            <span style={{ width: 28, height: 28, borderRadius: 6, background: t.color, border: `1px solid ${colors.border}` }} />
-            <span style={{ width: 28, height: 28, borderRadius: 6, background: t.accent, border: `1px solid ${colors.border}` }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>{t.name}</div>
-              {t.owner && <div style={{ fontSize: 10, color: colors.textMuted }}>Owner: {t.owner}</div>}
-            </div>
-            <code style={{ fontSize: 11, color: colors.text, background: colors.muted, padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>{t.color}</code>
-            <code style={{ fontSize: 11, color: colors.text, background: colors.muted, padding: '3px 8px', borderRadius: 4, fontWeight: 600 }}>{t.accent}</code>
-          </div>
-        ))}
-      </Card>
-
-      <Card>
-        <SectionHeading>Other integrations</SectionHeading>
-        {[
-          { name: 'prowiffleball.com API', desc: 'Player & team stats', status: API_CONFIG.isLive ? 'Connected' : 'Not configured', color: '#DD3C3C' },
-          { name: 'Metricool', desc: 'Social media scheduling & analytics', status: 'Not connected', color: '#6366F1' },
-          { name: 'Slack', desc: 'Team notifications', status: 'Not connected', color: '#E01E5A' },
-        ].map((x, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
-            background: colors.bg, borderRadius: radius.base, marginBottom: 4,
-            border: `1px solid ${colors.borderLight}`,
-          }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: x.status === 'Connected' ? colors.success : colors.border }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>{x.name}</div>
-              <div style={{ fontSize: 11, color: colors.textMuted }}>{x.desc}</div>
-            </div>
-            <span style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 600, color: x.status === 'Connected' ? '#15803D' : colors.textMuted }}>{x.status}</span>
-          </div>
-        ))}
-      </Card>
+      {/* v4.5.16: removed "Team colors" card — replaced by per-team
+          brand guidelines that will live under Resources. The codebase
+          still uses team.color tokens internally; this UI was
+          purely informational. */}
+      {/* v4.5.16: removed "Other integrations" card — all surfaces
+          listed there (prowiffleball API, Metricool, Slack) are
+          covered by their primary cards or are aspirational. The
+          card was redundant. */}
 
       {/* Download history — full list of generated posts (currently across
           everyone, per-user scoping lands in Phase 5). Paginated client-side
@@ -475,6 +451,84 @@ function DownloadHistoryCard() {
           )}
         </>
       )}
+    </Card>
+  );
+}
+
+// Athlete DM-to-admin card. v4.5.16. Athletes get a simple "send a
+// message to the admins" form in Settings — single textarea, send
+// button, no priority / template / type noise. Routes through the
+// existing Requests pipeline as a request with type='message' so the
+// master sees it in their normal inbox.
+function AthleteMessageCard() {
+  const { user, profile } = useAuth();
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const send = async () => {
+    if (!text.trim()) return;
+    setSending(true);
+    try {
+      const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      const message = {
+        id,
+        type: 'message',
+        title: text.split(/\n/)[0].slice(0, 80) || 'Athlete message',
+        team: profile?.team_id || null,
+        template: null,
+        status: 'pending',
+        priority: 'medium',
+        requester: profile?.display_name || user?.email || 'Athlete',
+        requesterEmail: user?.email || null,
+        requesterUserId: user?.id || null,
+        note: text.trim(),
+        createdAt: Date.now(),
+      };
+      const list = getRequests();
+      saveRequests([message, ...list]);
+      setText('');
+      setSent(true);
+      toast.success('Message sent', { detail: 'Master admin sees it in the requests inbox' });
+      setTimeout(() => setSent(false), 4000);
+    } catch (err) {
+      toast.error('Couldn\'t send', { detail: err?.message?.slice(0, 80) });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card>
+      <SectionHeading>Message the admin</SectionHeading>
+      <p style={{ fontSize: 12, color: colors.textSecondary, margin: '2px 0 12px', lineHeight: 1.5, maxWidth: '60ch' }}>
+        Quick line to the BLW Studio team. Use it for anything: a question, a typo
+        you spotted, a content idea, a profile update you'd like made. Lands in
+        the master admin's inbox.
+      </p>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="Type your message…"
+        rows={4}
+        style={{
+          ...inputStyle,
+          width: '100%', boxSizing: 'border-box',
+          minHeight: 90, resize: 'vertical',
+          fontFamily: fonts.body,
+          marginBottom: 8,
+        }}
+        disabled={sending}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <RedButton onClick={send} disabled={!text.trim() || sending}>
+          {sending ? 'Sending…' : sent ? '✓ Sent' : 'Send'}
+        </RedButton>
+        <span style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, letterSpacing: 0.4 }}>
+          {profile?.display_name || user?.email || 'You'} → Master admin
+        </span>
+      </div>
     </Card>
   );
 }
