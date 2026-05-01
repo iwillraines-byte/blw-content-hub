@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.15',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'Round 2: mobile template selector, dark mode contrast, profile-data empty state',
+    items: [
+      'Generate page on mobile: Template Type card now sits at the TOP of the controls column, not buried at the bottom of the right-side preview column. Picking a template is the first decision the user makes, so it should be the first card they see — used to require scrolling past Team / Player / Media / Overlay / Effects / Download to reach it.',
+      'Dark mode contrast pass: bumped lightness on textSecondary (0.74 → 0.88), textMuted (0.55 → 0.74), textOnDarkMuted alpha (0.55 → 0.78), border (0.32 → 0.40), borderLight (0.26 → 0.32), divider (0.22 → 0.28). Also added bright successText / warningText / infoText / dangerText variants for dark mode — they were falling back to dark hex and were invisible on dark status backgrounds.',
+      'Player page: when no CSV-driven vitals exist, the page used to render five rows of em-dashes (HT/WT —, Birthdate —, etc.). Now shows a single "NO PROFILE DATA YET" empty state explaining that the master can populate via Settings → Player bio import. Removes the "is the data broken or is there just no data?" ambiguity.',
+    ],
+  },
+  {
     version: '4.5.14',
     date: '2026-04-30',
     kind: 'patch',

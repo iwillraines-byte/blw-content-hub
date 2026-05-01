@@ -1156,13 +1156,38 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
           </div>
         </div>
 
-        {/* Col 2 — Vital stats */}
+        {/* Col 2 — Vital stats. v4.5.15: when every CSV-driven vital is
+            empty, render a single clear empty-state instead of 5 rows
+            of em-dashes. The em-dash row farm read as "broken UI" —
+            the empty-state reads as "no data yet, here's what to do."
+            League rank still renders so viewers see composite standing
+            even without a manual_players row. */}
         <div style={{ flex: '1 1 200px', minWidth: 200 }}>
-          <VitalRow label="HT/WT" value={htWt} />
-          <VitalRow label="Birthdate" value={birth} />
-          <VitalRow label="Bat/Thr" value={batThrow} />
-          <VitalRow label="Birthplace" value={birthplace} />
-          <VitalRow label="Status" value={statusLabel} dot={statusColor} />
+          {(htWt || birth || batThrow || birthplace) ? (
+            <>
+              <VitalRow label="HT/WT" value={htWt} />
+              <VitalRow label="Birthdate" value={birth} />
+              <VitalRow label="Bat/Thr" value={batThrow} />
+              <VitalRow label="Birthplace" value={birthplace} />
+              <VitalRow label="Status" value={statusLabel} dot={statusColor} />
+            </>
+          ) : (
+            <div style={{
+              padding: '8px 10px', marginBottom: 6,
+              background: colors.bg, borderRadius: radius.base,
+              fontSize: 11, color: colors.textSecondary, lineHeight: 1.5,
+            }}>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                letterSpacing: 0.6, color: colors.textMuted,
+                textTransform: 'uppercase', marginBottom: 3,
+              }}>NO PROFILE DATA YET</div>
+              <div>
+                Vitals (height, weight, bats, birthdate, birthplace) come from the
+                bio CSV import in <strong>Settings → Player bio import</strong>.
+              </div>
+            </div>
+          )}
           {/* League rank — shown prominently in vitals so a viewer
               sees composite standing alongside physical profile.
               Renders arrow + delta when rank changed this week. */}

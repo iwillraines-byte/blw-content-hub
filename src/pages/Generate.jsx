@@ -409,6 +409,20 @@ export default function Generate() {
   const isAthlete = isAthleteRole(role);
   const athleteLockedTeam = isAthlete ? (profileTeamId || '') : '';
 
+  // v4.5.15: mobile detection — drives placement of the Template Type card.
+  // On desktop it lives above the preview (right column) since picking a
+  // template fundamentally changes what the canvas shows. On mobile the
+  // right column drops below the left, so the Template Type card was
+  // buried under Team / Player / Media / Overlay / Effects / Download —
+  // counter-intuitive when it's the first decision the user needs to make.
+  // We render the SAME card in both spots and gate visibility on isMobile.
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
   // Custom-template state (the only mode — Classic was removed).
   // URL params from dashboard Content-Idea deep links pre-fill these on mount.
   const [customType, setCustomType] = useState(() => {
@@ -1080,6 +1094,40 @@ export default function Generate() {
   // owns its own scope keyed off the form's team state.
   const customTeamObjForScope = customTeam ? getTeam(customTeam) : null;
 
+  // v4.5.15: extract Template Type card so the same JSX renders in two
+  // spots — top of left column on mobile, top of right column on
+  // desktop. Memoised so the card doesn't re-render on every parent
+  // re-render (e.g. as customFields changes character-by-character).
+  const templateTypeCard = (
+    <Card>
+      <Label>Template Type</Label>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
+          <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
+            background: customType === key ? colors.accentSoft : colors.white,
+            border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+            color: customType === key ? colors.accent : colors.textSecondary,
+            borderRadius: radius.base, padding: 6, cursor: 'pointer',
+            fontFamily: fonts.body, fontSize: 10, fontWeight: 700, textAlign: 'center',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+          }}>
+            <TemplatePreview
+              templateKey={key}
+              platform={customPlatform}
+              team={customTeam}
+              width={72}
+              height={72}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ fontSize: 12 }}>{t.icon}</span>
+              <span>{t.name}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+
   return (
     <TeamThemeScope team={customTeamObjForScope}>
     <div>
@@ -1088,6 +1136,10 @@ export default function Generate() {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         {/* CONTROLS */}
         <div style={{ flex: '1 1 340px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* v4.5.15: on mobile, Template Type sits at the very top of
+              the controls column so it's the first thing the user sees.
+              On desktop it stays in the preview column (next block). */}
+          {isMobile && templateTypeCard}
           {/* Custom templates — the only mode.
               Form flow (left col): Team → Player → Media → Overlay → Content
               Template Type lives above the preview (right col) because it
@@ -1668,37 +1720,14 @@ export default function Generate() {
           </RedButton>
         </div>
 
-        {/* PREVIEW — Template Type sits above the preview because it dictates
-            what the canvas is actually showing. Effects panel directly below
-            so slider changes are visible without scrolling. */}
+        {/* PREVIEW — Template Type sits above the preview on desktop
+            because it dictates what the canvas is actually showing.
+            On mobile the same card is rendered at the top of the
+            controls column instead so the user sees it before any
+            other input. Effects panel still sits directly below the
+            preview so slider changes are visible without scrolling. */}
         <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Card>
-            <Label>Template Type</Label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
-                <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
-                  background: customType === key ? colors.accentSoft : colors.white,
-                  border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
-                  color: customType === key ? colors.accent : colors.textSecondary,
-                  borderRadius: radius.base, padding: 6, cursor: 'pointer',
-                  fontFamily: fonts.body, fontSize: 10, fontWeight: 700, textAlign: 'center',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                }}>
-                  <TemplatePreview
-                    templateKey={key}
-                    platform={customPlatform}
-                    team={customTeam}
-                    width={72}
-                    height={72}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <span style={{ fontSize: 12 }}>{t.icon}</span>
-                    <span>{t.name}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Card>
+          {!isMobile && templateTypeCard}
           <Label>Live Preview {showLayoutEditor && <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, letterSpacing: 0.5, marginLeft: 6 }}>· DRAG FIELDS TO REPOSITION</span>}</Label>
           <div style={{
             background: '#1A1A22', borderRadius: radius.lg, padding: 16,

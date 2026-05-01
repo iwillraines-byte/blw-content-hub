@@ -85,25 +85,40 @@ const DARK = {
   'muted':            'oklch(0.26 0.012 26.5)',
   'cardHover':        'oklch(0.26 0.012 26.5)',
 
-  'text':             'oklch(0.96 0.005 26.5)',
-  'textSecondary':    'oklch(0.74 0.010 26.5)',
-  'textMuted':        'oklch(0.55 0.012 26.5)',
-  'textOnDark':       'oklch(0.98 0.003 26.5)',
-  'textOnDarkMuted':  'oklch(0.98 0.003 26.5 / 0.55)',
+  // v4.5.15: contrast pass for dark mode. The previous values
+  // (textSecondary 0.74, textMuted 0.55, textOnDarkMuted 0.55 alpha)
+  // were materially dim — secondary copy and labels disappeared into
+  // the navy. Bumped lightness across the muted text scale and border
+  // tokens so on-card body / labels / hints pop without becoming the
+  // same brightness as primary text.
+  'text':             'oklch(0.97 0.005 26.5)',
+  'textSecondary':    'oklch(0.88 0.010 26.5)',         // 0.74 → 0.88
+  'textMuted':        'oklch(0.74 0.012 26.5)',         // 0.55 → 0.74
+  'textOnDark':       'oklch(0.99 0.003 26.5)',
+  'textOnDarkMuted':  'oklch(0.99 0.003 26.5 / 0.78)',   // 0.55α → 0.78α
 
-  'border':           'oklch(0.32 0.012 26.5)',
-  'borderLight':      'oklch(0.26 0.012 26.5)',
-  'divider':          'oklch(0.22 0.010 26.5)',
+  'border':           'oklch(0.40 0.012 26.5)',         // 0.32 → 0.40
+  'borderLight':      'oklch(0.32 0.012 26.5)',         // 0.26 → 0.32
+  'divider':          'oklch(0.28 0.010 26.5)',         // 0.22 → 0.28
 
   'success':          'oklch(0.78 0.18 150)',
   'successBg':        'oklch(0.78 0.18 150 / 0.16)',
   'successBorder':    'oklch(0.78 0.18 150 / 0.36)',
+  // v4.5.15: bright *Text variants for dark mode. The light palette's
+  // dark-on-light values (#065F46 etc.) become invisible against the
+  // dark status backgrounds — these brighter chromatic tones land
+  // legibly inside the *Bg surfaces while still reading as the right
+  // semantic color (forest-green text on green bg, amber on amber, etc).
+  'successText':      'oklch(0.86 0.16 150)',
   'warning':          'oklch(0.82 0.17 70)',
   'warningBg':        'oklch(0.82 0.17 70 / 0.16)',
   'warningBorder':    'oklch(0.82 0.17 70 / 0.36)',
+  'warningText':      'oklch(0.88 0.15 70)',
   'info':             'oklch(0.72 0.17 245)',
   'infoBg':           'oklch(0.72 0.17 245 / 0.16)',
   'infoBorder':       'oklch(0.72 0.17 245 / 0.36)',
+  'infoText':         'oklch(0.84 0.15 245)',
+  'dangerText':       'oklch(0.84 0.18 26.5)',
 };
 
 // Build a CSS string that declares both palettes keyed to the
