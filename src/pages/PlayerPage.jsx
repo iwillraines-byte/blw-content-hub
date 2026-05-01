@@ -41,6 +41,77 @@ function teammateNavBtnStyle(enabled) {
 // per row and the cost is trivial compared to the surrounding work.
 
 // Decimal percentage from the leaders feed comes through as a number in
+// v4.5.20: Photo grid that caps at ~2 rows by default with a "Show
+// all (N)" toggle. Used in the player gallery + the team media grid.
+// Default cap is 10 items (5 cols × 2 rows on a 1080px-ish layout);
+// caller can override via `defaultCap`.
+function ExpandableMediaGrid({ items, defaultCap = 10, renderItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, defaultCap);
+  const hidden = items.length - visible.length;
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+        {visible.map(renderItem)}
+      </div>
+      {hidden > 0 && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          style={{
+            marginTop: 8,
+            background: colors.bg, border: `1px solid ${colors.border}`,
+            color: colors.textSecondary, cursor: 'pointer',
+            borderRadius: radius.sm, padding: '6px 14px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+            letterSpacing: 0.4,
+          }}
+        >Show all {items.length}{hidden > 0 ? ` · +${hidden} more` : ''}</button>
+      )}
+      {expanded && items.length > defaultCap && (
+        <button
+          onClick={() => setExpanded(false)}
+          style={{
+            marginTop: 8,
+            background: 'none', border: `1px solid ${colors.border}`,
+            color: colors.textMuted, cursor: 'pointer',
+            borderRadius: radius.sm, padding: '6px 14px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+            letterSpacing: 0.4,
+          }}
+        >Collapse</button>
+      )}
+    </>
+  );
+}
+
+function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 1, marginBottom: 6 }}>
+        {type} ({items.length})
+      </div>
+      <ExpandableMediaGrid
+        items={items}
+        renderItem={(m) => (
+          <div key={m.id} style={{
+            borderRadius: radius.base, overflow: 'hidden',
+            border: `1px solid ${colors.borderLight}`,
+          }}>
+            <div style={{
+              width: '100%', height: 120,
+              background: mediaUrls[m.id] ? `url(${mediaUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
+            }} />
+            <div style={{
+              padding: 6, fontSize: 10, fontFamily: fonts.condensed,
+              color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{m.name}</div>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
 // 0..100 range (e.g. 14.9). Format as "14.9%" with one decimal.
 function formatPct(value) {
   if (value == null || value === '' || !Number.isFinite(Number(value))) return '—';
@@ -883,13 +954,14 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
       overflow: 'visible',
       position: 'relative',
     }}>
-      {/* Subtle team gradient wash on the left pane. Clipped by its own
-          rounded-corner mask + a small inset so it doesn't paint over the
-          card's border radius now that the parent doesn't clip. */}
+      {/* Subtle team gradient wash. v4.5.20: stretched to full card
+          width with a longer, multi-stop fade so the wash decays
+          smoothly across the entire hero instead of cutting off
+          abruptly at the 240px mark. */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, width: 240, height: '100%',
-        background: `linear-gradient(135deg, ${team.color}18, ${team.color}04 70%, transparent)`,
-        borderRadius: `${radius.lg}px 0 0 ${radius.lg}px`,
+        position: 'absolute', inset: 0,
+        background: `linear-gradient(110deg, ${team.color}22 0%, ${team.color}14 22%, ${team.color}08 45%, ${team.color}03 72%, transparent 100%)`,
+        borderRadius: radius.lg,
         pointerEvents: 'none',
       }} />
       <div style={{
@@ -2108,28 +2180,13 @@ export default function PlayerPage() {
           </div>
         )}
         {media.length > 0 && Object.entries(grouped).map(([type, items]) => (
-          <div key={type} style={{ marginBottom: 14 }}>
-            <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 1, marginBottom: 6 }}>
-              {type} ({items.length})
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-              {items.map(m => (
-                <div key={m.id} style={{
-                  borderRadius: radius.base, overflow: 'hidden',
-                  border: `1px solid ${colors.borderLight}`,
-                }}>
-                  <div style={{
-                    width: '100%', height: 120,
-                    background: mediaUrls[m.id] ? `url(${mediaUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
-                  }} />
-                  <div style={{
-                    padding: 6, fontSize: 10, fontFamily: fonts.condensed,
-                    color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{m.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ExpandablePlayerMediaGroup
+            key={type}
+            type={type}
+            items={items}
+            team={team}
+            mediaUrls={mediaUrls}
+          />
         ))}
       </Card>
     </div>

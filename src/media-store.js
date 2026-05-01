@@ -432,6 +432,7 @@ export function resolvePlayerAvatar(player, allMedia, opts = {}) {
   const LN = String(player.lastName || '').toUpperCase();
   const FI = String(player.firstInitial || (player.firstName || '').charAt(0)).toUpperCase();
   const NUM = String(player.num || '').padStart(2, '0');
+  const TEAM = String(player.team || '').toUpperCase();
   const lastnameUnique = opts.lastnameUnique !== false;
 
   // 1. Admin-picked override — wins everything else.
@@ -450,19 +451,33 @@ export function resolvePlayerAvatar(player, allMedia, opts = {}) {
   const padNum = (n) => String(n || '').padStart(2, '0');
   const matchesFI = (m) => (m.firstInitial || '').toUpperCase() === FI;
   const matchesNum = (m) => NUM && padNum(m.num) === NUM;
+  const matchesTeam = (m) => TEAM && (m.team || '').toUpperCase() === TEAM;
   const isType = (m, t) => (m.assetType || '').toUpperCase() === t;
+
+  // v4.5.20: Cross-team collision fix. Cam Smith (MIA, FI='C') and
+  // Connor Smith (SD, FI='C') share lastname AND first initial — without
+  // a team filter, whoever was uploaded first wins on both player pages.
+  // Strategy: prefer same-team matches at every priority step. Only fall
+  // back to other teams when nothing on the player's current team matches
+  // — that handles traded players whose old photos should still resolve.
+  const sameTeam = lastnameMatches.filter(matchesTeam);
+  const hasSameTeamCandidates = sameTeam.length > 0;
+  // When a same-team candidate exists, restrict the entire resolution
+  // pipeline to it. Otherwise (player traded, or media uploaded under
+  // an old team code), fall back to all-team matches.
+  const pool = hasSameTeamCandidates ? sameTeam : lastnameMatches;
 
   // 2-4. Same FI + jersey number, in priority order.
   if (FI && NUM) {
     for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
-      const hit = lastnameMatches.find(m => matchesFI(m) && matchesNum(m) && isType(m, t));
+      const hit = pool.find(m => matchesFI(m) && matchesNum(m) && isType(m, t));
       if (hit) return hit;
     }
   }
   // 5-7. Same FI alone, in priority order.
   if (FI) {
     for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
-      const hit = lastnameMatches.find(m => matchesFI(m) && isType(m, t));
+      const hit = pool.find(m => matchesFI(m) && isType(m, t));
       if (hit) return hit;
     }
   }
@@ -472,7 +487,7 @@ export function resolvePlayerAvatar(player, allMedia, opts = {}) {
   //    Marshall file (that's how Will ended up with Paul's photo).
   if (lastnameUnique) {
     for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
-      const hit = lastnameMatches.find(m => !m.firstInitial && isType(m, t));
+      const hit = pool.find(m => !m.firstInitial && isType(m, t));
       if (hit) return hit;
     }
   }
@@ -486,13 +501,13 @@ export function resolvePlayerAvatar(player, allMedia, opts = {}) {
   //    with what the API returned, so steps 5–8 all missed.
   if (lastnameUnique) {
     for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
-      const hit = lastnameMatches.find(m => isType(m, t));
+      const hit = pool.find(m => isType(m, t));
       if (hit) return hit;
     }
     // Also accept anything whose normalized assetType isn't on the
     // priority list — better than nothing for legacy uploads where
     // the type was left unset or stamped as 'FILE'.
-    const anyHit = lastnameMatches.find(m => m.blob || m.id);
+    const anyHit = pool.find(m => m.blob || m.id);
     if (anyHit) return anyHit;
   }
   return null;

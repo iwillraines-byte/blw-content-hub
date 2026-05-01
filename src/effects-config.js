@@ -111,19 +111,26 @@ export const BUILT_IN_EFFECTS = [
     },
   },
   {
-    id: 'team-duotone',
-    label: 'Team Duotone',
-    icon: '◑',
-    description: 'Team-colored gradient overlay',
+    // v4.5.20: Replaced 'team-duotone' (multiply blend, looked muddy on
+    // most photos) with a clean bottom-fade in the team's primary
+    // color. Same idea as 'gradient-bottom' but tinted to brand —
+    // designers reach for this every time the next text block needs to
+    // sit on the lower third of a photo. Slider drives final alpha
+    // 0–1; we hard-cap the floor opacity so even at 100% the photo
+    // remains readable behind the fade.
+    id: 'team-gradient',
+    label: 'Team Fade',
+    icon: '▼',
+    description: 'Bottom-up gradient in the team\'s primary color',
     usesTeamColor: true,
     render(ctx, w, h, opacity, teamColor) {
       ctx.save();
       const rgb = hexToRgb(teamColor || '#151C28');
-      const grad = ctx.createLinearGradient(0, 0, w, h);
-      grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity * 0.7})`);
-      grad.addColorStop(1, `rgba(0, 0, 0, ${opacity * 0.3})`);
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+      grad.addColorStop(0.55, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity * 0.55})`);
+      grad.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity * 0.95})`);
       ctx.fillStyle = grad;
-      ctx.globalCompositeOperation = 'multiply';
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
     },

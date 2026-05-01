@@ -333,9 +333,23 @@ export default function Settings() {
               <span style={{ opacity: 0.5 }}>↗</span>
             </button>
           </div>
-          <div>Content management and graphic generation tool for Big League Wiffle Ball.</div>
-          <div style={{ marginTop: 8 }}>Managing content for 9 of 10 BLW teams. Season launch: May 1, 2026.</div>
-          <div style={{ marginTop: 8 }}>Graphics are downloaded and scheduled via <strong>Metricool</strong> for social media publishing.</div>
+          <p style={{ marginTop: 0, marginBottom: 12 }}>
+            The pinnacle of wiffleball meets the pinnacle of media production tools. BLW Studio is a proprietary, fully customized, content generation tool made to propel the league and its athletes to the highest echelon of what this sport has to offer.
+          </p>
+          <p style={{ marginBottom: 12 }}>
+            BLW Studio content can be uploaded, stored, edited, downloaded, and posted more efficiently and easily than any tool on the market. Athletes have the ability to create and upload content to BLW Studio to help grow the league, its media database, and their own platforms.
+          </p>
+          <p style={{ marginBottom: 0 }}>
+            BLW Studio is also powered by a unique AI that's been trained on this league and will continue to improve exponentially over time. BLW Studio's statistics are derived from Grand Slam Systems' public API key and for even better and more insightful stats, visit{' '}
+            <a
+              href="https://prowiffleball.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: colors.red, fontWeight: 700, textDecoration: 'none' }}
+            >
+              prowiffleball.com
+            </a>.
+          </p>
         </div>
       </Card>
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />

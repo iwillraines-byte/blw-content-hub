@@ -18,6 +18,31 @@
 
 export const RELEASES = [
   {
+    version: '4.5.20',
+    date: '2026-05-01',
+    kind: 'minor',
+    summary: 'Demo polish wave: Smith fix, Studio re-layer, team strip, Resources upload',
+    items: [
+      'Cross-team avatar fix — Cam Smith on MIA was claiming Connor Smith\'s profile photo on SD because the avatar resolver had no team filter. Same-team match now wins; cross-team only kicks in when there\'s zero same-team media (handles traded players cleanly).',
+      'AI tag jersey auto-fill — typing team + lastName + first initial now pulls the jersey number from the roster automatically when it uniquely identifies a player.',
+      'Created posts now populate on Dashboard / Team / Player pages — fetchRecentGenerates was using plain fetch() which 401-d silently against the auth-walled cloud-sync endpoint. Switched to authedFetch.',
+      'Roster source universalized — added a canonical-anchor dedup pass so "Eddie \'Nick\' Martinez" / "Andrew Ledet Ledet" / API ghost rows all collapse into one canonical entry per lastname.',
+      'Studio layer reorder — the on-screen order now matches the conceptual stack: Picture + Photo Adjust → Effects → Overlay → Content. Effects render BELOW the overlay so brand chrome stays sharp.',
+      'Replaced Team Duotone effect with a clean Team Fade — bottom-up gradient in the team\'s primary color.',
+      'Team page leaders → full-width strip — the three big leader cards collapse into one card with one row each, percentile chips on the right.',
+      'Hero gradients (player + team) — replaced the abrupt 240/260px wash with an edge-to-edge multi-stop fade.',
+      'Team page social badges — always render IG / FB / TikTok chips; missing handles desaturate with "Not yet connected" tooltip. Master admin gets an inline "✎ EDIT" affordance.',
+      'Stats tables — swapped the Team and Rank columns. Team reads first.',
+      'Photo grids capped at 2 rows by default with "Show all" expand on player + team pages.',
+      'Monthly content target is now editable per team (master admin only).',
+      'Resources page — master admin can add custom links/files to any section inline. Welcome write-ups for athletes + admins anchor the top of the page.',
+      'Search bar — replaced the tiny ⌘K hint chip with a visible "Search players, teams…" affordance.',
+      'Content Ideas — added search + shuffle so the dashboard feels alive without burning AI tokens.',
+      'Mobile dashboard — Queue / Data / Standings cards now fill width when wrapped.',
+      'About footer copy refreshed in Settings.',
+    ],
+  },
+  {
     version: '4.5.19',
     date: '2026-04-30',
     kind: 'patch',
