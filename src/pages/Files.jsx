@@ -430,8 +430,14 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
           // distinct chips (e.g. "DAL #07 · L.ROSE 84%" vs
           // "DAL #14 · C.ROSE 62%"). Falls back to lastname-only when
           // no FI was returned.
+          // v4.5.12: drop the "#??" when num is unknown — reads cleaner
+          // as "MIA · J.Adams" than "MIA #?? · J.Adams". The literal
+          // "??" was distracting and made every chip look like it had
+          // missing data even when the team + name were already useful.
           const fiPrefix = c.firstInitial ? `${c.firstInitial}.` : '';
-          const label = `${c.team || '??'} #${c.num || '??'} · ${fiPrefix}${c.lastName || '???'}`;
+          const teamPart = c.team || '??';
+          const numPart = c.num ? ` #${c.num}` : '';
+          const label = `${teamPart}${numPart} · ${fiPrefix}${c.lastName || '???'}`;
           // Two flavors of chip:
           //   AI-ranked (c.score != null) → score badge + tinted by
           //   confidence; the user reads "the model thinks 84% this

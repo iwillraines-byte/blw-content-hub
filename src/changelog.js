@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.12',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Roster chips: drop "#??" placeholder when jersey is unknown',
+    items: [
+      'Auto-tag "Pick a player" roster chips on the Files page used to read "MIA #?? · J.Adams" when no jersey was on file. The "??" was distracting and made every chip look like it had broken data even when team + name were already useful. Now reads "MIA · J.Adams" — the # part appears only when there\'s a real number.',
+      'Jersey numbers populate automatically from the canonical roster, manual_players records, or the live API stat rows (whichever has them first). To bulk-add jerseys for a team, paste the list in chat and they go into CANONICAL_ROSTER_2026 in src/data.js.',
+    ],
+  },
+  {
     version: '4.5.11',
     date: '2026-04-30',
     kind: 'patch',
