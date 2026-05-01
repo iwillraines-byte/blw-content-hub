@@ -59,7 +59,7 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch { body = {}; }
   }
-  const { idea, platform, leagueContext = '' } = body || {};
+  const { idea, platform, leagueContext = '', athleteVoice = null } = body || {};
   if (!idea || !idea.headline) {
     res.status(400).json({ error: 'idea (with headline) is required' });
     return;
@@ -67,6 +67,23 @@ export default async function handler(req, res) {
   // Master-admin narrative context — same blob /api/ideas uses. Caps to keep
   // this endpoint cheap; rewrites should be quick.
   const trimmedLeagueContext = (leagueContext || '').trim().slice(0, 3000);
+
+  // v4.5.17: Athlete voice — when the idea spotlights a player whose
+  // self-authored "About me" exists, ground the caption in their actual
+  // voice (vibe, references, walk-up music, fun facts, content notes).
+  // Keeps captions on-brand AND personal at the same time. Trim each
+  // field so the prompt stays compact.
+  const athleteVoiceBlock = (() => {
+    if (!athleteVoice || typeof athleteVoice !== 'object') return '';
+    const lines = [];
+    if (athleteVoice.vibe) lines.push(`VIBE: ${String(athleteVoice.vibe).slice(0, 240)}`);
+    if (athleteVoice.references) lines.push(`REFERENCES: ${String(athleteVoice.references).slice(0, 240)}`);
+    if (athleteVoice.walkupMusic) lines.push(`WALK-UP MUSIC: ${String(athleteVoice.walkupMusic).slice(0, 120)}`);
+    if (athleteVoice.funFacts) lines.push(`FUN FACTS: ${String(athleteVoice.funFacts).slice(0, 320)}`);
+    if (athleteVoice.contentPrefs) lines.push(`CONTENT NOTES: ${String(athleteVoice.contentPrefs).slice(0, 240)}`);
+    if (!lines.length) return '';
+    return `\n\nATHLETE VOICE — self-authored notes from this player. Use these to ground tone and vocabulary; they are how the player describes themselves:\n${lines.join('\n')}`;
+  })();
   if (platform && !VALID_PLATFORMS.has(platform)) {
     res.status(400).json({ error: `platform must be one of ${[...VALID_PLATFORMS].join(', ')}` });
     return;
@@ -113,7 +130,7 @@ ${briefs}
 
   const userInstruction = `Write the requested caption${platformsToWrite.length === 1 ? '' : 's'} for this idea:
 
-${ideaSummary}${narrativeBlock}`;
+${ideaSummary}${narrativeBlock}${athleteVoiceBlock}`;
 
   const anthropicBody = {
     model,

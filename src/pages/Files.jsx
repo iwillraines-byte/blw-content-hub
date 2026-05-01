@@ -1906,20 +1906,41 @@ export default function Files() {
             onClose={() => setPreviewFile(null)}
             onPrev={goPrev}
             onNext={goNext}
-            actions={item.thumbUrl ? (
-              <a
-                href={item.thumbUrl}
-                download={item.name}
-                style={{
-                  background: colors.red, color: '#fff',
-                  border: '1px solid rgba(255,255,255,0.4)',
-                  borderRadius: radius.sm, padding: '4px 10px',
-                  fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                  letterSpacing: 0.5, textTransform: 'uppercase',
-                  textDecoration: 'none', whiteSpace: 'nowrap',
-                }}
-              >⬇ Download</a>
-            ) : null}
+            actions={
+              <>
+                {/* v4.5.17: "Download via Studio" — deep-links into Studio's
+                    Blank Slate template with this media id pre-loaded as
+                    the background. Lets the user crop / overlay text /
+                    export at the right platform aspect without having
+                    to find and re-upload the file from scratch. */}
+                <Link
+                  to={`/generate?template=blank-slate&bgMediaId=${encodeURIComponent(item.id)}${item.team ? `&team=${item.team}` : ''}`}
+                  title="Open this photo in Studio with the Blank Slate template"
+                  style={{
+                    background: 'transparent', color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.45)',
+                    borderRadius: radius.sm, padding: '4px 10px',
+                    fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                    letterSpacing: 0.5, textTransform: 'uppercase',
+                    textDecoration: 'none', whiteSpace: 'nowrap',
+                  }}
+                >✦ Download via Studio</Link>
+                {item.thumbUrl && (
+                  <a
+                    href={item.thumbUrl}
+                    download={item.name}
+                    style={{
+                      background: colors.red, color: '#fff',
+                      border: '1px solid rgba(255,255,255,0.4)',
+                      borderRadius: radius.sm, padding: '4px 10px',
+                      fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                      letterSpacing: 0.5, textTransform: 'uppercase',
+                      textDecoration: 'none', whiteSpace: 'nowrap',
+                    }}
+                  >⬇ Download</a>
+                )}
+              </>
+            }
           />
         );
       })()}

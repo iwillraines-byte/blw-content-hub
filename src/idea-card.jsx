@@ -67,6 +67,7 @@ export default function IdeaCard({
   queuedRequestId,   // string | null
   ideasLoading,      // boolean — disables "More like this"
   leagueContext = '', // master-admin notes — forwarded to /api/captions
+  athleteVoice = null, // v4.5.17: self-authored "about me" for the spotlit player
 }) {
   const toast = useToast();
   const team = idea.team && idea.team !== 'BLW' ? getTeam(idea.team) : null;
@@ -116,7 +117,7 @@ export default function IdeaCard({
       const res = await fetch('/api/captions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ idea, leagueContext }),
+        body: JSON.stringify({ idea, leagueContext, athleteVoice }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
@@ -136,7 +137,7 @@ export default function IdeaCard({
       const res = await fetch('/api/captions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ idea, platform, leagueContext }),
+        body: JSON.stringify({ idea, platform, leagueContext, athleteVoice }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);

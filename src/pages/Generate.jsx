@@ -865,6 +865,35 @@ export default function Generate() {
     setBgTransform(DEFAULT_BG_TRANSFORM);
   }, []);
 
+  // v4.5.17: deep-link entry point from Files preview "Download via
+  // Studio" — URL carries ?bgMediaId=<media.id>. Look up the media
+  // record in IndexedDB and load it as the background. Fires once on
+  // mount; clears the param on first apply so a manual change to the
+  // template URL doesn't keep re-applying.
+  const [bgMediaIdParam] = useState(() => searchParams.get('bgMediaId') || '');
+  useEffect(() => {
+    if (!bgMediaIdParam) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const all = await import('../media-store').then(m => m.getAllMedia());
+        if (cancelled) return;
+        const found = all.find(x => x.id === bgMediaIdParam);
+        if (!found?.blob) return;
+        const url = URL.createObjectURL(found.blob);
+        const img = new Image();
+        img.onload = () => {
+          if (cancelled) return;
+          setBgUrl(url);
+          setBgImg(img);
+          setBgTransform(DEFAULT_BG_TRANSFORM);
+        };
+        img.src = url;
+      } catch { /* media-store not ready or media missing — silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [bgMediaIdParam]);
+
   // ── Photo pan/zoom interaction on the preview canvas ──
   // Drag to pan, scroll to zoom. Both edit `bgTransform` in offset/zoom units —
   // the renderer translates back to source pixels via computeBgCrop().

@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.17',
+    date: '2026-04-30',
+    kind: 'minor',
+    summary: 'Athlete voice in captions + Blank Slate template + Download via Studio',
+    items: [
+      'Athlete voice now feeds /api/captions, not just /api/ideas. When the spotlit player has a self-authored About-me block (vibe, references, walk-up music, fun facts, content notes), the caption drafter grounds tone and vocabulary in their own words. Both initial drafts AND per-platform regenerates pass it through.',
+      'New Studio template: Blank Slate. Pure background photo with an optional headline overlay — no badges, no chrome. Designed for the fastest path from raw asset to social-ready export.',
+      'Files page preview lightbox: new "✦ Download via Studio" action on the tagged-file viewer. One click drops you into Studio with the Blank Slate template active and the photo pre-loaded as the background. No more "find the file → re-upload → tag → export" loop when you just want a quick crop or a headline overlay.',
+      'Generate.jsx now reads ?bgMediaId=<id> from the URL and looks up the media record from IndexedDB on mount, populating the canvas before any user input. Pairs with the Files preview deep-link.',
+    ],
+  },
+  {
     version: '4.5.16',
     date: '2026-04-30',
     kind: 'minor',

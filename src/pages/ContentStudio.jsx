@@ -440,19 +440,32 @@ export default function ContentStudio() {
                 prepended (so "More about Jaso" actually shows the new
                 ones, not whatever page you were idling on). */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {ideasPageItems.map(s => (
+              {ideasPageItems.map(s => {
+                // v4.5.17: pass the spotlit player's athleteVoice (if any)
+                // so /api/captions grounds the copy in their actual
+                // self-authored vibe / references / fun facts. Look up
+                // by the idea's team + the playerName's lastName.
+                const playerName = s.prefill?.playerName || s.playerName || '';
+                const lastName = playerName ? playerName.trim().split(/\s+/).pop() : '';
+                const voiceKey = lastName && s.team
+                  ? `${s.team.toUpperCase()}|${lastName.toUpperCase()}`
+                  : null;
+                const athleteVoice = voiceKey ? athleteVoices[voiceKey] || null : null;
+                return (
                 <IdeaCard
                   key={s.id}
                   idea={s}
                   queuedRequestId={queuedIdeas[s.id]}
                   ideasLoading={ideasLoading}
                   leagueContext={leagueCtx.notes || ''}
+                  athleteVoice={athleteVoice}
                   onQueue={queueIdeaAsRequest}
                   onOpenInGenerate={(idea) => navigate(buildLink(idea))}
                   onMoreLikeThis={(idea) => requestIdeas(idea, 3)}
                   onIdeaUpdate={patchIdea}
                 />
-              ))}
+                );
+              })}
             </div>
             <Pager {...ideasPagerProps} />
             {dataLoaded && suggestions.length === 0 && aiIdeas.length === 0 && (

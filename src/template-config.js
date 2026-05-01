@@ -300,6 +300,38 @@ export const TEMPLATE_TYPES = {
       ],
     },
   },
+
+  // v4.5.17: Blank Slate — pure background photo, no overlay, optional
+  // text. Used by the "Download via Studio" path on the Files /
+  // Player / Team pages: clicking a photo's preview action drops the
+  // user into Studio with this template active and the photo
+  // pre-loaded as the background. Designers who just want a clean
+  // export of the source asset (or to add minimal copy on top) avoid
+  // having to go through the full Custom + overlay flow.
+  'blank-slate': {
+    name: 'Blank Slate',
+    icon: '🖼️',
+    description: 'Just the photo — optional headline, no overlays. The fastest path from raw asset to social-ready export.',
+    playerCentric: false,
+    fields: {
+      feed: [
+        { key: 'headline', label: 'Headline (optional)', x: 540, y: 90, fontSize: 56, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900,
+          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+      ],
+      portrait: [
+        { key: 'headline', label: 'Headline (optional)', x: 540, y: 130, fontSize: 56, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900,
+          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+      ],
+      story: [
+        { key: 'headline', label: 'Headline (optional)', x: 540, y: 220, fontSize: 56, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900,
+          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+      ],
+      landscape: [
+        { key: 'headline', label: 'Headline (optional)', x: 600, y: 70, fontSize: 48, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 1000,
+          shadow: { color: 'rgba(0,0,0,0.7)', blur: 18, offsetX: 0, offsetY: 4 } },
+      ],
+    },
+  },
 };
 
 // Font map for canvas rendering. Three canonical slots (heading/body/
