@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.19',
+    date: '2026-04-30',
+    kind: 'patch',
+    summary: 'Player of the Game template: hardcoded scoreboard layout',
+    items: [
+      'Locked the Player of the Game stat-box positions to the master\'s design pass: portrait reference is x=230/539/848, y=1165, fontSize 200, font United Sans Bold. Three boxes laid HORIZONTALLY (same Y, three X) so the eye reads a scoreboard rather than stacked text.',
+      'Other platforms scale from the portrait reference: feed (1080×1080) → y=895, story (1080×1920) → y=1735, landscape (1200×675) → x=256/600/944, y=580, fontSize 160 to fit.',
+      'Auto-fill on player select now populates ONE short value per box (HR / AVG / OPS+ for batters, IP / K4 / W for pitchers) instead of a full multi-stat string. Matches the scoreboard layout where each box should hold a single number, not a sentence.',
+    ],
+  },
+  {
     version: '4.5.18',
     date: '2026-04-30',
     kind: 'minor',

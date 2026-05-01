@@ -258,43 +258,53 @@ export const TEMPLATE_TYPES = {
   'pitching-leaders': {
     name: 'Player of the Game',
     icon: '🏆',
-    description: 'Spotlight a single player coming off a standout game — three stacked stat boxes',
+    description: 'Spotlight a single player coming off a standout game — three stat boxes laid horizontally',
     playerCentric: true,
     fields: {
-      // Three centered stat boxes, generous vertical rhythm. Drop shadow
-      // is a single layer (semi-transparent black 6px blur, 2px down)
-      // so black text reads cleanly against any photo without looking
-      // bevelled or 3D.
+      // v4.5.19: Hardcoded coordinates from the master's design pass.
+      // Three boxes laid HORIZONTALLY (same Y, three X positions —
+      // 230 / 539 / 848 on the 1080-wide canvas) so the eye reads
+      // them like a scoreboard rather than stacked text. United Sans
+      // Bold @ 200pt anchors the layout. Values are locked across
+      // platforms via direct ports of the portrait reference: x is
+      // identical (canvas widths are 1080 except landscape which
+      // scales to 1200), y drops to the bottom band of each canvas.
+      // Per-field shadow stays declarative.
+      //
+      //   portrait (1080×1350) — REFERENCE: x = 230 / 539 / 848, y = 1165
+      //   feed     (1080×1080) — y rebased to 895 (same offset from bottom)
+      //   story    (1080×1920) — y rebased to 1735
+      //   landscape (1200×675) — x scaled +20px, y at 580
       feed: [
-        { key: 'statBox1', label: 'Stat Box 1', x: 540, y: 380, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox1', label: 'Stat Box 1', x: 230, y: 895, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox2', label: 'Stat Box 2', x: 540, y: 540, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox2', label: 'Stat Box 2', x: 539, y: 895, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox3', label: 'Stat Box 3', x: 540, y: 700, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox3', label: 'Stat Box 3', x: 848, y: 895, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
       portrait: [
-        { key: 'statBox1', label: 'Stat Box 1', x: 540, y: 460, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox1', label: 'Stat Box 1', x: 230, y: 1165, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox2', label: 'Stat Box 2', x: 540, y: 660, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox2', label: 'Stat Box 2', x: 539, y: 1165, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox3', label: 'Stat Box 3', x: 540, y: 860, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox3', label: 'Stat Box 3', x: 848, y: 1165, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
       story: [
-        { key: 'statBox1', label: 'Stat Box 1', x: 540, y: 720, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox1', label: 'Stat Box 1', x: 230, y: 1735, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox2', label: 'Stat Box 2', x: 540, y: 920, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox2', label: 'Stat Box 2', x: 539, y: 1735, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox3', label: 'Stat Box 3', x: 540, y: 1120, fontSize: 92, font: 'heading', color: '#000000', align: 'center', maxWidth: 900,
+        { key: 'statBox3', label: 'Stat Box 3', x: 848, y: 1735, fontSize: 200, font: 'united', color: '#000000', align: 'center', maxWidth: 320,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
       landscape: [
-        { key: 'statBox1', label: 'Stat Box 1', x: 600, y: 200, fontSize: 80, font: 'heading', color: '#000000', align: 'center', maxWidth: 1000,
+        { key: 'statBox1', label: 'Stat Box 1', x: 256, y: 580, fontSize: 160, font: 'united', color: '#000000', align: 'center', maxWidth: 360,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox2', label: 'Stat Box 2', x: 600, y: 340, fontSize: 80, font: 'heading', color: '#000000', align: 'center', maxWidth: 1000,
+        { key: 'statBox2', label: 'Stat Box 2', x: 600, y: 580, fontSize: 160, font: 'united', color: '#000000', align: 'center', maxWidth: 360,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
-        { key: 'statBox3', label: 'Stat Box 3', x: 600, y: 480, fontSize: 80, font: 'heading', color: '#000000', align: 'center', maxWidth: 1000,
+        { key: 'statBox3', label: 'Stat Box 3', x: 944, y: 580, fontSize: 160, font: 'united', color: '#000000', align: 'center', maxWidth: 360,
           shadows: [{ color: 'rgba(0,0,0,0.45)', blur: 6, offsetX: 0, offsetY: 2 }] },
       ],
     },

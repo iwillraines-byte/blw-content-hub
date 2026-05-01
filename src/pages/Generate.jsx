@@ -720,15 +720,21 @@ export default function Generate() {
         line3: mediaJersey ? `#${mediaJersey} · ${teamObj?.name || p.team}` : (teamObj?.name || p.team),
       };
     } else if (customType === 'pitching-leaders') {
-      // v4.5.18: Player of the Game — three stacked stat boxes.
-      // Box 1 = name + jersey, Box 2 = the stat line, Box 3 = team
-      // chrome. Pre-fill with sensible defaults; user can edit each
-      // box freely or wipe it and replace with anything.
-      newFields = {
-        statBox1: mediaJersey ? `${p.name} · #${mediaJersey}` : p.name,
-        statBox2: statLine || '',
-        statBox3: (teamObj?.name || p.team || '').toUpperCase(),
-      };
+      // v4.5.18 + v4.5.19: Player of the Game — three boxes laid
+      // horizontally (think scoreboard). Each box holds ONE short
+      // value (a number, an inning count, etc.) so the layout reads
+      // at a glance. Auto-fill picks the three most salient season
+      // numbers as a starting point; the user wipes and replaces
+      // with the actual game performance via the form fields.
+      //   batter  → HR · AVG · OPS+
+      //   pitcher → IP · K/4 · W
+      //   neither → empty (user types the game stats by hand)
+      const box = batter
+        ? { statBox1: String(batter.hr ?? ''), statBox2: String(batter.avg ?? ''), statBox3: String(batter.ops_plus ?? '') }
+        : pitcher
+          ? { statBox1: String(pitcher.ip ?? ''), statBox2: pitcher.k4 != null ? String(pitcher.k4) : '', statBox3: String(pitcher.w ?? '') }
+          : { statBox1: '', statBox2: '', statBox3: '' };
+      newFields = box;
     } else {
       newFields = { playerName: p.name, number: mediaJersey, teamName: teamObj?.name || p.team };
       if (statLine) newFields.statLine = statLine;
