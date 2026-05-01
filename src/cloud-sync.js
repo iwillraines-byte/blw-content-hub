@@ -331,7 +331,12 @@ export const cloud = {
 export async function fetchRecentGenerates(limit = 10) {
   if (!supabaseConfigured) return [];
   try {
-    const res = await fetch(`/api/cloud-sync?kind=generate-log&limit=${limit}`);
+    // v4.5.20: cloud-sync requires an authed JWT. Plain `fetch()` was
+    // 401-ing silently for every dashboard/team/player view, which is
+    // why the recent-posts strips have been empty since the auth wall
+    // landed. authedFetch attaches the bearer token from the active
+    // Supabase session.
+    const res = await authedFetch(`/api/cloud-sync?kind=generate-log&limit=${limit}`);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.records || []).map(r => ({
@@ -376,7 +381,7 @@ export async function fetchTeamMonthlyPostCount(team) {
       fields: 'id,team,created_at',
       limit: '500',
     });
-    const res = await fetch(`/api/cloud-sync?${params.toString()}`);
+    const res = await authedFetch(`/api/cloud-sync?${params.toString()}`);
     if (!res.ok) return 0;
     const data = await res.json();
     return Array.isArray(data.records) ? data.records.length : 0;
@@ -404,7 +409,7 @@ export async function fetchTeamMonthlyPosts(team) {
       since: monthStart,
       limit: '500',
     });
-    const res = await fetch(`/api/cloud-sync?${params.toString()}`);
+    const res = await authedFetch(`/api/cloud-sync?${params.toString()}`);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.records || []).map(r => ({

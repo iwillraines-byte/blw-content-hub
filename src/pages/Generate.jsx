@@ -319,12 +319,15 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
     ctx.fillRect(0, 0, w, h);
   }
 
-  // Layer 2: Overlay template PNG
-  if (overlayImg) {
-    ctx.drawImage(overlayImg, 0, 0, w, h);
-  }
+  // v4.5.20: Layer order is now Photo → Effects → Overlay → Text.
+  // Previously effects rendered ABOVE overlays, which let a vignette /
+  // grain bleed onto branded chrome (logos, scoreboards, lower-thirds)
+  // and made overlays look dirty. Effects are a *photo treatment* and
+  // should never affect the overlay layer.
 
-  // Layer 3: Effects (built-in + uploaded)
+  // Layer 2: Effects (built-in + uploaded) — applied to the photo layer
+  // only. When there's no photo we still render team-gradient because
+  // it composites cleanly against the team-color empty state.
   activeEffects.forEach(effect => {
     if (effect.opacity <= 0) return;
     if (effect.type === 'builtin' && effect.builtin) {
@@ -336,6 +339,12 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
       ctx.restore();
     }
   });
+
+  // Layer 3: Overlay template PNG (sits on top of effects so brand
+  // chrome stays sharp regardless of how heavy the effects stack is).
+  if (overlayImg) {
+    ctx.drawImage(overlayImg, 0, 0, w, h);
+  }
 
   // Layer 4: Dynamic text fields
   //  - Hidden fields (user toggled off) → skip entirely, no placeholder, no output
@@ -1206,6 +1215,106 @@ export default function Generate() {
     </Card>
   );
 
+  // v4.5.20: Effects card extracted so the same JSX can render in the
+  // left column (canonical) on desktop, while still giving us the
+  // option to place it anywhere we need on mobile. The render-order
+  // and on-card layer position now match the conceptual stack:
+  // Photo → Effects → Overlay → Text.
+  const effectsCard = (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <Label style={{ marginBottom: 0 }}>Effects</Label>
+        <button onClick={() => setShowEffectUpload(true)} style={{
+          background: colors.accentSoft, border: `1px solid ${colors.accentBorder}`,
+          color: colors.accent, borderRadius: radius.sm, padding: '3px 10px',
+          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+        }}>+ Upload Effect</button>
+      </div>
+      <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginBottom: 8, fontStyle: 'italic' }}>
+        Photo treatments — apply to the photo only. Overlays + text stay sharp.
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {BUILT_IN_EFFECTS.map(fx => {
+          const active = isEffectActive('builtin', fx.id);
+          return (
+            <button key={fx.id} onClick={() => toggleBuiltInEffect(fx.id)} style={{
+              background: active ? colors.accentSoft : colors.bg,
+              border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+              borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
+              fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
+              color: active ? colors.accent : colors.textSecondary,
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              minWidth: 62,
+            }}>
+              <span style={{ fontSize: 14 }}>{fx.icon}</span>
+              <span style={{ marginTop: 2 }}>{fx.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {uploadedEffects.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {uploadedEffects.map(fx => {
+            const active = isEffectActive('upload', fx.id);
+            return (
+              <div key={fx.id} style={{ position: 'relative' }}>
+                <button onClick={() => toggleUploadedEffect(fx)} style={{
+                  background: active ? colors.accentSoft : colors.bg,
+                  border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                  borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
+                  fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
+                  color: active ? colors.accent : colors.textSecondary,
+                  minWidth: 62, maxWidth: 100,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  ◊ {fx.name}
+                </button>
+                <button onClick={() => handleDeleteEffect(fx.id)} style={{
+                  position: 'absolute', top: -4, right: -4, width: 14, height: 14,
+                  borderRadius: '50%', background: '#EF4444', color: '#fff',
+                  border: 'none', fontSize: 8, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {activeEffects.length > 0 && (
+        <div style={{ marginTop: 6, paddingTop: 10, borderTop: `1px solid ${colors.divider}` }}>
+          {activeEffects.map(fx => {
+            const label = fx.type === 'builtin' ? fx.builtin?.label : fx.name;
+            return (
+              <div key={`${fx.type}-${fx.id}`} style={{ marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                  <span style={{ ...labelStyle, textTransform: 'none', fontWeight: 700 }}>{label}</span>
+                  <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, fontWeight: 700 }}>
+                    {Math.round(fx.opacity * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range" min={0} max={1} step={0.01}
+                  value={fx.opacity}
+                  onChange={e => setEffectOpacity({ type: fx.type, id: fx.id }, parseFloat(e.target.value))}
+                  style={{ width: '100%', accentColor: colors.accent }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {activeEffects.length === 0 && (
+        <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontStyle: 'italic' }}>
+          Click effects above to stack them. Use sliders to control intensity.
+        </div>
+      )}
+    </Card>
+  );
+
   return (
     <TeamThemeScope team={customTeamObjForScope}>
     <div>
@@ -1421,6 +1530,10 @@ export default function Generate() {
               </CollapsibleCard>
                 );
               })()}
+
+              {/* 3.5 Effects — sits between Picture and Overlay so the
+                  on-screen card order mirrors the layer stack. */}
+              {effectsCard}
 
               {/* 4. Overlay Picker — also gated on team. Collapsible like
                   the Media picker; summary surfaces the selected overlay's
@@ -1928,99 +2041,9 @@ export default function Generate() {
             </Card>
           )}
 
-          {/* Effects Layer — lives under the preview so slider changes are visible live */}
-          <Card>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Label style={{ marginBottom: 0 }}>Effects</Label>
-              <button onClick={() => setShowEffectUpload(true)} style={{
-                background: colors.accentSoft, border: `1px solid ${colors.accentBorder}`,
-                color: colors.accent, borderRadius: radius.sm, padding: '3px 10px',
-                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
-              }}>+ Upload Effect</button>
-            </div>
-
-            {/* Built-in effect thumbnails */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-              {BUILT_IN_EFFECTS.map(fx => {
-                const active = isEffectActive('builtin', fx.id);
-                return (
-                  <button key={fx.id} onClick={() => toggleBuiltInEffect(fx.id)} style={{
-                    background: active ? colors.accentSoft : colors.bg,
-                    border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
-                    borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
-                    fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
-                    color: active ? colors.accent : colors.textSecondary,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    minWidth: 62,
-                  }}>
-                    <span style={{ fontSize: 14 }}>{fx.icon}</span>
-                    <span style={{ marginTop: 2 }}>{fx.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Uploaded effect thumbnails */}
-            {uploadedEffects.length > 0 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                {uploadedEffects.map(fx => {
-                  const active = isEffectActive('upload', fx.id);
-                  return (
-                    <div key={fx.id} style={{ position: 'relative' }}>
-                      <button onClick={() => toggleUploadedEffect(fx)} style={{
-                        background: active ? colors.accentSoft : colors.bg,
-                        border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
-                        borderRadius: radius.sm, padding: '6px 8px', cursor: 'pointer',
-                        fontFamily: fonts.body, fontSize: 10, fontWeight: 700,
-                        color: active ? colors.accent : colors.textSecondary,
-                        minWidth: 62, maxWidth: 100,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        ◊ {fx.name}
-                      </button>
-                      <button onClick={() => handleDeleteEffect(fx.id)} style={{
-                        position: 'absolute', top: -4, right: -4, width: 14, height: 14,
-                        borderRadius: '50%', background: '#EF4444', color: '#fff',
-                        border: 'none', fontSize: 8, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>✕</button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Opacity sliders for active effects */}
-            {activeEffects.length > 0 && (
-              <div style={{ marginTop: 6, paddingTop: 10, borderTop: `1px solid ${colors.divider}` }}>
-                {activeEffects.map(fx => {
-                  const label = fx.type === 'builtin' ? fx.builtin?.label : fx.name;
-                  return (
-                    <div key={`${fx.type}-${fx.id}`} style={{ marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                        <span style={{ ...labelStyle, textTransform: 'none', fontWeight: 700 }}>{label}</span>
-                        <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, fontWeight: 700 }}>
-                          {Math.round(fx.opacity * 100)}%
-                        </span>
-                      </div>
-                      <input
-                        type="range" min={0} max={1} step={0.01}
-                        value={fx.opacity}
-                        onChange={e => setEffectOpacity({ type: fx.type, id: fx.id }, parseFloat(e.target.value))}
-                        style={{ width: '100%', accentColor: colors.accent }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {activeEffects.length === 0 && (
-              <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, fontStyle: 'italic' }}>
-                Click effects above to stack them. Use sliders to control intensity.
-              </div>
-            )}
-          </Card>
+          {/* v4.5.20: Effects card moved to the left column between Media
+              and Overlay so the on-screen order matches the conceptual
+              layer stack (Photo → Effects → Overlay → Text). */}
 
           {/* Brief context drawer — only renders when the user landed
               on Generate from a content idea (dashboard, team page,

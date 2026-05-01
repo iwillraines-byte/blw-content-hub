@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats } from '../data';
 import { getAllManualPlayers } from '../player-store';
@@ -279,9 +279,40 @@ export default function ContentStudio() {
   const oldestDays       = oldestPendingDays(requests);
   const topSuggestion    = suggestions[0];
 
-  // Pagination — applied to whichever list is currently displayed
-  // (aiIdeas wins; deterministic suggestions fall through if empty).
-  const ideasList = aiIdeas.length > 0 ? aiIdeas : suggestions;
+  // v4.5.20: Filter + shuffle layer between the raw list and the
+  // pager. The user's complaint was that the static feed felt stale
+  // — search lets you fish for a specific player/topic, shuffle
+  // re-orders existing ideas so a refresh feels alive without
+  // burning AI tokens on a regenerate.
+  const [ideasFilter, setIdeasFilter] = useState('');
+  const [ideasShuffleSeed, setIdeasShuffleSeed] = useState(0);
+  const ideasListBase = aiIdeas.length > 0 ? aiIdeas : suggestions;
+  const ideasList = useMemo(() => {
+    let list = ideasListBase;
+    const q = ideasFilter.trim().toLowerCase();
+    if (q) {
+      list = list.filter(s => {
+        const hay = [
+          s.headline, s.narrative, s.playerName, s.team,
+          s.prefill?.playerName, s.prefill?.statLine, s.prefill?.subtitle,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    if (ideasShuffleSeed > 0) {
+      // Deterministic shuffle keyed off seed so re-renders during a
+      // single shuffle pass don't reshuffle. New shuffle = bump seed.
+      const arr = [...list];
+      let s = ideasShuffleSeed;
+      for (let i = arr.length - 1; i > 0; i--) {
+        s = (s * 9301 + 49297) % 233280;
+        const j = Math.floor((s / 233280) * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      list = arr;
+    }
+    return list;
+  }, [ideasListBase, ideasFilter, ideasShuffleSeed]);
   const { pageItems: ideasPageItems, pagerProps: ideasPagerProps } = useIdeaPagination(ideasList);
 
   return (
@@ -434,6 +465,67 @@ export default function ContentStudio() {
                 </div>}
               </div>
             )}
+            {/* v4.5.20: Search + shuffle row. Search narrows by
+                player/team/headline/narrative; shuffle reorders the
+                visible deck so the same list feels different on each
+                visit. Both clear with a single click. */}
+            {ideasListBase.length > 1 && (
+              <div style={{
+                display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12,
+                flexWrap: 'wrap',
+              }}>
+                <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 200 }}>
+                  <input
+                    type="search"
+                    value={ideasFilter}
+                    onChange={(e) => setIdeasFilter(e.target.value)}
+                    placeholder="Search ideas — player, team, headline…"
+                    style={{
+                      width: '100%', padding: '7px 30px 7px 30px',
+                      border: `1px solid ${colors.border}`, borderRadius: radius.sm,
+                      background: colors.white, color: colors.text,
+                      fontFamily: fonts.body, fontSize: 12,
+                      outline: 'none',
+                    }}
+                  />
+                  <span style={{
+                    position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                    color: colors.textMuted, fontSize: 13, pointerEvents: 'none',
+                  }}>⌕</span>
+                  {ideasFilter && (
+                    <button
+                      onClick={() => setIdeasFilter('')}
+                      title="Clear search"
+                      style={{
+                        position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: colors.textMuted, fontSize: 14, padding: '4px 8px',
+                      }}
+                    >✕</button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setIdeasShuffleSeed(s => (s + 1) || 1)}
+                  title="Reorder the visible cards"
+                  style={{
+                    background: ideasShuffleSeed ? colors.accentSoft : colors.bg,
+                    border: `1px solid ${ideasShuffleSeed ? colors.accentBorder : colors.border}`,
+                    color: ideasShuffleSeed ? colors.accent : colors.textSecondary,
+                    borderRadius: radius.sm, padding: '7px 12px',
+                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+                    cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >⤬ SHUFFLE</button>
+                {(ideasFilter || ideasShuffleSeed > 0) && (
+                  <span style={{
+                    fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, fontWeight: 700, letterSpacing: 0.5,
+                  }}>
+                    {ideasList.length} of {ideasListBase.length}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Paginated view — shows IDEAS_PAGE_SIZE cards at a time with
                 ‹ / › arrows when the rolling 14-day store has more. The
                 pager hook auto-resets to page 1 when fresh ideas are
@@ -501,8 +593,15 @@ export default function ContentStudio() {
           </Card>
         </div>
 
-        {/* RIGHT — Queue + Standings */}
-        <div style={{ flex: '0 1 340px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* RIGHT — Queue + Standings.
+            v4.5.20: flex changed from `0 1 340px` to `1 1 340px` — the
+            old basis kept the column locked at 340px on mobile, so
+            the cards looked stranded on the left half of the screen
+            with empty space pushing them right. Letting it grow fills
+            the wrapped row edge-to-edge while keeping the desktop
+            two-column layout (the left column's `1 1 500px` still
+            wins the available real estate). */}
+        <div style={{ flex: '1 1 340px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Request Queue */}
           <Card>
             <SectionHeading>Request queue</SectionHeading>

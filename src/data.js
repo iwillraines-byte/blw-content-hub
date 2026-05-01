@@ -29,16 +29,16 @@ export const TEAMS = [
   // handle slot (paste the handle without the @, the UI prepends).
   // Empty strings hide the chip; populate any subset you have. Owner
   // strings preserved here in case any future report wants them.
-  { id:"LAN", apiAbbr:"LA", apiTeamId:45, slug:"la-naturals", name:"Los Angeles Naturals", city:"Los Angeles", color:"#0972CE", accent:"#C1CFD4", dark:"#054A8A", record:"17-1", rank:1, owner:"Kevin Costner", pct:".944", diff:"+49", logo:"/team-logos/la-naturals.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"AZS", apiAbbr:"AZ", apiTeamId:42, slug:"az-saguaros", name:"Arizona Saguaros", city:"Arizona", color:"#163E35", accent:"#6AA338", dark:"#0D2820", record:"11-5", rank:2, owner:"", pct:".688", diff:"+44", logo:"/team-logos/az-saguaros.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"LV",  apiAbbr:"LV", apiTeamId:49, slug:"lv-scorpions", name:"Las Vegas Scorpions", city:"Las Vegas", color:"#1A1A1A", accent:"#A3ABB1", dark:"#0D0D0D", record:"7-4", rank:3, owner:"Marc Lasry", pct:".636", diff:"+11", logo:"/team-logos/lv-scorpions.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"NYG", apiAbbr:"NY", apiTeamId:43, slug:"ny-greenapples", name:"New York Green Apples", city:"New York", color:"#538D41", accent:"#F5B8C5", dark:"#3A6A2D", record:"7-5", rank:4, owner:"Gary Vaynerchuk", pct:".583", diff:"-4", logo:"/team-logos/ny-greenapples.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"DAL", apiAbbr:"DAL", apiTeamId:44, slug:"dal-pandas", name:"Dallas Pandas", city:"Dallas", color:"#1A1A1A", accent:"#A37812", dark:"#0D0D0D", record:"6-6", rank:5, owner:"Dude Perfect", pct:".500", diff:"0", logo:"/team-logos/dal-pandas.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"BOS", apiAbbr:"BOS", apiTeamId:48, slug:"bos-harborhawks", name:"Boston Harbor Hawks", city:"Boston", color:"#06205B", accent:"#F9F2D8", dark:"#041640", record:"5-6", rank:6, owner:"", pct:".455", diff:"-4", logo:"/team-logos/bos-harborhawks.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"PHI", apiAbbr:"PHI", apiTeamId:47, slug:"phi-wiffleclub", name:"Philadelphia Wiffle Club", city:"Philadelphia", color:"#0D223F", accent:"#A8B8C8", dark:"#08162A", record:"4-5", rank:7, owner:"David Adelman", pct:".444", diff:"+16", logo:"/team-logos/phi-wiffleclub.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"CHI", apiAbbr:"CHI", apiTeamId:50, slug:"chi-bats", name:"Chicago Bats", city:"Chicago", color:"#EC1C2C", accent:"#FFFFFF", dark:"#B5151F", record:"4-6", rank:8, owner:"", pct:".400", diff:"-7", logo:"/team-logos/chi-bats.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"MIA", apiAbbr:"MIA", apiTeamId:51, slug:"mia-mirage", name:"Miami Mirage", city:"Miami", color:"#144734", accent:"#7EC6BB", dark:"#0D3024", record:"4-6", rank:9, owner:"", pct:".400", diff:"-1", logo:"/team-logos/mia-mirage.png", socials: { instagram: '', twitter: '', tiktok: '' } },
-  { id:"SDO", apiAbbr:"SD", apiTeamId:46, slug:"sd-orcas", name:"San Diego Orcas", city:"San Diego", color:"#0B3146", accent:"#4BCED8", dark:"#072230", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/sd-orcas.png", socials: { instagram: '', twitter: '', tiktok: '' } },
+  { id:"LAN", apiAbbr:"LA", apiTeamId:45, slug:"la-naturals", name:"Los Angeles Naturals", city:"Los Angeles", color:"#0972CE", accent:"#C1CFD4", dark:"#054A8A", record:"17-1", rank:1, owner:"Kevin Costner", pct:".944", diff:"+49", logo:"/team-logos/la-naturals.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"AZS", apiAbbr:"AZ", apiTeamId:42, slug:"az-saguaros", name:"Arizona Saguaros", city:"Arizona", color:"#163E35", accent:"#6AA338", dark:"#0D2820", record:"11-5", rank:2, owner:"", pct:".688", diff:"+44", logo:"/team-logos/az-saguaros.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"LV",  apiAbbr:"LV", apiTeamId:49, slug:"lv-scorpions", name:"Las Vegas Scorpions", city:"Las Vegas", color:"#1A1A1A", accent:"#A3ABB1", dark:"#0D0D0D", record:"7-4", rank:3, owner:"Marc Lasry", pct:".636", diff:"+11", logo:"/team-logos/lv-scorpions.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"NYG", apiAbbr:"NY", apiTeamId:43, slug:"ny-greenapples", name:"New York Green Apples", city:"New York", color:"#538D41", accent:"#F5B8C5", dark:"#3A6A2D", record:"7-5", rank:4, owner:"Gary Vaynerchuk", pct:".583", diff:"-4", logo:"/team-logos/ny-greenapples.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"DAL", apiAbbr:"DAL", apiTeamId:44, slug:"dal-pandas", name:"Dallas Pandas", city:"Dallas", color:"#1A1A1A", accent:"#A37812", dark:"#0D0D0D", record:"6-6", rank:5, owner:"Dude Perfect", pct:".500", diff:"0", logo:"/team-logos/dal-pandas.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"BOS", apiAbbr:"BOS", apiTeamId:48, slug:"bos-harborhawks", name:"Boston Harbor Hawks", city:"Boston", color:"#06205B", accent:"#F9F2D8", dark:"#041640", record:"5-6", rank:6, owner:"", pct:".455", diff:"-4", logo:"/team-logos/bos-harborhawks.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"PHI", apiAbbr:"PHI", apiTeamId:47, slug:"phi-wiffleclub", name:"Philadelphia Wiffle Club", city:"Philadelphia", color:"#0D223F", accent:"#A8B8C8", dark:"#08162A", record:"4-5", rank:7, owner:"David Adelman", pct:".444", diff:"+16", logo:"/team-logos/phi-wiffleclub.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"CHI", apiAbbr:"CHI", apiTeamId:50, slug:"chi-bats", name:"Chicago Bats", city:"Chicago", color:"#EC1C2C", accent:"#FFFFFF", dark:"#B5151F", record:"4-6", rank:8, owner:"", pct:".400", diff:"-7", logo:"/team-logos/chi-bats.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"MIA", apiAbbr:"MIA", apiTeamId:51, slug:"mia-mirage", name:"Miami Mirage", city:"Miami", color:"#144734", accent:"#7EC6BB", dark:"#0D3024", record:"4-6", rank:9, owner:"", pct:".400", diff:"-1", logo:"/team-logos/mia-mirage.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  { id:"SDO", apiAbbr:"SD", apiTeamId:46, slug:"sd-orcas", name:"San Diego Orcas", city:"San Diego", color:"#0B3146", accent:"#4BCED8", dark:"#072230", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/sd-orcas.png", socials: { instagram: '', facebook: '', tiktok: '' } },
 ];
 
 export const getTeam = (id) => TEAMS.find(t => t.id === id || t.slug === id || t.apiAbbr === id);
@@ -1203,21 +1203,63 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     if (remaining.length < 2) continue;
     const named = remaining.filter(e => e.firstName);
     const ghosts = remaining.filter(e => !e.firstName);
-    if (!ghosts.length || !named.length) continue;
-    for (const ghost of ghosts) {
-      const ghostNum = String(ghost.num || '').replace(/^0+/, '');
-      let target = null;
-      if (named.length === 1) {
-        target = named[0];
-      } else if (ghostNum) {
-        target = named.find(n => String(n.num || '').replace(/^0+/, '') === ghostNum);
+    if (ghosts.length && named.length) {
+      for (const ghost of ghosts) {
+        const ghostNum = String(ghost.num || '').replace(/^0+/, '');
+        let target = null;
+        if (named.length === 1) {
+          target = named[0];
+        } else if (ghostNum) {
+          target = named.find(n => String(n.num || '').replace(/^0+/, '') === ghostNum);
+        }
+        if (!target) continue;
+        target.hasStats = target.hasStats || ghost.hasStats;
+        target.hasMedia = target.hasMedia || ghost.hasMedia;
+        if (!target.num && ghost.num) target.num = ghost.num;
+        target.stats = Array.from(new Set([...(target.stats || []), ...(ghost.stats || [])]));
+        droppedIds.add(ghost);
       }
-      if (!target) continue;
-      target.hasStats = target.hasStats || ghost.hasStats;
-      target.hasMedia = target.hasMedia || ghost.hasMedia;
-      if (!target.num && ghost.num) target.num = ghost.num;
-      target.stats = Array.from(new Set([...(target.stats || []), ...(ghost.stats || [])]));
-      droppedIds.add(ghost);
+    }
+
+    // Pass 3 (v4.5.20): Canonical-anchor merge. If the canonical roster
+    // has exactly ONE entry on this team with this lastname, that entry
+    // is the source of truth for the player's identity — collapse every
+    // remaining same-lastname entry into it. This handles the lingering
+    // CSV-vs-API clash where the API ships a stripped lastname-only or
+    // nickname variant and the CSV ships a richer "Eddie 'Nick' Martinez"
+    // form, neither of which match the canonical "Nick Martinez" exactly.
+    const stillRemaining = group.filter(e => !droppedIds.has(e));
+    if (stillRemaining.length < 2) continue;
+    const lnUpper = stillRemaining[0].lastName.toUpperCase();
+    const canonicalsForLast = CANONICAL_ROSTER_2026.filter(c =>
+      c.team === teamId &&
+      c.name.split(' ').pop().toUpperCase() === lnUpper
+    );
+    if (canonicalsForLast.length === 1) {
+      const canonName = canonicalsForLast[0].name;
+      const canonFn = canonName.split(' ').slice(0, -1).join(' ').toLowerCase();
+      // Find the entry whose firstName matches the canonical exactly —
+      // that's our keeper. If none matches exactly, pick the cleanest
+      // by score (existing nameScore() heuristic).
+      const exactMatch = stillRemaining.find(e =>
+        String(e.firstName || '').toLowerCase() === canonFn
+      );
+      const sorted = [...stillRemaining].sort((a, b) => nameScore(a) - nameScore(b));
+      const keeper = exactMatch || sorted[0];
+      // Force-set keeper's name to the canonical so the UI shows
+      // "Eddie Martinez" instead of "Eddie 'Nick' Martinez" or
+      // "Drew Baalman" instead of "Drew Balmaan".
+      keeper.name = canonName;
+      keeper.firstName = canonName.split(' ').slice(0, -1).join(' ');
+      keeper.firstInitial = keeper.firstName.charAt(0).toUpperCase();
+      for (const e of stillRemaining) {
+        if (e === keeper) continue;
+        keeper.hasStats = keeper.hasStats || e.hasStats;
+        keeper.hasMedia = keeper.hasMedia || e.hasMedia;
+        if (!keeper.num && e.num) keeper.num = e.num;
+        keeper.stats = Array.from(new Set([...(keeper.stats || []), ...(e.stats || [])]));
+        droppedIds.add(e);
+      }
     }
   }
   return entries

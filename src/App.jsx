@@ -408,27 +408,52 @@ function TopBar({ isMobile, onMenuToggle }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flexShrink: 0 }}>
-        {/* Cmd+K hint — desktop only; hints the global switcher hotkey */}
-        {!isMobile && (
-          <button
-            onClick={() => {
-              // Synthesize a Cmd+K keystroke so the switcher opens.
-              const ev = new KeyboardEvent('keydown', { key: 'k', metaKey: true, ctrlKey: true, bubbles: true });
-              window.dispatchEvent(ev);
-            }}
-            title="Quick switcher · ⌘K"
-            style={{
-              background: colors.bg, border: `1px solid ${colors.border}`,
-              color: colors.textSecondary, cursor: 'pointer',
-              padding: '4px 10px', borderRadius: radius.full,
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <span>⌘K</span>
-            <span style={{ opacity: 0.6 }}>JUMP TO…</span>
-          </button>
-        )}
+        {/* v4.5.20: Visible search bar (desktop) / icon (mobile) that
+            opens the global QuickSwitcher modal. Was a tiny "⌘K" chip
+            buried on the right — now reads like a real search input
+            so people who don't think in keyboard shortcuts can still
+            find players + teams. The actual filtering UI is the
+            existing QuickSwitcher modal; clicking here just opens it. */}
+        <button
+          onClick={() => {
+            const ev = new KeyboardEvent('keydown', { key: 'k', metaKey: true, ctrlKey: true, bubbles: true });
+            window.dispatchEvent(ev);
+          }}
+          title="Search players, teams, pages · ⌘K"
+          style={{
+            background: colors.bg, border: `1px solid ${colors.border}`,
+            color: colors.textSecondary, cursor: 'pointer',
+            padding: isMobile ? '6px 10px' : '6px 10px 6px 28px',
+            borderRadius: radius.full,
+            fontFamily: fonts.body, fontSize: isMobile ? 13 : 12, fontWeight: 600,
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            position: 'relative',
+            minWidth: isMobile ? 0 : 220,
+            justifyContent: isMobile ? 'center' : 'flex-start',
+            transition: 'border-color 160ms ease, background 160ms ease',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = colors.accentBorder; e.currentTarget.style.background = colors.white; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.background = colors.bg; }}
+        >
+          {!isMobile && (
+            <span style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              fontSize: 14, color: colors.textMuted, pointerEvents: 'none',
+            }}>⌕</span>
+          )}
+          {isMobile ? (
+            <span style={{ fontSize: 16, color: colors.textSecondary }}>⌕</span>
+          ) : (
+            <>
+              <span style={{ flex: 1, color: colors.textMuted }}>Search players, teams…</span>
+              <span style={{
+                fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
+                background: colors.white, border: `1px solid ${colors.border}`,
+                color: colors.textMuted, padding: '1px 6px', borderRadius: 4,
+              }}>⌘K</span>
+            </>
+          )}
+        </button>
         {/* Cloud sync chip — only rendered when Supabase is configured.
             Clicking forces a re-hydrate from the cloud. */}
         {syncedAgo !== null && (

@@ -306,8 +306,12 @@ export function BattingTable({
             <tr style={{ background: colors.bg }}>
               <SortHeader label="#"      sortKey={null}        currentSort={sort} setSort={setSort} align="center" />
               <SortHeader label="Player" sortKey="name"        currentSort={sort} setSort={setSort} align="left" />
-              <SortHeader label="Rank"   sortKey="currentRank" currentSort={sort} setSort={setSort} align="left" />
+              {/* v4.5.20: swapped Team and Rank — Team reads first
+                  because that's the primary identity hook for most
+                  scanners; Rank is the BLW-derived composite that
+                  rewards a deeper read. */}
               <SortHeader label="Team"   sortKey="team"        currentSort={sort} setSort={setSort} align="left" />
+              <SortHeader label="Rank"   sortKey="currentRank" currentSort={sort} setSort={setSort} align="left" />
               <SortHeader label="G"      sortKey="games"       currentSort={sort} setSort={setSort} />
               <SortHeader label="PA"     sortKey="pa"          currentSort={sort} setSort={setSort} />
               <SortHeader label="AB"     sortKey="ab"          currentSort={sort} setSort={setSort} />
@@ -333,8 +337,8 @@ export function BattingTable({
               <tr key={p.playerId || `${p.name}-${p.team}-${i}`} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
                 <td style={{ ...cellFor(sort, null), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{i + 1}</td>
                 <td style={{ ...cellFor(sort, 'name'), textAlign: 'left' }}><PlayerCell name={p.name} team={p.team} /></td>
-                <td style={{ ...cellFor(sort, 'currentRank'), textAlign: 'left' }}><RankCell row={p} /></td>
                 <td style={{ ...cellFor(sort, 'team'), textAlign: 'left' }}><TeamLink teamId={p.team} /></td>
+                <td style={{ ...cellFor(sort, 'currentRank'), textAlign: 'left' }}><RankCell row={p} /></td>
                 <td style={cellFor(sort, 'games')}>{p.games ?? '—'}</td>
                 <td style={cellFor(sort, 'pa')}>{p.pa ?? '—'}</td>
                 <td style={cellFor(sort, 'ab')}>{p.ab ?? '—'}</td>
@@ -414,8 +418,8 @@ export function PitchingTable({
             <tr style={{ background: colors.bg }}>
               <SortHeader label="#"      sortKey={null}        currentSort={sort} setSort={setSort} align="center" />
               <SortHeader label="Player" sortKey="name"        currentSort={sort} setSort={setSort} align="left" />
-              <SortHeader label="Rank"   sortKey="currentRank" currentSort={sort} setSort={setSort} align="left" />
               <SortHeader label="Team"   sortKey="team"        currentSort={sort} setSort={setSort} align="left" />
+              <SortHeader label="Rank"   sortKey="currentRank" currentSort={sort} setSort={setSort} align="left" />
               <SortHeader label="G"      sortKey="games"       currentSort={sort} setSort={setSort} />
               <SortHeader label="W"      sortKey="w"           currentSort={sort} setSort={setSort} />
               <SortHeader label="L"      sortKey="l"           currentSort={sort} setSort={setSort} />
@@ -440,8 +444,8 @@ export function PitchingTable({
               <tr key={p.playerId || `${p.name}-${p.team}-${i}`} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
                 <td style={{ ...cellFor(sort, null), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{i + 1}</td>
                 <td style={{ ...cellFor(sort, 'name'), textAlign: 'left' }}><PlayerCell name={p.name} team={p.team} /></td>
-                <td style={{ ...cellFor(sort, 'currentRank'), textAlign: 'left' }}><RankCell row={p} /></td>
                 <td style={{ ...cellFor(sort, 'team'), textAlign: 'left' }}><TeamLink teamId={p.team} /></td>
+                <td style={{ ...cellFor(sort, 'currentRank'), textAlign: 'left' }}><RankCell row={p} /></td>
                 <td style={cellFor(sort, 'games')}>{p.games ?? '—'}</td>
                 <td style={cellFor(sort, 'w')}>{p.w}</td>
                 <td style={cellFor(sort, 'l')}>{p.l}</td>

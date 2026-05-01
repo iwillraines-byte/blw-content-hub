@@ -11,6 +11,71 @@ import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
 import { ContentIdeasSection } from '../content-ideas-section';
+import { percentileFor } from '../percentile-bubble';
+import { authedFetch } from '../authed-fetch';
+
+// v4.5.20: Team media grid with a 2-row default cap and "Show all"
+// expand. Used on the Recent player media section so 60-photo
+// teams don't dominate the page on first paint.
+function ExpandableTeamMediaGrid({ items, team, thumbUrls }) {
+  const [expanded, setExpanded] = useState(false);
+  const DEFAULT_CAP = 10;
+  const visible = expanded ? items : items.slice(0, DEFAULT_CAP);
+  const hidden = items.length - visible.length;
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+        {visible.map(m => (
+          <div key={m.id} style={{
+            borderRadius: radius.base, overflow: 'hidden',
+            border: `1px solid ${colors.borderLight}`,
+          }}>
+            <div style={{
+              width: '100%', height: 100,
+              background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
+            }} />
+            <div style={{ padding: 8 }}>
+              <div style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {m.name}
+              </div>
+              <div style={{ fontSize: 9, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
+                {m.assetType || 'FILE'}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {hidden > 0 && !expanded && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            onClick={() => setExpanded(true)}
+            style={{
+              background: colors.bg, border: `1px solid ${colors.border}`,
+              color: colors.textSecondary, cursor: 'pointer',
+              borderRadius: radius.sm, padding: '6px 14px',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+              letterSpacing: 0.4,
+            }}
+          >Show all {items.length} · +{hidden} more</button>
+        </div>
+      )}
+      {expanded && items.length > DEFAULT_CAP && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            onClick={() => setExpanded(false)}
+            style={{
+              background: 'none', border: `1px solid ${colors.border}`,
+              color: colors.textMuted, cursor: 'pointer',
+              borderRadius: radius.sm, padding: '6px 14px',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+              letterSpacing: 0.4,
+            }}
+          >Collapse</button>
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function TeamPage() {
   const { slug } = useParams();
@@ -54,6 +119,71 @@ export default function TeamPage() {
   const { role: authRole } = useAuth();
   const isMaster = authRole === 'master_admin';
   const [monthlyPostList, setMonthlyPostList] = useState([]);
+
+  // v4.5.20: Cloud-synced team socials (master admin owns writes; everyone
+  // reads). Hydrated once on mount; merged with TEAMS defaults so any team
+  // that already has handles in code keeps them when the cloud row is empty.
+  const [allTeamSocials, setAllTeamSocials] = useState(null);
+  const [socialsEditorOpen, setSocialsEditorOpen] = useState(false);
+  // v4.5.20: per-team monthly post target. Stored under app_settings
+  // key="monthly-post-targets" as { [teamId]: number }. Defaults to
+  // 12 when no override exists. Master admin owns writes.
+  const [monthlyTargets, setMonthlyTargets] = useState(null);
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const [socialsRes, targetsRes] = await Promise.all([
+          authedFetch('/api/app-settings?key=team-socials').catch(() => null),
+          authedFetch('/api/app-settings?key=monthly-post-targets').catch(() => null),
+        ]);
+        if (cancel) return;
+        if (socialsRes?.ok) {
+          const d = await socialsRes.json();
+          setAllTeamSocials(d?.value || {});
+        }
+        if (targetsRes?.ok) {
+          const d = await targetsRes.json();
+          setMonthlyTargets(d?.value || {});
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancel = true; };
+  }, []);
+  const teamMonthlyTarget = (monthlyTargets?.[team?.id]) || 12;
+  const saveMonthlyTarget = useCallback(async (next) => {
+    const all = { ...(monthlyTargets || {}), [team.id]: Math.max(1, Math.min(40, Number(next) || 12)) };
+    const res = await authedFetch('/api/app-settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'monthly-post-targets', value: all }),
+    });
+    if (!res.ok) return false;
+    setMonthlyTargets(all);
+    return true;
+  }, [team?.id, monthlyTargets]);
+  const mergedSocials = useMemo(() => {
+    if (!team) return null;
+    const cloud = allTeamSocials?.[team.id] || {};
+    const code = team.socials || {};
+    return {
+      instagram: cloud.instagram || code.instagram || '',
+      facebook:  cloud.facebook  || code.facebook  || '',
+      tiktok:    cloud.tiktok    || code.tiktok    || '',
+    };
+  }, [team, allTeamSocials]);
+  const saveSocials = useCallback(async (mergedAll) => {
+    const res = await authedFetch('/api/app-settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'team-socials', value: mergedAll }),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Save failed (${res.status}): ${txt.slice(0, 120)}`);
+    }
+    setAllTeamSocials(mergedAll);
+  }, []);
   useEffect(() => {
     if (!team?.id) return;
     let cancel = false;
@@ -515,10 +645,13 @@ export default function TeamPage() {
         overflow: 'hidden',
         position: 'relative',
       }}>
-        {/* Soft team wash behind the logo column */}
+        {/* Soft team wash. v4.5.20: stretched to full card width with
+            a long multi-stop fade so the gradient fades cleanly into
+            the card edge instead of stopping abruptly at the 260px
+            mark. */}
         <div style={{
-          position: 'absolute', top: 0, left: 0, width: 260, height: '100%',
-          background: `linear-gradient(135deg, ${team.color}18, ${team.color}04 75%, transparent)`,
+          position: 'absolute', inset: 0,
+          background: `linear-gradient(110deg, ${team.color}22 0%, ${team.color}14 22%, ${team.color}08 45%, ${team.color}03 72%, transparent 100%)`,
           pointerEvents: 'none',
         }} />
         <div style={{
@@ -565,11 +698,27 @@ export default function TeamPage() {
                     <span>COMPOSITE</span>
                   </span>
                 )}
-                {/* v4.5.16: owner replaced with social handles. Each
-                    populated handle renders as a clickable chip linking
-                    to the platform; empty handles are hidden. To add
-                    handles, edit TEAMS[i].socials in src/data.js. */}
-                <TeamSocials socials={team.socials} accent={team.color} />
+                {/* v4.5.20: Always render the IG / FB / TikTok chips —
+                    desaturated when no handle is set. Master admins
+                    get an inline "✎ EDIT" affordance that opens an
+                    editor below; writes go to /api/app-settings so
+                    every admin sees the latest handles. */}
+                <TeamSocials
+                  socials={mergedSocials}
+                  accent={team.color}
+                  canEdit={isMaster}
+                  onEdit={() => setSocialsEditorOpen(true)}
+                />
+                {socialsEditorOpen && isMaster && (
+                  <TeamSocialsEditor
+                    teamId={team.id}
+                    current={mergedSocials}
+                    allSocials={allTeamSocials}
+                    onSave={saveSocials}
+                    onClose={() => setSocialsEditorOpen(false)}
+                    accent={team.color}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -650,45 +799,114 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {/* Team Stats Summary */}
+      {/* v4.5.20: Replaced the three big leader cards (TOP BATTER /
+          TOP PITCHER / HR LEADER) with a full-width "Stat leaders"
+          strip. Each leader is one row that uses the page's full
+          horizontal real estate; the player's headline number anchors
+          the right edge, support stats fan to the left, and a
+          percentile chip surfaces how that headline number ranks
+          across the entire BLW population. The leaders + percentile
+          give the same information density as the old cards in
+          roughly half the vertical space. */}
       {(topBatter || topPitcher) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-          {/* Stat-leader cards — full hairline border tinted toward team
-              color. Team identity carried by the tint; the bold metric and
-              player name carry the focus. */}
-          {topBatter && (
-            <Card style={{ border: `1px solid ${team.color}33` }}>
-              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>TOP BATTER · OPS+</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{topBatter.name}</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.accent, letterSpacing: 1 }}>{topBatter.ops_plus}</div>
-              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                {topBatter.avg} AVG · {topBatter.hr} HR · {topBatter.obp} OBP
-              </div>
-            </Card>
-          )}
-          {topPitcher && (
-            <Card style={{ border: `1px solid ${team.color}33` }}>
-              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>TOP PITCHER · FIP</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{topPitcher.name}</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.accent, letterSpacing: 1 }}>
-                {typeof topPitcher.fip === 'number' ? topPitcher.fip.toFixed(2) : topPitcher.fip}
-              </div>
-              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                {topPitcher.era} ERA · {topPitcher.w}-{topPitcher.l} · {topPitcher.ip} IP
-              </div>
-            </Card>
-          )}
-          {hrLeader && hrLeader.hr > 0 && hrLeader !== topBatter && (
-            <Card style={{ border: `1px solid ${team.color}33` }}>
-              <div style={{ fontFamily: fonts.condensed, fontSize: 10, letterSpacing: 1, color: colors.textMuted, marginBottom: 4 }}>HR LEADER</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 22, color: colors.text, letterSpacing: 0.5 }}>{hrLeader.name}</div>
-              <div style={{ fontFamily: fonts.heading, fontSize: 32, color: colors.accent, letterSpacing: 1 }}>{hrLeader.hr}</div>
-              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                {hrLeader.avg} AVG · {hrLeader.slg} SLG
-              </div>
-            </Card>
-          )}
-        </div>
+        <Card style={{ border: `1px solid ${team.color}33`, padding: 0, overflow: 'hidden' }}>
+          {[
+            topBatter && {
+              kind: 'TOP BATTER',
+              statKey: 'ops_plus',
+              player: topBatter,
+              metric: topBatter.ops_plus,
+              metricLabel: 'OPS+',
+              support: `${topBatter.avg} AVG · ${topBatter.hr} HR · ${topBatter.obp} OBP`,
+              percentile: percentileFor(applyCanonicalToStats(liveBatting), topBatter.name, 'ops_plus', 'desc'),
+            },
+            topPitcher && {
+              kind: 'TOP PITCHER',
+              statKey: 'fip',
+              player: topPitcher,
+              metric: typeof topPitcher.fip === 'number' ? topPitcher.fip.toFixed(2) : topPitcher.fip,
+              metricLabel: 'FIP',
+              support: `${topPitcher.era} ERA · ${topPitcher.w}-${topPitcher.l} · ${topPitcher.ip} IP`,
+              percentile: percentileFor(applyCanonicalToStats(livePitching), topPitcher.name, 'fip', 'asc'),
+            },
+            (hrLeader && hrLeader.hr > 0 && hrLeader !== topBatter) && {
+              kind: 'HR LEADER',
+              statKey: 'hr',
+              player: hrLeader,
+              metric: hrLeader.hr,
+              metricLabel: 'HR',
+              support: `${hrLeader.avg} AVG · ${hrLeader.slg} SLG`,
+              percentile: percentileFor(applyCanonicalToStats(liveBatting), hrLeader.name, 'hr', 'desc'),
+            },
+          ].filter(Boolean).map((row, idx, arr) => {
+            const pct = row.percentile == null ? null : Math.round(row.percentile);
+            const pctColor = pct == null ? colors.border
+              : pct >= 90 ? '#C8302B'
+              : pct >= 75 ? '#DA453A'
+              : pct >= 60 ? '#E07368'
+              : pct >= 40 ? colors.textSecondary
+              : '#5C7A99';
+            return (
+              <Link
+                key={row.kind}
+                to={`/teams/${team.slug}/players/${playerSlug({
+                  name: row.player.name,
+                  firstName: row.player.firstName,
+                  lastName: row.player.lastName,
+                  firstInitial: row.player.firstInitial,
+                })}`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 16,
+                  padding: '14px 18px',
+                  borderBottom: idx < arr.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                  textDecoration: 'none', color: 'inherit',
+                  transition: 'background 160ms ease',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = `${team.color}06`}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <div style={{
+                  fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 1.2,
+                  color: team.color, minWidth: 88,
+                }}>
+                  {row.kind}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: fonts.heading, fontSize: 18, color: colors.text,
+                    letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{row.player.name}</div>
+                  <div style={{
+                    fontSize: 11, color: colors.textSecondary, marginTop: 2,
+                    fontFamily: fonts.body, fontWeight: 500,
+                  }}>{row.support}</div>
+                </div>
+                {pct != null && (
+                  <div title={`${pct}th percentile across the league`} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: `${pctColor}14`, color: pctColor,
+                    border: `1px solid ${pctColor}33`,
+                    padding: '4px 10px', borderRadius: 999,
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {pct}<span style={{ fontSize: 8, marginLeft: 1, opacity: 0.7 }}>%ile</span>
+                  </div>
+                )}
+                <div style={{ textAlign: 'right', minWidth: 96 }}>
+                  <div style={{
+                    fontFamily: fonts.heading, fontSize: 28, color: colors.accent,
+                    letterSpacing: 0.5, lineHeight: 1,
+                  }}>{row.metric}</div>
+                  <div style={{
+                    fontFamily: fonts.condensed, fontSize: 9, color: colors.textMuted,
+                    fontWeight: 700, letterSpacing: 0.8, marginTop: 4,
+                  }}>{row.metricLabel}</div>
+                </div>
+              </Link>
+            );
+          })}
+        </Card>
       )}
 
       {/* Roster */}
@@ -1009,27 +1227,11 @@ export default function TeamPage() {
           </div>
         )}
         {playerScopedMedia.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-            {playerScopedMedia.slice(0, 12).map(m => (
-              <div key={m.id} style={{
-                borderRadius: radius.base, overflow: 'hidden',
-                border: `1px solid ${colors.borderLight}`,
-              }}>
-                <div style={{
-                  width: '100%', height: 100,
-                  background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
-                }} />
-                <div style={{ padding: 8 }}>
-                  <div style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.name}
-                  </div>
-                  <div style={{ fontSize: 9, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
-                    {m.assetType || 'FILE'}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ExpandableTeamMediaGrid
+            items={playerScopedMedia}
+            team={team}
+            thumbUrls={thumbUrls}
+          />
         )}
       </Card>
 
@@ -1042,7 +1244,13 @@ export default function TeamPage() {
           target" chip surfaces. Re-derives from server on every
           team-page mount; auto-resets at month rollover via the
           dynamic `since` filter. */}
-      <MonthlyContentProgress team={team} count={monthlyPostedCount} />
+      <MonthlyContentProgress
+        team={team}
+        count={monthlyPostedCount}
+        target={teamMonthlyTarget}
+        isMaster={isMaster}
+        onTargetChange={saveMonthlyTarget}
+      />
 
       {/* Per-team monthly carousel — every generation for this team
           this month, posted + unposted. Master admin can toggle the
@@ -1071,52 +1279,183 @@ export default function TeamPage() {
 // glows team-tinted gold when over target so the team gets a visible
 // reward for going above the line. Animation is CSS-only (transition
 // on width) so the value can update mid-month without a layout thrash.
-// Team social handle chips. Renders one chip per populated platform
-// (instagram / twitter / tiktok). Each chip is a clickable link
-// opening the platform URL in a new tab. Empty handles are hidden.
-// Returns null when no handles are set so the row collapses cleanly
-// on teams that haven't published their socials yet.
-function TeamSocials({ socials, accent }) {
-  if (!socials) return null;
-  const platforms = [
-    { id: 'instagram', icon: '📷', label: 'Instagram', urlFor: (h) => `https://instagram.com/${h.replace(/^@/, '')}` },
-    { id: 'twitter',   icon: '𝕏',  label: 'X / Twitter', urlFor: (h) => `https://x.com/${h.replace(/^@/, '')}` },
-    { id: 'tiktok',    icon: '♪',  label: 'TikTok', urlFor: (h) => `https://tiktok.com/@${h.replace(/^@/, '')}` },
-  ];
-  const present = platforms.filter(p => socials[p.id] && socials[p.id].trim());
-  if (!present.length) return null;
+// Team social handle chips. v4.5.20: always renders all three
+// platform chips (Instagram, Facebook, TikTok). Populated handles
+// link out in full color; empty handles render desaturated with a
+// "Not yet connected" tooltip so visitors can see at a glance which
+// channels each team has live. Master admins see an inline pencil
+// affordance that opens the editor below.
+// v4.5.20: helper for the +/- buttons on the monthly target editor.
+function gaugeBtn(team) {
+  return {
+    background: colors.bg, border: `1px solid ${colors.border}`,
+    color: team?.color || colors.textSecondary, cursor: 'pointer',
+    borderRadius: radius.sm,
+    fontFamily: fonts.condensed, fontSize: 12, fontWeight: 800,
+    lineHeight: 1, height: 22,
+  };
+}
+
+const SOCIAL_PLATFORMS = [
+  { id: 'instagram', icon: '◯', label: 'Instagram', urlFor: (h) => `https://instagram.com/${h.replace(/^@/, '')}` },
+  { id: 'facebook',  icon: 'f',  label: 'Facebook',  urlFor: (h) => `https://facebook.com/${h.replace(/^@/, '')}` },
+  { id: 'tiktok',    icon: '♪',  label: 'TikTok',    urlFor: (h) => `https://tiktok.com/@${h.replace(/^@/, '')}` },
+];
+
+function TeamSocials({ socials, accent, onEdit, canEdit }) {
+  const handles = socials || {};
   return (
-    <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-      {present.map(p => {
-        const handle = socials[p.id].replace(/^@/, '');
-        return (
-          <a
-            key={p.id}
-            href={p.urlFor(handle)}
-            target="_blank"
-            rel="noreferrer"
-            title={`${p.label}: @${handle}`}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              fontFamily: fonts.body, fontSize: 11, fontWeight: 700,
-              color: accent || colors.text,
-              padding: '3px 10px', borderRadius: 999,
-              background: `${accent || colors.text}10`,
-              border: `1px solid ${accent || colors.text}33`,
-              textDecoration: 'none', whiteSpace: 'nowrap',
-            }}
-          >
+    <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      {SOCIAL_PLATFORMS.map(p => {
+        const raw = (handles[p.id] || '').trim();
+        const handle = raw.replace(/^@/, '');
+        const live = !!handle;
+        const chipStyle = {
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          fontFamily: fonts.body, fontSize: 11, fontWeight: 700,
+          padding: '3px 10px', borderRadius: 999,
+          textDecoration: 'none', whiteSpace: 'nowrap',
+          color: live ? (accent || colors.text) : colors.textMuted,
+          background: live ? `${accent || colors.text}10` : colors.bg,
+          border: `1px solid ${live ? `${accent || colors.text}33` : colors.borderLight}`,
+          filter: live ? 'none' : 'saturate(0)',
+          opacity: live ? 1 : 0.7,
+          cursor: live ? 'pointer' : 'default',
+          transition: 'opacity 160ms ease, filter 160ms ease',
+        };
+        const content = (
+          <>
             <span aria-hidden="true">{p.icon}</span>
-            <span>@{handle}</span>
+            <span>{live ? `@${handle}` : p.label}</span>
+          </>
+        );
+        return live ? (
+          <a key={p.id} href={p.urlFor(handle)} target="_blank" rel="noreferrer" title={`${p.label}: @${handle}`} style={chipStyle}>
+            {content}
           </a>
+        ) : (
+          <span key={p.id} title={`${p.label} — not yet connected`} style={chipStyle}>
+            {content}
+          </span>
         );
       })}
+      {canEdit && (
+        <button
+          onClick={onEdit}
+          title="Edit team social handles (master admin)"
+          style={{
+            background: 'none', border: `1px dashed ${colors.border}`,
+            color: colors.textMuted, cursor: 'pointer',
+            borderRadius: 999, padding: '3px 8px',
+            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+            letterSpacing: 0.5,
+          }}
+        >✎ EDIT</button>
+      )}
     </div>
   );
 }
 
-function MonthlyContentProgress({ team, count }) {
-  const TARGET = 12;
+// Inline editor card for master admins to set team socials.
+// Persists to /api/app-settings under key=team-socials so all
+// admins see the same handles. Reads existing values from the
+// passed-in `socials` prop (which is the merged TEAMS default +
+// cloud override), and writes the full team-socials object so
+// other teams' values aren't disturbed.
+function TeamSocialsEditor({ teamId, current, allSocials, onSave, onClose, accent }) {
+  const [draft, setDraft] = useState({
+    instagram: current?.instagram || '',
+    facebook:  current?.facebook  || '',
+    tiktok:    current?.tiktok    || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const merged = { ...(allSocials || {}), [teamId]: { ...draft } };
+      await onSave(merged);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      background: colors.bg, border: `1px solid ${colors.border}`,
+      borderRadius: radius.base, padding: 12, marginTop: 8,
+      display: 'flex', flexDirection: 'column', gap: 8,
+      maxWidth: 420,
+    }}>
+      <div style={{
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+        color: accent || colors.textSecondary, letterSpacing: 0.8,
+      }}>
+        SOCIAL HANDLES · {teamId}
+      </div>
+      {SOCIAL_PLATFORMS.map(p => (
+        <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            minWidth: 90, fontFamily: fonts.condensed, fontSize: 11,
+            color: colors.textSecondary, fontWeight: 700, letterSpacing: 0.4,
+          }}>{p.label}</span>
+          <input
+            type="text"
+            value={draft[p.id]}
+            onChange={e => setDraft(d => ({ ...d, [p.id]: e.target.value }))}
+            placeholder={`@${p.label.toLowerCase()}-handle`}
+            style={{
+              flex: 1, padding: '6px 10px',
+              border: `1px solid ${colors.border}`, borderRadius: radius.sm,
+              fontFamily: fonts.body, fontSize: 12, color: colors.text,
+              background: colors.white,
+            }}
+          />
+        </label>
+      ))}
+      {error && (
+        <div style={{ fontSize: 11, color: '#991B1B' }}>{error}</div>
+      )}
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button
+          onClick={onClose}
+          disabled={saving}
+          style={{
+            background: 'none', border: `1px solid ${colors.border}`,
+            color: colors.textSecondary, cursor: 'pointer',
+            borderRadius: radius.sm, padding: '5px 12px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+          }}
+        >Cancel</button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            background: colors.red, border: `1px solid ${colors.red}`,
+            color: '#fff', cursor: saving ? 'wait' : 'pointer',
+            borderRadius: radius.sm, padding: '5px 14px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+            letterSpacing: 0.4,
+          }}
+        >{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
+  );
+}
+
+function MonthlyContentProgress({ team, count, target = 12, isMaster = false, onTargetChange }) {
+  // v4.5.20: target is now configurable per team (master admin only).
+  // Falls back to 12 when no override exists. Clamp 1..40 so the
+  // gauge stays sensible.
+  const TARGET = Math.max(1, Math.min(40, Number(target) || 12));
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(TARGET);
+  const [saving, setSaving] = useState(false);
   // Clamp the bar's visible width at 100% — anything above target
   // surfaces as a glow/chip rather than overflowing the rail.
   const pct = Math.min(100, (count / TARGET) * 100);
@@ -1148,7 +1487,69 @@ function MonthlyContentProgress({ team, count }) {
           <div style={{
             fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted,
             letterSpacing: 0.5, marginTop: 2,
-          }}>{monthLabel} · target {TARGET} posts · resets 1st of every month</div>
+            display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+          }}>
+            <span>{monthLabel} · target {TARGET} posts · resets 1st of every month</span>
+            {isMaster && !editing && (
+              <button
+                onClick={() => { setDraft(TARGET); setEditing(true); }}
+                title="Adjust target (master admin)"
+                style={{
+                  background: 'none', border: `1px dashed ${colors.border}`,
+                  color: colors.textMuted, cursor: 'pointer',
+                  borderRadius: 999, padding: '1px 7px',
+                  fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                }}
+              >✎ TARGET</button>
+            )}
+            {isMaster && editing && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  onClick={() => setDraft(d => Math.max(1, d - 1))}
+                  style={{ ...gaugeBtn(team), padding: '0 8px' }}
+                >−</button>
+                <input
+                  type="number"
+                  min={1}
+                  max={40}
+                  value={draft}
+                  onChange={e => setDraft(Math.max(1, Math.min(40, parseInt(e.target.value, 10) || 1)))}
+                  style={{
+                    width: 48, padding: '2px 6px', textAlign: 'center',
+                    border: `1px solid ${colors.border}`, borderRadius: radius.sm,
+                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  }}
+                />
+                <button
+                  onClick={() => setDraft(d => Math.min(40, d + 1))}
+                  style={{ ...gaugeBtn(team), padding: '0 8px' }}
+                >+</button>
+                <button
+                  onClick={async () => {
+                    setSaving(true);
+                    try { await onTargetChange?.(draft); setEditing(false); }
+                    finally { setSaving(false); }
+                  }}
+                  disabled={saving}
+                  style={{
+                    background: team.color, color: '#fff',
+                    border: 'none', cursor: saving ? 'wait' : 'pointer',
+                    borderRadius: radius.sm, padding: '2px 8px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+                  }}
+                >{saving ? '…' : 'SAVE'}</button>
+                <button
+                  onClick={() => setEditing(false)}
+                  style={{
+                    background: 'none', border: `1px solid ${colors.border}`,
+                    color: colors.textMuted, cursor: 'pointer',
+                    borderRadius: radius.sm, padding: '2px 8px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+                  }}
+                >✕</button>
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{

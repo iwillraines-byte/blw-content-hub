@@ -1,6 +1,9 @@
 // Resources — central hub for SOPs, video training, FAQ, brand
 // guidelines, and team assets. v4.5.16 ships a clean shell with
 // stub sections that the master admin can populate via copy/paste.
+// v4.5.20: master admin can append custom links/files to any section
+// via /api/app-settings (key="resources-extras"); a platform intro
+// write-up sits at the top of the page for new athletes + admins.
 //
 // Architecture note: every section is rendered from a single config
 // array (RESOURCE_SECTIONS) so adding a new resource is a one-line
@@ -9,9 +12,11 @@
 // or external URLs. Athletes see all sections; admins also see a
 // hidden "Operations" group for internal-only material.
 
+import { useEffect, useState } from 'react';
 import { Card, PageHeader, SectionHeading } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { useAuth } from '../auth';
+import { authedFetch } from '../authed-fetch';
 
 // Resource section schema:
 //   id           — slug (used for anchor links + storage keys)
@@ -82,8 +87,8 @@ const RESOURCE_SECTIONS = [
     title: 'Team assets',
     summary: 'Downloadable logos, headshots, action photos.',
     items: [
-      { kind: 'link', title: 'Open team logos folder', detail: 'Public Drive folder with every team\'s logo files.', url: null, icon: '🗂️' },
-      { kind: 'link', title: 'Headshot library', detail: 'Sorted by team. Update via Files → Drive sync.', url: null, icon: '📸' },
+      { kind: 'link', title: 'Open team logos folder', detail: 'Public Drive folder with every team\'s logo files.', url: null, icon: '◫' },
+      { kind: 'link', title: 'Headshot library', detail: 'Sorted by team. Update via Files → Drive sync.', url: null, icon: '◉' },
     ],
   },
   {
@@ -108,10 +113,72 @@ const RESOURCE_SECTIONS = [
   },
 ];
 
+// v4.5.20: Platform intro for athletes and admins. Anchored at the top
+// of the Resources page above the section grid. Athletes get the
+// athlete-flavored block; admins get the admin-flavored one. We render
+// both side-by-side so an athlete reading the page can also see how
+// the league operates above them — context builds buy-in.
+const ATHLETE_INTRO = [
+  'BLW Studio is your home base for everything content-related — your headshots, your stats, your highlight clips, and your league-wide presence. The platform is built so the work of telling your story is mostly done for you.',
+  'Start at your player page (open your team from the sidebar, then click your name). Fill in your About-me — vibe, walk-up music, fun facts. Every AI-drafted caption about you reads from this block, so what you write here becomes the voice the league uses to talk about you.',
+  'When you want to post something, hit the Studio. Pick a template, your photo, and a layout — the app handles the rest. Downloaded posts get logged automatically so the league can track activity. Need a custom graphic? File it in Requests and the content team will pick it up.',
+];
+
+const ADMIN_INTRO = [
+  'BLW Studio is the production engine for league-wide content. The home Dashboard surfaces AI-drafted ideas tied to live stats; each idea is one click away from the Studio compositor.',
+  'Files is your media library — drag in photos, let auto-tag classify them, and they become available everywhere a player or team page asks for assets. Drive folders sync into this same library so partners can drop into a shared folder and we see it instantly.',
+  'Each team page surfaces a per-team monthly content gauge (configurable target, master-admin only), social handles you can edit inline, the live roster, and the team\'s recent uploads. Player pages do the same one level down — every athlete\'s identity, stats, and media in one place.',
+  'Requests is the work queue — anything that can\'t be self-served by an athlete files here. PEOPLE & ROLES gates everything: athletes see only their team, content sees league-wide, master admin owns everything.',
+];
+
 export default function Resources() {
   const { role } = useAuth();
+  const isAthlete = role === 'athlete';
   const isAdmin = role === 'master_admin' || role === 'admin' || role === 'content';
+  const isMaster = role === 'master_admin';
   const visibleSections = RESOURCE_SECTIONS.filter(s => !s.adminOnly || isAdmin);
+
+  // v4.5.20: Cloud-stored extras per section. Master admin reads + writes
+  // via /api/app-settings; everyone else reads. Shape: { [sectionId]: [items...] }
+  const [extras, setExtras] = useState({});
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await authedFetch('/api/app-settings?key=resources-extras');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancel) return;
+        setExtras(data?.value || {});
+      } catch { /* silent */ }
+    })();
+    return () => { cancel = true; };
+  }, []);
+
+  const saveExtras = async (next) => {
+    const res = await authedFetch('/api/app-settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'resources-extras', value: next }),
+    });
+    if (!res.ok) throw new Error('Save failed');
+    setExtras(next);
+  };
+
+  const addExtra = async (sectionId, item) => {
+    const next = {
+      ...extras,
+      [sectionId]: [...(extras[sectionId] || []), { ...item, addedAt: Date.now() }],
+    };
+    await saveExtras(next);
+  };
+
+  const removeExtra = async (sectionId, idx) => {
+    const list = (extras[sectionId] || []).slice();
+    list.splice(idx, 1);
+    const next = { ...extras, [sectionId]: list };
+    await saveExtras(next);
+  };
 
   return (
     <div>
@@ -119,6 +186,43 @@ export default function Resources() {
         title="RESOURCES"
         subtitle="SOPs, training, FAQs, and brand assets. Bookmark this page."
       />
+
+      {/* Platform intro — short prose introducing BLW Studio. Athlete and
+          admin variants render side-by-side so the audience always sees
+          their lane, plus the other lane for context. */}
+      <Card>
+        <SectionHeading>Welcome to BLW Studio</SectionHeading>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: 16,
+          marginTop: 6,
+        }}>
+          {[
+            { label: 'For athletes', body: ATHLETE_INTRO, accent: colors.accent, primary: isAthlete },
+            { label: 'For admins',   body: ADMIN_INTRO,   accent: colors.red,    primary: isAdmin && !isAthlete },
+          ].map(block => (
+            <div key={block.label} style={{
+              padding: 14,
+              borderRadius: radius.base,
+              background: block.primary ? `${block.accent}08` : colors.bg,
+              border: `1px solid ${block.primary ? `${block.accent}33` : colors.borderLight}`,
+            }}>
+              <div style={{
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                letterSpacing: 1, color: block.accent, marginBottom: 8,
+                textTransform: 'uppercase',
+              }}>{block.label}</div>
+              {block.body.map((p, i) => (
+                <p key={i} style={{
+                  fontSize: 13, lineHeight: 1.65, color: colors.textSecondary,
+                  margin: i === 0 ? '0 0 10px' : '0 0 10px',
+                }}>{p}</p>
+              ))}
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* Anchor index — quick jump for long pages */}
       <Card>
@@ -146,32 +250,46 @@ export default function Resources() {
         </div>
       </Card>
 
-      {visibleSections.map(section => (
-        <Card key={section.id} id={section.id} style={{ scrollMarginTop: 80 }}>
-          <SectionHeading>{section.title}</SectionHeading>
-          <div style={{
-            fontSize: 13, color: colors.textSecondary, lineHeight: 1.6,
-            marginBottom: 14, maxWidth: '60ch',
-          }}>
-            {section.summary}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {section.items.map((item, i) => (
-              <ResourceItem key={i} item={item} />
-            ))}
-          </div>
-        </Card>
-      ))}
+      {visibleSections.map(section => {
+        const sectionExtras = extras[section.id] || [];
+        return (
+          <Card key={section.id} id={section.id} style={{ scrollMarginTop: 80 }}>
+            <SectionHeading>{section.title}</SectionHeading>
+            <div style={{
+              fontSize: 13, color: colors.textSecondary, lineHeight: 1.6,
+              marginBottom: 14, maxWidth: '60ch',
+            }}>
+              {section.summary}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {section.items.map((item, i) => (
+                <ResourceItem key={i} item={item} />
+              ))}
+              {sectionExtras.map((item, i) => (
+                <ResourceItem
+                  key={`extra-${i}`}
+                  item={item}
+                  removable={isMaster}
+                  onRemove={() => removeExtra(section.id, i)}
+                />
+              ))}
+            </div>
+            {isMaster && (
+              <ResourceAdder onAdd={(item) => addExtra(section.id, item)} />
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }
 
-function ResourceItem({ item }) {
+function ResourceItem({ item, removable = false, onRemove = null }) {
   const icon = item.icon
     || (item.kind === 'video' ? '▶'
       : item.kind === 'link' ? '↗'
       : item.kind === 'file' ? '⬇'
-      : '📄');
+      : '◧');
 
   // No URL set yet — render as a faded "coming soon" preview tile.
   if (!item.url) {
@@ -205,32 +323,164 @@ function ResourceItem({ item }) {
   }
 
   return (
-    <a
-      href={item.url}
-      target={item.kind === 'video' || item.kind === 'link' ? '_blank' : undefined}
-      rel={item.kind === 'video' || item.kind === 'link' ? 'noreferrer' : undefined}
-      style={{
-        display: 'flex', alignItems: 'baseline', gap: 12,
-        padding: '10px 14px',
-        background: colors.white, borderRadius: radius.base,
-        border: `1px solid ${colors.borderLight}`,
-        textDecoration: 'none', color: 'inherit',
-        transition: 'border-color 0.15s, transform 0.15s',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = colors.accent; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = colors.borderLight; }}
-    >
-      <span style={{ fontSize: 16 }} aria-hidden="true">{icon}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: fonts.body, fontSize: 13, fontWeight: 700, color: colors.text,
-        }}>{item.title}</div>
-        {item.detail && (
+    <div style={{
+      display: 'flex', alignItems: 'baseline', gap: 8,
+      borderRadius: radius.base,
+      border: `1px solid ${colors.borderLight}`,
+      background: colors.white,
+      transition: 'border-color 0.15s',
+    }}>
+      <a
+        href={item.url}
+        target={item.kind === 'video' || item.kind === 'link' || item.kind === 'file' ? '_blank' : undefined}
+        rel={item.kind === 'video' || item.kind === 'link' || item.kind === 'file' ? 'noreferrer' : undefined}
+        style={{
+          flex: 1, display: 'flex', alignItems: 'baseline', gap: 12,
+          padding: '10px 14px',
+          textDecoration: 'none', color: 'inherit',
+        }}
+      >
+        <span style={{ fontSize: 16 }} aria-hidden="true">{icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: 12, color: colors.textSecondary, marginTop: 2, lineHeight: 1.5,
-          }}>{item.detail}</div>
-        )}
+            fontFamily: fonts.body, fontSize: 13, fontWeight: 700, color: colors.text,
+          }}>{item.title}</div>
+          {item.detail && (
+            <div style={{
+              fontSize: 12, color: colors.textSecondary, marginTop: 2, lineHeight: 1.5,
+            }}>{item.detail}</div>
+          )}
+        </div>
+      </a>
+      {removable && onRemove && (
+        <button
+          onClick={() => {
+            if (window.confirm(`Remove "${item.title}" from this section?`)) onRemove();
+          }}
+          title="Remove this resource (master admin)"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: colors.textMuted, padding: '0 12px',
+            fontSize: 14,
+          }}
+        >✕</button>
+      )}
+    </div>
+  );
+}
+
+// Master-admin only — collapsed by default, expands to a 4-field
+// inline form (kind, title, url, detail). New entries persist via
+// /api/app-settings.
+function ResourceAdder({ onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState('link');
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+  const [detail, setDetail] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    if (!title.trim()) { setErr('Title is required.'); return; }
+    if (!url.trim())   { setErr('URL is required.'); return; }
+    setErr('');
+    setSaving(true);
+    try {
+      await onAdd({ kind, title: title.trim(), url: url.trim(), detail: detail.trim() });
+      setTitle(''); setUrl(''); setDetail(''); setOpen(false);
+    } catch (e) {
+      setErr(e.message || 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          marginTop: 10,
+          background: colors.bg, border: `1px dashed ${colors.border}`,
+          color: colors.textSecondary, cursor: 'pointer',
+          borderRadius: radius.sm, padding: '7px 14px',
+          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+        }}
+      >+ Add resource</button>
+    );
+  }
+
+  const inputStyle = {
+    padding: '7px 10px',
+    border: `1px solid ${colors.border}`, borderRadius: radius.sm,
+    fontFamily: fonts.body, fontSize: 12, color: colors.text,
+    background: colors.white,
+    width: '100%', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{
+      marginTop: 10,
+      padding: 12, borderRadius: radius.base,
+      background: colors.bg, border: `1px solid ${colors.border}`,
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+        color: colors.textSecondary, letterSpacing: 0.8,
+      }}>NEW RESOURCE</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <select value={kind} onChange={e => setKind(e.target.value)} style={{ ...inputStyle, width: 120 }}>
+          <option value="link">Link</option>
+          <option value="doc">Document</option>
+          <option value="video">Video</option>
+          <option value="file">File / download</option>
+        </select>
+        <input
+          type="text" value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Title"
+          style={{ ...inputStyle, flex: '2 1 200px' }}
+        />
       </div>
-    </a>
+      <input
+        type="url" value={url}
+        onChange={e => setUrl(e.target.value)}
+        placeholder="URL — paste a Drive share, Loom, Notion page, or any direct file URL"
+        style={inputStyle}
+      />
+      <input
+        type="text" value={detail}
+        onChange={e => setDetail(e.target.value)}
+        placeholder="Optional one-line description"
+        style={inputStyle}
+      />
+      {err && (
+        <div style={{ fontSize: 11, color: '#991B1B' }}>{err}</div>
+      )}
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => { setOpen(false); setErr(''); }}
+          disabled={saving}
+          style={{
+            background: 'none', border: `1px solid ${colors.border}`,
+            color: colors.textSecondary, cursor: 'pointer',
+            borderRadius: radius.sm, padding: '6px 12px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+          }}
+        >Cancel</button>
+        <button
+          onClick={submit}
+          disabled={saving}
+          style={{
+            background: colors.red, border: `1px solid ${colors.red}`,
+            color: '#fff', cursor: saving ? 'wait' : 'pointer',
+            borderRadius: radius.sm, padding: '6px 14px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.4,
+          }}
+        >{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
   );
 }

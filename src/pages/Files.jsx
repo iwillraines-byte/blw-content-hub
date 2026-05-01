@@ -159,6 +159,37 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
     if (onRequestAiTag) onRequestAiTag(file.id);
   };
 
+  // v4.5.20: Roster-driven jersey auto-fill. Whenever the user (or AI)
+  // has settled on a team + lastName, look up the roster and try to
+  // fill the jersey number. Disambiguates with firstInitial when two
+  // players on the team share a lastname (cousin pairs). Does not
+  // overwrite a number the user explicitly typed.
+  useEffect(() => {
+    if (tagScope !== 'player') return;
+    if (!tagTeam || !tagName) return;
+    if (tagNum) return; // user-supplied or already filled — leave alone
+    if (!Array.isArray(roster) || roster.length === 0) return;
+    const lnUpper = tagName.toUpperCase();
+    const sameTeamLast = roster.filter(p =>
+      p.team === tagTeam && (p.lastName || '').toUpperCase() === lnUpper
+    );
+    if (sameTeamLast.length === 0) return;
+    let pick = null;
+    if (sameTeamLast.length === 1) {
+      pick = sameTeamLast[0];
+    } else if (tagInitial) {
+      const fi = tagInitial.toUpperCase();
+      const narrow = sameTeamLast.filter(p =>
+        ((p.firstInitial || (p.firstName || '').charAt(0)) || '').toUpperCase() === fi
+      );
+      if (narrow.length === 1) pick = narrow[0];
+    }
+    if (pick && pick.num) {
+      const n = String(pick.num).padStart(2, '0');
+      if (n && n !== '00') setTagNum(n);
+    }
+  }, [tagScope, tagTeam, tagName, tagInitial, roster]);
+
   const ext = file.name.split('.').pop() || 'png';
   let preview = null;
   if (tagScope === 'team' && tagTeam) {
