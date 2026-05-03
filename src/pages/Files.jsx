@@ -1378,6 +1378,46 @@ export default function Files() {
                     Comments: {r.comments.ok}/{r.comments.ok + r.comments.fail} · Players: {r.manualPlayers.ok}/{r.manualPlayers.ok + r.manualPlayers.fail} ·
                     Layout: {r.fieldOverrides.ok}/{r.fieldOverrides.ok + r.fieldOverrides.fail}
                   </div>
+                  {/* v4.5.21: surface the first error per failing kind so
+                      backup failures aren't a silent black box. The full
+                      cloud-sync error message lands in the toast detail
+                      via `res.error` — without it the only signal was
+                      "0/N" and you had to open devtools to debug. */}
+                  {totalFail > 0 && (() => {
+                    const failingKinds = Object.entries(r)
+                      .filter(([, v]) => (v.errors || []).length > 0)
+                      .slice(0, 4);
+                    if (failingKinds.length === 0) return null;
+                    return (
+                      <div style={{
+                        marginTop: 10, paddingTop: 8,
+                        borderTop: `1px solid rgba(245,158,11,0.3)`,
+                        fontFamily: fonts.condensed, fontSize: 10, lineHeight: 1.5,
+                      }}>
+                        <div style={{ fontWeight: 800, letterSpacing: 0.4, marginBottom: 4 }}>
+                          FIRST ERROR PER FAILING KIND:
+                        </div>
+                        {failingKinds.map(([kind, v]) => {
+                          const first = v.errors[0] || {};
+                          const detail = typeof first.error === 'string'
+                            ? first.error
+                            : JSON.stringify(first.error);
+                          const ident = first.name || first.id || first.error || '';
+                          return (
+                            <div key={kind} style={{ marginBottom: 2 }}>
+                              <strong style={{ textTransform: 'uppercase' }}>{kind}</strong>
+                              {ident && first.name && <span style={{ opacity: 0.75 }}> · {first.name}</span>}
+                              {ident && first.id && !first.name && <span style={{ opacity: 0.75 }}> · {first.id}</span>}
+                              <span style={{ opacity: 0.85 }}> — {detail}</span>
+                            </div>
+                          );
+                        })}
+                        <div style={{ marginTop: 6, opacity: 0.75 }}>
+                          More detail in the browser console (filter by <code>[cloud-sync]</code>).
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}

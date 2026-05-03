@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.21',
+    date: '2026-05-03',
+    kind: 'patch',
+    summary: 'Backup failures now show why',
+    items: [
+      'Cloud-sync POST helper now bubbles the server\'s actual error message to the caller. Previously a non-OK response logged the detail to the console but only returned `{ok:false, status}` — the failure summary on the Files page had no way to show what actually broke. Now it returns `{ok:false, status, error: "403: <message>"}` (parses JSON `{error,detail}` when present, falls back to raw text).',
+      'Backup result banner adds a "FIRST ERROR PER FAILING KIND" block when totalFail > 0. Surfaces the first record name/id + the server error message for up to 4 failing kinds so root cause is one glance away instead of a devtools dive.',
+    ],
+  },
+  {
     version: '4.5.20',
     date: '2026-05-01',
     kind: 'minor',
