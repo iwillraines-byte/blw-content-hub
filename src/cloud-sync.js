@@ -46,12 +46,25 @@ async function postSync(body) {
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.warn('[cloud-sync] non-OK', body.kind, body.action, res.status, detail.slice(0, 200));
-      return { ok: false, status: res.status };
+      // v4.5.21: Surface the server's error message to the caller so the
+      // backup runner's failure summary can show WHY it failed instead of
+      // just "0/N". Try to parse JSON ({error,detail}) first; fall back to
+      // the raw text. Bubble status alongside so the UI can hint at HTTP
+      // class (401 → re-auth, 403 → role gate, 5xx → server bug).
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const parsed = JSON.parse(detail);
+        const parts = [parsed.error, parsed.detail].filter(Boolean);
+        if (parts.length) errMsg = `${res.status}: ${parts.join(' — ')}`;
+      } catch {
+        if (detail) errMsg = `${res.status}: ${detail.slice(0, 200)}`;
+      }
+      return { ok: false, status: res.status, error: errMsg };
     }
     return { ok: true };
   } catch (err) {
     console.warn('[cloud-sync] network', body.kind, body.action, err?.message);
-    return { ok: false, error: err?.message };
+    return { ok: false, error: err?.message || 'network error' };
   }
 }
 
