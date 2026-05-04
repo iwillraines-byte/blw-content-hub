@@ -228,21 +228,27 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
 
   ctx.save();
 
-  // Card body — white, rounded, hairline border, soft drop shadow.
-  // v4.5.33: shadow strengthened (alpha 0.08 → 0.15, blur 12 → 20,
-  // offset 4 → 6) so the card lifts off photo backgrounds visibly
-  // while still reading "slight" — matches the user's brief.
-  ctx.shadowColor = 'rgba(15,23,42,0.15)';
-  ctx.shadowBlur = 20;
-  ctx.shadowOffsetY = 6;
+  // Card body — white, rounded, white frame stroke, deep drop shadow.
+  // v4.5.35: drop shadow deepened (0.15 → 0.32 alpha, 20 → 36 blur,
+  // offset 6 → 14). Hairline #EBEDF0 stroke replaced with a 10px
+  // white frame stroke — half draws inside the body (invisible
+  // against white fill) and half draws outside, so 5px of clean
+  // white border surrounds the card. Reads as a polished print
+  // frame without inheriting the team color.
+  ctx.shadowColor = 'rgba(15,23,42,0.32)';
+  ctx.shadowBlur = 36;
+  ctx.shadowOffsetY = 14;
   ctx.fillStyle = '#FFFFFF';
   roundRect(ctx, x, y, w, h, 14);
   ctx.fill();
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = '#EBEDF0';
-  ctx.lineWidth = 1;
+  // White frame — 10px stroke centered on the card outline; 5px
+  // outside the fill becomes a visible white border.
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 10;
+  ctx.lineJoin = 'round';
   roundRect(ctx, x, y, w, h, 14);
   ctx.stroke();
 
@@ -347,21 +353,22 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
 
   ctx.save();
 
-  // Card body — white, hairline border, soft drop shadow.
-  // v4.5.33: shadow strengthened to "slight" presence — was barely
-  // visible at 0.06 alpha; lifted to 0.13 to match the raw card and
-  // separate the card from photo BGs.
-  ctx.shadowColor = 'rgba(15,23,42,0.13)';
-  ctx.shadowBlur = 18;
-  ctx.shadowOffsetY = 5;
+  // Card body — white, white frame stroke, deep drop shadow.
+  // v4.5.35: shadow + frame match the raw card (0.32 alpha, 36 blur,
+  // 14 offset). 10px white stroke centered on the outline gives 5px
+  // of visible white border around the card.
+  ctx.shadowColor = 'rgba(15,23,42,0.32)';
+  ctx.shadowBlur = 36;
+  ctx.shadowOffsetY = 14;
   ctx.fillStyle = '#FFFFFF';
   roundRect(ctx, x, y, w, h, 14);
   ctx.fill();
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = '#EBEDF0';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 10;
+  ctx.lineJoin = 'round';
   roundRect(ctx, x, y, w, h, 14);
   ctx.stroke();
 

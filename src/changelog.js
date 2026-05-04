@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.35',
+    date: '2026-05-04',
+    kind: 'patch',
+    summary: 'Stat Cards: white frame stroke + deeper drop shadow',
+    items: [
+      'White frame around every stat card — 10px stroke centered on the card outline gives ~5px of visible white border. Polished print-frame look that doesn\'t inherit the team color.',
+      'Drop shadow deepened across both card types: rgba(15,23,42,0.32) at 36px blur with 14px offset (was 0.13–0.15 alpha at 18–20 blur, 5–6 offset). Cards now lift off photo backgrounds with real visual weight.',
+    ],
+  },
+  {
     version: '4.5.34',
     date: '2026-05-04',
     kind: 'patch',
