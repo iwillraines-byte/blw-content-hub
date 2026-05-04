@@ -536,6 +536,15 @@ export default function TeamPage() {
     setRoster(rebuildRoster(apiRoster, teamMedia, updated, allManual));
   };
 
+  // v4.5.27: PageDropZone callback. Prepends newly uploaded records
+  // onto local media state so the Recent media grid surfaces them
+  // immediately. MUST live above the early return below (Rules of
+  // Hooks: hook count has to be stable across renders).
+  const handleDropUploaded = useCallback((records) => {
+    if (!records?.length) return;
+    setMedia(prev => [...records, ...prev]);
+  }, []);
+
   if (!team) {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
@@ -624,15 +633,6 @@ export default function TeamPage() {
     () => media.filter(m => (m.scope || 'player') === 'player'),
     [media]
   );
-
-  // v4.5.27: drag-anywhere-on-page upload. Drops here are tagged
-  // team-scoped (TEAMPHOTO / VENUE / LOGO) since we don't know which
-  // player they're for. New records prepend onto local media state so
-  // the Recent media grid surfaces them immediately.
-  const handleDropUploaded = useCallback((records) => {
-    if (!records?.length) return;
-    setMedia(prev => [...records, ...prev]);
-  }, []);
 
   return (
     <PageDropZone team={team} onUploaded={handleDropUploaded}>

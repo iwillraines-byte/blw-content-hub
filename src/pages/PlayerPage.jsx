@@ -1773,6 +1773,16 @@ export default function PlayerPage() {
     return () => obs.disconnect();
   }, [player?.name]);
 
+  // v4.5.27: PageDropZone callback. Prepends newly uploaded records
+  // onto local media state so the gallery surfaces them immediately
+  // — no refetch needed. MUST live above every early return below
+  // (Rules of Hooks: hook count has to be stable across renders).
+  const handleDropUploaded = useCallback((records) => {
+    if (!records?.length) return;
+    setMedia(prev => [...records, ...prev]);
+    setAllMediaPool(prev => [...records, ...prev]);
+  }, []);
+
   if (!team) {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
@@ -1869,17 +1879,6 @@ export default function PlayerPage() {
   } : null;
 
   const playerRank = player.ranking?.currentRank || null;
-
-  // v4.5.27: drag any photo from outside the browser onto the page →
-  // tagged automatically as this player's asset. Keeps the player on
-  // their page instead of bouncing them to Files for one-off uploads.
-  // The callback prepends new records to local media state so the
-  // gallery shows them immediately, no refetch needed.
-  const handleDropUploaded = useCallback((records) => {
-    if (!records?.length) return;
-    setMedia(prev => [...records, ...prev]);
-    setAllMediaPool(prev => [...records, ...prev]);
-  }, []);
 
   return (
     <PageDropZone team={team} player={player} onUploaded={handleDropUploaded}>

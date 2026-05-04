@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.28',
+    date: '2026-05-03',
+    kind: 'patch',
+    summary: 'Hotfix: PlayerPage white screen from v4.5.27 hooks-order bug',
+    items: [
+      'v4.5.27\'s handleDropUploaded useCallback was placed AFTER PlayerPage and TeamPage early returns ("Loading…", "Team not found", "Player not found"), violating React\'s Rules of Hooks (hook count has to be stable across renders). On the first render the hook didn\'t exist; on the second it appeared, and React white-screened the entire page.',
+      'Moved both useCallbacks above every early return. Standard rules-of-hooks compliance.',
+    ],
+  },
+  {
     version: '4.5.27',
     date: '2026-05-03',
     kind: 'minor',
