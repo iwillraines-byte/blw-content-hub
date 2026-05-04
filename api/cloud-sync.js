@@ -409,7 +409,24 @@ export default async function handler(req, res) {
     }
 
     // Upload blob first if this kind carries one.
-    if (BLOB_KINDS.has(kind) && blob?.base64) {
+    // v4.5.23: caller can ALSO supply storage_path directly when the
+    // browser already PUT the blob to a presigned URL via
+    // /api/storage-presign. In that case we skip the relay upload and
+    // just stamp the path into the metadata row. Detect by checking
+    // for an inline storage_path (or thumbnail_storage_path for
+    // generate-log) on the record itself.
+    const pathColForKind = STORAGE_PATH_COL[kind] || 'storage_path';
+    const callerSuppliedPath = payload[pathColForKind] || record[pathColForKind];
+    if (BLOB_KINDS.has(kind) && callerSuppliedPath && !blob?.base64) {
+      // Direct-upload path — blob already in storage. Just keep the
+      // path intact on the payload (it's already there from spread).
+      payload[pathColForKind] = callerSuppliedPath;
+      if (kind === 'media') {
+        // Mime/size — caller can supply via the record; otherwise leave null.
+        if (record.mime_type) payload.mime_type = record.mime_type;
+        if (record.size_bytes != null) payload.size_bytes = record.size_bytes;
+      }
+    } else if (BLOB_KINDS.has(kind) && blob?.base64) {
       const bucket = BUCKET_FOR[kind];
       const mime = blob.mime || 'application/octet-stream';
       const ext = extForMime(mime);
