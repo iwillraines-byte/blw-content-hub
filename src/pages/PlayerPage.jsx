@@ -1650,12 +1650,22 @@ export default function PlayerPage() {
             batting: battingLeaders.slice(0, 60),
             pitching: pitchingLeaders.slice(0, 60),
             // Pass THIS player's voice block so the modal-generated
-            // idea actually reads it. Server keys on TEAM|LASTNAME
-            // and only renders for sampled players, so we send a
-            // single-key map keyed to the active player.
-            athleteVoices: player.athleteVoice && Object.values(player.athleteVoice).some(v => v)
-              ? { [`${player.team}|${player.lastName.toUpperCase()}`]: player.athleteVoice }
-              : {},
+            // idea actually reads it.
+            // v4.5.30: include both the cousin-safe TEAM|FI|LASTNAME
+            // key AND the legacy TEAM|LASTNAME key — server tries the
+            // composite first, falls back to lastname-only. Same
+            // pattern fixes the Paul/Will Marshall mix-up everywhere
+            // athleteVoices is read.
+            athleteVoices: (() => {
+              if (!player.athleteVoice || !Object.values(player.athleteVoice).some(v => v)) return {};
+              const team = (player.team || '').toUpperCase();
+              const last = (player.lastName || '').toUpperCase();
+              const fi = String(player.firstInitial || (player.firstName || '').charAt(0) || '').toUpperCase();
+              const map = {};
+              if (team && fi && last) map[`${team}|${fi}|${last}`] = player.athleteVoice;
+              if (team && last) map[`${team}|${last}`] = player.athleteVoice;
+              return map;
+            })(),
           },
           count: 1,
           seedIdea: {

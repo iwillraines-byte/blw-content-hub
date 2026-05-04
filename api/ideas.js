@@ -141,11 +141,23 @@ export default async function handler(req, res) {
   const voiceLines = [];
   const seenVoiceKeys = new Set();
   for (const p of sampledPlayers) {
-    const last = (p.name || '').split(/\s+/).pop().toUpperCase();
-    const key = `${(p.team || '').toUpperCase()}|${last}`;
-    if (seenVoiceKeys.has(key)) continue;
-    seenVoiceKeys.add(key);
-    const v = athleteVoices[key];
+    const parts = (p.name || '').split(/\s+/).filter(Boolean);
+    const last = (parts[parts.length - 1] || '').toUpperCase();
+    const fi = (parts[0] || '').charAt(0).toUpperCase();
+    const team = (p.team || '').toUpperCase();
+    // v4.5.30: try cousin-safe TEAM|FI|LASTNAME first, fall back to
+    // lastname-only TEAM|LASTNAME. Without the FI step, Paul Marshall
+    // (AZS|MARSHALL) and Will Marshall (AZS|MARSHALL) collapsed into
+    // one key — whichever cousin's voice was set last won, even when
+    // the idea was about the OTHER one.
+    const compositeKey = team && fi && last ? `${team}|${fi}|${last}` : null;
+    const fallbackKey = team && last ? `${team}|${last}` : null;
+    const dedupKey = compositeKey || fallbackKey;
+    if (!dedupKey || seenVoiceKeys.has(dedupKey)) continue;
+    seenVoiceKeys.add(dedupKey);
+    const v = (compositeKey && athleteVoices[compositeKey])
+      || (fallbackKey && athleteVoices[fallbackKey])
+      || null;
     if (!v || typeof v !== 'object') continue;
     const summary = [
       v.vibe && `vibe: ${String(v.vibe).slice(0, 200)}`,
@@ -293,13 +305,22 @@ ${athleteVoiceBlock}${leagueNarrativesBlock}`;
   // opposite of what users actually want when they hit "More like this."
   const seedTeam = seedIdea?.team && seedIdea.team !== 'BLW' ? seedIdea.team : null;
   const seedPlayerName = (seedIdea?.prefill?.playerName || '').trim();
-  const seedPlayerLast = seedPlayerName ? seedPlayerName.split(/\s+/).pop() : '';
+  const seedPlayerParts = seedPlayerName ? seedPlayerName.split(/\s+/).filter(Boolean) : [];
+  const seedPlayerLast = seedPlayerParts.length ? seedPlayerParts[seedPlayerParts.length - 1] : '';
+  // v4.5.30: explicit first initial in the prompt so cousin pairs
+  // (Paul/Will Marshall on AZS, Logan/Luke/Carson Rose on DAL,
+  // James/Justin Lee on LV) can't get conflated. The model now sees
+  // "Paul Marshall (P. Marshall)" instead of just "Marshall."
+  const seedPlayerFI = seedPlayerParts.length > 1 ? (seedPlayerParts[0] || '').charAt(0).toUpperCase() : '';
+  const seedPlayerLabel = seedPlayerFI && seedPlayerLast
+    ? `${seedPlayerName} (${seedPlayerFI}. ${seedPlayerLast})`
+    : seedPlayerName;
 
   const seedScopeBlock = (() => {
     if (!seedIdea) return '';
     const parts = [];
     if (seedTeam) parts.push(`MUST scope every idea to team ${seedTeam}. Do NOT pick a different team.`);
-    if (seedPlayerLast) parts.push(`The seed is about ${seedPlayerName}. Generate ideas focused on ${seedPlayerLast} — different angles on the same player (a stat highlight, a hype moment, a comparison, a milestone) — OR on their direct teammates on ${seedTeam || 'their team'}. Do NOT switch to other teams' players.`);
+    if (seedPlayerLast) parts.push(`The seed is about ${seedPlayerLabel}. Generate ideas focused on ${seedPlayerName} SPECIFICALLY — different angles on the same player (a stat highlight, a hype moment, a comparison, a milestone). Do NOT confuse them with any other player who shares the lastname "${seedPlayerLast}" (cousin pairs exist on this team — match the FULL first name, not just the lastname). You can also write about their direct teammates on ${seedTeam || 'their team'}. Do NOT switch to other teams' players.`);
     if (!seedPlayerLast && seedTeam) parts.push(`Spread across different players and storylines on ${seedTeam}. Don't repeat the seed's exact angle.`);
     // The system prompt's "at least 4 different teams" rule explicitly does
     // NOT apply to seeded regenerations — the whole point is to drill into

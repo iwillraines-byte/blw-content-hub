@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.30',
+    date: '2026-05-04',
+    kind: 'patch',
+    summary: 'Cousin-pair athlete voice fix (Paul/Will Marshall, Logan/Luke Rose, etc.)',
+    items: [
+      'Generating content for Paul Marshall was pulling Will Marshall\'s athlete voice (and vice versa). Same root issue as the v4.5.20 Smith collision: athleteVoice map was keyed by TEAM|LASTNAME, so Paul (AZS|MARSHALL) and Will (AZS|MARSHALL) collapsed into one slot — whichever was last in iteration order won. Same trap hit Logan/Luke/Carson Rose on DAL and James/Justin Lee on LV.',
+      'Map keys are now TEAM|FI|LASTNAME (e.g. AZS|P|MARSHALL vs AZS|W|MARSHALL). Lookup tries the cousin-safe composite key first, falls back to TEAM|LASTNAME for non-cousin lookups so legacy ideas without first-initial metadata still resolve.',
+      'Fixed in three locations: src/pages/ContentStudio.jsx (dashboard idea generation), src/pages/PlayerPage.jsx (player-page idea modal), api/ideas.js (server-side voice attachment).',
+      'Reinforced the AI seed-scope prompt so when the seed is "Paul Marshall," the model sees "Paul Marshall (P. Marshall)" with explicit anti-conflation language: "Do NOT confuse them with any other player who shares the lastname \'Marshall\' (cousin pairs exist on this team — match the FULL first name, not just the lastname)."',
+    ],
+  },
+  {
     version: '4.5.29',
     date: '2026-05-03',
     kind: 'patch',

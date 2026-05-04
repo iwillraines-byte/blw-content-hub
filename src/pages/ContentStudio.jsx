@@ -85,15 +85,36 @@ export default function ContentStudio() {
   const [athleteVoices, setAthleteVoices] = useState({});
   useEffect(() => {
     getAllManualPlayers().then(list => {
+      // v4.5.30: Cousin-pair fix. Keys are now TEAM|FI|LASTNAME so
+      // Paul Marshall (AZS|P|MARSHALL) and Will Marshall
+      // (AZS|W|MARSHALL) get distinct voice slots — previous lastname-
+      // only key collapsed them into one and whoever was last in the
+      // iteration order won, which is why "content created for Paul"
+      // was pulling Will's voice. We also write a TEAM|LASTNAME fallback
+      // ONLY when there's exactly one cousin on the team with that
+      // lastname, so legacy callers that don't know FI still hit the
+      // right entry.
+      const byTeamLast = {};
+      for (const p of list) {
+        if (!p?.team || !p?.lastName) continue;
+        const k = `${p.team.toUpperCase()}|${p.lastName.toUpperCase()}`;
+        (byTeamLast[k] = byTeamLast[k] || []).push(p);
+      }
       const map = {};
       for (const p of list) {
         const v = p.athleteVoice || p.athlete_voice;
         if (!v || typeof v !== 'object') continue;
         const hasContent = Object.values(v).some(x => x && String(x).trim());
         if (!hasContent) continue;
-        const key = `${(p.team || '').toUpperCase()}|${(p.lastName || '').toUpperCase()}`;
-        if (key === '|') continue;
-        map[key] = v;
+        const team = (p.team || '').toUpperCase();
+        const last = (p.lastName || '').toUpperCase();
+        if (!team || !last) continue;
+        const fi = String(p.firstInitial || (p.firstName || '').charAt(0) || '').toUpperCase();
+        // Composite key — always written, always cousin-safe.
+        if (fi) map[`${team}|${fi}|${last}`] = v;
+        // Lastname-only key — only when there's one cousin to overwrite.
+        const sameLast = byTeamLast[`${team}|${last}`] || [];
+        if (sameLast.length <= 1) map[`${team}|${last}`] = v;
       }
       setAthleteVoices(map);
     }).catch(() => {});
@@ -539,14 +560,22 @@ export default function ContentStudio() {
               {ideasPageItems.map(s => {
                 // v4.5.17: pass the spotlit player's athleteVoice (if any)
                 // so /api/captions grounds the copy in their actual
-                // self-authored vibe / references / fun facts. Look up
-                // by the idea's team + the playerName's lastName.
+                // self-authored vibe / references / fun facts.
+                // v4.5.30: Try the cousin-safe TEAM|FI|LASTNAME key
+                // first; fall back to TEAM|LASTNAME for non-cousin
+                // lookups. Without this, Paul Marshall ideas pulled
+                // Will Marshall's voice (whoever was last in the
+                // map's iteration order won the lastname-only key).
                 const playerName = s.prefill?.playerName || s.playerName || '';
-                const lastName = playerName ? playerName.trim().split(/\s+/).pop() : '';
-                const voiceKey = lastName && s.team
-                  ? `${s.team.toUpperCase()}|${lastName.toUpperCase()}`
-                  : null;
-                const athleteVoice = voiceKey ? athleteVoices[voiceKey] || null : null;
+                const nameParts = playerName ? playerName.trim().split(/\s+/) : [];
+                const lastName = nameParts.length ? nameParts[nameParts.length - 1] : '';
+                const firstInitial = nameParts.length > 1 ? (nameParts[0] || '').charAt(0).toUpperCase() : '';
+                const teamUp = (s.team || '').toUpperCase();
+                const lnUp = lastName.toUpperCase();
+                const athleteVoice = (firstInitial && teamUp && lnUp
+                  ? athleteVoices[`${teamUp}|${firstInitial}|${lnUp}`]
+                  : null
+                ) || (teamUp && lnUp ? athleteVoices[`${teamUp}|${lnUp}`] : null) || null;
                 return (
                 <IdeaCard
                   key={s.id}
