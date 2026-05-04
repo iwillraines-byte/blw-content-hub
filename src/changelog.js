@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.5.32',
+    date: '2026-05-04',
+    kind: 'patch',
+    summary: 'Stat Card design pass: lower-third sized, exact reference layouts',
+    items: [
+      'Rewrote the stat-card renderer to match the master\'s reference designs exactly. Two distinct layouts:',
+      'Raw Stats Card (Hitting / Pitching) — 4-column grid (~920×200 lower-third). Top header strip is a 135deg gradient in team color → team-dark with "2026 BATTING" / "2026 PITCHING" centered. Each column shows: stat label (uppercase 11-12px condensed muted), big value (heading face), rank line ("#32 / 64" condensed muted), and a 3px-thin mini progress bar. Last column is the headline stat (OPS+ for batting, FIP for pitching) rendered in TEAM ACCENT COLOR — value, mini-bar fill, all team-tinted.',
+      'Mini-bar tier palette for raw cards: ≥50 blue (#3B82F6), ≥25 amber (#F59E0B), <25 red (#EF4444). Headline stat overrides with team color regardless of percentile.',
+      'Percentile Card (Hitting / Pitching) — Savant-style bubble bars (~920×360-420 lower-third). Header reads "BLW BATTING/PITCHING PERCENTILE RANKINGS" + "Across N BLW batters/pitchers" subtitle. 6 rows of [70px label][bar with bubble][56px value]. Bubble has white ring + percentile number inside. Same 8-tier color palette as the player page (≥90 elite red C8302B → bottom-of-league navy 3F5A7A).',
+      'Default box geometry sized for lower-third use across all four platforms — feed, portrait, story, landscape. Raw cards top out around 200px tall; percentile cards around 360-420px. All horizontally centered with healthy side margins.',
+      'defaultCardBox now takes a cardType arg so raw vs percentile cards get different default heights.',
+    ],
+  },
+  {
     version: '4.5.31',
     date: '2026-05-04',
     kind: 'minor',

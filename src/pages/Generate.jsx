@@ -800,7 +800,7 @@ export default function Generate() {
     return {
       cardType: statCardType,
       player: enriched,
-      box: defaultCardBox(customPlatform),
+      box: defaultCardBox(customPlatform, statCardType),
       team: customTeamObj,
       leaders: { batting: battingPool, pitching: pitchingPool },
     };
