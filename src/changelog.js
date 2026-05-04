@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '4.5.34',
+    date: '2026-05-04',
+    kind: 'patch',
+    summary: 'Raw stat card: trim value font so multi-digit numbers don\'t collide',
+    items: [
+      'v4.5.33 set the raw card value font to 52% of body height. At that size, pitching cards with multi-digit values (25.0 / 11.68 / -1.85) ran into each other across columns and clipped the mini progress bar below. Reduced to 40%. Label + rank fonts trimmed slightly to keep proportions consistent.',
+    ],
+  },
+  {
     version: '4.5.33',
     date: '2026-05-04',
     kind: 'patch',

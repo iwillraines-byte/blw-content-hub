@@ -279,16 +279,18 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   const bodyTop = y + headerH;
   const bodyH = h - headerH;
   const colW = w / 4;
-  // v4.5.33: type sizes increased across the board. Value cell gets
-  // ~52% of body height (was 42%) for the headline number;
-  // label/rank scale up proportionally.
-  const yLabel  = bodyTop + bodyH * 0.16;
+  // v4.5.34: value font reduced from 52% → 40% of body height.
+  // At 52% the digits in pitching-stats (0.00 / 25.0 / 11.68 / -1.85)
+  // were running into each other across columns and clipping the
+  // mini-bar below. 40% gives breathing room while still reading as
+  // the headline number.
+  const yLabel  = bodyTop + bodyH * 0.18;
   const yValue  = bodyTop + bodyH * 0.50;
   const yRank   = bodyTop + bodyH * 0.78;
   const yBar    = bodyTop + bodyH * 0.92;
-  const valueFont = Math.round(bodyH * 0.52);
-  const labelFont = Math.round(bodyH * 0.16);
-  const rankFont = Math.round(bodyH * 0.13);
+  const valueFont = Math.round(bodyH * 0.40);
+  const labelFont = Math.round(bodyH * 0.15);
+  const rankFont = Math.round(bodyH * 0.12);
 
   cells.forEach((cell, i) => {
     const cx = x + colW * i + colW / 2;
