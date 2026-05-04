@@ -137,6 +137,10 @@ export function ContentIdeasSection({
 
       {ideas.length > 0 && (
         <>
+          {/* v4.5.26: pager above + below the cards so paginating from
+              a stable top position doesn't require chasing the bottom
+              one (which moves as card heights vary). */}
+          <Pager {...pagerProps} position="top" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
             {pageItems.map(idea => (
               <IdeaCard

@@ -58,12 +58,20 @@ export function useIdeaPagination(items, pageSize = IDEAS_PAGE_SIZE) {
   };
 }
 
-export function Pager({ page, totalPages, onPrev, onNext, total, pageSize = IDEAS_PAGE_SIZE }) {
+// v4.5.26: `position` prop ('top' | 'bottom', default 'bottom') so the
+// same component can render above OR below the list. Top variant uses
+// border-bottom + zero top margin so it sits flush under a header;
+// bottom keeps the original border-top + top margin. Render both in
+// long lists where varying card heights would otherwise make the
+// bottom pager move every time you click — users can paginate from a
+// stable top position without chasing the mouse.
+export function Pager({ page, totalPages, onPrev, onNext, total, pageSize = IDEAS_PAGE_SIZE, position = 'bottom' }) {
   if (totalPages <= 1) return null;
   const start = page * pageSize + 1;
   const end = Math.min(total, (page + 1) * pageSize);
   const atStart = page === 0;
   const atEnd = page >= totalPages - 1;
+  const isTop = position === 'top';
 
   return (
     <div
@@ -71,8 +79,13 @@ export function Pager({ page, totalPages, onPrev, onNext, total, pageSize = IDEA
       aria-label="Pagination"
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: 10, marginTop: 12, padding: '8px 4px',
-        borderTop: `1px solid ${colors.borderLight}`,
+        gap: 10,
+        marginTop: isTop ? 0 : 12,
+        marginBottom: isTop ? 12 : 0,
+        padding: '8px 4px',
+        ...(isTop
+          ? { borderBottom: `1px solid ${colors.borderLight}` }
+          : { borderTop: `1px solid ${colors.borderLight}` }),
       }}
     >
       <span className="tnum" style={{

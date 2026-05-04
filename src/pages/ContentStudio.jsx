@@ -530,7 +530,11 @@ export default function ContentStudio() {
                 ‹ / › arrows when the rolling 14-day store has more. The
                 pager hook auto-resets to page 1 when fresh ideas are
                 prepended (so "More about Jaso" actually shows the new
-                ones, not whatever page you were idling on). */}
+                ones, not whatever page you were idling on).
+                v4.5.26: pager renders both above AND below the cards so
+                you can paginate from a stable top position without
+                chasing the bottom one as card heights vary. */}
+            <Pager {...ideasPagerProps} position="top" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {ideasPageItems.map(s => {
                 // v4.5.17: pass the spotlit player's athleteVoice (if any)

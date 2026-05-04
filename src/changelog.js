@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.26',
+    date: '2026-05-03',
+    kind: 'patch',
+    summary: 'Idea pager renders top + bottom so you don\'t chase the mouse',
+    items: [
+      'Content Ideas pager (dashboard, team page, player page) now renders BOTH above and below the cards. The bottom one was the only paginator before, but card heights vary widely with text length — every page click moved the bottom pager and you had to chase the mouse to keep paginating. The top pager sits in a fixed position so you can click through pages without moving.',
+      'Pager component takes a new `position="top"` prop that swaps border-top + top-margin for border-bottom + bottom-margin so the visual treatment matches the placement.',
+    ],
+  },
+  {
     version: '4.5.25',
     date: '2026-05-03',
     kind: 'patch',
