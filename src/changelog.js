@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.5.33',
+    date: '2026-05-04',
+    kind: 'patch',
+    summary: 'Stat Cards: Space Grotesk + Inter, all 9 stats, bigger type, slight drop shadow',
+    items: [
+      'Typography aligned with the player page — Space Grotesk for headings + values, Inter for condensed labels and body text. Bypasses FONT_MAP and references the font stacks directly so the cards always read like the player page regardless of which Settings → Typography pick is active.',
+      'Type sizes increased across the board. Raw card: header text ~+20%, value cell ~+25% (now 52% of body height vs 42%). Percentile card: title ~+15%, row labels/values bumped to ~36% of row height for stronger presence in social previews.',
+      'Percentile cards now show ALL 9 stats per type — was 6. Hitting: AVG/OBP/SLG/OPS/BB%/K%/HR/PA/RBI/PA/R/PA. Pitching: ERA/WHIP/IP/K/K/4/BB/BB/4/FIP/K:BB. Same direction logic as the player page (asc on lower-is-better stats so the bubble points at "elite").',
+      'Tightened percentile-row padding so 9 rows fit cleanly. Inner padTop reduced 7%→5%, header height 16%→13%, row spacing pulled in. Bar height up to 40% of row height (was 32%) and bubbles scale with bar — bigger, more legible.',
+      'Slight drop shadow on every stat card. Raw card: rgba(15,23,42,0.15) blur 20 offset 6. Percentile card: rgba(15,23,42,0.13) blur 18 offset 5. Lifts the card off photo backgrounds without feeling heavy.',
+      'Default box heights enlarged to accommodate the new content density: feed 540px (was 360) for percentile cards, portrait 580 (380), story 640 (420), landscape 540 (360).',
+    ],
+  },
+  {
     version: '4.5.32',
     date: '2026-05-04',
     kind: 'patch',

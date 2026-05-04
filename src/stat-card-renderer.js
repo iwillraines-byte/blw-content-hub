@@ -15,7 +15,16 @@
 // so quality stays crisp at any export resolution.
 
 import { percentileFor, derivedPercentileFor } from './percentile-bubble';
-import { FONT_MAP } from './template-config';
+
+// v4.5.33: bypass FONT_MAP and reference the MVP theme stack directly.
+// FONT_MAP is keyed for the legacy Bebas Neue / Barlow stack; the
+// player page uses Space Grotesk + Inter via CSS custom properties.
+// We want the canvas card to match the player page typography
+// regardless of which Settings → Typography pick the user has active,
+// because these cards are visually anchored to the player page design.
+const FONT_HEAD = '"Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_BODY = '"Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_COND = '"Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
 
 // Mini-bar tier palette for the 4-column raw stat card. Simpler than
 // the Savant percentile bubble palette — just three bands so the eye
@@ -71,6 +80,21 @@ function formatRate(num, denom) {
   return (n / d).toFixed(3);
 }
 function safeRate(num, denom) {
+  const n = Number(num);
+  const d = Number(denom);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null;
+  return n / d;
+}
+// v4.5.33: ratio helpers for K:BB (and any future "x per y" stats
+// that aren't a single field on the row). Mirror the helpers on
+// PlayerPage.jsx so the displayed values match exactly.
+function formatRatio(num, denom) {
+  const n = Number(num);
+  const d = Number(denom);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return '—';
+  return (n / d).toFixed(2);
+}
+function safeRatio(num, denom) {
   const n = Number(num);
   const d = Number(denom);
   if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null;
@@ -134,9 +158,12 @@ function pitchingRawCells(player, leaders) {
   ];
 }
 
+// v4.5.33: full 9-row sets matching the player page exactly. Same
+// stat list, same direction (asc for "lower is better" stats like
+// K% and ERA so the bubble points at "good" the same way it does for
+// hitter-friendly metrics — bubble at 95 means elite, not worst).
 function hittingPercentileRows(player, battingLeaders) {
   const b = player.batting || {};
-  // Lower-third sized — keep to 6 rows max so the card fits.
   return [
     { label: 'AVG', value: b.avg ?? '—',
       percentile: percentileFor(battingLeaders, player.name, 'avg', 'desc', parseFloat) },
@@ -148,26 +175,41 @@ function hittingPercentileRows(player, battingLeaders) {
       percentile: percentileFor(battingLeaders, player.name, 'ops', 'desc', parseFloat) },
     { label: 'BB%', value: formatPctValue(b.bbPct),
       percentile: percentileFor(battingLeaders, player.name, 'bbPct', 'desc', Number) },
+    // K% lower-is-better for hitters
+    { label: 'K%', value: formatPctValue(b.kPct),
+      percentile: percentileFor(battingLeaders, player.name, 'kPct', 'asc', Number) },
     { label: 'HR/PA', value: formatRate(b.hr, b.pa),
       percentile: derivedPercentileFor(battingLeaders, player.name, (r) => safeRate(r.hr, r.pa), 'desc') },
+    { label: 'RBI/PA', value: formatRate(b.rbi, b.pa),
+      percentile: derivedPercentileFor(battingLeaders, player.name, (r) => safeRate(r.rbi, r.pa), 'desc') },
+    { label: 'R/PA', value: formatRate(b.runs, b.pa),
+      percentile: derivedPercentileFor(battingLeaders, player.name, (r) => safeRate(r.runs, r.pa), 'desc') },
   ];
 }
 
 function pitchingPercentileRows(player, pitchingLeaders) {
   const p = player.pitching || {};
   return [
-    { label: 'FIP', value: typeof p.fip === 'number' ? p.fip.toFixed(2) : (p.fip ?? '—'),
-      percentile: percentileFor(pitchingLeaders, player.name, 'fip', 'asc', parseFloat) },
-    { label: 'ERA', value: p.era ?? '—',
-      percentile: percentileFor(pitchingLeaders, player.name, 'era', 'asc', parseFloat) },
+    // ERA / WHIP / BB / BB/4 are "lower is better" — direction 'asc'
+    // so the bubble at 95 means elite, not "worst ERA in BLW".
+    { label: 'ERA',  value: p.era ?? '—',
+      percentile: percentileFor(pitchingLeaders, player.name, 'era',  'asc', parseFloat) },
     { label: 'WHIP', value: p.whip ?? '—',
       percentile: percentileFor(pitchingLeaders, player.name, 'whip', 'asc', parseFloat) },
-    { label: 'K/4', value: p.k4 ?? '—',
-      percentile: percentileFor(pitchingLeaders, player.name, 'k4', 'desc', parseFloat) },
-    { label: 'IP', value: p.ip ?? '—',
-      percentile: percentileFor(pitchingLeaders, player.name, 'ip', 'desc', parseFloat) },
-    { label: 'W', value: p.w ?? '—',
-      percentile: percentileFor(pitchingLeaders, player.name, 'w', 'desc', parseFloat) },
+    { label: 'IP',   value: p.ip ?? '—',
+      percentile: percentileFor(pitchingLeaders, player.name, 'ip',   'desc', parseFloat) },
+    { label: 'K',    value: p.k ?? '—',
+      percentile: percentileFor(pitchingLeaders, player.name, 'k',    'desc', Number) },
+    { label: 'K/4',  value: p.k4 ?? '—',
+      percentile: percentileFor(pitchingLeaders, player.name, 'k4',   'desc', parseFloat) },
+    { label: 'BB',   value: p.bb ?? '—',
+      percentile: percentileFor(pitchingLeaders, player.name, 'bb',   'asc', Number) },
+    { label: 'BB/4', value: p.bb4 ?? '—',
+      percentile: percentileFor(pitchingLeaders, player.name, 'bb4',  'asc', parseFloat) },
+    { label: 'FIP',  value: typeof p.fip === 'number' ? p.fip.toFixed(2) : (p.fip ?? '—'),
+      percentile: percentileFor(pitchingLeaders, player.name, 'fip',  'asc', parseFloat) },
+    { label: 'K:BB', value: p.kbb || formatRatio(p.k, p.bb),
+      percentile: derivedPercentileFor(pitchingLeaders, player.name, (r) => safeRatio(r.k, r.bb), 'desc') },
   ];
 }
 
@@ -180,15 +222,19 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   const { x, y, w, h } = box;
   const accent = team?.color || '#C8302B';
   const accentDark = team?.dark || accent;
-  const cond = FONT_MAP.condensed || "'Barlow Condensed', Arial, sans-serif";
-  const head = FONT_MAP.heading || "'Bebas Neue', 'Arial Black', sans-serif";
+  // v4.5.33: Space Grotesk + Inter to match the player page typography.
+  const cond = FONT_COND;
+  const head = FONT_HEAD;
 
   ctx.save();
 
-  // Card body — white, rounded, hairline border, soft shadow.
-  ctx.shadowColor = 'rgba(0,0,0,0.08)';
-  ctx.shadowBlur = 12;
-  ctx.shadowOffsetY = 4;
+  // Card body — white, rounded, hairline border, soft drop shadow.
+  // v4.5.33: shadow strengthened (alpha 0.08 → 0.15, blur 12 → 20,
+  // offset 4 → 6) so the card lifts off photo backgrounds visibly
+  // while still reading "slight" — matches the user's brief.
+  ctx.shadowColor = 'rgba(15,23,42,0.15)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 6;
   ctx.fillStyle = '#FFFFFF';
   roundRect(ctx, x, y, w, h, 14);
   ctx.fill();
@@ -203,7 +249,9 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   // Header strip — gradient team color, fitted to the top with the
   // card's top corners rounded but the bottom edge straight (so it
   // visually fuses with the body).
-  const headerH = Math.max(36, Math.round(h * 0.22));
+  // v4.5.33: bumped header to ~25% of card height so the larger
+  // condensed font has breathing room.
+  const headerH = Math.max(40, Math.round(h * 0.24));
   ctx.save();
   // Clip to the card's rounded rect so the header doesn't bleed past
   // the corners. This composites cleanly even though the gradient is
@@ -218,8 +266,10 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   ctx.restore();
 
   // Header text — uppercase season + label, centered.
+  // v4.5.33: bumped from 0.42 → 0.50 of header height for stronger
+  // type presence in social previews.
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = `700 ${Math.round(headerH * 0.42)}px ${cond}`;
+  ctx.font = `700 ${Math.round(headerH * 0.50)}px ${cond}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const headerText = `${SEASON_LABEL} ${headerLabel}`.toUpperCase();
@@ -229,29 +279,30 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   const bodyTop = y + headerH;
   const bodyH = h - headerH;
   const colW = w / 4;
-  // Vertical anchors inside each column (relative to bodyTop):
-  //   ~14% from top  → label
-  //   ~38% from top  → value (heading)
-  //   ~70% from top  → rank line
-  //   ~85% from top  → mini bar (top edge)
-  const yLabel  = bodyTop + bodyH * 0.18;
+  // v4.5.33: type sizes increased across the board. Value cell gets
+  // ~52% of body height (was 42%) for the headline number;
+  // label/rank scale up proportionally.
+  const yLabel  = bodyTop + bodyH * 0.16;
   const yValue  = bodyTop + bodyH * 0.50;
   const yRank   = bodyTop + bodyH * 0.78;
-  const yBar    = bodyTop + bodyH * 0.90;
-  const valueFont = Math.round(bodyH * 0.42);
+  const yBar    = bodyTop + bodyH * 0.92;
+  const valueFont = Math.round(bodyH * 0.52);
+  const labelFont = Math.round(bodyH * 0.16);
+  const rankFont = Math.round(bodyH * 0.13);
 
   cells.forEach((cell, i) => {
     const cx = x + colW * i + colW / 2;
     // Label
     ctx.fillStyle = '#9CA3AF';
-    ctx.font = `700 ${Math.round(bodyH * 0.13)}px ${cond}`;
+    ctx.font = `700 ${labelFont}px ${cond}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(cell.label).toUpperCase(), cx, yLabel);
 
-    // Value — heading face, bigger weight. Highlight stat uses team accent.
+    // Value — Space Grotesk display weight 600. Highlight stat uses
+    // team accent, otherwise dark text.
     ctx.fillStyle = cell.highlight ? accent : '#151C28';
-    ctx.font = `400 ${valueFont}px ${head}`;
+    ctx.font = `600 ${valueFont}px ${head}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(cell.value), cx, yValue);
@@ -259,16 +310,16 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
     // Rank — "#32 / 64". Hidden if rank is unknown.
     if (cell.rank != null && cell.total != null && cell.total > 0) {
       ctx.fillStyle = '#9CA3AF';
-      ctx.font = `600 ${Math.round(bodyH * 0.11)}px ${cond}`;
+      ctx.font = `600 ${rankFont}px ${cond}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`#${cell.rank} / ${cell.total}`, cx, yRank);
     }
 
-    // Mini progress bar — track + fill, 3px tall, 78% of column width.
-    const barW = colW * 0.72;
+    // Mini progress bar — track + fill, 3-4px tall, 75% of column width.
+    const barW = colW * 0.75;
     const barX = cx - barW / 2;
-    const barH = 3;
+    const barH = 4;
     ctx.fillStyle = 'rgba(0,0,0,0.06)';
     roundRect(ctx, barX, yBar, barW, barH, barH / 2);
     ctx.fill();
@@ -287,17 +338,20 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
 function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, playerName }) {
   const { x, y, w, h } = box;
   const accent = team?.color || '#C8302B';
-  const cond = FONT_MAP.condensed || "'Barlow Condensed', Arial, sans-serif";
-  const head = FONT_MAP.heading || "'Bebas Neue', 'Arial Black', sans-serif";
-  const body = FONT_MAP.body || "'Barlow', Arial, sans-serif";
-  const tnum = FONT_MAP.tnum || body;
+  // v4.5.33: Space Grotesk + Inter to match the player page typography.
+  const cond = FONT_COND;
+  const head = FONT_HEAD;
+  const tnum = FONT_BODY;
 
   ctx.save();
 
-  // Card body — white, hairline border, soft shadow, generous radius.
-  ctx.shadowColor = 'rgba(17,24,39,0.06)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetY = 2;
+  // Card body — white, hairline border, soft drop shadow.
+  // v4.5.33: shadow strengthened to "slight" presence — was barely
+  // visible at 0.06 alpha; lifted to 0.13 to match the raw card and
+  // separate the card from photo BGs.
+  ctx.shadowColor = 'rgba(15,23,42,0.13)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 5;
   ctx.fillStyle = '#FFFFFF';
   roundRect(ctx, x, y, w, h, 14);
   ctx.fill();
@@ -309,43 +363,56 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
   roundRect(ctx, x, y, w, h, 14);
   ctx.stroke();
 
-  // Inner padding
+  // Inner padding. v4.5.33: tightened the row spacing so all 9 stats
+  // fit comfortably while font sizes go UP. padTop trimmed slightly
+  // and headerHeight reduced — the body block now claims more space.
   const padX = Math.round(w * 0.045);
-  const padTop = Math.round(h * 0.07);
-  const headerHeight = Math.round(h * 0.16);
+  const padTop = Math.round(h * 0.05);
+  const headerHeight = Math.round(h * 0.13);
 
   // Header — title left, "Across N BLW [batters/pitchers]" right.
+  // v4.5.33: title up to 64% of header height (was 55%) for stronger
+  // brand presence on social previews.
   ctx.fillStyle = '#151C28';
-  const titleSize = Math.round(headerHeight * 0.55);
+  const titleSize = Math.round(headerHeight * 0.64);
   ctx.font = `600 ${titleSize}px ${head}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(headerLabel).toUpperCase(), x + padX, y + padTop + headerHeight * 0.45);
+  ctx.fillText(String(headerLabel).toUpperCase(), x + padX, y + padTop + headerHeight * 0.5);
 
   ctx.fillStyle = '#9CA3AF';
-  ctx.font = `400 ${Math.round(headerHeight * 0.32)}px ${cond}`;
+  ctx.font = `400 ${Math.round(headerHeight * 0.36)}px ${cond}`;
   ctx.textAlign = 'right';
-  ctx.fillText(totalLabel, x + w - padX, y + padTop + headerHeight * 0.5);
+  ctx.fillText(totalLabel, x + w - padX, y + padTop + headerHeight * 0.55);
 
-  // Body rows. Three-column grid: [label 70][bar flex][value 56].
-  const bodyTop = y + padTop + headerHeight + 8;
+  // Body rows. Three-column grid: [label 70-ish][bar flex][value 56-ish].
+  // v4.5.33: row spacing pulled in (gap between rows reduced) so 9
+  // rows fit in the same vertical real estate. Each row is now
+  // tighter but the bar/bubble themselves take a larger fraction of
+  // the row height for visual punch.
+  const bodyTop = y + padTop + headerHeight + 6;
   const bodyBottom = y + h - padTop;
   const bodyHeight = bodyBottom - bodyTop;
   const rowHeight = bodyHeight / Math.max(1, rows.length);
   const labelW = Math.round(w * 0.10);
   const valueW = Math.round(w * 0.10);
-  const barX = x + padX + labelW + 12;
-  const barW = w - padX * 2 - labelW - valueW - 24;
+  const barX = x + padX + labelW + 14;
+  const barW = w - padX * 2 - labelW - valueW - 28;
 
-  const barH = Math.max(8, Math.round(rowHeight * 0.32));
-  const bubbleR = Math.max(barH * 0.95, 11);
+  // Bar takes ~40% of row height (was 32%) for stronger presence at
+  // 9-row density. Bubble scales with bar height + a fixed minimum.
+  const barH = Math.max(8, Math.round(rowHeight * 0.40));
+  const bubbleR = Math.max(barH * 1.0, 12);
+
+  // Row text size: scale up by ~10% from the previous 32% baseline.
+  const rowFontSize = Math.max(13, Math.round(rowHeight * 0.36));
 
   rows.forEach((row, i) => {
     const rowY = bodyTop + i * rowHeight + rowHeight / 2;
 
     // Label — right-aligned in the 70-ish px column.
     ctx.fillStyle = '#151C28';
-    ctx.font = `700 ${Math.round(rowHeight * 0.32)}px ${cond}`;
+    ctx.font = `700 ${rowFontSize}px ${cond}`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(row.label).toUpperCase(), x + padX + labelW, rowY);
@@ -377,9 +444,10 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
       ctx.beginPath();
       ctx.arc(bubbleCx, bubbleCy, bubbleR, 0, Math.PI * 2);
       ctx.fill();
-      // Bubble number — white, centered.
+      // Bubble number — white, centered. Bumped to ~95% of bubble
+      // radius for higher number readability.
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = `800 ${Math.round(bubbleR * 0.95)}px ${cond}`;
+      ctx.font = `800 ${Math.round(bubbleR * 1.0)}px ${cond}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(Math.round(pct)), bubbleCx, bubbleCy + 1);
@@ -387,7 +455,7 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
 
     // Value — body font, tabular-numbers, left-aligned in the value column.
     ctx.fillStyle = '#151C28';
-    ctx.font = `700 ${Math.round(rowHeight * 0.32)}px ${tnum}`;
+    ctx.font = `700 ${rowFontSize}px ${tnum}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(row.value), x + w - padX - valueW + 6, rowY);
@@ -448,32 +516,35 @@ export function renderStatCard(ctx, { cardType, player, box, team, leaders }) {
 export function defaultCardBox(platform, cardType = 'hitting-stats') {
   // Raw cards are short — header strip + 4 columns; percentile cards
   // are taller because each row is a discrete bar.
+  // v4.5.33: percentile cards now show all 9 stats (was 6) so heights
+  // bumped up to keep rows readable at the new font sizes.
   const isPct = cardType === 'hitting-percentiles' || cardType === 'pitching-percentiles';
 
   switch (platform) {
     case 'feed': {
       // 1080×1080
-      const w = 920, h = isPct ? 360 : 200;
-      return { x: (1080 - w) / 2, y: 1080 - h - 80, w, h };
+      const w = 940, h = isPct ? 540 : 240;
+      return { x: (1080 - w) / 2, y: 1080 - h - 70, w, h };
     }
     case 'portrait': {
       // 1080×1350
-      const w = 920, h = isPct ? 380 : 220;
-      return { x: (1080 - w) / 2, y: 1350 - h - 90, w, h };
+      const w = 940, h = isPct ? 580 : 260;
+      return { x: (1080 - w) / 2, y: 1350 - h - 80, w, h };
     }
     case 'story': {
       // 1080×1920
-      const w = 920, h = isPct ? 420 : 260;
-      return { x: (1080 - w) / 2, y: 1920 - h - 220, w, h };
+      const w = 940, h = isPct ? 640 : 300;
+      return { x: (1080 - w) / 2, y: 1920 - h - 200, w, h };
     }
     case 'landscape': {
-      // 1200×675
-      const w = 700, h = isPct ? 360 : 200;
-      return { x: 1200 - w - 60, y: 675 - h - 50, w, h };
+      // 1200×675 — percentile card too tall here for a true lower-third;
+      // anchor to the right side with full canvas height usable.
+      const w = 720, h = isPct ? 540 : 230;
+      return { x: 1200 - w - 50, y: 675 - h - 40, w, h };
     }
     default: {
-      const w = 920, h = isPct ? 360 : 200;
-      return { x: (1080 - w) / 2, y: 1080 - h - 80, w, h };
+      const w = 940, h = isPct ? 540 : 240;
+      return { x: (1080 - w) / 2, y: 1080 - h - 70, w, h };
     }
   }
 }
