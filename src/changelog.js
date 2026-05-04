@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.24',
+    date: '2026-05-03',
+    kind: 'patch',
+    summary: 'BLW logo placed app-wide (sidebar, top bar, login)',
+    items: [
+      'Sidebar header — replaced the placeholder mark + typed "BLW Studio" text with the actual league logo file (/brand/blw-logo.svg). Logo at 48px, "BLW Studio" wordmark + "Big League Wiffle Ball" subline sit to its right.',
+      'Top bar — added the logo next to the page title (28px on mobile, 36px desktop) so the brand reads on mobile where the sidebar is hidden by default.',
+      'Login page — full logo replaces the placeholder mark on the main sign-in screen + Cloud-not-configured state. Sized at 96px to anchor the page.',
+      'Drop-in updates — the league logo lives at /public/brand/blw-logo.svg. Swap that one file to refresh every surface app-wide; no code edits required.',
+    ],
+  },
+  {
     version: '4.5.23',
     date: '2026-05-03',
     kind: 'minor',

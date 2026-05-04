@@ -196,21 +196,33 @@ function Sidebar({ isMobile, open, onClose }) {
         zIndex: isMobile ? 100 : 50,
         boxShadow: isMobile ? '4px 0 24px rgba(0,0,0,0.3)' : 'none',
       }}>
-        {/* Logo — branded mark + wordmark. v4.5.0: replaced text-only "B" tile
-            with the actual BLW square mark from /public/brand. Designers
-            can swap the SVG file in place to update without touching code. */}
-        <Link to="/dashboard" style={{ textDecoration: 'none', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Logo — full BLW logo from /public/brand/blw-logo.svg. v4.5.24:
+            replaced the placeholder mark + typed "BLW Studio" text with
+            the actual league logo file the user provided. Logo carries
+            its own typography so we drop the wordmark to its right. A
+            small "STUDIO" caption sits underneath since the league logo
+            doesn't include it on its own. Designers can swap the SVG
+            in place to update without touching code. */}
+        <Link to="/dashboard" style={{ textDecoration: 'none', padding: '18px 18px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <img
-            src="/brand/blw-mark.svg"
-            alt=""
-            width={32}
-            height={32}
-            style={{ display: 'block', borderRadius: radius.base, flexShrink: 0 }}
+            src="/brand/blw-logo.svg"
+            alt="BLW"
+            style={{
+              display: 'block', flexShrink: 0,
+              width: 48, height: 48, objectFit: 'contain',
+            }}
           />
-          <div style={{
-            fontFamily: fonts.heading, fontSize: 18, color: '#fff',
-            letterSpacing: 1.5, lineHeight: 1,
-          }}>BLW Studio</div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{
+              fontFamily: fonts.heading, fontSize: 18, color: '#fff',
+              letterSpacing: 1.5, lineHeight: 1,
+            }}>BLW Studio</div>
+            <div style={{
+              fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700,
+              color: 'rgba(255,255,255,0.55)', letterSpacing: 1.4,
+              textTransform: 'uppercase', marginTop: 4,
+            }}>Big League Wiffle Ball</div>
+          </div>
         </Link>
 
         {/* Nav */}
@@ -400,6 +412,21 @@ function TopBar({ isMobile, onMenuToggle }) {
             display: 'flex', alignItems: 'center',
           }}>☰</button>
         )}
+        {/* v4.5.24: BLW logo next to the title so the brand reads on
+            mobile (sidebar is hidden by default on mobile, so the
+            sidebar's logo isn't visible until the hamburger is tapped).
+            Smaller on mobile to keep the top bar from feeling crowded. */}
+        <img
+          src="/brand/blw-logo.svg"
+          alt="BLW"
+          style={{
+            display: 'block',
+            width: isMobile ? 28 : 36,
+            height: isMobile ? 28 : 36,
+            objectFit: 'contain',
+            flexShrink: 0,
+          }}
+        />
         <h2 style={{
           fontFamily: fonts.heading, fontSize: isMobile ? 18 : 24,
           fontWeight: 400, color: colors.text, margin: 0, letterSpacing: 1.2,
