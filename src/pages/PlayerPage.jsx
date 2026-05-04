@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
@@ -547,7 +548,15 @@ function PositionEditor({ team, src, initial, onClose, onSave, saving }) {
   const reset = () => { setOffsetX(0); setOffsetY(0); setZoom(1); };
   const handleSave = () => onSave({ offsetX, offsetY, zoom });
 
-  return (
+  // v4.5.25: lock body scroll while open + render via portal so the
+  // modal escapes any transform-having ancestor and pins to viewport.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const overlay = (
     <div
       onClick={() => !saving && onClose?.()}
       style={{
@@ -662,19 +671,55 @@ function PositionEditor({ team, src, initial, onClose, onSave, saving }) {
       </div>
     </div>
   );
+  return createPortal(overlay, document.body);
 }
 
-function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, saving }) {
+function PhotoPicker({ team, player, teamMedia, mediaUrls, currentId, onClose, onPick, saving }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // v4.5.25: lock body scroll while open so the dimmer doesn't shift
+  // horizontally when an underlying scrollbar disappears, and so the
+  // user can't accidentally scroll the page underneath the modal.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // v4.5.25: filter to media that's actually for THIS player. Was
+  // showing all team-wide media, which made finding the right shot a
+  // scroll-fest. Match by lastName (required) + firstInitial when set
+  // (so cousin pairs like Logan/Luke Rose don't share each other's
+  // photos). Falls back to the full team list with an info note if no
+  // player-tagged media exists yet — surfaces team photos so admins
+  // can still pick an action shot or group shot for a player whose
+  // headshot hasn't been uploaded yet.
+  const wantLast = String(player?.lastName || '').toUpperCase();
+  const wantFI   = String(player?.firstInitial || (player?.firstName || '').charAt(0)).toUpperCase();
+  const playerScoped = teamMedia.filter(m => {
+    if ((m.scope || 'player') !== 'player') return false;
+    if (!wantLast) return false;
+    if ((m.player || '').toUpperCase() !== wantLast) return false;
+    const mFI = (m.firstInitial || '').toUpperCase();
+    // If the file has a firstInitial AND we know the player's, they
+    // must match. Untagged-FI files (legacy uploads) still pass — the
+    // Smith-fix in resolvePlayerAvatar handles cross-team disambiguation
+    // upstream, so by the time we're in PhotoPicker the lastName+team
+    // pair is already narrow enough.
+    if (mFI && wantFI && mFI !== wantFI) return false;
+    return true;
+  });
+  const usingFallback = playerScoped.length === 0;
+  const visibleMedia = usingFallback ? teamMedia : playerScoped;
+
   // Split media by asset-type group so the picker reads "Headshots on
   // top, action shots, then team photos" — easier to scan at a glance.
   const groups = {};
-  for (const m of teamMedia) {
+  for (const m of visibleMedia) {
     const k = m.assetType || 'FILE';
     (groups[k] = groups[k] || []).push(m);
   }
@@ -688,7 +733,11 @@ function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, s
     ...Object.keys(groups).filter(k => !orderedKeys.includes(k)),
   ];
 
-  return (
+  // v4.5.25: render via portal to document.body so the fixed-position
+  // overlay isn't bound by any transform-having ancestor. Was
+  // appearing offset / scroll-required on tall player pages because
+  // some parent broke `position: fixed`.
+  const overlay = (
     <div
       onClick={onClose}
       style={{
@@ -717,7 +766,9 @@ function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, s
               Choose profile photo
             </h2>
             <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-              Pick any asset uploaded for {team.name}. Click outside or press ESC to cancel.
+              {usingFallback
+                ? `No tagged media for ${player?.name || 'this player'} yet — showing all ${team.name} media.`
+                : `${visibleMedia.length} photo${visibleMedia.length === 1 ? '' : 's'} for ${player?.name || 'this player'}. Click outside or press ESC to cancel.`}
             </div>
           </div>
           <button onClick={onClose} style={{
@@ -797,6 +848,7 @@ function PhotoPicker({ team, teamMedia, mediaUrls, currentId, onClose, onPick, s
       </div>
     </div>
   );
+  return createPortal(overlay, document.body);
 }
 
 // Compact "More info" badge that expands a small popover with the
@@ -1957,6 +2009,7 @@ export default function PlayerPage() {
       {photoPickerOpen && (
         <PhotoPicker
           team={team}
+          player={player}
           teamMedia={teamMedia}
           mediaUrls={mediaUrls}
           currentId={player.profileMediaId || headshot?.id || null}
@@ -2207,7 +2260,16 @@ function GeneratedIdeaModal({ idea, player, team, leagueContext, onClose, onIdea
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // v4.5.25: lock body scroll while open + render via portal so the
+  // modal pins to the viewport regardless of any transform-having
+  // ancestor in the page tree.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const overlay = (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
       style={{
@@ -2298,6 +2360,7 @@ function GeneratedIdeaModal({ idea, player, team, leagueContext, onClose, onIdea
       </div>
     </div>
   );
+  return createPortal(overlay, document.body);
 }
 
 // ─── Sticky mini-hero ───────────────────────────────────────────────────────

@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.5.25',
+    date: '2026-05-03',
+    kind: 'patch',
+    summary: 'Photo picker filters to player + every modal centers properly',
+    items: [
+      'Profile photo picker now filters to media tagged for THIS player only — was showing every team-wide asset, which made finding the right shot a scroll-fest. Match is by lastName + firstInitial; cousin pairs (Logan/Luke Rose) get their own scoped lists. Falls back to all team media (with a clear note) when no player-tagged media exists yet.',
+      'Header copy reflects the scope: "12 photos for Konnor Jaso" or "No tagged media for Konnor Jaso yet — showing all LAN media."',
+      'All PlayerPage modals (PhotoPicker, ProfilePositionEditor, GeneratedIdeaModal) now render via createPortal to document.body — fixes the "modal opens off-screen, have to scroll to find it" bug. The fixed-position centering was being broken by some transform-having ancestor in the page tree; portaling to body sidesteps that entirely.',
+      'Same fix applied to the overlay + effect upload modals in Studio so they always center on viewport regardless of how far down the page you scrolled before opening them.',
+      'Body scroll lock while any modal is open — page underneath can\'t scroll out from under the modal.',
+    ],
+  },
+  {
     version: '4.5.24',
     date: '2026-05-03',
     kind: 'patch',

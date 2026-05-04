@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPlayers, fetchAllData } from '../data';
 import { Card, CollapsibleCard, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
@@ -2071,7 +2072,11 @@ export default function Generate() {
           setUploadPreview(null);
           setUploadName('');
         };
-        return (
+        // v4.5.25: portal + body-scroll-lock so the modal centers in the
+        // viewport regardless of how far down the page the user is, and
+        // any transform-having ancestor in the tree can't break the
+        // fixed positioning.
+        return createPortal((
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: colors.white, borderRadius: radius.lg, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -2219,11 +2224,12 @@ export default function Generate() {
             </div>
           </div>
         </div>
-        );
+        ), document.body);
       })()}
 
-      {/* UPLOAD EFFECT MODAL */}
-      {showEffectUpload && (
+      {/* UPLOAD EFFECT MODAL — also via portal so the modal is centered
+          on the viewport regardless of scroll position. */}
+      {showEffectUpload && createPortal((
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: colors.white, borderRadius: radius.lg, padding: 24, maxWidth: 420, width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -2260,7 +2266,7 @@ export default function Generate() {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
     </TeamThemeScope>
   );
