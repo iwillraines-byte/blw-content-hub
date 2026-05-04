@@ -12,6 +12,7 @@
 
 import { supabaseConfigured } from './supabase-client';
 import { authedFetch } from './authed-fetch';
+import { compressToFitUploadLimit } from './image-compress';
 
 // ─── Blob helpers ────────────────────────────────────────────────────────────
 
@@ -207,13 +208,20 @@ function mapPlayerToRow(p) {
 
 export const cloud = {
   // Media — needs both the blob and the metadata.
+  // v4.5.22: re-compress oversized blobs to fit Vercel's 4.5 MB function
+  // payload limit. The first-pass auto-compression at upload time is
+  // 1920px / q=0.85, which is plenty for the canvas pipeline but can
+  // still exceed the limit on high-megapixel sports cameras after the
+  // base64 inflation (~33%). compressToFitUploadLimit progressively
+  // walks down to 800px / q=0.65 until something fits.
   async syncMedia(record) {
     if (!record?.id) return;
-    const base64 = await blobToBase64(record.blob);
+    const fit = await compressToFitUploadLimit(record.blob);
+    const base64 = await blobToBase64(fit.blob);
     fireAndForget({
       kind: 'media', action: 'upsert',
       record: mapMediaToRow(record),
-      blob: base64 ? { base64, mime: record.blob?.type || 'application/octet-stream' } : null,
+      blob: base64 ? { base64, mime: fit.blob?.type || record.blob?.type || 'application/octet-stream' } : null,
     });
   },
   deleteMedia(id) {
@@ -224,11 +232,12 @@ export const cloud = {
   // Overlays
   async syncOverlay(record) {
     if (!record?.id) return;
-    const base64 = await blobToBase64(record.imageBlob);
+    const fit = await compressToFitUploadLimit(record.imageBlob);
+    const base64 = await blobToBase64(fit.blob);
     fireAndForget({
       kind: 'overlay', action: 'upsert',
       record: mapOverlayToRow(record),
-      blob: base64 ? { base64, mime: record.imageBlob?.type || 'image/png' } : null,
+      blob: base64 ? { base64, mime: fit.blob?.type || record.imageBlob?.type || 'image/png' } : null,
     });
   },
   deleteOverlay(id) {
@@ -239,11 +248,12 @@ export const cloud = {
   // Effects
   async syncEffect(record) {
     if (!record?.id) return;
-    const base64 = await blobToBase64(record.imageBlob);
+    const fit = await compressToFitUploadLimit(record.imageBlob);
+    const base64 = await blobToBase64(fit.blob);
     fireAndForget({
       kind: 'effect', action: 'upsert',
       record: mapEffectToRow(record),
-      blob: base64 ? { base64, mime: record.imageBlob?.type || 'image/png' } : null,
+      blob: base64 ? { base64, mime: fit.blob?.type || record.imageBlob?.type || 'image/png' } : null,
     });
   },
   deleteEffect(id) {
@@ -487,29 +497,44 @@ export async function fetchUploadedIds(kind) {
 export const cloudAwait = {
   async syncMedia(record) {
     if (!supabaseConfigured || !record?.id) return { skipped: true };
-    const base64 = await blobToBase64(record.blob);
+    // v4.5.22: fit under Vercel's 4.5 MB function payload limit. Mirrors
+    // the cloud.syncMedia path so backup runs and live uploads share a
+    // single compression policy.
+    const fit = await compressToFitUploadLimit(record.blob);
+    if (!fit.fitted) {
+      return { ok: false, status: 413, error: `413: blob did not fit under upload limit even after re-compression (${fit.reason || 'unknown'})` };
+    }
+    const base64 = await blobToBase64(fit.blob);
     return postSync({
       kind: 'media', action: 'upsert',
       record: mapMediaToRow(record),
-      blob: base64 ? { base64, mime: record.blob?.type || 'application/octet-stream' } : null,
+      blob: base64 ? { base64, mime: fit.blob?.type || record.blob?.type || 'application/octet-stream' } : null,
     });
   },
   async syncOverlay(record) {
     if (!supabaseConfigured || !record?.id) return { skipped: true };
-    const base64 = await blobToBase64(record.imageBlob);
+    const fit = await compressToFitUploadLimit(record.imageBlob);
+    if (!fit.fitted) {
+      return { ok: false, status: 413, error: `413: overlay did not fit under upload limit (${fit.reason || 'unknown'})` };
+    }
+    const base64 = await blobToBase64(fit.blob);
     return postSync({
       kind: 'overlay', action: 'upsert',
       record: mapOverlayToRow(record),
-      blob: base64 ? { base64, mime: record.imageBlob?.type || 'image/png' } : null,
+      blob: base64 ? { base64, mime: fit.blob?.type || record.imageBlob?.type || 'image/png' } : null,
     });
   },
   async syncEffect(record) {
     if (!supabaseConfigured || !record?.id) return { skipped: true };
-    const base64 = await blobToBase64(record.imageBlob);
+    const fit = await compressToFitUploadLimit(record.imageBlob);
+    if (!fit.fitted) {
+      return { ok: false, status: 413, error: `413: effect did not fit under upload limit (${fit.reason || 'unknown'})` };
+    }
+    const base64 = await blobToBase64(fit.blob);
     return postSync({
       kind: 'effect', action: 'upsert',
       record: mapEffectToRow(record),
-      blob: base64 ? { base64, mime: record.imageBlob?.type || 'image/png' } : null,
+      blob: base64 ? { base64, mime: fit.blob?.type || record.imageBlob?.type || 'image/png' } : null,
     });
   },
   async syncRequest(record) {

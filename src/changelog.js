@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.5.22',
+    date: '2026-05-03',
+    kind: 'patch',
+    summary: 'Backup fixes: 413 payload limit + tolerant column writes',
+    items: [
+      'Vercel functions cap request payloads at 4.5 MB regardless of plan. Added compressToFitUploadLimit() that progressively re-compresses oversized blobs (1600px/q=0.82 → 1280/0.78 → 1080/0.72 → 800/0.65) until they fit. cloud.syncMedia / syncOverlay / syncEffect (and their awaitable mirrors used by the backup runner) now run blobs through it before base64 — fixes the "413 Request Entity Too Large" failures on high-megapixel sports cameras.',
+      'Tolerant upsert in api/cloud-sync.js — when Postgrest rejects an upsert with "Could not find the X column", the server now strips that column and retries (up to 6 unknown columns per row). Mirrors the v4.5.8 fix for profiles.role_expires_at. Fixes the cascading 500s when overlays.mime_type or manual_players.profile_media_id columns are missing.',
+      'Stopped the server from injecting mime_type / size_bytes into overlays + effects payloads — those tables don\'t have the columns and the read path doesn\'t use them. Saves a wasted round-trip per blob.',
+      'Optional schema migration db/010 — adds mime_type + size_bytes to overlays and effects so blob metadata is consistent across all three tables. No-op if columns already exist.',
+      'NOTE: db/005_player_profile_pic.sql adds manual_players.profile_media_id — if you haven\'t run it yet, the tolerant upsert will drop that column on each write (works fine, but profile-pic overrides won\'t persist). Run the migration to enable per-player profile pic picks.',
+    ],
+  },
+  {
     version: '4.5.21',
     date: '2026-05-03',
     kind: 'patch',

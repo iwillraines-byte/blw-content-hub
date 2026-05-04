@@ -426,8 +426,13 @@ export default async function handler(req, res) {
       if (upErr) throw upErr;
       const pathCol = STORAGE_PATH_COL[kind] || 'storage_path';
       payload[pathCol] = storagePath;
-      // mime_type / size_bytes columns only exist on the main 3 blob tables.
-      if (['media', 'overlay', 'effect'].includes(kind)) {
+      // v4.5.22: Only the `media` table is guaranteed to have mime_type +
+      // size_bytes columns. The `overlays` and `effects` tables were
+      // never migrated to add them, and the read path doesn't use them
+      // either — so injecting was a no-op that broke writes. The
+      // tolerant-upsert retry below will catch this either way, but
+      // skipping the injection avoids a wasted round-trip per blob.
+      if (kind === 'media') {
         payload.mime_type = payload.mime_type || mime;
         payload.size_bytes = payload.size_bytes ?? buf.length;
       }
@@ -437,10 +442,40 @@ export default async function handler(req, res) {
     // composite-PK tables use their compound key.
     const conflictCols = COMPOSITE_PK[kind]?.join(',') || 'id';
 
-    const { error } = await sb.from(table).upsert(payload, { onConflict: conflictCols });
+    // v4.5.22: tolerant upsert. Postgrest rejects upserts when ANY key
+    // in the payload references a column that doesn't exist in the
+    // schema cache (e.g. `overlays.mime_type` or
+    // `manual_players.profile_media_id` on databases that haven't run
+    // the latest migration). Without recovery, one missing column
+    // bricks the entire backup for that kind.
+    //
+    // Strategy: try the full payload first. If Postgrest comes back
+    // with PGRST204 / PGRST116 ("Could not find the X column"), strip
+    // the offending column and retry — up to 6 unknown columns. This
+    // mirrors the v4.5.8 fix for `profiles.role_expires_at` on the
+    // _supabase.js side. The end result is the row lands with whatever
+    // columns the cloud DOES support, and a console warning surfaces
+    // every dropped key so the operator knows which migration to run.
+    let { error } = await sb.from(table).upsert(payload, { onConflict: conflictCols });
+    let attempts = 0;
+    const droppedCols = [];
+    while (error && attempts < 6) {
+      const msg = error.message || '';
+      const m = /Could not find the '([^']+)' column/i.exec(msg);
+      if (!m) break;
+      const badCol = m[1];
+      if (!(badCol in payload)) break;
+      delete payload[badCol];
+      droppedCols.push(badCol);
+      attempts++;
+      ({ error } = await sb.from(table).upsert(payload, { onConflict: conflictCols }));
+    }
     if (error) throw error;
+    if (droppedCols.length) {
+      console.warn(`[cloud-sync] ${kind} ${payload.id || ''}: dropped unknown columns`, droppedCols);
+    }
 
-    res.status(200).json({ ok: true });
+    res.status(200).json({ ok: true, droppedColumns: droppedCols.length ? droppedCols : undefined });
   } catch (err) {
     console.error('[cloud-sync]', kind, action, err);
     res.status(500).json({ error: 'cloud-sync failed', detail: err.message });
