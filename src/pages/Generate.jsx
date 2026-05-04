@@ -5,7 +5,8 @@ import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPla
 import { Card, CollapsibleCard, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
-import { TEMPLATE_TYPES, FONT_MAP, getFieldConfig } from '../template-config';
+import { TEMPLATE_TYPES, FONT_MAP, STAT_CARD_TYPES, getFieldConfig } from '../template-config';
+import { renderStatCard as statCardRender, defaultCardBox } from '../stat-card-renderer';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
@@ -285,7 +286,7 @@ function computeBgCrop(bgImg, w, h, transform) {
 //   exposure adjustments are applied via ctx.filter ONLY for the background draw
 //   so overlays + text remain unaffected.
 function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
-  const { hiddenFields, forExport, bgTransform } = options;
+  const { hiddenFields, forExport, bgTransform, statCard } = options;
   ctx.clearRect(0, 0, w, h);
   const teamColor = team?.color;
 
@@ -345,6 +346,17 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
   // chrome stays sharp regardless of how heavy the effects stack is).
   if (overlayImg) {
     ctx.drawImage(overlayImg, 0, 0, w, h);
+  }
+
+  // v4.5.31: Layer 3.5 — Stat Card. Drawn between the overlay layer
+  // and the text layer so brand chrome can frame it from above (overlay)
+  // and captions/credits can sit on top of it (text fields below).
+  // The card is rendered programmatically by stat-card-renderer.js
+  // using canvas primitives — same visual treatment as the player
+  // page card (rounded white BG, team-color accent bar, savant
+  // percentile bubbles or two-column raw stats).
+  if (statCard?.cardType && statCard?.player && statCard?.box) {
+    statCardRender(ctx, statCard);
   }
 
   // Layer 4: Dynamic text fields
@@ -535,6 +547,12 @@ export default function Generate() {
   const [liveBatting, setLiveBatting] = useState([]);
   const [livePitching, setLivePitching] = useState([]);
   const [recommendedStatLines, setRecommendedStatLines] = useState([]); // [{ label, value, badge? }]
+
+  // v4.5.31: Stat Card type picker state. Only used when customType ===
+  // 'stat-card'. Defaults to hitting-stats; user picks one of the four
+  // sub-types to drive the card content. Resets to hitting-stats when
+  // the template changes so a fresh stat-card always opens with hitting.
+  const [statCardType, setStatCardType] = useState('hitting-stats');
 
   useEffect(() => {
     fetchAllData().then(({ batting, pitching }) => {
@@ -762,6 +780,32 @@ export default function Generate() {
   const activeW = customPlat.w;
   const activeH = customPlat.h;
 
+  // v4.5.31: build the statCard option payload when the active template
+  // wants one. The renderer needs the resolved player object (with
+  // batting/pitching), team, leaders for percentile lookup, and the
+  // box geometry — all derived from existing state.
+  const statCardOption = useMemo(() => {
+    const t = TEMPLATE_TYPES[customType];
+    if (!t?.rendersStatCard) return null;
+    if (!selectedPlayer) return null;
+    const p = (allPlayers || []).find(pl => `${pl.team}_${pl.name}` === selectedPlayer);
+    if (!p) return null;
+    // Fold live stats into the player object so the renderer has them.
+    const battingPool = liveBatting.length ? liveBatting : BATTING_LEADERS;
+    const pitchingPool = livePitching.length ? livePitching : PITCHING_LEADERS;
+    const batter = battingPool.find(b => b.name === p.name && b.team === p.team) || null;
+    const pitcher = pitchingPool.find(b => b.name === p.name && b.team === p.team) || null;
+    const customTeamObj = getTeam(customTeam);
+    const enriched = { ...p, batting: batter, pitching: pitcher };
+    return {
+      cardType: statCardType,
+      player: enriched,
+      box: defaultCardBox(customPlatform),
+      team: customTeamObj,
+      leaders: { batting: battingPool, pitching: pitchingPool },
+    };
+  }, [customType, selectedPlayer, liveBatting, livePitching, customTeam, customPlatform, statCardType]);
+
   // ── Render ──
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -770,8 +814,8 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform });
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion]);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption });
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption]);
 
   // Per-input render — exactly the same shape as before the local-fonts
   // change. Two reasons not to await fonts here: (1) rebinding inside a
@@ -805,7 +849,7 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, forExport: true, bgTransform });
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, forExport: true, bgTransform, statCard: statCardOption });
     const link = document.createElement('a');
     link.download = `BLW_${customTeam}_${customType}_${customPlatform}.png`;
     link.href = canvas.toDataURL('image/png');
@@ -1531,6 +1575,61 @@ export default function Generate() {
               </CollapsibleCard>
                 );
               })()}
+
+              {/* v4.5.31: Stat Card picker — only shown when the active
+                  template renders a stat card. Four sub-types: hitting
+                  raw, hitting percentiles, pitching raw, pitching
+                  percentiles. The selected type drives the canvas
+                  rendering in stat-card-renderer.js. */}
+              {customTypeObj?.rendersStatCard && (
+                <Card>
+                  <Label>Stat Card Type</Label>
+                  <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginBottom: 8, fontStyle: 'italic' }}>
+                    Pick which card to layer onto the composition. Stats auto-fill from the selected player.
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                    {STAT_CARD_TYPES.map(t => {
+                      const active = statCardType === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => setStatCardType(t.id)}
+                          style={{
+                            background: active ? colors.accentSoft : colors.white,
+                            border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                            color: active ? colors.accent : colors.textSecondary,
+                            borderRadius: radius.base, padding: '10px 12px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            display: 'flex', flexDirection: 'column', gap: 4,
+                            transition: 'border-color 160ms ease, background 160ms ease',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 16, color: active ? colors.accent : colors.textMuted }}>{t.icon}</span>
+                            <span style={{ fontFamily: fonts.body, fontSize: 12, fontWeight: 700 }}>{t.label}</span>
+                          </div>
+                          <div style={{
+                            fontSize: 10, color: colors.textMuted,
+                            fontFamily: fonts.condensed, lineHeight: 1.4,
+                          }}>{t.hint}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!selectedPlayer && (
+                    <div style={{
+                      marginTop: 10, padding: 8,
+                      fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed,
+                      fontStyle: 'italic', textAlign: 'center',
+                      background: colors.bg, borderRadius: radius.sm,
+                      border: `1px dashed ${colors.borderLight}`,
+                    }}>
+                      Pick a player above to populate the card.
+                    </div>
+                  )}
+                </Card>
+              )}
 
               {/* 3.5 Effects — sits between Picture and Overlay so the
                   on-screen card order mirrors the layer stack. */}

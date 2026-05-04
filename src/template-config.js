@@ -366,7 +366,51 @@ export const TEMPLATE_TYPES = {
       ],
     },
   },
+
+  // v4.5.31 — Stat Card. Drops a player's actual hitting/pitching stats
+  // (raw or savant-style percentile bubbles) onto the composition with
+  // the same visual treatment as the player page card. The card itself
+  // is rendered to canvas by stat-card-renderer.js — what lives in
+  // `fields` here is the OPTIONAL caption + tag the user can layer
+  // above or below the card. The user picks ONE of four card types
+  // (cardType field) from the Custom mode picker; selection drives
+  // which rows the renderer displays.
+  'stat-card': {
+    name: 'Stat Card',
+    icon: '◧',
+    description: 'A player\'s hitting/pitching stats or percentile bubbles in the same card design as the player page — optional photo background + caption.',
+    playerCentric: true,
+    rendersStatCard: true,    // signals Generate.jsx to call renderStatCard
+    fields: {
+      feed: [
+        { key: 'caption', label: 'Caption (optional)', x: 540, y: 100, fontSize: 38, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 920,
+          shadows: [{ color: 'rgba(0,0,0,0.6)', blur: 14, offsetX: 0, offsetY: 3 }] },
+      ],
+      portrait: [
+        { key: 'caption', label: 'Caption (optional)', x: 540, y: 130, fontSize: 38, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 920,
+          shadows: [{ color: 'rgba(0,0,0,0.6)', blur: 14, offsetX: 0, offsetY: 3 }] },
+      ],
+      story: [
+        { key: 'caption', label: 'Caption (optional)', x: 540, y: 240, fontSize: 38, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 920,
+          shadows: [{ color: 'rgba(0,0,0,0.6)', blur: 14, offsetX: 0, offsetY: 3 }] },
+      ],
+      landscape: [
+        { key: 'caption', label: 'Caption (optional)', x: 270, y: 90, fontSize: 32, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 480,
+          shadows: [{ color: 'rgba(0,0,0,0.6)', blur: 14, offsetX: 0, offsetY: 3 }] },
+      ],
+    },
+  },
 };
+
+// v4.5.31: stat-card sub-types. Surfaced as a 4-button picker in the
+// Studio UI when the 'stat-card' template is active. Each renders the
+// player's data with the card design defined in stat-card-renderer.js.
+export const STAT_CARD_TYPES = [
+  { id: 'hitting-stats',       label: 'Hitting · Stats',       icon: '⚾', hint: 'AVG / OPS+ / HR / OBP / SLG / OPS / RBI / PA' },
+  { id: 'hitting-percentiles', label: 'Hitting · Percentiles', icon: '◑', hint: 'Savant-style bubble bars across BLW batters' },
+  { id: 'pitching-stats',      label: 'Pitching · Stats',      icon: '↗', hint: 'ERA / FIP / IP / W-L / K/4 / WHIP' },
+  { id: 'pitching-percentiles',label: 'Pitching · Percentiles',icon: '◐', hint: 'Savant-style bubble bars across BLW pitchers' },
+];
 
 // Font map for canvas rendering. Three canonical slots (heading/body/
 // condensed) plus three local-loaded display faces (gotham/press/united)

@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '4.5.31',
+    date: '2026-05-04',
+    kind: 'minor',
+    summary: 'Stat Card template — drop player stats into Studio compositions',
+    items: [
+      'New "Stat Card" template in Studio. Picks a player from the team and lays their actual stats onto the canvas with the same visual treatment as the player page card — rounded white card, team-colored accent bar, savant-style percentile bubbles or two-column raw stats.',
+      'Four card types selectable from a 2×2 picker: Hitting · Stats (AVG / OPS+ / HR / OBP / SLG / OPS / RBI / PA), Hitting · Percentiles (savant bubbles for the same metrics + BB% / K% / HR/PA / RBI/PA), Pitching · Stats (ERA / FIP / IP / W-L / K/4 / WHIP / K / BB), Pitching · Percentiles (FIP / ERA / WHIP / K/4 / IP / W).',
+      'Card draws programmatically via canvas primitives — no html2canvas, no DOM rasterization. Crisp at any export resolution. Same percentile color tiers as the player page (≥90 elite red, sliding through to bottom-of-league dark blue).',
+      'Stats auto-fill from live data the moment a player is selected. Percentile lookups use percentileFor / derivedPercentileFor — same source the player page reads from, so what you see in Studio matches what you see on their page.',
+      'Card sits between Overlay and Text in the layer stack — overlay chrome can frame it from above, captions can sit on top of it. Default box position varies by platform (lower half on feed/portrait/story, right side on landscape).',
+      'Photo background, effects, overlays, and the optional caption text field all still work alongside the card. Same composer flow as every other template.',
+      'New file: src/stat-card-renderer.js — pure canvas drawing functions for the four card types.',
+    ],
+  },
+  {
     version: '4.5.30',
     date: '2026-05-04',
     kind: 'patch',
