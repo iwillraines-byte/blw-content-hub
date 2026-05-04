@@ -204,18 +204,111 @@ function mapPlayerToRow(p) {
   };
 }
 
+// ─── Direct-to-Supabase-Storage upload (v4.5.23) ────────────────────────────
+//
+// Big files relayed through /api/cloud-sync hit Vercel's hard 4.5 MB
+// payload limit and 413 out. For blobs over a configurable threshold
+// (default 3 MB binary), this path:
+//   1. Asks /api/storage-presign for a signed PUT URL.
+//   2. PUTs the blob DIRECTLY to Supabase Storage (no Vercel hop).
+//   3. Returns { storage_path, mime } so the caller can include them on
+//      the metadata-only POST to /api/cloud-sync.
+//
+// Returns { ok, path, mime, error? }. Caller decides what to do on
+// failure — fall back to relay, surface the error, etc.
+const DIRECT_UPLOAD_THRESHOLD = 3 * 1024 * 1024; // 3 MB binary
+const DIRECT_UPLOAD_KINDS = new Set(['media', 'overlay', 'effect']);
+
+export function shouldDirectUpload(blob, kind) {
+  if (!blob || !DIRECT_UPLOAD_KINDS.has(kind)) return false;
+  // Operator escape hatch — set localStorage["blw.upload.directMode"] = "0"
+  // to force every upload through the relay path. Useful for debugging
+  // or rolling back without redeploying.
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('blw.upload.directMode') === '0') {
+      return false;
+    }
+  } catch { /* ignore */ }
+  return blob.size > DIRECT_UPLOAD_THRESHOLD;
+}
+
+async function directUploadBlob({ kind, id, blob }) {
+  if (!supabaseConfigured) return { ok: false, error: 'supabase not configured' };
+  if (!blob || !id) return { ok: false, error: 'blob + id required' };
+  const mime = blob.type || 'application/octet-stream';
+
+  // 1. Mint a presigned URL.
+  let presign;
+  try {
+    const res = await authedFetch('/api/storage-presign', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind, id, mime }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return { ok: false, error: `presign ${res.status}: ${detail.slice(0, 160)}` };
+    }
+    presign = await res.json();
+  } catch (err) {
+    return { ok: false, error: `presign network: ${err?.message || err}` };
+  }
+  if (!presign?.signedUrl || !presign?.path) {
+    return { ok: false, error: 'presign returned no URL' };
+  }
+
+  // 2. PUT the blob directly to Supabase Storage. The signed URL embeds
+  // its own auth token — no Authorization header needed. We DO need the
+  // x-upsert header so re-uploads of the same id overwrite (Supabase
+  // defaults to fail-on-exists for direct PUT).
+  try {
+    const putRes = await fetch(presign.signedUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': mime,
+        'x-upsert': 'true',
+      },
+      body: blob,
+    });
+    if (!putRes.ok) {
+      const detail = await putRes.text().catch(() => '');
+      return { ok: false, error: `storage PUT ${putRes.status}: ${detail.slice(0, 160)}` };
+    }
+  } catch (err) {
+    return { ok: false, error: `storage PUT network: ${err?.message || err}` };
+  }
+
+  return { ok: true, path: presign.path, mime, bucket: presign.bucket };
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export const cloud = {
   // Media — needs both the blob and the metadata.
-  // v4.5.22: re-compress oversized blobs to fit Vercel's 4.5 MB function
-  // payload limit. The first-pass auto-compression at upload time is
-  // 1920px / q=0.85, which is plenty for the canvas pipeline but can
-  // still exceed the limit on high-megapixel sports cameras after the
-  // base64 inflation (~33%). compressToFitUploadLimit progressively
-  // walks down to 800px / q=0.65 until something fits.
+  // v4.5.23: For blobs > 3 MB, upload DIRECTLY to Supabase Storage via a
+  // presigned URL (bypasses Vercel's 4.5 MB function payload cap, no
+  // re-compression needed, faster). For smaller blobs, keep the existing
+  // relay path through /api/cloud-sync — it's a single round-trip and
+  // there's no benefit to splitting it. v4.5.22's compressToFitUploadLimit
+  // remains the safety net for the relay path (rare case where a blob
+  // sneaks just under the 3 MB direct threshold but inflates past 4.5 MB
+  // after base64).
   async syncMedia(record) {
     if (!record?.id) return;
+    if (shouldDirectUpload(record.blob, 'media')) {
+      const direct = await directUploadBlob({ kind: 'media', id: record.id, blob: record.blob });
+      if (direct.ok) {
+        const row = mapMediaToRow(record);
+        row.storage_path = direct.path;
+        row.mime_type = direct.mime;
+        row.size_bytes = record.blob.size;
+        fireAndForget({ kind: 'media', action: 'upsert', record: row, blob: null });
+        return;
+      }
+      // Direct upload failed — fall through to the relay path so we
+      // still try (the fit-compress will likely make it work).
+      console.warn('[cloud-sync] direct upload failed, falling back to relay', direct.error);
+    }
     const fit = await compressToFitUploadLimit(record.blob);
     const base64 = await blobToBase64(fit.blob);
     fireAndForget({
@@ -232,6 +325,16 @@ export const cloud = {
   // Overlays
   async syncOverlay(record) {
     if (!record?.id) return;
+    if (shouldDirectUpload(record.imageBlob, 'overlay')) {
+      const direct = await directUploadBlob({ kind: 'overlay', id: record.id, blob: record.imageBlob });
+      if (direct.ok) {
+        const row = mapOverlayToRow(record);
+        row.storage_path = direct.path;
+        fireAndForget({ kind: 'overlay', action: 'upsert', record: row, blob: null });
+        return;
+      }
+      console.warn('[cloud-sync] direct overlay upload failed, falling back to relay', direct.error);
+    }
     const fit = await compressToFitUploadLimit(record.imageBlob);
     const base64 = await blobToBase64(fit.blob);
     fireAndForget({
@@ -248,6 +351,16 @@ export const cloud = {
   // Effects
   async syncEffect(record) {
     if (!record?.id) return;
+    if (shouldDirectUpload(record.imageBlob, 'effect')) {
+      const direct = await directUploadBlob({ kind: 'effect', id: record.id, blob: record.imageBlob });
+      if (direct.ok) {
+        const row = mapEffectToRow(record);
+        row.storage_path = direct.path;
+        fireAndForget({ kind: 'effect', action: 'upsert', record: row, blob: null });
+        return;
+      }
+      console.warn('[cloud-sync] direct effect upload failed, falling back to relay', direct.error);
+    }
     const fit = await compressToFitUploadLimit(record.imageBlob);
     const base64 = await blobToBase64(fit.blob);
     fireAndForget({
@@ -497,9 +610,21 @@ export async function fetchUploadedIds(kind) {
 export const cloudAwait = {
   async syncMedia(record) {
     if (!supabaseConfigured || !record?.id) return { skipped: true };
-    // v4.5.22: fit under Vercel's 4.5 MB function payload limit. Mirrors
-    // the cloud.syncMedia path so backup runs and live uploads share a
-    // single compression policy.
+    // v4.5.23: try direct-to-Supabase first for big blobs.
+    if (shouldDirectUpload(record.blob, 'media')) {
+      const direct = await directUploadBlob({ kind: 'media', id: record.id, blob: record.blob });
+      if (direct.ok) {
+        const row = mapMediaToRow(record);
+        row.storage_path = direct.path;
+        row.mime_type = direct.mime;
+        row.size_bytes = record.blob.size;
+        return postSync({ kind: 'media', action: 'upsert', record: row, blob: null });
+      }
+      // fall through to relay on direct-upload failure
+    }
+    // v4.5.22: fit under Vercel's 4.5 MB function payload limit on the
+    // relay path. Mirrors the cloud.syncMedia path so backup runs and
+    // live uploads share a single compression policy.
     const fit = await compressToFitUploadLimit(record.blob);
     if (!fit.fitted) {
       return { ok: false, status: 413, error: `413: blob did not fit under upload limit even after re-compression (${fit.reason || 'unknown'})` };
@@ -513,6 +638,14 @@ export const cloudAwait = {
   },
   async syncOverlay(record) {
     if (!supabaseConfigured || !record?.id) return { skipped: true };
+    if (shouldDirectUpload(record.imageBlob, 'overlay')) {
+      const direct = await directUploadBlob({ kind: 'overlay', id: record.id, blob: record.imageBlob });
+      if (direct.ok) {
+        const row = mapOverlayToRow(record);
+        row.storage_path = direct.path;
+        return postSync({ kind: 'overlay', action: 'upsert', record: row, blob: null });
+      }
+    }
     const fit = await compressToFitUploadLimit(record.imageBlob);
     if (!fit.fitted) {
       return { ok: false, status: 413, error: `413: overlay did not fit under upload limit (${fit.reason || 'unknown'})` };
@@ -526,6 +659,14 @@ export const cloudAwait = {
   },
   async syncEffect(record) {
     if (!supabaseConfigured || !record?.id) return { skipped: true };
+    if (shouldDirectUpload(record.imageBlob, 'effect')) {
+      const direct = await directUploadBlob({ kind: 'effect', id: record.id, blob: record.imageBlob });
+      if (direct.ok) {
+        const row = mapEffectToRow(record);
+        row.storage_path = direct.path;
+        return postSync({ kind: 'effect', action: 'upsert', record: row, blob: null });
+      }
+    }
     const fit = await compressToFitUploadLimit(record.imageBlob);
     if (!fit.fitted) {
       return { ok: false, status: 413, error: `413: effect did not fit under upload limit (${fit.reason || 'unknown'})` };

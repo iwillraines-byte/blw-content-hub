@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '4.5.23',
+    date: '2026-05-03',
+    kind: 'minor',
+    summary: 'Direct-to-Supabase uploads — bypass Vercel for big blobs',
+    items: [
+      'New endpoint /api/storage-presign mints a short-lived signed PUT URL so the browser can upload blobs DIRECTLY to Supabase Storage, skipping the Vercel function relay (and its hard 4.5 MB payload limit). Replaces the relay path for any blob > 3 MB.',
+      'cloud.syncMedia / syncOverlay / syncEffect (and the awaitable mirrors used by the backup runner) now check blob size and route accordingly: small blobs through the existing /api/cloud-sync relay (one round-trip, simpler), big blobs through the direct path (two round-trips: presign + PUT, then a tiny metadata POST).',
+      'Direct-upload failures fall back to the relay automatically so a transient presign error doesn\'t lose the upload — relay path then picks it up and the v4.5.22 fit-compression takes care of the size.',
+      'Existing files in cloud are untouched. Only new uploads route via the new path. Read paths (signed download URLs from /api/cloud-sync) unchanged.',
+      'Operator escape hatch: set localStorage["blw.upload.directMode"] = "0" to force every upload through the relay (debugging / rollback without redeploy).',
+      'api/cloud-sync POST handler now accepts records that already carry a storage_path (no blob field) — that\'s how the metadata-only POST after a direct upload completes the round-trip.',
+      'Photographer raw drops + future video clips now upload natively. Vercel function compute time per upload drops to near zero (no buffer-the-whole-blob-into-memory step).',
+    ],
+  },
+  {
     version: '4.5.22',
     date: '2026-05-03',
     kind: 'patch',
