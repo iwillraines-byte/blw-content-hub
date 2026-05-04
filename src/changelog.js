@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.36',
+    date: '2026-05-04',
+    kind: 'patch',
+    summary: 'Stat Cards: drop subtitle, deepen drop shadow',
+    items: [
+      'Removed the "Across N BLW batters/pitchers" subtitle from percentile cards — the title alone reads cleaner and the population context isn\'t needed on the social card.',
+      'Drop shadow deeper still: rgba(15,23,42,0.45) at 52px blur, 18px offset (was 0.32 / 36 / 14). Cards have real visual weight against busy photo backgrounds now.',
+    ],
+  },
+  {
     version: '4.5.35',
     date: '2026-05-04',
     kind: 'patch',

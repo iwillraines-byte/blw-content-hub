@@ -235,9 +235,9 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   // against white fill) and half draws outside, so 5px of clean
   // white border surrounds the card. Reads as a polished print
   // frame without inheriting the team color.
-  ctx.shadowColor = 'rgba(15,23,42,0.32)';
-  ctx.shadowBlur = 36;
-  ctx.shadowOffsetY = 14;
+  ctx.shadowColor = 'rgba(15,23,42,0.45)';
+  ctx.shadowBlur = 52;
+  ctx.shadowOffsetY = 18;
   ctx.fillStyle = '#FFFFFF';
   roundRect(ctx, x, y, w, h, 14);
   ctx.fill();
@@ -357,9 +357,9 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
   // v4.5.35: shadow + frame match the raw card (0.32 alpha, 36 blur,
   // 14 offset). 10px white stroke centered on the outline gives 5px
   // of visible white border around the card.
-  ctx.shadowColor = 'rgba(15,23,42,0.32)';
-  ctx.shadowBlur = 36;
-  ctx.shadowOffsetY = 14;
+  ctx.shadowColor = 'rgba(15,23,42,0.45)';
+  ctx.shadowBlur = 52;
+  ctx.shadowOffsetY = 18;
   ctx.fillStyle = '#FFFFFF';
   roundRect(ctx, x, y, w, h, 14);
   ctx.fill();
@@ -379,20 +379,16 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
   const padTop = Math.round(h * 0.05);
   const headerHeight = Math.round(h * 0.13);
 
-  // Header — title left, "Across N BLW [batters/pitchers]" right.
-  // v4.5.33: title up to 64% of header height (was 55%) for stronger
-  // brand presence on social previews.
+  // Header — title left, no subtitle.
+  // v4.5.36: removed the "Across N BLW batters/pitchers" subtitle
+  // per master direction — the title alone reads cleaner and the
+  // population-size context isn't needed on the social card.
   ctx.fillStyle = '#151C28';
   const titleSize = Math.round(headerHeight * 0.64);
   ctx.font = `600 ${titleSize}px ${head}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(headerLabel).toUpperCase(), x + padX, y + padTop + headerHeight * 0.5);
-
-  ctx.fillStyle = '#9CA3AF';
-  ctx.font = `400 ${Math.round(headerHeight * 0.36)}px ${cond}`;
-  ctx.textAlign = 'right';
-  ctx.fillText(totalLabel, x + w - padX, y + padTop + headerHeight * 0.55);
 
   // Body rows. Three-column grid: [label 70-ish][bar flex][value 56-ish].
   // v4.5.33: row spacing pulled in (gap between rows reduced) so 9
