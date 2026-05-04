@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.5.27',
+    date: '2026-05-03',
+    kind: 'minor',
+    summary: 'Drag a photo onto a player or team page → auto-tag',
+    items: [
+      'New PageDropZone component wraps PlayerPage + TeamPage with window-level drag-and-drop. When you\'re already on a player\'s page (or a team page), you can now drag any photo from your downloads folder, finder, desktop, etc. straight onto the page.',
+      'On dragenter the whole page dims with a brand-red border + a "Drop to add to {player name}" callout — impossible-to-miss target.',
+      'On drop, a tight asset-type picker appears with 5 options for player drops (Headshot, Portrait, Hitting, Pitching, Other action) or 3 for team drops (Team photo, Venue, Logo). Pick one → file uploads with the canonical filename auto-built from URL context. Multi-file drops apply the same type to all.',
+      'Filename construction uses the same buildPlayerFilename / buildTeamFilename helpers the existing tag system uses, so the new files are immediately discoverable by the avatar resolver, the gallery, and the Generate-page picker — no extra wiring.',
+      'Compression pipeline runs first (1920px / q=0.85 default), so big drops don\'t bloat the cloud. Direct-upload path (v4.5.23) handles anything > 3MB.',
+      'Toast on completion shows count + tagged subject. Local media state prepends so the photo appears in the gallery instantly without a refetch.',
+    ],
+  },
+  {
     version: '4.5.26',
     date: '2026-05-03',
     kind: 'patch',

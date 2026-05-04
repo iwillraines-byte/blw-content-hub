@@ -13,6 +13,7 @@ import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer }
 import { ContentIdeasSection } from '../content-ideas-section';
 import { percentileFor } from '../percentile-bubble';
 import { authedFetch } from '../authed-fetch';
+import { PageDropZone } from '../page-drop-zone';
 
 // v4.5.20: Team media grid with a 2-row default cap and "Show all"
 // expand. Used on the Recent player media section so 60-photo
@@ -624,7 +625,17 @@ export default function TeamPage() {
     [media]
   );
 
+  // v4.5.27: drag-anywhere-on-page upload. Drops here are tagged
+  // team-scoped (TEAMPHOTO / VENUE / LOGO) since we don't know which
+  // player they're for. New records prepend onto local media state so
+  // the Recent media grid surfaces them immediately.
+  const handleDropUploaded = useCallback((records) => {
+    if (!records?.length) return;
+    setMedia(prev => [...records, ...prev]);
+  }, []);
+
   return (
+    <PageDropZone team={team} onUploaded={handleDropUploaded}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Team Header — matches the PlayerPage hero treatment.
           White card with a team-colored left-accent border + a soft team-
@@ -1270,6 +1281,7 @@ export default function TeamPage() {
           from Grand Slam Systems /games (already proxied via /api/gss). */}
       <ContentCalendar team={team} games={games} />
     </div>
+    </PageDropZone>
   );
 }
 

@@ -4,6 +4,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { ContentIdeasSection } from '../content-ideas-section';
+import { PageDropZone } from '../page-drop-zone';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
@@ -1869,7 +1870,19 @@ export default function PlayerPage() {
 
   const playerRank = player.ranking?.currentRank || null;
 
+  // v4.5.27: drag any photo from outside the browser onto the page →
+  // tagged automatically as this player's asset. Keeps the player on
+  // their page instead of bouncing them to Files for one-off uploads.
+  // The callback prepends new records to local media state so the
+  // gallery shows them immediately, no refetch needed.
+  const handleDropUploaded = useCallback((records) => {
+    if (!records?.length) return;
+    setMedia(prev => [...records, ...prev]);
+    setAllMediaPool(prev => [...records, ...prev]);
+  }, []);
+
   return (
+    <PageDropZone team={team} player={player} onUploaded={handleDropUploaded}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {ambiguityBanner}
 
@@ -2243,6 +2256,7 @@ export default function PlayerPage() {
         ))}
       </Card>
     </div>
+    </PageDropZone>
   );
 }
 
