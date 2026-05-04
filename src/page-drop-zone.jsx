@@ -26,7 +26,7 @@
 //   The component renders {children} unchanged — it just adds the
 //   document-level handlers + overlay portal.
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { saveMedia, blobToObjectURL, buildPlayerFilename, buildTeamFilename } from './media-store';
 import { compressImageBlob, getCompressPreference } from './image-compress';
@@ -50,11 +50,28 @@ const TEAM_ASSET_TYPES = [
   { id: 'LOGO_PRIMARY', label: 'Logo',    icon: '◉', hint: 'Logo / wordmark' },
 ];
 
-export function PageDropZone({ team, player = null, onUploaded, children }) {
+export const PageDropZone = forwardRef(function PageDropZone({ team, player = null, onUploaded, children }, ref) {
   const [dragActive, setDragActive] = useState(false);
   const [pickerFiles, setPickerFiles] = useState(null); // File[] awaiting type selection
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+
+  // v4.5.29: imperative handle so a parent can trigger the asset-type
+  // picker from an in-page "+ Add photo" button. Same flow as drag-and-
+  // drop — once files are queued, the user picks the asset type and
+  // we save with the same canonical filename construction.
+  useImperativeHandle(ref, () => ({
+    openPicker(files) {
+      const arr = Array.from(files || []).filter(f =>
+        f.type.startsWith('image/') || f.type.startsWith('video/')
+      );
+      if (arr.length === 0) {
+        toast.warn('Nothing to upload', { detail: 'Only image and video files are supported.' });
+        return;
+      }
+      setPickerFiles(arr);
+    },
+  }), [toast]);
 
   // Window-level drag handlers. Counter-pattern (incrementing depth on
   // dragenter, decrementing on dragleave) avoids the dragleave/dragenter
@@ -349,7 +366,7 @@ export function PageDropZone({ team, player = null, onUploaded, children }) {
       {pickerOverlay && createPortal(pickerOverlay, document.body)}
     </>
   );
-}
+});
 
 // Small helper — extract the player's first initial without breaking
 // when firstInitial is missing but firstName is set.

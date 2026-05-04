@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, canonicalNumOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
@@ -545,6 +545,19 @@ export default function TeamPage() {
     setMedia(prev => [...records, ...prev]);
   }, []);
 
+  // v4.5.29: ref + hidden file input so the team page can also expose
+  // an explicit "+ Add photo" button alongside drag-and-drop.
+  const dropZoneRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const triggerFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+  const onFileSelected = useCallback((e) => {
+    const files = e.target?.files;
+    if (files?.length) dropZoneRef.current?.openPicker(files);
+    if (e.target) e.target.value = '';
+  }, []);
+
   if (!team) {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
@@ -635,7 +648,7 @@ export default function TeamPage() {
   );
 
   return (
-    <PageDropZone team={team} onUploaded={handleDropUploaded}>
+    <PageDropZone ref={dropZoneRef} team={team} onUploaded={handleDropUploaded}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Team Header — matches the PlayerPage hero treatment.
           White card with a team-colored left-accent border + a soft team-
@@ -1225,16 +1238,56 @@ export default function TeamPage() {
 
       {/* Recently Uploaded Player Media */}
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        {/* Hidden file input — triggered by the "+ Add photo" button.
+            Multi-select on for bulk drops; the asset-type picker that
+            opens after will apply one type to the whole batch. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          onChange={onFileSelected}
+          style={{ display: 'none' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
           <SectionHeading style={{ margin: 0 }}>Recent player media</SectionHeading>
-          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
-            Go to Files →
-          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* v4.5.29: explicit "+ Add photo" affordance for team-page
+                drops. Drag-and-drop still works via PageDropZone — the
+                button just makes the option visible. */}
+            <button
+              onClick={triggerFilePicker}
+              title={`Add a photo for ${team.name}`}
+              style={{
+                background: team.color,
+                border: `1px solid ${team.color}`,
+                color: '#fff', cursor: 'pointer',
+                borderRadius: radius.sm, padding: '6px 12px',
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                letterSpacing: 0.5, whiteSpace: 'nowrap',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+              <span>ADD PHOTO</span>
+            </button>
+            <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
+              Go to Files →
+            </Link>
+          </div>
         </div>
         {playerScopedMedia.length === 0 && (
           <div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
-            No player media uploaded for this team yet.{' '}
-            <Link to="/files" style={{ color: colors.accent }}>Upload in Files</Link>
+            No player media uploaded for this team yet. Drag photos onto the page or{' '}
+            <button
+              onClick={triggerFilePicker}
+              style={{
+                background: 'none', border: 'none', padding: 0,
+                color: colors.accent, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 700,
+                textDecoration: 'underline', textUnderlineOffset: 2,
+              }}
+            >tap here to add one</button>.
           </div>
         )}
         {playerScopedMedia.length > 0 && (

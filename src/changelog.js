@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.5.29',
+    date: '2026-05-03',
+    kind: 'patch',
+    summary: '"+ Add photo" button on Media gallery — drag-and-drop is now discoverable',
+    items: [
+      'PageDropZone now exposes an imperative `openPicker(files)` handle via forwardRef + useImperativeHandle so a parent component can trigger the same asset-type picker from any UI affordance.',
+      'PlayerPage Media gallery card header now carries a red "+ ADD PHOTO" button. Click → native file picker → asset-type selector → uploads tagged with player context. Same flow as drag-and-drop, just discoverable.',
+      'TeamPage Recent player media card gets the same treatment — team-tinted button so it reads on every team page.',
+      'Empty-state copy updated to mention both paths: "Drag any photo onto this page to auto-tag it for {Player}, or tap the button below."',
+      'Multi-select on the file picker so you can grab several photos at once — same asset-type applies to all (matches the existing drag-multi-drop behavior).',
+      'Mobile bonus: tapping the button on iOS/Android opens the native photo picker, which on most devices includes a "Take photo" option — early start on the mobile camera feature.',
+    ],
+  },
+  {
     version: '4.5.28',
     date: '2026-05-03',
     kind: 'patch',

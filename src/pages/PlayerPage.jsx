@@ -1783,6 +1783,20 @@ export default function PlayerPage() {
     setAllMediaPool(prev => [...records, ...prev]);
   }, []);
 
+  // v4.5.29: ref + hidden file input pair so the gallery's "+ Add
+  // photo" button can trigger the same asset-type picker the drag-drop
+  // path uses. Avoids duplicating the save logic.
+  const dropZoneRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const triggerFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+  const onFileSelected = useCallback((e) => {
+    const files = e.target?.files;
+    if (files?.length) dropZoneRef.current?.openPicker(files);
+    if (e.target) e.target.value = ''; // allow re-selecting the same file
+  }, []);
+
   if (!team) {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
@@ -1881,7 +1895,7 @@ export default function PlayerPage() {
   const playerRank = player.ranking?.currentRank || null;
 
   return (
-    <PageDropZone team={team} player={player} onUploaded={handleDropUploaded}>
+    <PageDropZone ref={dropZoneRef} team={team} player={player} onUploaded={handleDropUploaded}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {ambiguityBanner}
 
@@ -2215,11 +2229,45 @@ export default function PlayerPage() {
 
       {/* Media Gallery */}
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        {/* Hidden file input — triggered by the "+ Add photo" button.
+            Multi-select on for bulk drops; the asset-type picker that
+            opens after will apply one type to the whole batch. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          onChange={onFileSelected}
+          style={{ display: 'none' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
           <SectionHeading style={{ margin: 0 }}>Media</SectionHeading>
-          <span style={{ fontFamily: fonts.body, fontSize: 11, color: colors.textMuted, fontWeight: 500 }}>
-            {media.length} {media.length === 1 ? 'asset' : 'assets'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: fonts.body, fontSize: 11, color: colors.textMuted, fontWeight: 500 }}>
+              {media.length} {media.length === 1 ? 'asset' : 'assets'}
+            </span>
+            {/* v4.5.29: explicit "+ Add photo" affordance so the upload
+                path is discoverable. Drag-and-drop still works app-wide
+                via PageDropZone — this button just makes the option
+                visible on touch devices and to admins who haven't
+                noticed the drop hint. */}
+            <button
+              onClick={triggerFilePicker}
+              title={`Add a photo for ${player.name}`}
+              style={{
+                background: colors.accent,
+                border: `1px solid ${colors.accent}`,
+                color: '#fff', cursor: 'pointer',
+                borderRadius: radius.sm, padding: '6px 12px',
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                letterSpacing: 0.5, whiteSpace: 'nowrap',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+              <span>ADD PHOTO</span>
+            </button>
+          </div>
         </div>
         {media.length === 0 && (
           <div style={{
@@ -2231,17 +2279,32 @@ export default function PlayerPage() {
             <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
               No photos for {player.name.split(' ')[0]} yet
             </div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 280, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
-              Add a HEADSHOT, ACTION shot, or PORTRAIT in Files; tag the file with the player's last name to wire it through.
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+              Drag any photo onto this page to auto-tag it for {player.name.split(' ')[0]}, or tap the button below.
             </div>
-            <Link to="/files" style={{
-              display: 'inline-block',
-              fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
-              color: colors.accent, textDecoration: 'none',
-              padding: '6px 14px', borderRadius: radius.base,
-              border: `1px solid ${colors.accentBorder}`,
-              background: colors.accentSoft,
-            }}>Upload in Files →</Link>
+            <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button
+                onClick={triggerFilePicker}
+                style={{
+                  background: colors.accent, border: `1px solid ${colors.accent}`,
+                  color: '#fff', cursor: 'pointer',
+                  borderRadius: radius.base, padding: '8px 16px',
+                  fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>+</span>
+                Add a photo
+              </button>
+              <Link to="/files" style={{
+                display: 'inline-flex', alignItems: 'center',
+                fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
+                color: colors.accent, textDecoration: 'none',
+                padding: '8px 14px', borderRadius: radius.base,
+                border: `1px solid ${colors.accentBorder}`,
+                background: colors.accentSoft,
+              }}>Bulk import in Files →</Link>
+            </div>
           </div>
         )}
         {media.length > 0 && Object.entries(grouped).map(([type, items]) => (
