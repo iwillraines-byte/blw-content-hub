@@ -181,6 +181,65 @@ export function setCompressPreference(on) {
   try { localStorage.setItem(PREF_KEY, on ? '1' : '0'); } catch {}
 }
 
+// Vercel functions cap request payloads at 4.5 MB regardless of plan.
+// Base64 encoding inflates by ~33%, so the binary blob has to come in
+// under ~3.3 MB to fit safely. v4.5.22: this helper re-compresses an
+// already-uploaded blob more aggressively until it fits, so files that
+// passed the 1920 px / 0.85 quality first pass but still exceeded the
+// limit (typical of high-megapixel sports cameras) don't 413 the
+// backup runner. Returns the original blob if no compression is
+// needed, or an aggressively re-encoded blob that fits.
+//
+// Strategy: try progressively smaller dimensions and lower quality
+// until we cross under the threshold. Each pass is independent — we
+// always start from the source blob, never from a previously
+// re-encoded one (re-encoding a JPEG twice degrades quickly).
+const VERCEL_PAYLOAD_LIMIT = 4 * 1024 * 1024; // 4 MB binary, leaves room for base64 + JSON wrapper
+const FIT_PASSES = [
+  { maxDimension: 1600, quality: 0.82 },
+  { maxDimension: 1280, quality: 0.78 },
+  { maxDimension: 1080, quality: 0.72 },
+  { maxDimension: 800,  quality: 0.65 },
+];
+
+export async function compressToFitUploadLimit(blob, opts = {}) {
+  const { limit = VERCEL_PAYLOAD_LIMIT } = opts;
+  if (!blob) return { blob, width: 0, height: 0, fitted: true, attempts: 0 };
+  // Already small enough — pass through. Saves a decode for the 95% case.
+  if (blob.size <= limit) {
+    return { blob, width: 0, height: 0, fitted: true, attempts: 0 };
+  }
+  // Non-image (video, PDF) — we can't compress here, the caller has to
+  // chunk-upload or skip. Surface that explicitly.
+  if (!isImage(blob) || PASSTHROUGH_TYPES.has(blob.type)) {
+    return { blob, width: 0, height: 0, fitted: false, attempts: 0, reason: 'cannot-compress' };
+  }
+  // Try each progressively-smaller pass until something fits.
+  let lastResult = null;
+  for (let i = 0; i < FIT_PASSES.length; i++) {
+    const pass = FIT_PASSES[i];
+    try {
+      const r = await compressImageBlob(blob, pass);
+      lastResult = r;
+      if (r.blob.size <= limit) {
+        return { blob: r.blob, width: r.width, height: r.height, fitted: true, attempts: i + 1 };
+      }
+    } catch {
+      // Next pass.
+    }
+  }
+  // Couldn't get under the limit even at 800px / q=0.65 — return the
+  // smallest version we managed and let the caller surface the failure.
+  return {
+    blob: lastResult?.blob || blob,
+    width: lastResult?.width || 0,
+    height: lastResult?.height || 0,
+    fitted: false,
+    attempts: FIT_PASSES.length,
+    reason: 'too-large-after-recompress',
+  };
+}
+
 // Format helper for UI — "1.8 MB → 412 KB (76% smaller)"
 export function formatSavings({ originalBytes, finalBytes }) {
   const fmt = (n) => n < 1024 ? `${n} B`
