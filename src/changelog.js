@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.51',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'Hotfix: invitation links hung on "Signing you in…"',
+    items: [
+      'v4.5.45 switched the auth flow to PKCE to defeat email-scanner token-burn. PKCE works for return-user sign-ins (where the same browser stored a code_verifier) but BREAKS invitation links — invited users have no prior signInWithOtp call, so the SDK\'s auto-exchange found no code_verifier and hung indefinitely on the "Signing you in…" spinner. lrose@blwwiffleball.com was the canary.',
+      'AuthCallback now explicitly handles invitation/recovery/email-change links by detecting `?token_hash=&type=` in the URL and calling supabase.auth.verifyOtp({ token_hash, type }) directly. The auto-exchange path (PKCE `?code=` for returning users) is unchanged.',
+      '12-second escape hatch: if the page is still loading with no user and no error after 12 seconds, the spinner swaps for a "This is taking too long — send a new link" recovery CTA. Guarantees no user gets stuck on the spinner indefinitely.',
+    ],
+  },
+  {
     version: '4.5.50',
     date: '2026-05-06',
     kind: 'patch',
