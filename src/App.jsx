@@ -44,10 +44,17 @@ const navItems = [
   // tell that this is the creative-focal surface of the app.
   { path: "/generate",    label: "Studio",           icon: "✦", iconClass: 'nav-icon-studio' },
   { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content', 'athlete'] },
-  { path: "/requests",    label: "Requests",         icon: "☰",  roles: ['master_admin', 'admin', 'content'] },
-  { path: "/game-center", label: "ProWiffle Stats",  icon: "▣" },
-  { path: "/files",       label: "Files",            icon: "◫",  roles: ['master_admin', 'admin', 'content'] },
-  { path: "/settings",    label: "Settings",         icon: "⚙" },
+  // v4.5.39: replaced single-codepoint Unicode symbols (☰ ◫ ⚙ ▣) with
+  // proper emoji codepoints. The old ones live in the Miscellaneous
+  // Symbols block (U+2600-26FF) — supported by Symbola/Noto Sans
+  // Symbols but missing from default macOS/iOS emoji fonts, which made
+  // them render as `!` (the browser's missing-glyph fallback) on plenty
+  // of admin machines. Full emoji codepoints ship with every OS's
+  // emoji font and render universally.
+  { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content'] },
+  { path: "/game-center", label: "ProWiffle Stats",  icon: "📊" },
+  { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
+  { path: "/settings",    label: "Settings",         icon: "⚙️" },
 ];
 
 const pageTitles = {
@@ -117,7 +124,11 @@ function TeamsDropdown({ location }) {
           fontWeight: onTeamRoute ? 700 : 500,
           border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
         }}>
-        <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>⚑</span>
+        {/* v4.5.39: was ⚑ (Black Flag, U+2691) — missing from default
+            macOS/iOS emoji fonts, rendered as `!` for half the admin
+            tier. 🏟 (Stadium) is in every OS emoji font and ties
+            semantically to "the league's teams." */}
+        <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>🏟</span>
         <span style={{ flex: 1 }}>Teams</span>
         <span style={{ fontSize: 11, opacity: 0.5, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
       </button>

@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '4.5.39',
+    date: '2026-05-05',
+    kind: 'patch',
+    summary: 'Fix sidebar icons rendering as "!"',
+    items: [
+      'Replaced sidebar nav icons that lived in the Unicode Miscellaneous Symbols block (☰ ◫ ⚙ ▣ ⚑) with full-emoji codepoints (📥 📁 ⚙️ 📊 🏟). The old glyphs were missing from default macOS/iOS emoji fonts, so the browser fell back to its missing-glyph indicator and rendered them as "!" for everyone whose system didn\'t happen to have Symbola or Noto Sans Symbols installed. Affected: Requests, Files, Settings, ProWiffle Stats, Teams. Now renders correctly across every OS.',
+    ],
+  },
+  {
     version: '4.5.38',
     date: '2026-05-05',
     kind: 'patch',
