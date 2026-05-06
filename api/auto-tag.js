@@ -32,6 +32,7 @@
 // }
 
 import { requireUser, requireRole } from './_supabase.js';
+import { checkRateLimit } from './_rate-limit.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 300;
@@ -50,6 +51,11 @@ export default async function handler(req, res) {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
   if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return;
+  // v4.5.38 (security audit I2): hourly rate limit. Auto-tag is the
+  // most expensive endpoint per call (Claude vision), so limits matter
+  // most here — even staff is capped at 1000/hr to bound damage from
+  // a stuck "bulk re-tag" loop on the Files page.
+  if (await checkRateLimit(ctx, 'auto-tag', res)) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

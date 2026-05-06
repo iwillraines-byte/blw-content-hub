@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.38',
+    date: '2026-05-05',
+    kind: 'patch',
+    summary: 'Security audit follow-up: RLS team-lock + AI rate limits',
+    items: [
+      'C1 fix: profile self-updates now lock team_id, email, and role_expires_at in addition to role. An athlete can only change their own display_name from the browser; team flips go through master/admin via /api/admin-people. db/012 migration tightens the WITH CHECK clause; safe to re-run.',
+      'I2 fix: per-user-per-hour rate limits on /api/ideas, /api/captions, /api/auto-tag. Caps are role-specific — athletes 30/60/0 (auto-tag is staff-only), staff 300–1000 depending on endpoint. Returns 429 with Retry-After header when exceeded. Fails open if the rate-limit RPC errors so the AI surface degrades gracefully instead of breaking. Requires db/013 migration (atomic increment_rate_limit RPC + table).',
+    ],
+  },
+  {
     version: '4.5.37',
     date: '2026-05-05',
     kind: 'minor',

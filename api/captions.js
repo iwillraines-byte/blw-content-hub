@@ -28,6 +28,7 @@
 // }
 
 import { requireUser } from './_supabase.js';
+import { checkRateLimit } from './_rate-limit.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 800;
@@ -56,6 +57,8 @@ export default async function handler(req, res) {
   // but trivially DoS-able at scale.
   const ctx = await requireUser(req, res);
   if (!ctx) return;
+  // v4.5.38 (security audit I2): hourly rate limit by role.
+  if (await checkRateLimit(ctx, 'captions', res)) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

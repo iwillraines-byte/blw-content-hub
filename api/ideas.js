@@ -31,6 +31,7 @@
 // }
 
 import { getServiceClient, requireUser } from './_supabase.js';
+import { checkRateLimit } from './_rate-limit.js';
 import { persistIdeas } from './content-ideas.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
@@ -68,6 +69,10 @@ export default async function handler(req, res) {
   // Now requires a valid Supabase session JWT; user identity is in ctx.
   const ctx = await requireUser(req, res);
   if (!ctx) return;
+  // v4.5.38 (security audit I2): per-user-per-hour rate limit. Caps
+  // burst traffic from a runaway script or compromised account. Limits
+  // are role-specific — staff has wide headroom, athletes are tight.
+  if (await checkRateLimit(ctx, 'ideas', res)) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
