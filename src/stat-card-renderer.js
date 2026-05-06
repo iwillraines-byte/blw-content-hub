@@ -356,21 +356,20 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   ctx.fillRect(x, y, w, headerH);
   ctx.restore();
 
-  // Header text — uppercase season + label, centered.
-  // v4.5.33: bumped from 0.42 → 0.50 of header height for stronger
-  // type presence in social previews.
-  // v4.5.48: title shifts left so the prowiffleball wordmark on the
-  // right side has room. Title still appears centered relative to the
-  // remaining space (excluding the right-side logo zone) so the
-  // composition doesn't feel left-pinned.
-  const logoZoneW = Math.round(w * 0.32); // ~one-third reserved on the right
-  const titleCenterX = x + (w - logoZoneW) / 2;
+  // Header text — uppercase season + label, centered across the full
+  // card width. v4.5.33: bumped from 0.42 → 0.50 of header height
+  // for stronger type presence in social previews. v4.5.50: reverted
+  // the v4.5.48 left-shift — the prowiffleball wordmark anchors hard
+  // right, the title sits dead-center, and as long as the title
+  // string + logo zone don't overlap on the platform-typical card
+  // widths the eye reads them as two distinct elements rather than
+  // a left-justified compromise.
   ctx.fillStyle = '#FFFFFF';
   ctx.font = `700 ${Math.round(headerH * 0.50)}px ${cond}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const headerText = `${SEASON_LABEL} ${headerLabel}`.toUpperCase();
-  ctx.fillText(headerText, titleCenterX, y + headerH / 2);
+  ctx.fillText(headerText, x + w / 2, y + headerH / 2);
 
   // v4.5.48: prowiffleball.com wordmark on the right side of the
   // dark gradient header. White-on-transparent SVG renders as-is
@@ -486,20 +485,12 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
   ctx.textBaseline = 'middle';
   ctx.fillText(String(headerLabel).toUpperCase(), x + padX, y + padTop + headerHeight * 0.5);
 
-  // v4.5.48: prowiffleball.com wordmark on the right side of the
-  // header band. White header so we use the dark variant — the
-  // colored-logo cache mints a navy fill on first call. padRight
-  // matches the card's left padding so the logo sits inside the
-  // same visual margin as the title.
-  drawProwiffleLogoInHeader(
-    ctx,
-    '#151C28',
-    x,
-    y + padTop,
-    w,
-    headerHeight,
-    padX,
-  );
+  // v4.5.50: prowiffleball wordmark removed from percentile cards.
+  // The title here is long-form ("BLW PITCHING PERCENTILE RANKINGS")
+  // and runs the full width — adding a logo on the right caused the
+  // wordmark to overlap the title text. Raw stat cards keep the
+  // wordmark since their title is short ("2026 PITCHING") and there's
+  // empty space on the right by default.
 
   // Body rows. Three-column grid: [label 70-ish][bar flex][value 56-ish].
   // v4.5.33: row spacing pulled in (gap between rows reduced) so 9

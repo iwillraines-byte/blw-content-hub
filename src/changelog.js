@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.50',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'Stat-card headers: re-center raw, drop logo from percentile',
+    items: [
+      'Raw stat cards: title is now centered across the full card width again. v4.5.48 left-shifted it to make room for the prowiffleball wordmark; the wordmark sits hard right and the title visually clears it on every platform export size, so the offset wasn\'t necessary.',
+      'Percentile cards: prowiffleball wordmark removed entirely. The long title ("BLW PITCHING PERCENTILE RANKINGS") needs the full header width — adding a logo overlapped the text. Raw cards keep the wordmark since their title is short and there\'s natural empty space on the right.',
+    ],
+  },
+  {
     version: '4.5.49',
     date: '2026-05-06',
     kind: 'minor',
