@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.45',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'Magic links now survive corporate email scanners (PKCE)',
+    items: [
+      'Auth flow switched implicit → PKCE. Magic links no longer carry the access token directly — instead they carry a `?code=` that\'s only redeemable with a `code_verifier` stored in the user\'s browser. Defeats Outlook 365 / Mimecast / Barracuda email security tools that pre-click every URL in inbound email and were burning the one-time token before users could click. Side effect: returning sign-in links must be opened on the same device/browser they were requested from (almost always the case in practice).',
+      'AuthCallback error state now explains why a "expired/invalid" link likely happened (corporate scanner pre-clicked it OR opened on a different device) and offers a one-click "Send a new link" CTA so the user can self-recover instead of contacting the admin.',
+      'Master-admin pre-flight checklist updated with email-scanner guidance: tell invitees to click within 30 minutes, not forward the email, and not let their email client "preview" the link.',
+    ],
+  },
+  {
     version: '4.5.44',
     date: '2026-05-05',
     kind: 'minor',

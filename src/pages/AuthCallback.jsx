@@ -62,16 +62,40 @@ export default function AuthCallback() {
             <h1 style={{ fontFamily: fonts.heading, fontSize: 24, margin: 0, color: colors.text, letterSpacing: 1.2 }}>
               Sign-in failed
             </h1>
-            <p style={{ fontSize: 13, color: colors.textSecondary, margin: '10px 0 18px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 13, color: colors.textSecondary, margin: '10px 0 14px', lineHeight: 1.5 }}>
               {error}
             </p>
+            {/* v4.5.45: explain the most common cause + offer the
+                one-click fix. The "expired / invalid" error usually
+                means a corporate email scanner pre-clicked the link
+                or the user opened it on a different device than the
+                one they requested it from (PKCE flow). Either way,
+                the fix is "request a new link" — surface it as the
+                primary CTA so the user doesn't have to figure out
+                what to do next. */}
+            <div style={{
+              padding: 12, background: colors.bg, borderRadius: radius.base,
+              border: `1px solid ${colors.borderLight}`,
+              fontSize: 11, color: colors.textSecondary, lineHeight: 1.5,
+              textAlign: 'left', marginBottom: 16,
+            }}>
+              <strong style={{ color: colors.text }}>Why this happens:</strong> corporate
+              email security tools (Outlook, Mimecast, etc.) sometimes
+              pre-click links to scan for malware, which burns the
+              one-time token before you do. Or the link was opened on
+              a different device than the one that requested it.
+              <br /><br />
+              <strong style={{ color: colors.text }}>Fix:</strong> request a fresh
+              link below and click it from this same browser within
+              5 minutes.
+            </div>
             <button onClick={() => navigate('/login', { replace: true })} style={{
               padding: '10px 14px', background: colors.red, color: '#fff',
               border: 'none', borderRadius: radius.base, cursor: 'pointer',
               fontFamily: fonts.condensed, fontSize: 13, fontWeight: 700,
               letterSpacing: 1, textTransform: 'uppercase',
             }}>
-              Back to sign-in
+              Send a new link →
             </button>
           </>
         ) : (
