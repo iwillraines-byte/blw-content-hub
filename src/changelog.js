@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.44',
+    date: '2026-05-05',
+    kind: 'minor',
+    summary: 'Sticky preview + Headline on every template + Teams icon',
+    items: [
+      'Teams sidebar icon swapped 🏟 → 🚩 (Triangular Flag, Unicode 6.0/2010). The stadium emoji from v4.5.39 was Unicode 8.0 (2015) and still missing from older system emoji fonts on iOS 9 / macOS 10.10 — flag is universal across every emoji font shipped in the last 15 years.',
+      'Headline pill now available on every template EXCEPT Team/Player News (player-stat). News intentionally uses three matched stacked lines — wrapping one in a pill would break the symmetric typographic stack. Game Day, Final Score, Hype/Promo, Highlight, Stat Leader, Player of the Game, Standings, Blank Slate, and Stat Card all now show the headline picker.',
+      'Studio preview is now sticky on desktop — the canvas + download buttons stay pinned at the top of the right column while you scroll the controls. No more "scroll up to confirm, scroll down to edit" loop. Download row moved into the sticky panel so it\'s one click away from any scroll position. maxHeight + overflowY means tall right columns (canvas + Photo Adjust + download) scroll internally without forcing the page to grow.',
+    ],
+  },
+  {
     version: '4.5.43',
     date: '2026-05-05',
     kind: 'patch',

@@ -126,9 +126,12 @@ function TeamsDropdown({ location }) {
         }}>
         {/* v4.5.39: was ⚑ (Black Flag, U+2691) — missing from default
             macOS/iOS emoji fonts, rendered as `!` for half the admin
-            tier. 🏟 (Stadium) is in every OS emoji font and ties
-            semantically to "the league's teams." */}
-        <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>🏟</span>
+            tier. v4.5.44: was 🏟 (Stadium, U+1F3DF) — Unicode 8.0
+            (2015), still missing from older system emoji fonts on
+            iOS 9 / macOS 10.10 etc. Switched to 🚩 (Triangular Flag,
+            U+1F6A9, Unicode 6.0 / 2010) which has been in every OS
+            emoji font for 15+ years. Same "teams / banners" semantic. */}
+        <span style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: onTeamRoute ? 1 : 0.6 }}>🚩</span>
         <span style={{ flex: 1 }}>Teams</span>
         <span style={{ fontSize: 11, opacity: 0.5, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
       </button>

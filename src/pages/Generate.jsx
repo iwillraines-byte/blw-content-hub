@@ -299,21 +299,23 @@ function computeBgCrop(bgImg, w, h, transform) {
 // - bgTransform: { offsetX, offsetY, zoom, brightness, contrast, saturation } —
 //   exposure adjustments are applied via ctx.filter ONLY for the background draw
 //   so overlays + text remain unaffected.
-// v4.5.37 / v4.5.42: Templates that opt into the "Headline" pill
-// treatment. When a headline font is selected, the largest text field
-// on the canvas gets a team-colored rounded-pill background, the
-// chosen font, and a soft drop shadow — same visual energy as a TV
-// chyron. Other text fields render unchanged.
+// v4.5.37 / v4.5.42 / v4.5.44: Templates that opt into the "Headline"
+// pill treatment. When a headline font is selected, the largest text
+// field on the canvas gets a team-colored rounded-pill background,
+// the chosen font, and a soft drop shadow — same visual energy as a
+// TV chyron. Other text fields render unchanged.
 //
-// v4.5.42: the toggle was originally Winner-Sans-only (boolean on/off);
-// now it accepts ANY font key from FONT_MAP. State is `headlineFont`
-// — null/undefined = OFF, a font key = ON with that face. Lets the
-// designer match the headline face to the post mood.
-const HEADLINE_TOGGLE_TEMPLATES = new Set(['blank-slate', 'highlight', 'batting-leaders']);
+// v4.5.42: was boolean on/off (Winner-Sans-only); now any FONT_MAP key.
+// v4.5.44: was an allowlist of three templates; now ALL templates are
+// eligible EXCEPT 'player-stat' (Team/Player News). News intentionally
+// uses three matched stacked lines — wrapping one in a pill would
+// break the symmetric typographic stack. Every other template benefits.
+const HEADLINE_TOGGLE_BLOCKED_TEMPLATES = new Set(['player-stat']);
+const headlineToggleEligible = (templateType) => !HEADLINE_TOGGLE_BLOCKED_TEMPLATES.has(templateType);
 
 function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
   const { hiddenFields, forExport, bgTransform, statCard, headlineFont, templateType } = options;
-  const headlineEnabled = !!headlineFont && HEADLINE_TOGGLE_TEMPLATES.has(templateType);
+  const headlineEnabled = !!headlineFont && headlineToggleEligible(templateType);
   // The "headline" is whichever rendered field has the largest fontSize.
   // Computed once so each field's draw block can decide if it's the one.
   const headlineKey = headlineEnabled && fieldConfig
@@ -1811,7 +1813,7 @@ export default function Generate() {
                   Live preview updates the moment the chip flips —
                   every face renders from the local-fonts pipeline so
                   there's no fallback flash on first paint. */}
-              {HEADLINE_TOGGLE_TEMPLATES.has(customType) && (
+              {headlineToggleEligible(customType) && (
                 <Card>
                   <Label style={{ marginBottom: 4 }}>Headline treatment</Label>
                   <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, lineHeight: 1.45, fontStyle: 'italic', marginBottom: 12 }}>
@@ -2267,23 +2269,6 @@ export default function Generate() {
 
           </>
 
-          {/* v4.5.37: Two-button download row. Standard = native template
-              size (e.g. 1080×1350). HD = 2× resolution rendered from
-              primitives (genuinely sharper, ~2160×2700) for print,
-              prowiffleball.com hero blocks, and any surface that
-              doesn't crunch big PNGs. */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <RedButton onClick={() => download(1)} style={{ flex: '2 1 auto', padding: '14px 18px', fontSize: 14 }}>
-              Download PNG ({customPlat.label})
-            </RedButton>
-            <OutlineButton
-              onClick={() => download(2)}
-              title={`Render at 2× — ${customPlat.w * 2}×${customPlat.h * 2}px. Sharper for print, large social, and video composites.`}
-              style={{ flex: '1 1 auto', padding: '14px 14px', fontSize: 12, fontWeight: 800, letterSpacing: 0.4 }}
-            >
-              ⤓ HD 2×
-            </OutlineButton>
-          </div>
         </div>
 
         {/* PREVIEW — Template Type sits above the preview on desktop
@@ -2291,8 +2276,28 @@ export default function Generate() {
             On mobile the same card is rendered at the top of the
             controls column instead so the user sees it before any
             other input. Effects panel still sits directly below the
-            preview so slider changes are visible without scrolling. */}
-        <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            preview so slider changes are visible without scrolling.
+
+            v4.5.44: Sticky on desktop. The preview + download buttons
+            stay pinned in view while the user scrolls the controls
+            column — no more "scroll up to confirm, scroll down to
+            edit" loop. Download row moved OUT of the controls column
+            into here so it's reachable from any scroll position.
+            maxHeight + overflowY:auto means a tall right column
+            (canvas + photo adjust + download) scrolls internally
+            instead of forcing the page to grow. */}
+        <div style={{
+          flex: '1 1 400px',
+          display: 'flex', flexDirection: 'column', gap: 10,
+          ...(isMobile ? {} : {
+            position: 'sticky',
+            top: 70,
+            alignSelf: 'flex-start',
+            maxHeight: 'calc(100vh - 86px)',
+            overflowY: 'auto',
+            paddingRight: 4, // breathing room before scrollbar
+          }),
+        }}>
           {!isMobile && templateTypeCard}
           <Label>Live Preview {showLayoutEditor && <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, letterSpacing: 0.5, marginLeft: 6 }}>· DRAG FIELDS TO REPOSITION</span>}</Label>
           <div style={{
@@ -2339,6 +2344,25 @@ export default function Generate() {
           </div>
           <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, textAlign: 'center' }}>
             {activeW}x{activeH}px · Click download for full resolution
+          </div>
+
+          {/* v4.5.44: Download row — moved INTO the sticky right column so
+              it stays one click away no matter where the user is in
+              the controls scroll. Standard = native template size
+              (e.g. 1080×1350). HD = 2× resolution rendered from
+              primitives for print, prowiffleball.com hero blocks, and
+              video composites. */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <RedButton onClick={() => download(1)} style={{ flex: '2 1 auto', padding: '14px 18px', fontSize: 14 }}>
+              Download PNG ({customPlat.label})
+            </RedButton>
+            <OutlineButton
+              onClick={() => download(2)}
+              title={`Render at 2× — ${customPlat.w * 2}×${customPlat.h * 2}px. Sharper for print, large social, and video composites.`}
+              style={{ flex: '1 1 auto', padding: '14px 14px', fontSize: 12, fontWeight: 800, letterSpacing: 0.4 }}
+            >
+              ⤓ HD 2×
+            </OutlineButton>
           </div>
 
           {/* Photo Adjust — pan/zoom + exposure. Affects ONLY the background photo;
