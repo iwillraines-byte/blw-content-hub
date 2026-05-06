@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.43',
+    date: '2026-05-05',
+    kind: 'patch',
+    summary: 'Headline pill: per-font centering + softer corners',
+    items: [
+      'Pill now centers on the actually-rendered glyphs via ctx.measureText().actualBoundingBoxAscent/Descent — adapts to whatever font the picker selected (winner / heading / press / united / gotham / condensed) instead of a one-size-fits-all 0.78×fontSize approximation. Winner Sans no longer renders bottom-heavy.',
+      'Corner radius is now 18% of pill height capped at 24px — was pillH/2.6 (a near-capsule). Reads as a softly-rounded rectangle that sits with the rest of the BLW chrome.',
+      'Vertical padding bumped 0.18 → 0.22×fontSize for a touch more breathing room above and below the headline.',
+    ],
+  },
+  {
     version: '4.5.42',
     date: '2026-05-05',
     kind: 'minor',

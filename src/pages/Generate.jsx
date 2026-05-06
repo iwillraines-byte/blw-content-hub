@@ -430,20 +430,40 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
 
       if (isHeadlinePill) {
         const padX = Math.round(f.fontSize * 0.5);
-        const padY = Math.round(f.fontSize * 0.18);
+        const padY = Math.round(f.fontSize * 0.22); // v4.5.43: 0.18 → 0.22, more breathing room
         const measured = ctx.measureText(text);
         const textW = Math.min(measured.width, f.maxWidth || measured.width);
         const pillW = textW + padX * 2;
-        const pillH = f.fontSize + padY * 2;
-        // Position so the text baseline (default alphabetic) lands at f.y.
-        // Approximate ascent as 0.78 × fontSize — close enough for a
-        // visually-balanced pill across our display fonts.
-        const pillY = f.y - Math.round(f.fontSize * 0.78) - padY;
+        // v4.5.43: Center the pill on the *actually-rendered* glyphs
+        // instead of a baked 0.78×fontSize ascent constant. The old
+        // approximation undershot Winner Sans (cap height ~0.85fs) so
+        // the pill sat too low — visible whitespace below the
+        // baseline outweighed whitespace above the cap. Using
+        // ctx.measureText().actualBoundingBox{Ascent,Descent} pulls
+        // the real per-font extents at the active fontSize, so the
+        // pill auto-recenters for whatever face the picker selected
+        // (winner / heading / press / united / gotham / condensed).
+        // Falls back to a sensible 0.74/0.20 split if the metrics
+        // aren't available (older WebKit on iOS < 11.3).
+        const ascent = (typeof measured.actualBoundingBoxAscent === 'number' && measured.actualBoundingBoxAscent > 0)
+          ? measured.actualBoundingBoxAscent
+          : f.fontSize * 0.74;
+        const descent = (typeof measured.actualBoundingBoxDescent === 'number' && measured.actualBoundingBoxDescent >= 0)
+          ? measured.actualBoundingBoxDescent
+          : f.fontSize * 0.20;
+        const visibleH = ascent + descent;
+        const pillH = visibleH + padY * 2;
+        const pillY = (f.y - ascent) - padY;
         let pillX;
         if ((f.align || 'center') === 'left')        pillX = f.x - padX;
         else if ((f.align || 'center') === 'right')  pillX = f.x - pillW + padX;
         else                                          pillX = f.x - pillW / 2;
-        const radius = Math.round(pillH / 2.6);
+        // v4.5.43: pill corners much more subtle. Was pillH/2.6 (~0.38×
+        // height — gave a stadium/capsule shape). Now scaled to
+        // 18% of pillH and capped at 24px — reads as a softly-rounded
+        // rectangle rather than a capsule, which sits better against
+        // the rest of the BLW chrome.
+        const radius = Math.min(Math.round(pillH * 0.18), 24);
         ctx.save();
         ctx.fillStyle = team?.color || '#DC2626';
         ctx.shadowColor   = 'rgba(0,0,0,0.32)';
