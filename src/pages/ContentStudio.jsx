@@ -11,7 +11,9 @@ import { getAllMedia } from '../media-store';
 import { isAlreadyTagged } from '../tag-heuristics';
 import { getUsageToday, recordUsage } from '../ai-usage-store';
 import { useToast } from '../toast';
-import { fetchRecentGenerates } from '../cloud-sync';
+import { fetchRecentGenerates, setGenerateLogHidden } from '../cloud-sync';
+import { useAuth } from '../auth';
+import { formatPostName } from '../template-config';
 import IdeaCard from '../idea-card';
 import { Pager, useIdeaPagination, IDEAS_PAGE_SIZE } from '../idea-pager';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
@@ -739,7 +741,23 @@ export default function ContentStudio() {
           shipping" row instead of competing with the live-state cards
           and content ideas at the top of the page. Empty state hides
           the whole row until someone has actually posted. */}
-      <RecentPostsStrip posts={recentPosts} loaded={recentPostsLoaded} />
+      <RecentPostsStrip
+        posts={recentPosts}
+        loaded={recentPostsLoaded}
+        onHide={(id) => {
+          // v4.5.37: master-admin only — server PATCH sets hidden=true,
+          // local state drops the post immediately so the strip
+          // reflects the change without a re-fetch round trip.
+          setGenerateLogHidden(id, true).then(ok => {
+            if (ok) {
+              setRecentPosts(list => list.filter(p => p.id !== id));
+              toast.success('Post hidden', { detail: 'Removed from public feeds across the app.' });
+            } else {
+              toast.error('Couldn\'t hide post', { detail: 'Try again — server rejected the change.' });
+            }
+          });
+        }}
+      />
     </div>
   );
 }
@@ -759,7 +777,9 @@ function truncate(str, n) {
 // truth about which posts actually shipped vs. which are sitting on
 // the shelf. Always renders, even when empty — the empty state is the
 // indicator that the surface exists for users on cold installs.
-function RecentPostsStrip({ posts, loaded }) {
+function RecentPostsStrip({ posts, loaded, onHide }) {
+  const { role } = useAuth();
+  const isMaster = role === 'master_admin';
   const timeAgo = (d) => {
     if (!d) return '';
     const diff = Date.now() - d.getTime();
@@ -819,8 +839,33 @@ function RecentPostsStrip({ posts, loaded }) {
             const team = post.team ? getTeam(post.team) : null;
             const dimmed = post.posted === false;
             return (
+              <div key={post.id} style={{ position: 'relative' }}>
+              {/* v4.5.37: master-admin hide-from-feed button. Sits in
+                  the corner of every recent-posts tile. Click confirms,
+                  then PATCHes hidden=true so the post disappears from
+                  the dashboard, team page carousel, and player page
+                  feeds for every viewer. */}
+              {isMaster && onHide && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (window.confirm('Hide this post from the dashboard, team pages, and player pages? Master admin only.')) {
+                      onHide(post.id);
+                    }
+                  }}
+                  title="Hide this post from public feeds (master admin)"
+                  style={{
+                    position: 'absolute', top: 4, right: 4, zIndex: 2,
+                    width: 22, height: 22, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.6)', color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.25)',
+                    cursor: 'pointer', fontSize: 11, fontWeight: 800,
+                    lineHeight: 1, padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >✕</button>
+              )}
               <Link
-                key={post.id}
                 to={buildRegenerateLink(post)}
                 title={`${post.team || 'BLW'} · ${post.templateType || 'template'} · ${post.platform || ''}${dimmed ? ' · marked NOT POSTED' : ''} · click to re-open in Generate`}
                 style={{
@@ -876,8 +921,11 @@ function RecentPostsStrip({ posts, loaded }) {
                   )}
                 </div>
                 <div style={{ padding: '6px 2px 0' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {post.templateType || 'post'}
+                  <div
+                    title={formatPostName(post, getTeam)}
+                    style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {formatPostName(post, getTeam) || post.templateType || 'post'}
                   </div>
                   <div style={{ fontSize: 10, fontFamily: fonts.condensed, color: colors.textMuted, letterSpacing: 0.3, display: 'flex', justifyContent: 'space-between' }}>
                     <span>{post.platform || '—'}</span>
@@ -885,6 +933,7 @@ function RecentPostsStrip({ posts, loaded }) {
                   </div>
                 </div>
               </Link>
+              </div>
             );
           })}
         </div>

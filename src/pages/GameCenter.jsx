@@ -5,6 +5,7 @@ import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, FreeAgentChip, Ou
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
 import { getAllManualPlayers } from '../player-store';
+import { ProWiffleBallBlurb } from '../stats-tables';
 
 // Helper: render a sortable header
 // SortHeader — the column whose sortKey matches the current sort becomes red.
@@ -549,13 +550,16 @@ export default function GameCenter() {
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <SectionHeading style={{ margin: 0 }}>Batting leaders</SectionHeading>
-            <input
-              type="text"
-              value={battingSearch}
-              onChange={e => setBattingSearch(e.target.value)}
-              placeholder="Search player or team…"
-              style={{ ...inputStyle, maxWidth: 260 }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <ProWiffleBallBlurb />
+              <input
+                type="text"
+                value={battingSearch}
+                onChange={e => setBattingSearch(e.target.value)}
+                placeholder="Search player or team…"
+                style={{ ...inputStyle, maxWidth: 260 }}
+              />
+            </div>
           </div>
           <div style={{ padding: '12px 18px', borderBottom: `1px solid ${colors.borderLight}` }}>
             <PercentileLegend />
@@ -637,13 +641,16 @@ export default function GameCenter() {
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <SectionHeading style={{ margin: 0 }}>Pitching leaders</SectionHeading>
-            <input
-              type="text"
-              value={pitchingSearch}
-              onChange={e => setPitchingSearch(e.target.value)}
-              placeholder="Search player or team…"
-              style={{ ...inputStyle, maxWidth: 260 }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <ProWiffleBallBlurb />
+              <input
+                type="text"
+                value={pitchingSearch}
+                onChange={e => setPitchingSearch(e.target.value)}
+                placeholder="Search player or team…"
+                style={{ ...inputStyle, maxWidth: 260 }}
+              />
+            </div>
           </div>
           <div style={{ padding: '12px 18px', borderBottom: `1px solid ${colors.borderLight}` }}>
             <PercentileLegend />
@@ -719,13 +726,16 @@ export default function GameCenter() {
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <SectionHeading style={{ margin: 0 }}>Player rankings</SectionHeading>
-            <input
-              type="text"
-              value={rankingsSearch}
-              onChange={e => setRankingsSearch(e.target.value)}
-              placeholder="Search player…"
-              style={{ ...inputStyle, maxWidth: 260 }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <ProWiffleBallBlurb />
+              <input
+                type="text"
+                value={rankingsSearch}
+                onChange={e => setRankingsSearch(e.target.value)}
+                placeholder="Search player…"
+                style={{ ...inputStyle, maxWidth: 260 }}
+              />
+            </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>

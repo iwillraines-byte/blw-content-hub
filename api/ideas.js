@@ -30,7 +30,7 @@
 //   "usage": { input_tokens, output_tokens, cache_read_tokens }
 // }
 
-import { getServiceClient } from './_supabase.js';
+import { getServiceClient, requireUser } from './_supabase.js';
 import { persistIdeas } from './content-ideas.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
@@ -52,16 +52,22 @@ const TEMPLATE_CATALOG = `TEMPLATE CATALOG (map each idea to exactly one templat
 `;
 
 export default async function handler(req, res) {
-  // CORS headers so the page can call this from localhost during dev + from
-  // the deployed domain in prod.
+  // CORS — restricted to OPTIONS preflight + same-origin in prod.
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'POST required' });
     return;
   }
+
+  // v4.5.37 (security audit): gate behind requireUser. Pre-rollout this
+  // endpoint was open to any caller, which made an Anthropic-credit DoS
+  // trivial — anyone with the deployed URL could spam idea generation.
+  // Now requires a valid Supabase session JWT; user identity is in ctx.
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

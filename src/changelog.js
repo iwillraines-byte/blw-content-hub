@@ -18,6 +18,26 @@
 
 export const RELEASES = [
   {
+    version: '4.5.37',
+    date: '2026-05-05',
+    kind: 'minor',
+    summary: 'Demo polish wave + pre-rollout security pass',
+    items: [
+      'Drive API key edit/clear is master-admin only — content/admin tier sees a read-only view (prevents an accidentally-deleted key from breaking Drive imports league-wide).',
+      'Hype/Promo, Blank Slate, and Stat Card templates default ALL text fields to OFF — the imagery (or rendered card) is the content; adding text is opt-in. Deep-links that explicitly populate a field still un-hide it.',
+      'High-resolution download: new "⤓ HD 2×" button next to Download. Renders an offscreen canvas at 2× resolution from primitives (genuinely sharper, ~2160×2700 for portrait), filename suffixed with _HD.',
+      'Team Fade effect now constrained to the bottom HALF of the canvas — preserves athletes\' faces in the upper half while still giving text a colored runway along the lower third.',
+      'Resources: master admin can hide built-in placeholder items (cloud-stored as resources-hidden), with a "↺ Restore N HIDDEN" affordance per section to undo.',
+      'Stats tables: every batting/pitching/rankings table now carries a "For more in-depth stats and box scores, visit prowiffleball.com" link in the top-right.',
+      'Hide-from-feed: master admin can ✕ a post on the dashboard recent-posts strip — server PATCHes hidden=true on generate_log so the post drops out of every team carousel and player page feed (db/011 migration adds the column; tolerant fallback lets the read still work pre-migration).',
+      'Posts now display as Name_Template_MM/DD/YY across the dashboard, team carousel, player page, and Settings download history. Studio download filenames match.',
+      'Player pages: master admin gets an "✎ Edit player info" button that opens an inline modal for nickname, jersey #, position, height/weight, birthdate, bats/throws, birthplace, and status. Saves through the existing upsertManualPlayer pipeline.',
+      'Content calendar: master admin can click any cell to mark it with a post type — fills the cell in the type\'s color (matchup hype / highlight / score / stat leader / standings / idea). Marks persist per-team in cloud (key=content-calendar-{teamId}).',
+      'New "Headline" toggle for Blank Slate, Highlight, and Stat Leader templates — wraps the largest visible text field in a team-colored rounded pill in Winner Sans with a soft drop shadow (TV-chyron energy). Drop /public/fonts/WinnerSans-Bold.otf to enable; falls back to Bebas Neue cleanly without it.',
+      'Pre-100-user security pass: AI endpoints (/api/ideas, /api/captions, /api/auto-tag) now require a valid Supabase JWT (auto-tag is staff-only). /api/app-settings GET gates the Drive key to staff and per-team calendars to that team. /api/storage-presign caps signed-upload payloads at 25 MB and blocks athlete writes to overlay/effect buckets.',
+    ],
+  },
+  {
     version: '4.5.36',
     date: '2026-05-04',
     kind: 'patch',

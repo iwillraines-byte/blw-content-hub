@@ -5,7 +5,7 @@ import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPla
 import { Card, CollapsibleCard, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
-import { TEMPLATE_TYPES, FONT_MAP, STAT_CARD_TYPES, getFieldConfig } from '../template-config';
+import { TEMPLATE_TYPES, FONT_MAP, STAT_CARD_TYPES, getFieldConfig, formatPostName } from '../template-config';
 import { renderStatCard as statCardRender, defaultCardBox } from '../stat-card-renderer';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
@@ -210,6 +210,20 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
 
 // Placeholder text shown in the preview when a field is empty.
 // Picked so character width roughly matches expected filled value.
+// v4.5.37: Templates whose imagery already carries the message — text
+// fields are PRESENT in the template config (so designers can flip
+// them on as a layer-cake) but default OFF so a clean photo stays
+// clean. Hype/Promo, Blank Slate, and Stat Card all fall in this
+// bucket: the picture (or, for stat-card, the rendered card) IS the
+// content. Adding a headline is opt-in.
+const TEMPLATES_WITH_TEXT_OFF_BY_DEFAULT = new Set(['hype', 'blank-slate', 'stat-card']);
+
+function defaultHiddenFieldsFor(templateType, platform) {
+  if (!TEMPLATES_WITH_TEXT_OFF_BY_DEFAULT.has(templateType)) return new Set();
+  const fields = getFieldConfig(templateType, platform || 'portrait');
+  return new Set((fields || []).map(f => f.key));
+}
+
 const FIELD_PLACEHOLDERS = {
   // Team/Player News template (renamed from player-stat) — three lines.
   line1:       'TEXT HERE LINE ONE',
@@ -285,8 +299,23 @@ function computeBgCrop(bgImg, w, h, transform) {
 // - bgTransform: { offsetX, offsetY, zoom, brightness, contrast, saturation } —
 //   exposure adjustments are applied via ctx.filter ONLY for the background draw
 //   so overlays + text remain unaffected.
+// v4.5.37: Templates that opt into the "Headline" pill treatment. When
+// the toggle is on, the largest text field on the canvas gets a
+// team-colored rounded-pill background, Winner Sans font, and a soft
+// drop shadow — same visual energy as a TV chyron. Other text fields
+// render unchanged.
+const HEADLINE_TOGGLE_TEMPLATES = new Set(['blank-slate', 'highlight', 'batting-leaders']);
+
 function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
-  const { hiddenFields, forExport, bgTransform, statCard } = options;
+  const { hiddenFields, forExport, bgTransform, statCard, headlineMode, templateType } = options;
+  const headlineEnabled = !!headlineMode && HEADLINE_TOGGLE_TEMPLATES.has(templateType);
+  // The "headline" is whichever rendered field has the largest fontSize.
+  // Computed once so each field's draw block can decide if it's the one.
+  const headlineKey = headlineEnabled && fieldConfig
+    ? (fieldConfig
+        .filter(f => !(hiddenFields && hiddenFields.has(f.key)))
+        .reduce((best, f) => (best == null || f.fontSize > best.fontSize ? f : best), null)?.key)
+    : null;
   ctx.clearRect(0, 0, w, h);
   const teamColor = team?.color;
 
@@ -377,10 +406,47 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
         : (FIELD_PLACEHOLDERS[f.key] || String(f.label || f.key).toUpperCase());
 
       ctx.save();
-      ctx.fillStyle = f.color || '#FFFFFF';
-      ctx.font = `${f.fontSize}px ${FONT_MAP[f.font] || FONT_MAP.body}`;
+      // v4.5.37: Headline pill treatment — when this field is the
+      // template's largest and the toggle is on, swap to Winner Sans
+      // and draw a team-colored rounded rectangle behind the text.
+      // Pill width hugs the text + padding; height grows with fontSize.
+      // White-on-team-color reads at every photo brightness, with a
+      // subtle dark shadow under the pill for separation from the bg.
+      const isHeadlinePill = headlineEnabled && f.key === headlineKey && hasValue;
+      const fontKey = isHeadlinePill ? 'winner' : f.font;
+      ctx.fillStyle = isHeadlinePill ? '#FFFFFF' : (f.color || '#FFFFFF');
+      ctx.font = `${f.fontSize}px ${FONT_MAP[fontKey] || FONT_MAP.body}`;
       ctx.textAlign = f.align || 'center';
       if (!hasValue) ctx.globalAlpha = 0.32;
+
+      if (isHeadlinePill) {
+        const padX = Math.round(f.fontSize * 0.5);
+        const padY = Math.round(f.fontSize * 0.18);
+        const measured = ctx.measureText(text);
+        const textW = Math.min(measured.width, f.maxWidth || measured.width);
+        const pillW = textW + padX * 2;
+        const pillH = f.fontSize + padY * 2;
+        // Position so the text baseline (default alphabetic) lands at f.y.
+        // Approximate ascent as 0.78 × fontSize — close enough for a
+        // visually-balanced pill across our display fonts.
+        const pillY = f.y - Math.round(f.fontSize * 0.78) - padY;
+        let pillX;
+        if ((f.align || 'center') === 'left')        pillX = f.x - padX;
+        else if ((f.align || 'center') === 'right')  pillX = f.x - pillW + padX;
+        else                                          pillX = f.x - pillW / 2;
+        const radius = Math.round(pillH / 2.6);
+        ctx.save();
+        ctx.fillStyle = team?.color || '#DC2626';
+        ctx.shadowColor   = 'rgba(0,0,0,0.32)';
+        ctx.shadowBlur    = 16;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4;
+        drawRoundRect(ctx, pillX, pillY, pillW, pillH, radius);
+        ctx.fill();
+        ctx.restore();
+        // Reset fill style for the text pass.
+        ctx.fillStyle = '#FFFFFF';
+      }
 
       const draw = () => {
         if (f.maxWidth) ctx.fillText(text, f.x, f.y, f.maxWidth);
@@ -467,8 +533,17 @@ export default function Generate() {
   }, [isAthlete, profileTeamId]);
   const [customPlatform, setCustomPlatform] = useState('portrait');
   const [customFields, setCustomFields] = useState({});
-  // Fields the user has explicitly toggled off — no placeholder in preview, no text in export
-  const [hiddenFields, setHiddenFields] = useState(() => new Set());
+  // Fields the user has explicitly toggled off — no placeholder in preview, no text in export.
+  // v4.5.37: For templates that ship with their dynamic content baked into
+  // the imagery (Hype/Promo, Blank Slate, Stat Card), every text field
+  // starts HIDDEN by default. The designer can flip individual fields
+  // back on as needed — but the canvas should never auto-render
+  // "Headline / Subtext / Team" placeholder text on a clean photo.
+  const [hiddenFields, setHiddenFields] = useState(() => defaultHiddenFieldsFor(
+    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('template'))
+      || 'player-stat',
+    'portrait',
+  ));
   const [overlays, setOverlays] = useState([]);
   const [selectedOverlayId, setSelectedOverlayId] = useState(null);
   const [overlayImg, setOverlayImg] = useState(null);
@@ -534,6 +609,12 @@ export default function Generate() {
       setBriefIdea(idea ? { ...idea, requestId: fromRequest } : null);
     }
   }, [searchParams]);
+
+  // v4.5.37: "Headline" pill toggle. When on, the largest visible text
+  // field on Blank Slate / Highlight / Stat Leader templates renders in
+  // Winner Sans inside a team-colored rounded rectangle with a soft
+  // drop shadow — like a TV chyron.
+  const [headlineMode, setHeadlineMode] = useState(false);
 
   // Effects state
   const [activeEffects, setActiveEffects] = useState([]); // [{ id, type: 'builtin'|'upload', opacity, builtin?, image? }]
@@ -619,6 +700,15 @@ export default function Generate() {
 
     if (Object.keys(params).length > 0) {
       setCustomFields(prev => ({ ...prev, ...params }));
+      // v4.5.37: If the deep-link explicitly populates a field on a
+      // template that defaults its text off (Hype/Blank/StatCard), the
+      // user's intent IS to render that text — un-hide just those keys.
+      setHiddenFields(prev => {
+        if (!prev || prev.size === 0) return prev;
+        const next = new Set(prev);
+        for (const k of Object.keys(params)) next.delete(k);
+        return next;
+      });
     }
   }, []);
 
@@ -814,8 +904,8 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption });
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption]);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption, headlineMode, templateType: customType });
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption, headlineMode]);
 
   // Per-input render — exactly the same shape as before the local-fonts
   // change. Two reasons not to await fonts here: (1) rebinding inside a
@@ -841,18 +931,62 @@ export default function Generate() {
     return () => { cancelled = true; };
   }, []);
 
-  const download = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    // Re-render without placeholders so the downloaded PNG only contains real
-    // text + hidden fields stay hidden. Then re-render for preview afterwards.
-    const ctx = canvas.getContext('2d');
+  // v4.5.37: download() takes an optional scale multiplier. Standard
+  // download (1×) renders to the visible canvas at native template
+  // size. HD download (2×) renders to an offscreen canvas at double
+  // the resolution — every layer (background, overlay, effects, text,
+  // stat card) is drawn from primitives at the larger size, so the
+  // output is genuinely sharper, not just an upscaled bitmap. PNG
+  // file size grows roughly 3–4× but every glyph + edge stays crisp
+  // when designers print, post to Twitter (which doesn't downsample
+  // 2160px exports as aggressively), or composite into a video.
+  const download = (scale = 1) => {
+    const previewCanvas = canvasRef.current;
+    if (!previewCanvas) return;
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, forExport: true, bgTransform, statCard: statCardOption });
+
+    let exportCanvas;
+    if (scale > 1) {
+      // Offscreen canvas at the higher resolution. Renderer scales
+      // every coordinate by `scale`, so text positions/sizes stay in
+      // proportion to the canvas instead of getting interpolated.
+      exportCanvas = document.createElement('canvas');
+      exportCanvas.width = customPlat.w * scale;
+      exportCanvas.height = customPlat.h * scale;
+      const ectx = exportCanvas.getContext('2d');
+      ectx.scale(scale, scale);
+      renderCustomTemplate(
+        ectx, customPlat.w, customPlat.h, bgImg, overlayImg,
+        customFields, fieldConfig, activeEffects, customTeamObj,
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineMode, templateType: customType },
+      );
+    } else {
+      // Standard 1× — re-render the visible canvas without placeholders.
+      const ctx = previewCanvas.getContext('2d');
+      renderCustomTemplate(
+        ctx, customPlat.w, customPlat.h, bgImg, overlayImg,
+        customFields, fieldConfig, activeEffects, customTeamObj,
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineMode, templateType: customType },
+      );
+      exportCanvas = previewCanvas;
+    }
+
+    const hdSuffix = scale > 1 ? '_HD' : '';
+    // v4.5.37: filename matches the in-app post label —
+    // {Name}_{Template}_{MM/DD/YY}.png (with _HD suffix at 2× scale).
+    // Slashes in the date stamp are filename-illegal on most operating
+    // systems, so the date here uses dashes; the dashboard label uses
+    // slashes for human reading. Both come from the same data via
+    // formatPostName, so changing one source updates both.
+    const niceName = formatPostName(
+      { templateType: customType, team: customTeam, settings: { fields: customFields }, createdAt: new Date() },
+      getTeam,
+    ) || `BLW_${customTeam}_${customType}_${customPlatform}`;
+    const safeName = niceName.replace(/[/\\:?"<>|]/g, '-');
     const link = document.createElement('a');
-    link.download = `BLW_${customTeam}_${customType}_${customPlatform}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.download = `${safeName}${hdSuffix}.png`;
+    link.href = exportCanvas.toDataURL('image/png');
     link.click();
 
     // Log the generation to Supabase so the dashboard "Recent posts" strip
@@ -866,7 +1000,9 @@ export default function Generate() {
       thumb.width = targetW;
       thumb.height = Math.round(customPlat.h * thumbScale);
       const tctx = thumb.getContext('2d');
-      tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+      // Always use the visible preview canvas for the thumbnail —
+      // the HD offscreen canvas is throwaway after the download.
+      tctx.drawImage(previewCanvas, 0, 0, thumb.width, thumb.height);
       const thumbnailDataUrl = thumb.toDataURL('image/png');
       cloud.logGenerate({
         id: crypto.randomUUID(),
@@ -890,7 +1026,8 @@ export default function Generate() {
 
     // Restore preview render (with placeholders) right after export
     render();
-    toast.success('Downloaded', { detail: `${customTeam} · ${customType} · ${customPlat.label}` });
+    const hdLabel = scale > 1 ? ` · HD ${customPlat.w * scale}×${customPlat.h * scale}` : '';
+    toast.success('Downloaded', { detail: `${customTeam} · ${customType} · ${customPlat.label}${hdLabel}` });
   };
 
   const toggleFieldHidden = (key) => {
@@ -1167,6 +1304,11 @@ export default function Generate() {
   const getEffectOpacity = (type, id) => activeEffects.find(e => e.type === type && e.id === id)?.opacity ?? 0.5;
 
   const customTypeObj = TEMPLATE_TYPES[customType];
+  // v4.5.37: Component-level reference to the team object — used by the
+  // Headline toggle UI to tint the active state in the team's color. The
+  // render callbacks below also resolve this independently for stable
+  // useCallback dependencies.
+  const customTeamObj = useMemo(() => getTeam(customTeam), [customTeam]);
   // Applied config — merges user overrides on top of the template defaults.
   // Reading `overridesVersion` here just forces recomputation; applyOverrides
   // re-reads from localStorage so the latest edits surface immediately.
@@ -1235,7 +1377,7 @@ export default function Generate() {
       <Label>Template Type</Label>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
-          <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(new Set()); setSelectedOverlayId(null); setOverlayImg(null); }} style={{
+          <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(defaultHiddenFieldsFor(key, customPlatform)); setSelectedOverlayId(null); setOverlayImg(null); setHeadlineMode(false); }} style={{
             background: customType === key ? colors.accentSoft : colors.white,
             border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
             color: customType === key ? colors.accent : colors.textSecondary,
@@ -1628,6 +1770,42 @@ export default function Generate() {
                       Pick a player above to populate the card.
                     </div>
                   )}
+                </Card>
+              )}
+
+              {/* v4.5.37: Headline toggle — only shown for templates
+                  that opt into the pill treatment. Switches the largest
+                  visible text field to Winner Sans inside a
+                  team-colored rounded rectangle with a soft drop
+                  shadow. Live preview updates the moment the toggle
+                  flips. */}
+              {HEADLINE_TOGGLE_TEMPLATES.has(customType) && (
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 220px', minWidth: 200 }}>
+                      <Label style={{ marginBottom: 4 }}>Headline treatment</Label>
+                      <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, lineHeight: 1.45, fontStyle: 'italic' }}>
+                        Wraps the title in a team-colored pill in Winner Sans — TV-chyron energy. Other text stays untouched.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setHeadlineMode(v => !v)}
+                      style={{
+                        background: headlineMode ? (customTeamObj?.color || colors.accent) : colors.white,
+                        color: headlineMode ? '#FFFFFF' : colors.textSecondary,
+                        border: `1px solid ${headlineMode ? (customTeamObj?.color || colors.accent) : colors.border}`,
+                        borderRadius: radius.full,
+                        padding: '8px 16px',
+                        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                        letterSpacing: 0.6, cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        boxShadow: headlineMode ? '0 4px 10px rgba(15,23,42,0.18)' : 'none',
+                        transition: 'background 160ms ease, color 160ms ease',
+                      }}
+                    >
+                      {headlineMode ? 'HEADLINE: ON' : 'HEADLINE: OFF'}
+                    </button>
+                  </div>
                 </Card>
               )}
 
@@ -2041,9 +2219,23 @@ export default function Generate() {
 
           </>
 
-          <RedButton onClick={download} style={{ width: '100%', padding: '14px 24px', fontSize: 14 }}>
-            Download PNG ({customPlat.label})
-          </RedButton>
+          {/* v4.5.37: Two-button download row. Standard = native template
+              size (e.g. 1080×1350). HD = 2× resolution rendered from
+              primitives (genuinely sharper, ~2160×2700) for print,
+              prowiffleball.com hero blocks, and any surface that
+              doesn't crunch big PNGs. */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <RedButton onClick={() => download(1)} style={{ flex: '2 1 auto', padding: '14px 18px', fontSize: 14 }}>
+              Download PNG ({customPlat.label})
+            </RedButton>
+            <OutlineButton
+              onClick={() => download(2)}
+              title={`Render at 2× — ${customPlat.w * 2}×${customPlat.h * 2}px. Sharper for print, large social, and video composites.`}
+              style={{ flex: '1 1 auto', padding: '14px 14px', fontSize: 12, fontWeight: 800, letterSpacing: 0.4 }}
+            >
+              ⤓ HD 2×
+            </OutlineButton>
+          </div>
         </div>
 
         {/* PREVIEW — Template Type sits above the preview on desktop

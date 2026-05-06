@@ -121,17 +121,25 @@ export const BUILT_IN_EFFECTS = [
     id: 'team-gradient',
     label: 'Team Fade',
     icon: '▼',
-    description: 'Bottom-up gradient in the team\'s primary color',
+    description: 'Bottom-half fade in the team\'s primary color',
     usesTeamColor: true,
+    // v4.5.37: Constrained to the bottom HALF of the canvas (was full
+    // height in v4.5.20–4.5.36). The fade now starts dead-clear at the
+    // vertical midpoint and ramps to the team color at the bottom edge —
+    // the top half of the photo is untouched. Designers were finding the
+    // full-height fade muddied athlete portraits; restricting it
+    // preserves the face/upper-body composition while still giving text
+    // a colored runway to sit on along the lower third.
     render(ctx, w, h, opacity, teamColor) {
       ctx.save();
       const rgb = hexToRgb(teamColor || '#151C28');
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      const top = h * 0.5; // start at midpoint
+      const grad = ctx.createLinearGradient(0, top, 0, h);
       grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
       grad.addColorStop(0.55, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity * 0.55})`);
       grad.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity * 0.95})`);
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, top, w, h - top);
       ctx.restore();
     },
   },

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, canonicalNumOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
+import { formatPostName } from '../template-config';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
 import { fetchTeamMonthlyPostCount, fetchTeamMonthlyPosts, setGenerateLogPosted } from '../cloud-sync';
@@ -1800,7 +1801,9 @@ function PostTile({ post, team, canToggle, onToggle }) {
             color: colors.textSecondary, letterSpacing: 0.4,
             textTransform: 'uppercase',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{post.templateType || 'template'}</div>
+          }}
+          title={formatPostName(post, getTeam)}
+          >{formatPostName(post, getTeam) || post.templateType || 'template'}</div>
           <div style={{
             fontFamily: fonts.condensed, fontSize: 9, color: colors.textMuted,
             letterSpacing: 0.3,

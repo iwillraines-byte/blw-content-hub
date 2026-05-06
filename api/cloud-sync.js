@@ -180,12 +180,17 @@ export default async function handler(req, res) {
         const teamFilter = (req.query.team || '').trim();
         const sinceParam = (req.query.since || '').trim();
         const postedParam = (req.query.posted || '').trim();
+        // v4.5.37: includeHidden=1 lets master admin's history surface
+        // see posts they previously hid. Default OFF — every public
+        // surface (dashboard, team page carousel) calls without the
+        // flag and gets a clean feed.
+        const includeHidden = ['1', 'true'].includes((req.query.includeHidden || '').trim());
         // Lightweight projection — when the caller only needs counts
         // (the team progress bar) they pass `fields=id,team,created_at`
         // so the server skips the full record + signed-URL generation.
         const fieldsParam = (req.query.fields || '').trim();
         if (fieldsParam) {
-          const allowed = new Set(['id', 'team', 'template_type', 'platform', 'created_at', 'posted', 'settings']);
+          const allowed = new Set(['id', 'team', 'template_type', 'platform', 'created_at', 'posted', 'hidden', 'settings']);
           const cols = fieldsParam.split(',').map(s => s.trim()).filter(c => allowed.has(c));
           if (cols.length > 0) q = sb.from(table).select(cols.join(','));
         }
@@ -196,10 +201,41 @@ export default async function handler(req, res) {
         }
         if (postedParam === 'true' || postedParam === '1') q = q.eq('posted', true);
         if (postedParam === 'false' || postedParam === '0') q = q.eq('posted', false);
+        if (!includeHidden) q = q.or('hidden.is.null,hidden.eq.false');
         const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
         q = q.order('created_at', { ascending: false }).limit(limit);
       }
-      const { data, error } = await q;
+      let { data, error } = await q;
+      // v4.5.37: tolerant to the `hidden` column not existing yet on
+      // pre-db/011 schemas. Retry once without the hidden filter so
+      // the read still works for owners who haven't run the migration.
+      if (error && /column\s+(generate_log\.)?hidden/i.test(String(error.message || ''))) {
+        // Build a fresh query without the hidden filter.
+        let q2 = sb.from(table).select('*');
+        if (kind === 'generate-log') {
+          const teamFilter = (req.query.team || '').trim();
+          const sinceParam = (req.query.since || '').trim();
+          const postedParam = (req.query.posted || '').trim();
+          const fieldsParam = (req.query.fields || '').trim();
+          if (fieldsParam) {
+            const allowed = new Set(['id', 'team', 'template_type', 'platform', 'created_at', 'posted', 'settings']);
+            const cols = fieldsParam.split(',').map(s => s.trim()).filter(c => allowed.has(c));
+            if (cols.length > 0) q2 = sb.from(table).select(cols.join(','));
+          }
+          if (teamFilter) q2 = q2.eq('team', teamFilter);
+          if (sinceParam) {
+            const sinceDate = new Date(sinceParam);
+            if (!isNaN(sinceDate.getTime())) q2 = q2.gte('created_at', sinceDate.toISOString());
+          }
+          if (postedParam === 'true' || postedParam === '1') q2 = q2.eq('posted', true);
+          if (postedParam === 'false' || postedParam === '0') q2 = q2.eq('posted', false);
+          const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+          q2 = q2.order('created_at', { ascending: false }).limit(limit);
+        }
+        const r2 = await q2;
+        data = r2.data;
+        error = r2.error;
+      }
       if (error) throw error;
       let records = data || [];
 
@@ -265,7 +301,11 @@ export default async function handler(req, res) {
       return;
     }
     const PATCHABLE = {
-      'generate-log': new Set(['posted']),
+      // v4.5.37: `hidden` joins `posted`. Setting hidden=true removes the
+      // post from the dashboard recent strip + every team/player page
+      // grid. Tolerant of the column not yet existing on older
+      // databases — see the catch block below for the fallback.
+      'generate-log': new Set(['posted', 'hidden']),
       // Staff (master/admin/content) can patch a request's status,
       // priority, and the notified_at timestamp from the "Notify
       // requester" button. Athletes are blocked from PATCH entirely
@@ -286,9 +326,29 @@ export default async function handler(req, res) {
       return;
     }
     try {
-      const { error } = await sb.from(pTable).update(payload).eq('id', id);
-      if (error) throw error;
-      res.status(200).json({ ok: true, patched: payload });
+      // v4.5.37: tolerant patch — strip columns the live schema doesn't
+      // know about (e.g. `hidden` before db/011 has been applied) and
+      // retry. Mirrors the upsert tolerance pattern used elsewhere in
+      // this file. Caps at 4 retries so a malformed payload can't
+      // hot-loop.
+      let attempt = { ...payload };
+      let lastErr = null;
+      for (let i = 0; i < 4; i++) {
+        const { error } = await sb.from(pTable).update(attempt).eq('id', id);
+        if (!error) {
+          res.status(200).json({ ok: true, patched: attempt });
+          return;
+        }
+        lastErr = error;
+        const m = String(error.message || '').match(/Could not find the '([^']+)' column/i)
+          || String(error.message || '').match(/column "([^"]+)" of relation/i);
+        if (!m) break;
+        const col = m[1];
+        if (!(col in attempt)) break;
+        delete attempt[col];
+        if (Object.keys(attempt).length === 0) break;
+      }
+      throw lastErr || new Error('patch failed');
     } catch (err) {
       console.error('[cloud-sync PATCH]', pKind, id, err);
       res.status(500).json({ error: 'patch failed', detail: err.message });

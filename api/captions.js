@@ -27,6 +27,8 @@
 //   "usage":    { input_tokens, output_tokens }
 // }
 
+import { requireUser } from './_supabase.js';
+
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 800;
 
@@ -41,12 +43,19 @@ const PLATFORM_BRIEFS = {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'POST required' });
     return;
   }
+
+  // v4.5.37 (security audit): require a valid Supabase session JWT.
+  // Pre-fix the endpoint was unauthenticated — anyone with the URL
+  // could spam Anthropic credits. Caption rewrites are cheap per call
+  // but trivially DoS-able at scale.
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

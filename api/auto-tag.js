@@ -31,6 +31,8 @@
 //   "usage": { input_tokens, output_tokens, cache_read_tokens }
 // }
 
+import { requireUser, requireRole } from './_supabase.js';
+
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 300;
 
@@ -39,6 +41,15 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'POST required' });
     return;
   }
+
+  // v4.5.37 (security audit): auth + role gate. Pre-fix this endpoint
+  // was unauthenticated AND priced — every call burns vision-tier
+  // Anthropic credits. Now requires a Supabase JWT and is restricted
+  // to staff (master/admin/content). Athletes don't run auto-tag —
+  // they consume tagged media — so this matches today's UX.
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+  if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

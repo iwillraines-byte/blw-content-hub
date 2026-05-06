@@ -27,6 +27,27 @@ export default async function handler(req, res) {
       res.status(400).json({ error: 'key query param required' });
       return;
     }
+    // v4.5.37 (security audit): per-key read gating.
+    //   `drive` carries a Google Drive API key — staff only.
+    //   `content-calendar-{teamId}` is per-team — gated to that team
+    //     OR staff so an athlete can't read every team's calendar.
+    //   Other keys (resources-extras, resources-hidden, monthly-post-
+    //     targets, team-socials) are league-wide informational and
+    //     stay readable by every authenticated user.
+    const role = ctx.profile?.role || null;
+    const isStaff = role === 'master_admin' || role === 'admin' || role === 'content';
+    if (key === 'drive' && !isStaff) {
+      res.status(403).json({ error: 'Drive config is staff-only' });
+      return;
+    }
+    if (key.startsWith('content-calendar-')) {
+      const targetTeam = key.slice('content-calendar-'.length);
+      const userTeam = ctx.profile?.team_id || null;
+      if (!isStaff && targetTeam !== userTeam) {
+        res.status(403).json({ error: 'Calendar belongs to a different team' });
+        return;
+      }
+    }
     try {
       const { data, error } = await sb
         .from('app_settings')

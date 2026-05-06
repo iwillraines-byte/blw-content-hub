@@ -25,7 +25,13 @@
 //   - Signed URLs expire in 60 seconds — short enough to limit replay,
 //     long enough for a client-side upload to complete on slow connections.
 
-import { requireUser } from './_supabase.js';
+import { requireUser, requireRole } from './_supabase.js';
+
+// v4.5.37 (security audit): athletes can upload media (their own
+// photos) but NOT overlays / effects (designer-only assets that ship
+// to the overlay picker for the whole league). Mirrors the
+// ATHLETE_WRITABLE allowlist in cloud-sync.js.
+const STAFF_ONLY_KINDS = new Set(['overlay', 'effect']);
 
 // Mirror the BUCKET_FOR map from /api/cloud-sync.js. Kept as a separate
 // const to avoid a cross-file import (Vercel bundles each function alone).
@@ -77,6 +83,11 @@ export default async function handler(req, res) {
     res.status(400).json({ error: `kind must be one of: ${Object.keys(BUCKET_FOR).join(', ')}` });
     return;
   }
+  // v4.5.37 (security audit): role gate on overlay/effect uploads.
+  // Athletes get media uploads, staff gets the rest.
+  if (STAFF_ONLY_KINDS.has(kind)) {
+    if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return;
+  }
   // Validate id — must look like a UUID-ish string. Supabase Storage
   // accepts most filenames but we want consistent <id>.<ext> paths so
   // overwrites and existence checks line up with the relay code path.
@@ -100,10 +111,16 @@ export default async function handler(req, res) {
     // supabase.storage.from(bucket).uploadToSignedUrl(path, token, blob).
     // We surface BOTH so the client can use whichever flow (raw fetch PUT
     // vs SDK helper) is more convenient.
+    // v4.5.37 (security audit): ~25 MB cap on signed-upload payloads.
+    // High enough for a 6000×4000 PNG at full quality, low enough
+    // that an athlete account can't burn unbounded storage. The
+    // option is supported by supabase-js v2 — quietly ignored on
+    // older client versions, so no compat risk.
+    const presignOpts = { upload: { fileSizeLimit: 25 * 1024 * 1024 } };
     const { data, error } = await ctx.sb
       .storage
       .from(bucket)
-      .createSignedUploadUrl(path);
+      .createSignedUploadUrl(path, presignOpts);
 
     if (error) {
       // Common case: object already exists — Supabase requires

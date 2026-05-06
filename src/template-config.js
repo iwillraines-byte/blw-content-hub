@@ -428,7 +428,49 @@ export const FONT_MAP = {
   gotham:    "'Gotham', 'Arial Black', sans-serif",
   press:     "'Press Gothic', 'Impact', sans-serif",
   united:    "'United Sans', 'Arial Black', sans-serif",
+  // v4.5.37: Winner Sans — heavy condensed display face. Used by the
+  // optional "Headline" treatment (team-colored pill behind the text).
+  // Falls back to Bebas Neue then Arial Black if the local file isn't
+  // installed at /public/fonts/WinnerSans-Bold.otf.
+  winner:    "'Winner Sans', 'Bebas Neue', 'Arial Black', sans-serif",
 };
+
+// v4.5.37: Build the canonical "Name_Template_MM/DD/YY" string used to
+// label generate_log entries on the dashboard, team page carousel, and
+// settings download history. "Name" prefers the player name (most
+// recognizable handle) falling back to the team name. Date is the
+// post's createdAt in MM/DD/YY (US convention — matches every other
+// date stamp in the app). Underscores not spaces because the string
+// also doubles as the default download filename when the user
+// re-exports.
+//
+// Returns a single string. Caller decides where to render it.
+export function formatPostName(post, getTeam = null) {
+  if (!post) return '';
+  const tmplType = post.templateType || post.template_type || '';
+  const tmpl = TEMPLATE_TYPES[tmplType];
+  const tmplLabel = (tmpl?.name || tmplType || 'Post').replace(/[\s/]+/g, '');
+
+  // Pull the human handle from the settings snapshot. Fields layout
+  // varies by template — try every key the templates use today.
+  const f = post.settings?.fields || {};
+  const handle =
+    f.playerName ||
+    f.line1 ||
+    f.headline ||
+    (post.team && getTeam ? (getTeam(post.team)?.name || post.team) : post.team) ||
+    'BLW';
+  const cleanHandle = String(handle).split(/[\n,|]/)[0].trim().replace(/[\s/]+/g, '');
+
+  const d = post.createdAt instanceof Date
+    ? post.createdAt
+    : (post.createdAt ? new Date(post.createdAt) : null);
+  const stamp = d && !isNaN(d.getTime())
+    ? `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(-2)}`
+    : '';
+
+  return [cleanHandle, tmplLabel, stamp].filter(Boolean).join('_');
+}
 
 // Get field config for a template type + platform
 export function getFieldConfig(templateType, platform) {

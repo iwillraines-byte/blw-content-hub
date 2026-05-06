@@ -583,6 +583,24 @@ export async function setGenerateLogPosted(id, posted) {
   }
 }
 
+// v4.5.37: Master-admin only — hide a post from every public feed
+// (dashboard "Recent posts", team page carousel, player page assets).
+// The row stays in the database (and stays visible to master admin via
+// includeHidden=1 in the cloud-side filter) so a hide is reversible.
+export async function setGenerateLogHidden(id, hidden) {
+  if (!supabaseConfigured || !id) return false;
+  try {
+    const res = await authedFetch('/api/cloud-sync', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'generate-log', id, fields: { hidden: !!hidden } }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // Lightweight cloud-side existence check. Returns a Set of IDs that
 // already have a storage_path (i.e. the blob is fully uploaded). Used
 // by the backup runner to skip media/overlays/effects that are already

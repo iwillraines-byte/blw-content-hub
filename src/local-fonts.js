@@ -40,6 +40,19 @@ export const LOCAL_FONTS = [
     src: '/fonts/UnitedSans-Bold.otf',
     format: 'opentype',
   },
+  // v4.5.37: Winner Sans — heavy condensed display face used by the
+  // optional "Headline" treatment on Blank Slate / Highlight / Stat
+  // Leader templates. Drop the bold weight at /public/fonts/
+  // WinnerSans-Bold.otf; loader logs a warning and falls back to
+  // Bebas Neue if the file isn't there yet, so the canvas still
+  // renders cleanly during the soft rollout.
+  {
+    family: 'Winner Sans',
+    weight: 700,
+    style: 'normal',
+    src: '/fonts/WinnerSans-Bold.otf',
+    format: 'opentype',
+  },
 ];
 
 let _registered = false;

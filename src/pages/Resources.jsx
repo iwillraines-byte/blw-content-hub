@@ -141,6 +141,13 @@ export default function Resources() {
   // v4.5.20: Cloud-stored extras per section. Master admin reads + writes
   // via /api/app-settings; everyone else reads. Shape: { [sectionId]: [items...] }
   const [extras, setExtras] = useState({});
+  // v4.5.37: Cloud-stored hidden built-in items. Master admin can hide a
+  // placeholder ("Coming soon" stub) so it disappears for every viewer
+  // until a real resource lands. Shape: { [sectionId]: [titleString, ...] }
+  // — keyed by item title because the items themselves are baked into
+  // RESOURCE_SECTIONS code, no stable id otherwise. Stored under
+  // /api/app-settings key="resources-hidden".
+  const [hiddenItems, setHiddenItems] = useState({});
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -151,9 +158,39 @@ export default function Resources() {
         if (cancel) return;
         setExtras(data?.value || {});
       } catch { /* silent */ }
+      try {
+        const res2 = await authedFetch('/api/app-settings?key=resources-hidden');
+        if (!res2.ok) return;
+        const data2 = await res2.json();
+        if (cancel) return;
+        setHiddenItems(data2?.value || {});
+      } catch { /* silent */ }
     })();
     return () => { cancel = true; };
   }, []);
+
+  const saveHiddenItems = async (next) => {
+    const res = await authedFetch('/api/app-settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'resources-hidden', value: next }),
+    });
+    if (!res.ok) throw new Error('Save failed');
+    setHiddenItems(next);
+  };
+
+  const hideBuiltIn = async (sectionId, title) => {
+    const list = hiddenItems[sectionId] || [];
+    if (list.includes(title)) return;
+    const next = { ...hiddenItems, [sectionId]: [...list, title] };
+    await saveHiddenItems(next);
+  };
+
+  const restoreAllBuiltIns = async (sectionId) => {
+    if (!hiddenItems[sectionId]?.length) return;
+    const next = { ...hiddenItems, [sectionId]: [] };
+    await saveHiddenItems(next);
+  };
 
   const saveExtras = async (next) => {
     const res = await authedFetch('/api/app-settings', {
@@ -252,9 +289,26 @@ export default function Resources() {
 
       {visibleSections.map(section => {
         const sectionExtras = extras[section.id] || [];
+        const hiddenForSection = hiddenItems[section.id] || [];
+        const hiddenSet = new Set(hiddenForSection);
+        const visibleBuiltIns = section.items.filter(it => !hiddenSet.has(it.title));
         return (
           <Card key={section.id} id={section.id} style={{ scrollMarginTop: 80 }}>
-            <SectionHeading>{section.title}</SectionHeading>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <SectionHeading>{section.title}</SectionHeading>
+              {isMaster && hiddenForSection.length > 0 && (
+                <button
+                  onClick={() => restoreAllBuiltIns(section.id)}
+                  title={`Restore ${hiddenForSection.length} hidden placeholder${hiddenForSection.length === 1 ? '' : 's'}`}
+                  style={{
+                    background: 'none', border: `1px solid ${colors.borderLight}`,
+                    color: colors.textMuted, cursor: 'pointer',
+                    borderRadius: radius.sm, padding: '3px 9px',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                  }}
+                >↺ RESTORE {hiddenForSection.length} HIDDEN</button>
+              )}
+            </div>
             <div style={{
               fontSize: 13, color: colors.textSecondary, lineHeight: 1.6,
               marginBottom: 14, maxWidth: '60ch',
@@ -262,8 +316,24 @@ export default function Resources() {
               {section.summary}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {section.items.map((item, i) => (
-                <ResourceItem key={i} item={item} />
+              {visibleBuiltIns.map((item, i) => (
+                <ResourceItem
+                  key={i}
+                  item={item}
+                  // v4.5.37: Master admin can hide built-in placeholders
+                  // ("Coming soon" stubs from RESOURCE_SECTIONS). Hides
+                  // for every viewer until restored. The actual
+                  // RESOURCE_SECTIONS code stays untouched — we record
+                  // the hidden title in the cloud config so a future
+                  // copy refresh doesn't lose the hide state.
+                  removable={isMaster}
+                  removeLabel="Hide"
+                  onRemove={() => {
+                    if (window.confirm(`Hide "${item.title}" from this section? Master admin only — you can restore it from the section header.`)) {
+                      hideBuiltIn(section.id, item.title);
+                    }
+                  }}
+                />
               ))}
               {sectionExtras.map((item, i) => (
                 <ResourceItem
@@ -273,6 +343,16 @@ export default function Resources() {
                   onRemove={() => removeExtra(section.id, i)}
                 />
               ))}
+              {visibleBuiltIns.length === 0 && sectionExtras.length === 0 && (
+                <div style={{
+                  fontSize: 12, color: colors.textMuted, fontStyle: 'italic',
+                  padding: '12px 14px', background: colors.bg,
+                  borderRadius: radius.base, border: `1px dashed ${colors.borderLight}`,
+                }}>
+                  Nothing in this section yet.
+                  {isMaster && ' Use the “+ Add resource” button below to drop in a link.'}
+                </div>
+              )}
             </div>
             {isMaster && (
               <ResourceAdder onAdd={(item) => addExtra(section.id, item)} />
@@ -284,7 +364,7 @@ export default function Resources() {
   );
 }
 
-function ResourceItem({ item, removable = false, onRemove = null }) {
+function ResourceItem({ item, removable = false, onRemove = null, removeLabel = 'Remove' }) {
   const icon = item.icon
     || (item.kind === 'video' ? '▶'
       : item.kind === 'link' ? '↗'
@@ -318,6 +398,17 @@ function ResourceItem({ item, removable = false, onRemove = null }) {
           background: colors.white, padding: '2px 8px', borderRadius: 999,
           border: `1px solid ${colors.borderLight}`, whiteSpace: 'nowrap',
         }}>COMING SOON</span>
+        {removable && onRemove && (
+          <button
+            onClick={onRemove}
+            title={`${removeLabel} this placeholder (master admin)`}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: colors.textMuted, padding: '0 6px',
+              fontSize: 14,
+            }}
+          >✕</button>
+        )}
       </div>
     );
   }

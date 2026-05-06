@@ -12,6 +12,7 @@ import { TierBadge } from '../tier-badges';
 import { useAuth, isStaffRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
+import { formatPostName } from '../template-config';
 import { authedJson } from '../authed-fetch';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
 import { useLeagueContext } from '../league-context';
@@ -958,7 +959,7 @@ function ExtrasDropdown({ instagramHandle, funFacts }) {
   );
 }
 
-function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, onGenerate, generating = false, canEditPhoto, onEditPhoto, onAdjustPhoto, prevPlayer = null, nextPlayer = null }) {
+function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, onGenerate, generating = false, canEditPhoto, onEditPhoto, onAdjustPhoto, isMaster = false, onEditInfo = null, prevPlayer = null, nextPlayer = null }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
   const height = formatHeight(v.heightIn);
@@ -1277,6 +1278,19 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               >
                 {generating ? '…GENERATING' : '✦ Generate content'}
               </RedButton>
+              {/* v4.5.37: master-admin only inline player-info editor.
+                  Drops a modal to update nickname, jersey #, position,
+                  height/weight, birthdate, bats/throws, birthplace,
+                  status without leaving the page. Saves through the
+                  same upsertManualPlayer pipeline used by the photo
+                  picker — vitals re-render in place after save. */}
+              {isMaster && onEditInfo && (
+                <OutlineButton
+                  onClick={onEditInfo}
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                  title="Edit nickname, vitals, jersey #, status — master admin only"
+                >✎ Edit player info</OutlineButton>
+              )}
             </div>
           </div>
         </div>
@@ -1428,6 +1442,10 @@ export default function PlayerPage() {
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [positionEditorOpen, setPositionEditorOpen] = useState(false);
   const [savingPosition, setSavingPosition] = useState(false);
+  // v4.5.37: master-admin-only inline player info editor (nickname,
+  // jersey #, position, vitals, status). Open state lives here so the
+  // hero CTA can flip it; the modal renders below the avatar picker.
+  const [editInfoOpen, setEditInfoOpen] = useState(false);
   // Recent posts featuring this player. Pulled from the global generate-log
   // (last 100 posts) and filtered client-side on settings.fields.playerName
   // so we don't need a new index. Soft-fails to an empty list when cloud
@@ -2019,6 +2037,8 @@ export default function PlayerPage() {
           canEditPhoto={isAdmin}
           onEditPhoto={openPhotoPicker}
           onAdjustPhoto={() => setPositionEditorOpen(true)}
+          isMaster={isMaster}
+          onEditInfo={() => setEditInfoOpen(true)}
         />
       </div>
 
@@ -2070,6 +2090,60 @@ export default function PlayerPage() {
           onClose={() => !savingPosition && setPositionEditorOpen(false)}
           onSave={savePosition}
           saving={savingPosition}
+        />
+      )}
+
+      {/* v4.5.37: master-admin player-info editor. Renders when
+          editInfoOpen is true. createPortal lifts it out of any
+          transform-having ancestor so the modal centers cleanly. */}
+      {editInfoOpen && isMaster && (
+        <EditPlayerInfoModal
+          player={player}
+          team={team}
+          onClose={() => setEditInfoOpen(false)}
+          onSave={async (updates) => {
+            try {
+              await upsertManualPlayer({
+                team: team.id,
+                lastName: player.lastName,
+                firstInitial: player.firstInitial,
+                firstName: player.firstName,
+                num: updates.num ?? player.num,
+                updates: {
+                  // Submit snake_case so it lands as-is on the
+                  // manual_players row. mapPlayerToRow tolerates either
+                  // shape, but we already know the cloud schema here.
+                  nickname:    updates.nickname || null,
+                  num:         updates.num || null,
+                  position:    updates.position || null,
+                  height_in:   updates.heightIn ?? null,
+                  weight_lbs:  updates.weightLbs ?? null,
+                  birthdate:   updates.birthdate || null,
+                  bats:        updates.bats || null,
+                  throws:      updates.throws || null,
+                  birthplace:  updates.birthplace || null,
+                  status:      updates.status || null,
+                },
+              });
+              setPlayer(prev => prev ? {
+                ...prev,
+                nickname:   updates.nickname,
+                num:        updates.num || prev.num,
+                position:   updates.position,
+                heightIn:   updates.heightIn,
+                weightLbs:  updates.weightLbs,
+                birthdate:  updates.birthdate,
+                bats:       updates.bats,
+                throws:     updates.throws,
+                birthplace: updates.birthplace,
+                status:     updates.status,
+              } : prev);
+              toast.success('Player info saved');
+              setEditInfoOpen(false);
+            } catch (err) {
+              toast.error('Save failed', { detail: err?.message?.slice(0, 80) });
+            }
+          }}
         />
       )}
 
@@ -2608,11 +2682,14 @@ function PlayerRecentPosts({ posts, team, player }) {
               )}
             </div>
             <div style={{ padding: '6px 2px 0' }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: colors.text,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {post.templateType || 'post'}
+              <div
+                title={formatPostName(post, getTeam)}
+                style={{
+                  fontSize: 11, fontWeight: 700, color: colors.text,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                {formatPostName(post, getTeam) || post.templateType || 'post'}
               </div>
               <div style={{
                 fontSize: 10, fontFamily: fonts.condensed,
@@ -2966,6 +3043,172 @@ function LinkAthleteAccount({ player, team, linkedUserId, onLink }) {
         >✓ LINKED</span>
       )}
     </div>
+  );
+}
+
+// ─── v4.5.37: Master-admin player info editor ───────────────────────────────
+// Inline modal for editing nickname, jersey #, position, vitals, and
+// status without leaving the player page. Saves through the existing
+// upsertManualPlayer pipeline. Body-scroll-locked + portaled to body so
+// the modal escapes any transform-having ancestor.
+function EditPlayerInfoModal({ player, team, onClose, onSave }) {
+  const [nickname,   setNickname]   = useState(player.nickname || '');
+  const [num,        setNum]        = useState(player.num || '');
+  const [position,   setPosition]   = useState(player.position || '');
+  const [heightFt,   setHeightFt]   = useState(player.heightIn ? Math.floor(player.heightIn / 12) : '');
+  const [heightIn,   setHeightIn]   = useState(player.heightIn ? player.heightIn % 12 : '');
+  const [weightLbs,  setWeightLbs]  = useState(player.weightLbs || '');
+  const [birthdate,  setBirthdate]  = useState(player.birthdate ? String(player.birthdate).slice(0, 10) : '');
+  const [bats,       setBats]       = useState(player.bats || '');
+  const [throws,     setThrows]     = useState(player.throws || '');
+  const [birthplace, setBirthplace] = useState(player.birthplace || '');
+  const [status,     setStatus]     = useState(player.status || 'active');
+  const [saving,     setSaving]     = useState(false);
+
+  // Body scroll lock while modal open. Mirrors the photo picker /
+  // position editor pattern elsewhere in this file.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const ftNum = parseInt(heightFt, 10);
+    const inNum = parseInt(heightIn, 10);
+    const totalIn =
+      Number.isFinite(ftNum) || Number.isFinite(inNum)
+        ? (Number.isFinite(ftNum) ? ftNum * 12 : 0) + (Number.isFinite(inNum) ? inNum : 0)
+        : null;
+    const wt = parseInt(weightLbs, 10);
+    try {
+      await onSave({
+        nickname:   nickname.trim() || null,
+        num:        String(num).trim() || null,
+        position:   position.trim() || null,
+        heightIn:   totalIn || null,
+        weightLbs:  Number.isFinite(wt) ? wt : null,
+        birthdate:  birthdate || null,
+        bats:       bats || null,
+        throws:     throws || null,
+        birthplace: birthplace.trim() || null,
+        status:     status || 'active',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fieldStyle = {
+    padding: '8px 10px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: radius.sm,
+    fontSize: 13, fontFamily: fonts.body,
+    background: colors.white, color: colors.text,
+    width: '100%', boxSizing: 'border-box',
+  };
+  const labelStyle = {
+    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+    letterSpacing: 0.6, color: colors.textMuted,
+    textTransform: 'uppercase', marginBottom: 4, display: 'block',
+  };
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16, overflow: 'auto',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 560,
+          background: colors.white, borderRadius: radius.lg,
+          padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
+          maxHeight: '92vh', overflow: 'auto',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
+          <SectionHeading style={{ margin: 0 }}>Edit player info</SectionHeading>
+          <span style={{
+            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+            letterSpacing: 0.6, color: colors.textMuted,
+          }}>{team?.id} · {player?.name || `${player?.firstName || ''} ${player?.lastName || ''}`}</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Nickname</label>
+            <input style={fieldStyle} value={nickname} onChange={e => setNickname(e.target.value)} placeholder='e.g. "The Closer"' />
+          </div>
+          <div>
+            <label style={labelStyle}>Jersey #</label>
+            <input style={fieldStyle} value={num} onChange={e => setNum(e.target.value)} placeholder="03" />
+          </div>
+          <div>
+            <label style={labelStyle}>Position</label>
+            <input style={fieldStyle} value={position} onChange={e => setPosition(e.target.value)} placeholder="P / C / OF / IF" />
+          </div>
+          <div>
+            <label style={labelStyle}>Height</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input style={{ ...fieldStyle, flex: 1 }} value={heightFt} onChange={e => setHeightFt(e.target.value)} placeholder="ft" inputMode="numeric" />
+              <input style={{ ...fieldStyle, flex: 1 }} value={heightIn} onChange={e => setHeightIn(e.target.value)} placeholder="in" inputMode="numeric" />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Weight (lbs)</label>
+            <input style={fieldStyle} value={weightLbs} onChange={e => setWeightLbs(e.target.value)} placeholder="180" inputMode="numeric" />
+          </div>
+          <div>
+            <label style={labelStyle}>Birthdate</label>
+            <input style={fieldStyle} type="date" value={birthdate} onChange={e => setBirthdate(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Birthplace</label>
+            <input style={fieldStyle} value={birthplace} onChange={e => setBirthplace(e.target.value)} placeholder="Phoenix, AZ" />
+          </div>
+          <div>
+            <label style={labelStyle}>Bats</label>
+            <select style={fieldStyle} value={bats} onChange={e => setBats(e.target.value)}>
+              <option value="">—</option>
+              <option value="R">Right</option>
+              <option value="L">Left</option>
+              <option value="S">Switch</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Throws</label>
+            <select style={fieldStyle} value={throws} onChange={e => setThrows(e.target.value)}>
+              <option value="">—</option>
+              <option value="R">Right</option>
+              <option value="L">Left</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Status</label>
+            <select style={fieldStyle} value={status} onChange={e => setStatus(e.target.value)}>
+              <option value="active">Active</option>
+              <option value="injured">Injured</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+          <OutlineButton onClick={onClose} disabled={saving}>Cancel</OutlineButton>
+          <RedButton onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </RedButton>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -4,6 +4,7 @@ import { TEAMS, API_CONFIG, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from '../version';
+import { formatPostName } from '../template-config';
 import ChangelogModal from '../changelog-modal';
 import { getApiKey, setApiKey, clearApiKey, pushDriveToCloud, getSavedFolders } from '../drive-api';
 import { authedFetch } from '../authed-fetch';
@@ -205,19 +206,33 @@ export default function Settings() {
 
         <Label>Drive API Key</Label>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          {/* v4.5.37: Drive API key edit is master_admin only. Non-masters
+              see a read-only field — the cloud-shared key is still
+              applied via pushDriveToCloud, but content/admin tier can
+              no longer overwrite or remove it. Prevents an
+              accidentally-deleted key from breaking Drive imports for
+              every other admin in the league. */}
           <input
             type={driveKeyMasked && driveKey === driveKeyDraft ? 'password' : 'text'}
             value={driveKeyDraft}
-            onChange={e => setDriveKeyDraft(e.target.value)}
-            placeholder="AIzaSy..."
-            style={{ ...inputStyle, flex: 1, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}
+            onChange={e => isMaster && setDriveKeyDraft(e.target.value)}
+            placeholder={isMaster ? 'AIzaSy...' : 'Set by master admin'}
+            disabled={!isMaster}
+            readOnly={!isMaster}
+            style={{
+              ...inputStyle, flex: 1, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12,
+              opacity: isMaster ? 1 : 0.7,
+              cursor: isMaster ? 'text' : 'not-allowed',
+            }}
             autoComplete="off"
             spellCheck={false}
           />
-          <RedButton onClick={saveDriveKey} disabled={!driveKeyDraft.trim() || driveKeyDraft === driveKey}>
-            {driveKey ? 'Update' : 'Save'}
-          </RedButton>
-          {driveKey && (
+          {isMaster && (
+            <RedButton onClick={saveDriveKey} disabled={!driveKeyDraft.trim() || driveKeyDraft === driveKey}>
+              {driveKey ? 'Update' : 'Save'}
+            </RedButton>
+          )}
+          {isMaster && driveKey && (
             <OutlineButton onClick={removeDriveKey}>Remove</OutlineButton>
           )}
           {/* v4.5.11: master can force a re-push at any time, even when
@@ -433,7 +448,12 @@ function DownloadHistoryCard() {
                           fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
                         }}>{team.id}</span>
                       )}
-                      <span>{post.templateType || '—'}</span>
+                      {/* v4.5.37: name is now Name_Template_MM/DD/YY for
+                          a stable identity that survives template
+                          renames + tells you who/what at a glance. */}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {formatPostName(post, getTeam) || post.templateType || '—'}
+                      </span>
                       <span style={{ color: colors.textMuted, fontWeight: 400, fontSize: 11 }}>·  {post.platform || '—'}</span>
                     </div>
                     <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, letterSpacing: 0.3, marginTop: 2 }}>

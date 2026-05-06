@@ -7,10 +7,12 @@
 // the dot deep-links to /generate pre-filled with a suggested template for
 // that post type.
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SectionHeading } from './components';
 import { colors, fonts, radius } from './theme';
+import { authedFetch } from './authed-fetch';
+import { useAuth } from './auth';
 
 // Heuristic for picking a readable text color on top of an arbitrary
 // hex background. Used by the GAME badge and team-colored day chips
@@ -146,9 +148,86 @@ function colorForPostType(type, teamColor) {
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
+// v4.5.37: Post-type catalog for the master-admin "mark this day"
+// popover. Mirrors colorForPostType() so the cell fill matches the
+// legend entry below the calendar. Order is the order the chips
+// render in the popover.
+const POST_TYPE_OPTIONS = [
+  { type: 'preview',   label: 'Matchup hype' },
+  { type: 'highlight', label: 'Highlight / recap' },
+  { type: 'score',     label: 'Final score' },
+  { type: 'leader',    label: 'Stat leader' },
+  { type: 'standings', label: 'Standings' },
+  { type: 'idea',      label: 'Idea / prep' },
+];
+
 export function ContentCalendar({ team, games }) {
+  const { role } = useAuth();
+  const isMaster = role === 'master_admin';
   const today = new Date();
   const plan = useMemo(() => buildPostPlan(team, games, today, 4), [team, games]);
+
+  // v4.5.37: Cloud-stored manual marks. Shape: { 'YYYY-MM-DD': postType }.
+  // Loaded once per team on mount; saved through /api/app-settings (key
+  // = `content-calendar-${teamId}`). Reflects what the team ACTUALLY
+  // posted as opposed to the auto-cadence's recommendation.
+  const [marks, setMarks] = useState({});
+  const [marksLoaded, setMarksLoaded] = useState(false);
+  const [openCellKey, setOpenCellKey] = useState(null); // 'YYYY-MM-DD' currently being edited
+  const [savingMark, setSavingMark] = useState(false);
+
+  // v4.5.37: outside-click + Escape close the popover. Cell-click handler
+  // runs first via stopPropagation in the popover, so opening a different
+  // cell doesn't immediately close.
+  useEffect(() => {
+    if (!openCellKey) return;
+    const onDoc = () => setOpenCellKey(null);
+    const onKey = (e) => { if (e.key === 'Escape') setOpenCellKey(null); };
+    document.addEventListener('click', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openCellKey]);
+
+  useEffect(() => {
+    if (!team?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authedFetch(`/api/app-settings?key=content-calendar-${team.id}`);
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        setMarks(json?.value || {});
+      } catch { /* silent — falls back to no marks */ }
+      finally {
+        if (!cancelled) setMarksLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [team?.id]);
+
+  const saveMarks = async (next) => {
+    setMarks(next);
+    if (!isMaster) return;
+    setSavingMark(true);
+    try {
+      await authedFetch('/api/app-settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: `content-calendar-${team.id}`, value: next }),
+      });
+    } catch { /* silent — local state already updated; will retry on next mark */ }
+    finally { setSavingMark(false); }
+  };
+
+  const setMarkForDay = (key, type) => {
+    const next = { ...marks };
+    if (type) next[key] = type; else delete next[key];
+    saveMarks(next);
+    setOpenCellKey(null);
+  };
 
   // Group 28 days back into rows of 7.
   const weeks = [];
@@ -247,58 +326,161 @@ export function ContentCalendar({ team, games }) {
                 const isToday = isSameDay(d.date, today);
                 const isPast = d.date < today && !isToday;
                 const hasGame = d.dayGames.length > 0;
+                const dayKey = d.date.toISOString().slice(0, 10);
+                const mark = marks[dayKey] || null;
+                // v4.5.37: a marked cell takes a tinted full-cell fill in
+                // the post-type's color, so the master sees at a glance
+                // which days actually got a post out the door (versus
+                // which ones are still just the auto-suggested cadence).
+                const markFill = mark ? `${colorForPostType(mark, teamColor)}26` : null; // ~15% alpha
+                const markBorder = mark ? colorForPostType(mark, teamColor) : null;
+                const isOpen = openCellKey === dayKey;
                 return (
-                  <div key={di} style={{
-                    // Game days already get a tinted background and a stronger
-                    // border tint than non-game days. That's enough signal —
-                    // the prior 3px left side-stripe was redundant.
-                    background: hasGame ? gameBg : (isToday ? todayBg : colors.bg),
-                    border: `1px solid ${
-                      isToday ? todayBorder : (hasGame ? `${teamColor}55` : colors.borderLight)
-                    }`,
-                    borderRadius: radius.sm,
-                    padding: 6,
-                    minHeight: 72,
-                    opacity: isPast ? 0.5 : 1,
-                    display: 'flex', flexDirection: 'column', gap: 3,
-                    transition: 'background 0.15s',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <span style={{
-                        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
-                        color: isToday ? teamDark : colors.textSecondary,
-                      }}>
-                        {d.date.getDate()}
-                      </span>
-                      {hasGame && (
-                        <span title="Game scheduled" style={{
-                          fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
-                          background: teamColor, color: onTeamText,
-                          padding: '1px 5px', borderRadius: 2, letterSpacing: 0.6,
-                        }}>GAME</span>
-                      )}
-                    </div>
-                    {d.posts.map((post, pi) => (
-                      <Link
-                        key={pi}
-                        to={`/generate?template=${post.templateId}&team=${team.id}`}
-                        title={`${post.label} → open Generate`}
-                        style={{ textDecoration: 'none' }}
-                      >
+                  <div key={di} style={{ position: 'relative' }}>
+                    <div
+                      onClick={(e) => {
+                        if (!isMaster) return;
+                        e.stopPropagation();
+                        setOpenCellKey(isOpen ? null : dayKey);
+                      }}
+                      title={isMaster
+                        ? (mark ? `Marked: ${mark} — click to change` : 'Click to mark this day with a post type')
+                        : undefined}
+                      style={{
+                        // Mark fill takes priority; otherwise game / today / default.
+                        background: markFill || (hasGame ? gameBg : (isToday ? todayBg : colors.bg)),
+                        border: `1px solid ${
+                          markBorder || (isToday ? todayBorder : (hasGame ? `${teamColor}55` : colors.borderLight))
+                        }`,
+                        borderRadius: radius.sm,
+                        padding: 6,
+                        minHeight: 72,
+                        opacity: isPast && !mark ? 0.5 : 1,
+                        display: 'flex', flexDirection: 'column', gap: 3,
+                        transition: 'background 0.15s, border-color 0.15s',
+                        cursor: isMaster ? 'pointer' : 'default',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <span style={{
+                          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                          color: isToday ? teamDark : colors.textSecondary,
+                        }}>
+                          {d.date.getDate()}
+                        </span>
+                        {hasGame && (
+                          <span title="Game scheduled" style={{
+                            fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
+                            background: teamColor, color: onTeamText,
+                            padding: '1px 5px', borderRadius: 2, letterSpacing: 0.6,
+                          }}>GAME</span>
+                        )}
+                      </div>
+                      {/* Manual mark badge — only shown when a master has
+                          tagged this day with a post type. Sits at the
+                          top of the cell so it reads as the primary
+                          status, with the auto-cadence dots below as
+                          recommendations the team can still act on. */}
+                      {mark && (
                         <div style={{
-                          display: 'flex', alignItems: 'center', gap: 4,
-                          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 600,
-                          color: colors.textSecondary, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                          color: colorForPostType(mark, teamColor),
+                          letterSpacing: 0.4, textTransform: 'uppercase',
                         }}>
                           <span style={{
                             width: 6, height: 6, borderRadius: '50%',
-                            background: colorForPostType(post.type, teamColor),
-                            flexShrink: 0,
+                            background: colorForPostType(mark, teamColor),
                           }} />
-                          {post.label}
+                          ✓ {mark}
                         </div>
-                      </Link>
-                    ))}
+                      )}
+                      {d.posts.map((post, pi) => (
+                        <Link
+                          key={pi}
+                          to={`/generate?template=${post.templateId}&team=${team.id}`}
+                          onClick={(e) => { if (isMaster) e.stopPropagation(); }}
+                          title={`${post.label} → open Generate`}
+                          style={{ textDecoration: 'none' }}
+                        >
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 600,
+                            color: colors.textSecondary, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                          }}>
+                            <span style={{
+                              width: 6, height: 6, borderRadius: '50%',
+                              background: colorForPostType(post.type, teamColor),
+                              flexShrink: 0,
+                            }} />
+                            {post.label}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                    {/* v4.5.37: Type-picker popover for master admin.
+                        Anchors to the clicked cell. Click outside closes
+                        via the parent's overlay (rendered below). */}
+                    {isOpen && isMaster && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: 'absolute', top: '100%', left: 0, zIndex: 5,
+                          marginTop: 4,
+                          background: colors.white,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: radius.base,
+                          boxShadow: '0 12px 28px rgba(15,23,42,0.18)',
+                          padding: 8, minWidth: 180,
+                          display: 'flex', flexDirection: 'column', gap: 4,
+                        }}
+                      >
+                        <div style={{
+                          fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                          color: colors.textMuted, letterSpacing: 0.5,
+                          padding: '2px 4px',
+                        }}>
+                          MARK {d.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                        </div>
+                        {POST_TYPE_OPTIONS.map(opt => (
+                          <button
+                            key={opt.type}
+                            onClick={() => setMarkForDay(dayKey, opt.type)}
+                            disabled={savingMark}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              padding: '6px 8px', borderRadius: radius.sm,
+                              border: mark === opt.type ? `1px solid ${colorForPostType(opt.type, teamColor)}` : `1px solid transparent`,
+                              background: mark === opt.type ? `${colorForPostType(opt.type, teamColor)}1A` : 'transparent',
+                              cursor: 'pointer', textAlign: 'left',
+                              fontFamily: fonts.body, fontSize: 12, color: colors.text,
+                            }}
+                          >
+                            <span style={{
+                              width: 10, height: 10, borderRadius: '50%',
+                              background: colorForPostType(opt.type, teamColor),
+                              flexShrink: 0,
+                            }} />
+                            {opt.label}
+                          </button>
+                        ))}
+                        {mark && (
+                          <button
+                            onClick={() => setMarkForDay(dayKey, null)}
+                            disabled={savingMark}
+                            style={{
+                              padding: '6px 8px', borderRadius: radius.sm,
+                              border: `1px solid ${colors.borderLight}`,
+                              background: 'transparent',
+                              cursor: 'pointer', textAlign: 'left',
+                              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                              color: colors.textMuted, letterSpacing: 0.4,
+                              marginTop: 4,
+                            }}
+                          >✕ CLEAR MARK</button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
