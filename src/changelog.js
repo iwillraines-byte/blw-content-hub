@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '4.5.41',
+    date: '2026-05-05',
+    kind: 'patch',
+    summary: 'Stats tables show the prowiffleball.com wordmark logo',
+    items: [
+      'Replaced the "PWB" text pill above each stats table with the actual prowiffleball.com wordmark (public/brand/prowiffleball-logo.svg). Sits flush right at the top of the header row on Batting / Pitching / Rankings tables (Game Center, Team page, Dashboard). Hover bumps opacity slightly so it reads as a link, not decoration.',
+    ],
+  },
+  {
     version: '4.5.40',
     date: '2026-05-05',
     kind: 'patch',

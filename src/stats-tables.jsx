@@ -16,41 +16,40 @@ import { colors, fonts, radius } from './theme';
 
 // ─── Primitives ──────────────────────────────────────────────────────────────
 
-// v4.5.37: Cross-promo blurb shown above every stats table. Points
-// readers at prowiffleball.com (the league's source-of-truth stats site)
-// for box scores and granular splits we don't replicate here. The wedge
-// "PWB" logotype keeps it lightweight — the link itself is the call to
-// action. Stays right-aligned and small so it never crowds the search
-// input or the section title.
+// v4.5.37 / v4.5.41: Cross-promo link shown above every stats table —
+// points readers at prowiffleball.com (the league's source-of-truth
+// stats site) for box scores and historical data the app doesn't
+// replicate. v4.5.41 swaps the text-pill chip for the actual
+// prowiffleball.com wordmark logo (public/brand/prowiffleball-logo.svg).
+// Sits hard-right of the table header on its own. Hover slightly
+// raises opacity so it reads as an active link rather than a static
+// stamp — the logo IS the affordance.
 export function ProWiffleBallBlurb({ compact = false }) {
   return (
     <a
       href="https://prowiffleball.com"
       target="_blank"
       rel="noopener noreferrer"
-      title="Open prowiffleball.com — full box scores, splits, and historical data"
+      title="Visit prowiffleball.com — full box scores, splits, and historical data"
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        textDecoration: 'none', color: colors.textSecondary,
-        fontFamily: fonts.body, fontSize: compact ? 11 : 12,
-        lineHeight: 1.4,
-        padding: '4px 10px',
-        background: colors.bg,
-        border: `1px solid ${colors.borderLight}`,
-        borderRadius: radius.full,
-        whiteSpace: 'nowrap', maxWidth: '100%',
+        display: 'inline-flex', alignItems: 'center',
+        textDecoration: 'none',
+        opacity: 0.85,
+        transition: 'opacity 160ms ease',
       }}
+      onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+      onMouseLeave={e => { e.currentTarget.style.opacity = '0.85'; }}
     >
-      <span aria-hidden="true" style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 20, height: 20, borderRadius: '50%',
-        background: '#0F172A', color: '#fff',
-        fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.4,
-      }}>PWB</span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        For more in-depth stats and box scores, visit{' '}
-        <span style={{ color: colors.red, fontWeight: 700 }}>prowiffleball.com</span>
-      </span>
+      <img
+        src="/brand/prowiffleball-logo.svg"
+        alt="prowiffleball.com"
+        height={compact ? 22 : 28}
+        style={{
+          display: 'block',
+          width: 'auto', height: compact ? 22 : 28,
+          maxWidth: '100%',
+        }}
+      />
     </a>
   );
 }
