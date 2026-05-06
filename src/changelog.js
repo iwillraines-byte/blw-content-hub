@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.47',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'ProWiffle Stats page header credits prowiffleball.com',
+    items: [
+      'Page header rewritten from "PROWIFFLE STATS · Stats, rankings, and standings from Grand Slam Systems" → "BLW STATISTICS BY PROWIFFLEBALL.COM" with the wordmark inline as a clickable link.',
+      'New supporting copy: explains what readers get on this page (standings, rankings, basic hitting/pitching for active rostered players) and points them to prowiffleball.com for box scores + detailed stats.',
+      'Added a second paragraph linking to prowiffleball.com/rankings/fast-pitch — explains how Grand Slam Systems curates OPWB® Rankings via "clicking here" hyperlink.',
+    ],
+  },
+  {
     version: '4.5.46',
     date: '2026-05-06',
     kind: 'minor',

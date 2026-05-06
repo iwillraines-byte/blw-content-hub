@@ -498,7 +498,59 @@ export default function GameCenter() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title="PROWIFFLE STATS" subtitle="Stats, rankings, and standings from Grand Slam Systems" />
+      {/* v4.5.47: Replaced the standard PageHeader with a richer
+          intro that credits prowiffleball.com (the source-of-truth
+          stats site) up front and points readers at the rankings
+          methodology page. The page H1 stays display-font + caps —
+          consistent with every other page header — but with
+          ProWiffleBall.com inline as a link in the title. */}
+      <div style={{ marginBottom: 18 }}>
+        <h1 style={{
+          fontFamily: fonts.heading,
+          fontSize: 36, fontWeight: 400,
+          color: colors.text, margin: 0,
+          letterSpacing: 1.5, lineHeight: 1.05,
+        }}>
+          BLW STATISTICS BY{' '}
+          <a
+            href="https://prowiffleball.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: colors.red, textDecoration: 'none' }}
+          >PROWIFFLEBALL.COM</a>
+        </h1>
+        <p style={{
+          fontFamily: fonts.body, fontSize: 14, lineHeight: 1.65,
+          color: colors.textSecondary,
+          margin: '12px 0 0', maxWidth: '78ch',
+          fontWeight: 500,
+        }}>
+          Find team standings, player rankings, and basic hitting/pitching
+          statistics for any BLW player actively rostered here. Box scores,
+          detailed stats, and any other wiffle ball stats you could imagine at{' '}
+          <a
+            href="https://prowiffleball.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: colors.red, fontWeight: 700, textDecoration: 'none' }}
+          >prowiffleball.com</a>.
+        </p>
+        <p style={{
+          fontFamily: fonts.body, fontSize: 13, lineHeight: 1.65,
+          color: colors.textSecondary,
+          margin: '8px 0 0', maxWidth: '78ch',
+          fontWeight: 500,
+        }}>
+          Want to know more about your player ranking score? Learn how Grand
+          Slam Systems curates OPWB® Rankings by{' '}
+          <a
+            href="https://prowiffleball.com/rankings/fast-pitch"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: colors.red, fontWeight: 700, textDecoration: 'none' }}
+          >clicking here</a>.
+        </p>
+      </div>
 
       {/* API Status */}
       <Card style={{
