@@ -92,6 +92,12 @@ function rowToOverlay(r) {
     width: r.width || 0,
     height: r.height || 0,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    // v4.5.46: anything pulled from the cloud is — by definition —
+    // already in the cloud. Stamp the sync indicator so the picker
+    // doesn't render an "unsynced" dot on records that other admins
+    // shipped fine.
+    cloudSyncedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    cloudSyncError: null,
   };
 }
 
@@ -102,6 +108,8 @@ function rowToEffect(r) {
     width: r.width || 0,
     height: r.height || 0,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    cloudSyncedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    cloudSyncError: null,
   };
 }
 

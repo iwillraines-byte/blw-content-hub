@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.5.46',
+    date: '2026-05-06',
+    kind: 'minor',
+    summary: 'Overlay cloud-sync visibility — per-overlay status + retry',
+    items: [
+      'Overlay (and effect) saves now AWAIT the cloud sync inline instead of fire-and-forget. The record carries cloudSyncedAt + cloudSyncError so the picker can render exactly what made it to other admins vs. what\'s stuck on this machine.',
+      'Picker tiles get a per-overlay indicator dot — green ✓ when in cloud, amber ↻ when local-only. Click the amber dot to retry that ONE overlay without redoing the whole batch. Local-only tiles also get an amber rim so the eye lands on them.',
+      'Picker header shows "N LOCAL-ONLY" badge + "↻ Sync local-only (N)" button when any overlay didn\'t make it. Bulk retry walks the list sequentially so a flaky network on one doesn\'t take down the rest.',
+      'Upload toast now reports the actual cloud-sync split — "X synced · Y stuck local-only" — instead of a blanket "saved!" that hid silent failures. Single-file uploads also surface the specific error in the toast detail.',
+      'Cloud-pulled overlays get cloudSyncedAt stamped automatically (they\'re by definition in the cloud), so the indicator only fires for genuine local-only records.',
+      'Same treatment for the Effects store — saveEffect / resyncEffect / resyncAllLocalOnlyEffects mirror the overlay path.',
+    ],
+  },
+  {
     version: '4.5.45',
     date: '2026-05-06',
     kind: 'patch',

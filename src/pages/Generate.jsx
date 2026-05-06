@@ -7,7 +7,7 @@ import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
 import { TEMPLATE_TYPES, FONT_MAP, STAT_CARD_TYPES, getFieldConfig, formatPostName } from '../template-config';
 import { renderStatCard as statCardRender, defaultCardBox } from '../stat-card-renderer';
-import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage } from '../overlay-store';
+import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage, resyncOverlay, resyncAllLocalOnlyOverlays } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
 import { getPresetOverlays, loadPresetImage } from '../preset-overlays';
@@ -1255,6 +1255,11 @@ export default function Generate() {
       const name = isBulk
         ? file.name.replace(/\.[^.]+$/, '')
         : (uploadName || file.name.replace(/\.[^.]+$/, ''));
+      // v4.5.46: saveOverlay now AWAITS the cloud sync inline and
+      // stamps `cloudSyncedAt` on the returned record (or
+      // `cloudSyncError` on failure). The progress counter reflects
+      // local saves; the success/failure split is reported in the
+      // toast below from the actual record state.
       const record = await saveOverlay({
         name,
         type: uploadType,
@@ -1275,7 +1280,71 @@ export default function Generate() {
     // Auto-select the first uploaded overlay so the user sees an
     // immediate result instead of having to dig through the picker.
     if (saved[0]) setSelectedOverlayId(saved[0].id);
+
+    // v4.5.46: per-record cloud-sync outcome reporting. Counts how
+    // many of the just-saved overlays actually made it to the cloud
+    // (visible to other admins) vs landed local-only. The toast tells
+    // the master what really happened so they don't think a silent
+    // 500 means "everything synced." Local-only records get an amber
+    // dot in the picker + a Retry action.
+    const cloudOk = saved.filter(r => r.cloudSyncedAt).length;
+    const localOnly = saved.length - cloudOk;
+    if (saved.length === 1) {
+      if (cloudOk === 1) {
+        toast.success('Overlay saved + synced to cloud', { detail: 'Visible to other admins on their next refresh.' });
+      } else {
+        toast.error('Saved locally — cloud sync failed', {
+          detail: `${saved[0].cloudSyncError || 'Unknown error'} — open the picker and click ↻ to retry.`,
+        });
+      }
+    } else {
+      if (localOnly === 0) {
+        toast.success(`${cloudOk} overlays saved + synced`, { detail: 'All visible to other admins on their next refresh.' });
+      } else if (cloudOk === 0) {
+        toast.error(`${saved.length} saved locally — none reached the cloud`, {
+          detail: 'Open the picker and use "↻ Sync local-only overlays" to retry.',
+        });
+      } else {
+        toast.error(`${cloudOk} synced · ${localOnly} stuck local-only`, {
+          detail: 'Open the picker and use "↻ Sync local-only overlays" to retry the rest.',
+        });
+      }
+    }
   };
+
+  // v4.5.46: per-overlay manual retry handler. Called from the picker's
+  // amber-dot tile when master-admin clicks ↻ on a stuck overlay.
+  const retryOverlaySync = useCallback(async (id) => {
+    const updated = await resyncOverlay(id);
+    if (!updated) return;
+    setOverlays(prev => prev.map(o => o.id === id ? updated : o));
+    if (updated.cloudSyncedAt) {
+      toast.success('Synced to cloud', { detail: `"${updated.name}" is now visible to other admins.` });
+    } else {
+      toast.error('Sync still failing', { detail: updated.cloudSyncError || 'Try again in a moment.' });
+    }
+  }, [toast]);
+
+  // v4.5.46: bulk retry — walk every local-only overlay in IndexedDB
+  // and push each in sequence. Fires from the "↻ Sync local-only"
+  // button at the top of the overlay picker. Sequential by design so
+  // a transient flaky network doesn't take down the whole batch.
+  const resyncAllLocalOnly = useCallback(async () => {
+    toast.info?.('Resyncing local-only overlays…') ?? toast.success('Resyncing local-only overlays…');
+    const summary = await resyncAllLocalOnlyOverlays();
+    // Refresh state from IDB so the indicators update.
+    const fresh = await getOverlays();
+    setOverlays(fresh);
+    if (summary.total === 0) {
+      toast.success('Nothing to resync', { detail: 'Every overlay is already in the cloud.' });
+    } else if (summary.failed === 0) {
+      toast.success(`${summary.synced} overlay${summary.synced === 1 ? '' : 's'} pushed to cloud`);
+    } else {
+      toast.error(`${summary.synced}/${summary.total} synced · ${summary.failed} still failing`, {
+        detail: 'Failures often retry-clear after a refresh. The stuck ones will keep their amber dot.',
+      });
+    }
+  }, [toast]);
 
   const handleDeleteOverlay = async (id) => {
     await deleteOverlay(id);
@@ -1977,26 +2046,68 @@ export default function Generate() {
                     )}
                     {filteredOverlays.length > 0 && (
                       <>
-                        {presetOverlays.length > 0 && (
-                          <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6 }}>
-                            UPLOADED · {filteredOverlays.length}
-                          </div>
-                        )}
+                        {/* v4.5.46: header now includes a per-team
+                            local-only count + bulk resync action.
+                            Only renders the badge when there's at
+                            least one stuck overlay, so the master
+                            sees a clear "you have N to retry" signal. */}
+                        {(() => {
+                          const localOnlyCount = filteredOverlays.filter(o => !o.cloudSyncedAt).length;
+                          return (
+                            <div style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              marginBottom: 6, gap: 8, flexWrap: 'wrap',
+                            }}>
+                              <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8 }}>
+                                UPLOADED · {filteredOverlays.length}
+                                {localOnlyCount > 0 && (
+                                  <span style={{
+                                    marginLeft: 8, color: '#92400E',
+                                    background: 'rgba(245,158,11,0.18)',
+                                    border: '1px solid rgba(245,158,11,0.4)',
+                                    borderRadius: 999, padding: '2px 8px',
+                                    fontWeight: 700,
+                                  }}>
+                                    {localOnlyCount} LOCAL-ONLY
+                                  </span>
+                                )}
+                              </div>
+                              {localOnlyCount > 0 && (
+                                <button
+                                  onClick={resyncAllLocalOnly}
+                                  title="Push every local-only overlay to the cloud one at a time. Sequential — a network blip on one doesn't take down the rest."
+                                  style={{
+                                    background: '#F59E0B', color: '#FFFFFF', border: 'none',
+                                    borderRadius: 999, padding: '4px 12px', cursor: 'pointer',
+                                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+                                  }}
+                                >↻ SYNC LOCAL-ONLY ({localOnlyCount})</button>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {filteredOverlays.map(o => {
                             const thumbUrl = overlayThumbUrls.get(o.id);
                             const display = formatOverlayName(o.name);
+                            const isCloudSynced = !!o.cloudSyncedAt;
                             return (
                             <div key={o.id} style={{ position: 'relative' }}>
                               <div
                                 onClick={() => setSelectedOverlayId(o.id === selectedOverlayId ? null : o.id)}
-                                title={display}
+                                title={isCloudSynced
+                                  ? `${display} · synced to cloud ${new Date(o.cloudSyncedAt).toLocaleString()}`
+                                  : `${display} · LOCAL ONLY · ${o.cloudSyncError || 'cloud sync failed'} — click ↻ to retry`}
                                 style={{
                                   width: 80, height: 80, borderRadius: radius.base, cursor: 'pointer',
                                   background: thumbUrl
                                     ? `#1A1A22 url(${thumbUrl}) center/cover`
                                     : '#1A1A22',
-                                  border: selectedOverlayId === o.id ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                                  border: selectedOverlayId === o.id
+                                    ? `2px solid ${colors.accent}`
+                                    : !isCloudSynced
+                                      ? `2px solid #F59E0B` // amber rim for local-only
+                                      : `1px solid ${colors.border}`,
                                   position: 'relative', overflow: 'hidden',
                                 }}
                               >
@@ -2011,6 +2122,33 @@ export default function Generate() {
                                   fontSize: 7, fontFamily: fonts.condensed, fontWeight: 800, letterSpacing: 0.5,
                                 }}>
                                   {o.team ? o.team : 'UPLOAD'}
+                                </div>
+                                {/* v4.5.46: cloud-sync indicator. Green
+                                    dot = in cloud, visible to other
+                                    admins. Amber dot = local-only,
+                                    needs retry. Click amber to retry
+                                    THIS overlay specifically. */}
+                                <div
+                                  onClick={(e) => {
+                                    if (isCloudSynced) return;
+                                    e.stopPropagation();
+                                    retryOverlaySync(o.id);
+                                  }}
+                                  title={isCloudSynced
+                                    ? 'Synced to cloud · visible to other admins'
+                                    : `Local only · click to retry sync (${o.cloudSyncError || 'sync failed'})`}
+                                  style={{
+                                    position: 'absolute', top: 4, left: 4,
+                                    width: 14, height: 14, borderRadius: '50%',
+                                    background: isCloudSynced ? '#22C55E' : '#F59E0B',
+                                    border: '1px solid rgba(0,0,0,0.4)',
+                                    cursor: isCloudSynced ? 'default' : 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 9, color: '#fff', fontWeight: 800,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                                  }}
+                                >
+                                  {isCloudSynced ? '✓' : '↻'}
                                 </div>
                                 {/* Bottom name caption with gradient — same
                                     pattern as the preset tiles. Friendly
