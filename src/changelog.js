@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.48',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'prowiffleball.com wordmark on stat-card headers',
+    items: [
+      'Raw stat cards (Hitting Stats / Pitching Stats): white prowiffleball.com wordmark now sits on the right side of the team-color gradient header. Title shifts to balance against the reserved logo zone so the composition still reads centered.',
+      'Percentile cards (Hitting Percentiles / Pitching Percentiles): dark prowiffleball.com wordmark on the right side of the white header. Canvas globalCompositeOperation re-fills the white SVG\'s alpha shape with navy on the fly; cached so subsequent renders are zero-cost.',
+      'Logo loads asynchronously at module init; Studio waits for the load to resolve before the first stat-card paint so the logo never pops in on user interaction.',
+    ],
+  },
+  {
     version: '4.5.47',
     date: '2026-05-06',
     kind: 'patch',

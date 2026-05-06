@@ -106,6 +106,91 @@ function safeRatio(num, denom) {
 // can edit this string when we ship 2027).
 const SEASON_LABEL = '2026';
 
+// ─── prowiffleball.com logo loader (v4.5.48) ────────────────────────────────
+// Drawn into both card headers as a "stats source" credit. The SVG at
+// /public/brand/prowiffleball-logo.svg is white-on-transparent (its
+// internal feColorMatrix forces every embedded pixel to white). That's
+// perfect for the dark gradient header on the raw card — drawn as-is.
+//
+// For the percentile card (white header) we need a dark version. Canvas
+// can't apply a CSS filter directly, but `globalCompositeOperation =
+// 'source-in'` lets us re-fill the loaded image's alpha shape with any
+// color. We cache the dark variant on first use so repeat renders
+// don't re-paint pixel-by-pixel.
+//
+// Loading is async — `Image().onload` fires off the main thread. To
+// avoid flashing a logo-less card on first render, callers (Generate.jsx)
+// can `await ensureProwiffleLogoReady()` before kicking the canvas.
+// If the logo isn't loaded by render time, we just skip drawing it —
+// the next render after load completes will pick it up.
+let _logoImg = null;
+let _logoFailed = false;
+const _coloredLogoCache = new Map(); // color → offscreen canvas with logo masked to that color
+
+const _logoPromise = (typeof window === 'undefined') ? Promise.resolve(null) : new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => { _logoImg = img; resolve(img); };
+  img.onerror = () => { _logoFailed = true; resolve(null); };
+  img.src = '/brand/prowiffleball-logo.svg';
+});
+
+export function ensureProwiffleLogoReady() {
+  return _logoPromise;
+}
+
+// Returns either the cached white logo Image (if color === 'white' /
+// not specified) OR an offscreen canvas with the logo's alpha shape
+// re-filled in the requested color. Null if the logo hasn't loaded
+// yet or failed to load — caller should skip the draw in that case.
+function getProwiffleLogo(color = 'white') {
+  if (!_logoImg || _logoFailed) return null;
+  if (color === 'white') return _logoImg;
+  const key = String(color).toLowerCase();
+  if (_coloredLogoCache.has(key)) return _coloredLogoCache.get(key);
+  const w = _logoImg.naturalWidth || _logoImg.width || 200;
+  const h = _logoImg.naturalHeight || _logoImg.height || 48;
+  const off = document.createElement('canvas');
+  off.width = w;
+  off.height = h;
+  const octx = off.getContext('2d');
+  octx.drawImage(_logoImg, 0, 0, w, h);
+  octx.globalCompositeOperation = 'source-in';
+  octx.fillStyle = color;
+  octx.fillRect(0, 0, w, h);
+  _coloredLogoCache.set(key, off);
+  return off;
+}
+
+// Helper — draws the logo at the right side of a header strip, vertically
+// centered, capped by maxH. Width derived from logo's native aspect ratio.
+// padRight controls how far in from the right edge it sits.
+function drawProwiffleLogoInHeader(ctx, color, headerX, headerY, headerW, headerH, padRight = null) {
+  const logo = getProwiffleLogo(color);
+  if (!logo) return;
+  const logoNativeW = logo.naturalWidth || logo.width;
+  const logoNativeH = logo.naturalHeight || logo.height;
+  if (!logoNativeW || !logoNativeH) return;
+  // Logo height = ~58% of header height (legible without dominating).
+  // Width auto from aspect ratio. Cap to ~28% of header width so the
+  // logo never crowds the title text on narrow cards.
+  const targetH = Math.round(headerH * 0.58);
+  const aspect = logoNativeW / logoNativeH;
+  let targetW = Math.round(targetH * aspect);
+  const maxW = Math.round(headerW * 0.28);
+  if (targetW > maxW) {
+    targetW = maxW;
+    // Don't downscale targetH — keep the aspect ratio by also shrinking H
+    const adjustedH = Math.round(targetW / aspect);
+    const drawX = headerX + headerW - targetW - (padRight ?? Math.round(headerW * 0.025));
+    const drawY = headerY + Math.round((headerH - adjustedH) / 2);
+    ctx.drawImage(logo, drawX, drawY, targetW, adjustedH);
+    return;
+  }
+  const drawX = headerX + headerW - targetW - (padRight ?? Math.round(headerW * 0.025));
+  const drawY = headerY + Math.round((headerH - targetH) / 2);
+  ctx.drawImage(logo, drawX, drawY, targetW, targetH);
+}
+
 // ─── Card-content builders ──────────────────────────────────────────────────
 // Raw cards return EXACTLY 4 columns. The 4th is the "headline" stat
 // rendered in team-accent color (matches the OPS+ treatment in the
@@ -274,12 +359,23 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   // Header text — uppercase season + label, centered.
   // v4.5.33: bumped from 0.42 → 0.50 of header height for stronger
   // type presence in social previews.
+  // v4.5.48: title shifts left so the prowiffleball wordmark on the
+  // right side has room. Title still appears centered relative to the
+  // remaining space (excluding the right-side logo zone) so the
+  // composition doesn't feel left-pinned.
+  const logoZoneW = Math.round(w * 0.32); // ~one-third reserved on the right
+  const titleCenterX = x + (w - logoZoneW) / 2;
   ctx.fillStyle = '#FFFFFF';
   ctx.font = `700 ${Math.round(headerH * 0.50)}px ${cond}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const headerText = `${SEASON_LABEL} ${headerLabel}`.toUpperCase();
-  ctx.fillText(headerText, x + w / 2, y + headerH / 2);
+  ctx.fillText(headerText, titleCenterX, y + headerH / 2);
+
+  // v4.5.48: prowiffleball.com wordmark on the right side of the
+  // dark gradient header. White-on-transparent SVG renders as-is
+  // here. Implicit "stats source" credit on every raw stat card.
+  drawProwiffleLogoInHeader(ctx, 'white', x, y, w, headerH);
 
   // 4-column body. Equal-width columns, consistent inner padding.
   const bodyTop = y + headerH;
@@ -389,6 +485,21 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(headerLabel).toUpperCase(), x + padX, y + padTop + headerHeight * 0.5);
+
+  // v4.5.48: prowiffleball.com wordmark on the right side of the
+  // header band. White header so we use the dark variant — the
+  // colored-logo cache mints a navy fill on first call. padRight
+  // matches the card's left padding so the logo sits inside the
+  // same visual margin as the title.
+  drawProwiffleLogoInHeader(
+    ctx,
+    '#151C28',
+    x,
+    y + padTop,
+    w,
+    headerHeight,
+    padX,
+  );
 
   // Body rows. Three-column grid: [label 70-ish][bar flex][value 56-ish].
   // v4.5.33: row spacing pulled in (gap between rows reduced) so 9

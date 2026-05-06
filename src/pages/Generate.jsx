@@ -6,7 +6,7 @@ import { Card, CollapsibleCard, Label, PageHeader, SectionHeading, RedButton, Ou
 import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
 import { TEMPLATE_TYPES, FONT_MAP, STAT_CARD_TYPES, getFieldConfig, formatPostName } from '../template-config';
-import { renderStatCard as statCardRender, defaultCardBox } from '../stat-card-renderer';
+import { renderStatCard as statCardRender, defaultCardBox, ensureProwiffleLogoReady } from '../stat-card-renderer';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage, resyncOverlay, resyncAllLocalOnlyOverlays } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
@@ -958,6 +958,14 @@ export default function Generate() {
   useEffect(() => {
     let cancelled = false;
     localFontsReady().then(() => {
+      if (!cancelled) renderRef.current();
+    });
+    // v4.5.48: also re-render once the prowiffleball.com logo SVG
+    // finishes loading so it appears on the FIRST stat-card paint
+    // instead of popping in on the next user interaction. Cheap —
+    // the promise resolves in <50 ms on a warm cache and is cached
+    // across renders so subsequent stat cards have it instantly.
+    ensureProwiffleLogoReady().then(() => {
       if (!cancelled) renderRef.current();
     });
     return () => { cancelled = true; };
