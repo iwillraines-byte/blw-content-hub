@@ -35,13 +35,35 @@ const RESOURCE_SECTIONS = [
   {
     id: 'getting-started',
     title: 'Getting started',
-    summary: 'New to BLW Studio? Start here.',
+    summary: 'Find your role, then jump to the surface you need.',
     items: [
       {
-        kind: 'doc',
-        title: 'Welcome to BLW Studio',
-        detail: 'A 60-second tour of the dashboard, the Studio, and where to find what you need. Coming soon — drop your copy in src/pages/Resources.jsx.',
-        url: null,
+        kind: 'link',
+        title: 'What each role can do',
+        detail: 'Master / admin / content / athlete — capabilities and limits, side by side.',
+        url: '#role-permissions',
+        icon: '◑',
+      },
+      {
+        kind: 'link',
+        title: 'Open the Studio',
+        detail: 'Pick a template, drop in a photo, ship a post.',
+        url: '/generate',
+        icon: '✦',
+      },
+      {
+        kind: 'link',
+        title: 'Open Files',
+        detail: 'Upload, tag, and browse media. Drive sync keeps it in step with the shared folders.',
+        url: '/files',
+        icon: '📁',
+      },
+      {
+        kind: 'link',
+        title: 'File a request',
+        detail: 'Need something the team should do? Drop it in the Requests queue.',
+        url: '/requests',
+        icon: '📥',
       },
     ],
   },
@@ -260,6 +282,155 @@ export default function Resources() {
           ))}
         </div>
       </Card>
+
+      {/* v4.5.42: Role permissions reference — replaces the
+          long-standing placeholder items in the "Getting started"
+          section with concrete, role-by-role coverage. Renders for
+          everyone (athletes benefit from seeing what staff can /
+          can't do). */}
+      <Card id="role-permissions" style={{ scrollMarginTop: 80 }}>
+        <SectionHeading>What each role can do</SectionHeading>
+        <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 16, lineHeight: 1.55, maxWidth: '70ch' }}>
+          BLW Studio has four roles. Your role lives on your profile and is set by the master admin. You always see the surfaces relevant to your tier — surfaces above your tier are simply hidden, not just disabled.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          {[
+            {
+              role: 'Master admin',
+              accent: colors.red,
+              tagline: 'You are the operator. Owns the league.',
+              can: [
+                'Everything below + add/remove admins, change roles, grant 6h temp access',
+                'Edit Drive API key (other admins inherit it cloud-shared)',
+                'Hide posts from public feeds',
+                'Edit player vitals + nicknames (✎ Edit player info on player pages)',
+                'Mark cells in team content calendars',
+                'Hide / restore Resources placeholders',
+                'Run player bio CSV imports + roster diagnostics + raw API inspector',
+              ],
+              cant: ['Nothing — you have full access by definition.'],
+            },
+            {
+              role: 'Admin',
+              accent: '#0EA5E9',
+              tagline: 'Trusted operator. Most full-app capability.',
+              can: [
+                'Everything in Studio (templates, overlays, effects, downloads, HD exports)',
+                'Files: upload, tag, edit, delete media',
+                'Requests: pick up, status-flip, comment, notify requesters',
+                'Browse every team page + player page + Game Center',
+                'Access Resources + see admin-only sections',
+              ],
+              cant: [
+                'Edit the Drive API key (read-only — inherits master\'s)',
+                'Hide posts from feeds (master only)',
+                'Edit player vitals (master only)',
+                'Mark content-calendar cells (master only)',
+                'Manage other admins or change roles (master only)',
+              ],
+            },
+            {
+              role: 'Content',
+              accent: '#22C55E',
+              tagline: 'Day-to-day production. Posts content for the league.',
+              can: [
+                'Studio + every template + downloads',
+                'Files: upload, tag, edit own + team media',
+                'Requests: pick up, status-flip, comment',
+                'Browse every team page + player page + Game Center',
+                'Resources, including admin-tier SOPs',
+              ],
+              cant: [
+                'People & Roles, trades, bio imports, diagnostics (master only)',
+                'Drive key edits (read-only)',
+                'Hide posts from feeds (master only)',
+                'Edit player vitals (master only)',
+              ],
+            },
+            {
+              role: 'Athlete',
+              accent: '#F59E0B',
+              tagline: 'Player or coach. Self-serve for your own content.',
+              can: [
+                'View every team + player page + Game Center',
+                'Edit your own About-me on your player page (feeds AI captions)',
+                'Generate posts in Studio scoped to your team',
+                'Upload + tag media for your team',
+                'File requests with the master admin (DM card in Settings)',
+                'See your own request history',
+              ],
+              cant: [
+                'See requests filed by other athletes',
+                'Browse Files across other teams\' uploads',
+                'Edit profile photos / vitals on player pages (admins handle this)',
+                'Use Drive sync, overlay/effect uploads, or master diagnostics',
+              ],
+            },
+          ].map(r => (
+            <div key={r.role} style={{
+              background: `${r.accent}06`,
+              border: `1px solid ${r.accent}33`,
+              borderRadius: radius.base,
+              padding: 14,
+              display: 'flex', flexDirection: 'column', gap: 10,
+            }}>
+              <div>
+                <div style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                  letterSpacing: 0.8, color: r.accent, textTransform: 'uppercase',
+                  marginBottom: 4,
+                }}>{r.role}</div>
+                <div style={{ fontSize: 12, color: colors.textSecondary, fontStyle: 'italic', lineHeight: 1.4 }}>
+                  {r.tagline}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, marginBottom: 4 }}>Can:</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.6, color: colors.textSecondary }}>
+                  {r.can.map((c, i) => <li key={i}>{c}</li>)}
+                </ul>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, marginBottom: 4 }}>Can't:</div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.6, color: colors.textMuted }}>
+                  {r.cant.map((c, i) => <li key={i}>{c}</li>)}
+                </ul>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* v4.5.42: Master-admin-only pre-flight checklist for onboarding
+          a new external user. Lives in Resources so it doesn't clutter
+          Settings; gated to master so admins can't see what's expected
+          of them before being onboarded. */}
+      {isMaster && (
+        <Card id="onboard-preflight" style={{ scrollMarginTop: 80 }}>
+          <SectionHeading>Pre-flight: onboard a new admin</SectionHeading>
+          <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 14, lineHeight: 1.55, maxWidth: '70ch' }}>
+            Run through this list once per new admin you bring on. Each item answers a real question that\'s tripped up an onboarding before. Keep it open in a tab while they have their first session.
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, lineHeight: 1.7, color: colors.text }}>
+            <li><strong>Decide the role</strong> — admin (full access bar master tools) or content (production-only). When in doubt, start at content; promote later via People & Roles.</li>
+            <li><strong>Invite from Settings → People &amp; Roles</strong> — paste their email, set role, optionally pin them to a team. Magic-link email sends immediately.</li>
+            <li><strong>Confirm they got the email</strong> — first-time invitations sometimes land in Promotions. Tell them to search "BLW Studio" in their inbox.</li>
+            <li><strong>Watch them land</strong> — first dashboard view shows the one-time welcome card. They\'ll see role + first action ("Open the Studio →"). If the card doesn\'t appear they\'re probably master-tier by mistake — check People & Roles.</li>
+            <li><strong>Verify role gating</strong> — have them click around: Settings should hide People &amp; Roles + bio import + diagnostics; Drive key shows read-only; Studio works fully; Files works fully. Nothing should 401 or 500.</li>
+            <li><strong>Verify Drive sync</strong> — your Drive API key auto-syncs to them on sign-in. Within 60s of their first session they should see overlays + saved folders. If empty, hit Settings → Google Drive → Sync now in your master session.</li>
+            <li><strong>Run a test post together</strong> — a real Studio export + download. Tells you AI endpoints work, file save works, generate-log writes work. Their post lands in the dashboard recent strip.</li>
+            <li><strong>Point them at Resources</strong> — they\'ll find the role permissions reference, FAQ, and how-tos here.</li>
+            <li><strong>Wait a day before granting more</strong> — don\'t bump content → admin until they\'ve been in for 24 hours. Cheap insurance.</li>
+          </ol>
+          <div style={{
+            marginTop: 14, padding: 12, background: colors.bg, borderRadius: radius.base,
+            border: `1px solid ${colors.borderLight}`, fontSize: 12, color: colors.textSecondary, lineHeight: 1.55,
+          }}>
+            <strong style={{ color: colors.text }}>If something\'s off:</strong>{' '}
+            ask the new admin to hard-refresh (⌘⇧R), then check People &amp; Roles to confirm their assigned role + team. Most "I can\'t see X" issues resolve from a refresh + a role/team correction.
+          </div>
+        </Card>
+      )}
 
       {/* Anchor index — quick jump for long pages */}
       <Card>

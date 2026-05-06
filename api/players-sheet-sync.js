@@ -455,6 +455,33 @@ export default async function handler(req, res) {
     if (!/^https?:\/\//i.test(csvUrl)) {
       return res.status(400).json({ error: 'csvUrl must be an http(s) URL' });
     }
+    // v4.5.42 (security audit I5): SSRF host allowlist. Master admin can
+    // only fetch from Google's CSV-export hosts. Without this, a phished
+    // master account could paste e.g. `http://169.254.169.254/...` (AWS
+    // metadata) or any internal URL and the function would dutifully
+    // return its bytes. Allowlist here is tiny because Google Sheets
+    // CSV exports come from exactly two hosts.
+    let parsedHost;
+    try {
+      parsedHost = new URL(csvUrl).hostname.toLowerCase();
+    } catch {
+      return res.status(400).json({ error: 'csvUrl is not a valid URL' });
+    }
+    const ALLOWED_HOSTS = [
+      'docs.google.com',
+      'sheets.googleapis.com',
+    ];
+    const ALLOWED_SUFFIXES = [
+      '.googleusercontent.com', // CSV export sometimes redirects through here
+    ];
+    const allowed = ALLOWED_HOSTS.includes(parsedHost)
+      || ALLOWED_SUFFIXES.some(s => parsedHost.endsWith(s));
+    if (!allowed) {
+      return res.status(400).json({
+        error: 'csvUrl host not allowed',
+        detail: `Only Google Sheets export URLs are accepted. Host "${parsedHost}" is blocked. Publish your sheet to the web (File → Share → Publish to web → Comma-separated values .csv) and paste the resulting docs.google.com URL.`,
+      });
+    }
     inputMode = 'url';
     try {
       const upstream = await fetch(csvUrl, {

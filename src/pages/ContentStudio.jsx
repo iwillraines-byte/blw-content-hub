@@ -342,6 +342,13 @@ export default function ContentStudio() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="Dashboard" subtitle="Draft, design, and track BLW content across every team" />
 
+      {/* v4.5.42: First-run welcome card. Renders once per user, scoped
+          to the staff tier ('admin' / 'content' — not master-admin who
+          built the place, not athletes who land on /my-stats). Dismiss
+          stamp lives in localStorage keyed by user.id so the card
+          stays gone after the first visit. */}
+      <FirstRunWelcomeCard />
+
       {/* Live-state cards — each reflects current state, not just a nav shortcut */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <LiveCard
@@ -778,6 +785,122 @@ export default function ContentStudio() {
 function truncate(str, n) {
   if (!str) return '';
   return str.length <= n ? str : str.slice(0, n - 1) + '…';
+}
+
+// v4.5.42: First-run welcome card for non-master staff. The first time
+// a freshly-onboarded admin or content-tier user lands on the
+// dashboard we show a brief role-aware orientation block — what they
+// can do, where to go first, where to file questions. Dismiss stamp
+// stamps localStorage so it never fires again for that user.
+//
+// Master admin doesn't see this (they built the system). Athletes
+// don't see it because they default-route to /my-stats not the
+// dashboard. The card is purely "you're in, here's the lay of the
+// land" for the people who'll be the bulk of the next 100 users.
+function FirstRunWelcomeCard() {
+  const { user, role, profile } = useAuth();
+  const [dismissed, setDismissed] = useState(true); // start true to avoid flash before localStorage check
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const key = `blw-welcome-dismissed-${user.id}`;
+    setDismissed(!!localStorage.getItem(key));
+  }, [user?.id]);
+
+  // Master-admin built the system; athletes route to /my-stats. Card is
+  // for the new admin / content tier who'll arrive in the wave of 100.
+  if (role !== 'admin' && role !== 'content') return null;
+  if (dismissed) return null;
+  if (!user?.id) return null;
+
+  const dismiss = () => {
+    try { localStorage.setItem(`blw-welcome-dismissed-${user.id}`, String(Date.now())); } catch { /* private mode */ }
+    setDismissed(true);
+  };
+
+  // Role-specific orientation — what they CAN do, framed positively,
+  // with a single concrete first action. Keep this short; the full
+  // permissions reference lives in Resources.
+  const roleCopy = role === 'admin'
+    ? {
+        title: 'Welcome — you\'re in as ADMIN',
+        body: 'You have full access to Studio, Files, Requests, every team page, and player editing — basically everything except Drive API key edits and a handful of master-only diagnostics.',
+        firstStep: { label: 'Open the Studio →', to: '/generate' },
+      }
+    : {
+        title: 'Welcome — you\'re in as CONTENT',
+        body: 'You can browse every team and player, generate posts in the Studio, upload media in Files, and pick up requests. Master-admin tools (People & Roles, trades, raw API inspector) stay hidden — that\'s expected.',
+        firstStep: { label: 'Open the Studio →', to: '/generate' },
+      };
+
+  return (
+    <Card style={{
+      padding: 18,
+      background: `linear-gradient(135deg, ${colors.accent}10 0%, ${colors.accent}04 100%)`,
+      border: `1px solid ${colors.accent}30`,
+      position: 'relative',
+    }}>
+      <button
+        onClick={dismiss}
+        title="Got it — don't show this again"
+        style={{
+          position: 'absolute', top: 10, right: 10,
+          width: 28, height: 28, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.6)', border: `1px solid ${colors.borderLight}`,
+          color: colors.textMuted, cursor: 'pointer',
+          fontSize: 13, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >✕</button>
+      <div style={{
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+        letterSpacing: 0.8, color: colors.accent,
+        textTransform: 'uppercase', marginBottom: 6,
+      }}>NEW HERE · ONE-TIME WELCOME</div>
+      <SectionHeading style={{ margin: 0, marginBottom: 8 }}>{roleCopy.title}</SectionHeading>
+      <p style={{
+        fontSize: 14, lineHeight: 1.6, color: colors.textSecondary,
+        margin: '0 0 14px', maxWidth: '70ch',
+      }}>{roleCopy.body}</p>
+      <p style={{
+        fontSize: 13, lineHeight: 1.6, color: colors.textSecondary,
+        margin: '0 0 14px', maxWidth: '70ch',
+      }}>
+        Stuck on anything? Use{' '}
+        <Link to="/requests" style={{ color: colors.accent, fontWeight: 600 }}>Requests</Link>
+        {' '}to ping the master admin. The full role reference + how-tos live in{' '}
+        <Link to="/resources" style={{ color: colors.accent, fontWeight: 600 }}>Resources</Link>.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Link
+          to={roleCopy.firstStep.to}
+          style={{
+            background: colors.accent, color: '#FFFFFF',
+            padding: '8px 14px', borderRadius: radius.full,
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+            letterSpacing: 0.6, textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}
+        >{roleCopy.firstStep.label}</Link>
+        <Link
+          to="/resources"
+          style={{
+            background: 'transparent', color: colors.textSecondary,
+            padding: '8px 14px', borderRadius: radius.full,
+            border: `1px solid ${colors.border}`,
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+            letterSpacing: 0.5, textDecoration: 'none',
+          }}
+        >Read the Resources →</Link>
+      </div>
+      <div style={{
+        fontSize: 11, color: colors.textMuted, marginTop: 12, fontStyle: 'italic',
+        fontFamily: fonts.body,
+      }}>
+        Signed in as <strong>{profile?.display_name || user?.email}</strong>{profile?.team_id ? ` · team ${profile.team_id}` : ''}.
+      </div>
+    </Card>
+  );
 }
 
 // Single live-state card at the top of the dashboard

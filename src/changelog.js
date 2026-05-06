@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '4.5.42',
+    date: '2026-05-05',
+    kind: 'minor',
+    summary: 'Audit close-out + onboarding prep for external admins',
+    items: [
+      'Winner Sans font installed at /public/fonts/WinnerSans-Bold.otf — the Headline pill now ships at the design intent on first render.',
+      'Headline toggle is now a font picker — six chips (OFF / Winner Sans / Bebas Neue / Press Gothic / United Sans / Gotham / Barlow Cond). Each chip renders its own font so designers can preview before clicking. Active chip fills in the team color.',
+      'Security audit I5: SSRF host allowlist on /api/players-sheet-sync. Master admin can only fetch CSV-export URLs from docs.google.com, sheets.googleapis.com, or *.googleusercontent.com — anywhere else returns a 400 with guidance.',
+      'First-run welcome card on the dashboard for non-master staff (admin / content tier). Shows role + first action ("Open the Studio →") + pointer to Resources. Dismisses to localStorage so it never fires again per user.',
+      'Resources page: new "What each role can do" reference card with concrete CAN / CAN\'T lists for master / admin / content / athlete tiers. Replaces the long-standing placeholder items in Getting started.',
+      'Resources page (master only): new pre-flight checklist for onboarding a new admin — nine-step run-through covering invite, role gating, Drive sync, first test post, and what to do when something\'s off.',
+      'Getting started section now shows real "Jump to the Studio / Files / Requests / role permissions" links instead of "coming soon" placeholders.',
+    ],
+  },
+  {
     version: '4.5.41',
     date: '2026-05-05',
     kind: 'patch',

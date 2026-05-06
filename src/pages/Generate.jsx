@@ -299,16 +299,21 @@ function computeBgCrop(bgImg, w, h, transform) {
 // - bgTransform: { offsetX, offsetY, zoom, brightness, contrast, saturation } —
 //   exposure adjustments are applied via ctx.filter ONLY for the background draw
 //   so overlays + text remain unaffected.
-// v4.5.37: Templates that opt into the "Headline" pill treatment. When
-// the toggle is on, the largest text field on the canvas gets a
-// team-colored rounded-pill background, Winner Sans font, and a soft
-// drop shadow — same visual energy as a TV chyron. Other text fields
-// render unchanged.
+// v4.5.37 / v4.5.42: Templates that opt into the "Headline" pill
+// treatment. When a headline font is selected, the largest text field
+// on the canvas gets a team-colored rounded-pill background, the
+// chosen font, and a soft drop shadow — same visual energy as a TV
+// chyron. Other text fields render unchanged.
+//
+// v4.5.42: the toggle was originally Winner-Sans-only (boolean on/off);
+// now it accepts ANY font key from FONT_MAP. State is `headlineFont`
+// — null/undefined = OFF, a font key = ON with that face. Lets the
+// designer match the headline face to the post mood.
 const HEADLINE_TOGGLE_TEMPLATES = new Set(['blank-slate', 'highlight', 'batting-leaders']);
 
 function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
-  const { hiddenFields, forExport, bgTransform, statCard, headlineMode, templateType } = options;
-  const headlineEnabled = !!headlineMode && HEADLINE_TOGGLE_TEMPLATES.has(templateType);
+  const { hiddenFields, forExport, bgTransform, statCard, headlineFont, templateType } = options;
+  const headlineEnabled = !!headlineFont && HEADLINE_TOGGLE_TEMPLATES.has(templateType);
   // The "headline" is whichever rendered field has the largest fontSize.
   // Computed once so each field's draw block can decide if it's the one.
   const headlineKey = headlineEnabled && fieldConfig
@@ -413,7 +418,11 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
       // White-on-team-color reads at every photo brightness, with a
       // subtle dark shadow under the pill for separation from the bg.
       const isHeadlinePill = headlineEnabled && f.key === headlineKey && hasValue;
-      const fontKey = isHeadlinePill ? 'winner' : f.font;
+      // v4.5.42: pill renders in whichever font the user picked from
+      // the headline font picker (winner / heading / press / united /
+      // gotham / etc). Falls back to the field's own font if the key
+      // is unknown so we never render in default-serif.
+      const fontKey = isHeadlinePill ? headlineFont : f.font;
       ctx.fillStyle = isHeadlinePill ? '#FFFFFF' : (f.color || '#FFFFFF');
       ctx.font = `${f.fontSize}px ${FONT_MAP[fontKey] || FONT_MAP.body}`;
       ctx.textAlign = f.align || 'center';
@@ -610,11 +619,12 @@ export default function Generate() {
     }
   }, [searchParams]);
 
-  // v4.5.37: "Headline" pill toggle. When on, the largest visible text
-  // field on Blank Slate / Highlight / Stat Leader templates renders in
-  // Winner Sans inside a team-colored rounded rectangle with a soft
-  // drop shadow — like a TV chyron.
-  const [headlineMode, setHeadlineMode] = useState(false);
+  // v4.5.37 / v4.5.42: Headline pill picker. State is the FONT_MAP key
+  // for the picked face, or null when off. Defaulting to null keeps
+  // backward-compatible behavior (no pill) — flipping a chip in the
+  // UI sets it to that font and re-renders. The five-chip picker
+  // lives in the Custom-mode controls (see HEADLINE_FONT_CHOICES).
+  const [headlineFont, setHeadlineFont] = useState(null);
 
   // Effects state
   const [activeEffects, setActiveEffects] = useState([]); // [{ id, type: 'builtin'|'upload', opacity, builtin?, image? }]
@@ -904,8 +914,8 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption, headlineMode, templateType: customType });
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption, headlineMode]);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption, headlineFont, templateType: customType });
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption, headlineFont]);
 
   // Per-input render — exactly the same shape as before the local-fonts
   // change. Two reasons not to await fonts here: (1) rebinding inside a
@@ -959,7 +969,7 @@ export default function Generate() {
       renderCustomTemplate(
         ectx, customPlat.w, customPlat.h, bgImg, overlayImg,
         customFields, fieldConfig, activeEffects, customTeamObj,
-        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineMode, templateType: customType },
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType },
       );
     } else {
       // Standard 1× — re-render the visible canvas without placeholders.
@@ -967,7 +977,7 @@ export default function Generate() {
       renderCustomTemplate(
         ctx, customPlat.w, customPlat.h, bgImg, overlayImg,
         customFields, fieldConfig, activeEffects, customTeamObj,
-        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineMode, templateType: customType },
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType },
       );
       exportCanvas = previewCanvas;
     }
@@ -1377,7 +1387,7 @@ export default function Generate() {
       <Label>Template Type</Label>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
-          <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(defaultHiddenFieldsFor(key, customPlatform)); setSelectedOverlayId(null); setOverlayImg(null); setHeadlineMode(false); }} style={{
+          <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(defaultHiddenFieldsFor(key, customPlatform)); setSelectedOverlayId(null); setOverlayImg(null); setHeadlineFont(null); }} style={{
             background: customType === key ? colors.accentSoft : colors.white,
             border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
             color: customType === key ? colors.accent : colors.textSecondary,
@@ -1773,38 +1783,56 @@ export default function Generate() {
                 </Card>
               )}
 
-              {/* v4.5.37: Headline toggle — only shown for templates
-                  that opt into the pill treatment. Switches the largest
-                  visible text field to Winner Sans inside a
-                  team-colored rounded rectangle with a soft drop
-                  shadow. Live preview updates the moment the toggle
-                  flips. */}
+              {/* v4.5.37 / v4.5.42: Headline picker — six chips
+                  (OFF + five display fonts). Click a font to wrap the
+                  largest visible text field in a team-colored pill
+                  rendered in that face with a soft drop shadow. Click
+                  the active chip again (or "OFF") to remove the pill.
+                  Live preview updates the moment the chip flips —
+                  every face renders from the local-fonts pipeline so
+                  there's no fallback flash on first paint. */}
               {HEADLINE_TOGGLE_TEMPLATES.has(customType) && (
                 <Card>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1 1 220px', minWidth: 200 }}>
-                      <Label style={{ marginBottom: 4 }}>Headline treatment</Label>
-                      <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, lineHeight: 1.45, fontStyle: 'italic' }}>
-                        Wraps the title in a team-colored pill in Winner Sans — TV-chyron energy. Other text stays untouched.
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setHeadlineMode(v => !v)}
-                      style={{
-                        background: headlineMode ? (customTeamObj?.color || colors.accent) : colors.white,
-                        color: headlineMode ? '#FFFFFF' : colors.textSecondary,
-                        border: `1px solid ${headlineMode ? (customTeamObj?.color || colors.accent) : colors.border}`,
-                        borderRadius: radius.full,
-                        padding: '8px 16px',
-                        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-                        letterSpacing: 0.6, cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        boxShadow: headlineMode ? '0 4px 10px rgba(15,23,42,0.18)' : 'none',
-                        transition: 'background 160ms ease, color 160ms ease',
-                      }}
-                    >
-                      {headlineMode ? 'HEADLINE: ON' : 'HEADLINE: OFF'}
-                    </button>
+                  <Label style={{ marginBottom: 4 }}>Headline treatment</Label>
+                  <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, lineHeight: 1.45, fontStyle: 'italic', marginBottom: 12 }}>
+                    Wraps the title in a team-colored pill — TV-chyron energy. Pick a font to enable, click again or hit OFF to remove.
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {[
+                      { key: null,       label: 'OFF',          familyPreview: null },
+                      { key: 'winner',   label: 'Winner Sans',  familyPreview: FONT_MAP.winner },
+                      { key: 'heading',  label: 'Bebas Neue',   familyPreview: FONT_MAP.heading },
+                      { key: 'press',    label: 'Press Gothic', familyPreview: FONT_MAP.press },
+                      { key: 'united',   label: 'United Sans',  familyPreview: FONT_MAP.united },
+                      { key: 'gotham',   label: 'Gotham',       familyPreview: FONT_MAP.gotham },
+                      { key: 'condensed',label: 'Barlow Cond',  familyPreview: FONT_MAP.condensed },
+                    ].map(opt => {
+                      const active = headlineFont === opt.key;
+                      const isOff = opt.key === null;
+                      return (
+                        <button
+                          key={opt.label}
+                          onClick={() => setHeadlineFont(opt.key)}
+                          style={{
+                            background: active ? (customTeamObj?.color || colors.accent) : colors.white,
+                            color: active ? '#FFFFFF' : colors.textSecondary,
+                            border: `1px solid ${active ? (customTeamObj?.color || colors.accent) : colors.border}`,
+                            borderRadius: radius.full,
+                            padding: '6px 14px',
+                            fontFamily: opt.familyPreview || fonts.condensed,
+                            fontSize: isOff ? 11 : 13, fontWeight: 700,
+                            letterSpacing: isOff ? 0.6 : 0.3,
+                            textTransform: isOff ? 'uppercase' : 'none',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            boxShadow: active ? '0 4px 10px rgba(15,23,42,0.18)' : 'none',
+                            transition: 'background 160ms ease, color 160ms ease, border-color 160ms ease',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </Card>
               )}
