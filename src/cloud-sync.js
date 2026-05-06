@@ -587,17 +587,31 @@ export async function setGenerateLogPosted(id, posted) {
 // (dashboard "Recent posts", team page carousel, player page assets).
 // The row stays in the database (and stays visible to master admin via
 // includeHidden=1 in the cloud-side filter) so a hide is reversible.
+//
+// v4.5.40: returns { ok, error?, detail? } instead of a bare boolean
+// so the caller can surface the server's guidance (e.g. "run db/011
+// migration") in the toast detail line. Old `if (ok)` callers still
+// work because the truthy check on the object itself returns true —
+// destructure to access fields.
 export async function setGenerateLogHidden(id, hidden) {
-  if (!supabaseConfigured || !id) return false;
+  if (!supabaseConfigured || !id) return { ok: false, error: 'Supabase not configured' };
   try {
     const res = await authedFetch('/api/cloud-sync', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ kind: 'generate-log', id, fields: { hidden: !!hidden } }),
     });
-    return res.ok;
-  } catch {
-    return false;
+    if (res.ok) return { ok: true };
+    let body = null;
+    try { body = await res.json(); } catch { /* non-json response */ }
+    return {
+      ok: false,
+      status: res.status,
+      error: body?.error || `HTTP ${res.status}`,
+      detail: body?.detail || null,
+    };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Network error' };
   }
 }
 

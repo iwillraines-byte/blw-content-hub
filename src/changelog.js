@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '4.5.40',
+    date: '2026-05-05',
+    kind: 'patch',
+    summary: 'Hide-post error now names the missing migration',
+    items: [
+      'When clicking ✕ on a post fails because the db/011 migration hasn\'t been applied, the toast now says "Schema migration required — run db/011_generate_log_hidden.sql in the Supabase SQL editor" instead of the generic "server rejected the change." Server returns 412 Precondition Failed with the migration path embedded; client surfaces the detail directly.',
+    ],
+  },
+  {
     version: '4.5.39',
     date: '2026-05-05',
     kind: 'patch',

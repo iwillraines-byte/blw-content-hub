@@ -331,12 +331,25 @@ export default async function handler(req, res) {
       // retry. Mirrors the upsert tolerance pattern used elsewhere in
       // this file. Caps at 4 retries so a malformed payload can't
       // hot-loop.
+      //
+      // v4.5.40: If the only requested patch column doesn't exist
+      // (e.g. the user clicked "hide post" but the db/011 migration
+      // was never applied), DON'T fall through to the generic 500 —
+      // return a 412 Precondition Failed with a clear message naming
+      // the missing column + migration file. The client maps this to
+      // a help-text toast so the master admin sees exactly what to
+      // run instead of "server rejected the change."
       let attempt = { ...payload };
       let lastErr = null;
+      const stripped = [];
       for (let i = 0; i < 4; i++) {
         const { error } = await sb.from(pTable).update(attempt).eq('id', id);
         if (!error) {
-          res.status(200).json({ ok: true, patched: attempt });
+          res.status(200).json({
+            ok: true,
+            patched: attempt,
+            ...(stripped.length ? { strippedColumns: stripped } : {}),
+          });
           return;
         }
         lastErr = error;
@@ -345,8 +358,26 @@ export default async function handler(req, res) {
         if (!m) break;
         const col = m[1];
         if (!(col in attempt)) break;
+        stripped.push(col);
         delete attempt[col];
-        if (Object.keys(attempt).length === 0) break;
+        if (Object.keys(attempt).length === 0) {
+          // Every requested column is missing from the live schema.
+          // Tell the user which migration to run rather than 500'ing.
+          const MIGRATIONS_FOR_COLUMN = {
+            hidden: 'db/011_generate_log_hidden.sql',
+          };
+          const guidance = stripped
+            .map(c => MIGRATIONS_FOR_COLUMN[c]
+              ? `${c} → run ${MIGRATIONS_FOR_COLUMN[c]} in the Supabase SQL editor`
+              : `${c} → column missing on the live schema`)
+            .join('; ');
+          res.status(412).json({
+            error: 'Schema migration required',
+            detail: guidance || `Columns missing: ${stripped.join(', ')}`,
+            missingColumns: stripped,
+          });
+          return;
+        }
       }
       throw lastErr || new Error('patch failed');
     } catch (err) {

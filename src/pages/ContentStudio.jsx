@@ -748,12 +748,23 @@ export default function ContentStudio() {
           // v4.5.37: master-admin only — server PATCH sets hidden=true,
           // local state drops the post immediately so the strip
           // reflects the change without a re-fetch round trip.
-          setGenerateLogHidden(id, true).then(ok => {
-            if (ok) {
+          // v4.5.40: surface the server's actual error detail (e.g.
+          // "run db/011 migration") in the toast so the master admin
+          // knows exactly what to do instead of seeing a generic
+          // "server rejected the change."
+          setGenerateLogHidden(id, true).then(result => {
+            if (result.ok) {
               setRecentPosts(list => list.filter(p => p.id !== id));
               toast.success('Post hidden', { detail: 'Removed from public feeds across the app.' });
+            } else if (result.status === 412) {
+              // Schema migration needed — be specific.
+              toast.error('Schema migration required', {
+                detail: result.detail || 'Run db/011_generate_log_hidden.sql in the Supabase SQL editor.',
+              });
             } else {
-              toast.error('Couldn\'t hide post', { detail: 'Try again — server rejected the change.' });
+              toast.error('Couldn\'t hide post', {
+                detail: result.detail || result.error || 'Try again — server rejected the change.',
+              });
             }
           });
         }}
