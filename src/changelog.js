@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.5.49',
+    date: '2026-05-06',
+    kind: 'minor',
+    summary: 'Cross-device hydration — close the local/cloud gap',
+    items: [
+      'Bug: refreshFromCloud silently dropped any record whose blob fetch failed during hydration. The cloud row existed but the local IDB had no entry — getAllMedia() under-reported by however many blobs the network couldn\'t reach. Result: signing into a fresh device showed 188/340 files; another device showed 256/340. Fixed by ALWAYS writing the metadata row to IDB; missing blobs are flagged with cloudBlobMissing: true so the UI can surface a retry.',
+      'Hydrate now downloads blobs in parallel batches of 8 instead of sequentially. A 340-blob hydrate at sequential speeds took ~70s — long enough for users to navigate away and leave a partial state. Concurrency 8 finishes the same hydrate in under 10s on a normal connection.',
+      'New gap banner on the Files page: when local IDB count < cloud media count, a yellow callout shows "N files in cloud not yet on this device · Local 256 · Cloud 340" with a one-click "↻ Sync N from cloud" button. Newly-signed-in admins see exactly what to do, no scrolling required.',
+      'Refresh report rewritten to show the actual gap: "Media: 340 records · +84 new blobs · 12 still missing" with a hint to retry. Replaces the old "Media +0" message that hid silent failures.',
+      'Same fixes apply to overlay + effect hydration (same hydrateBlobKind path).',
+    ],
+  },
+  {
     version: '4.5.48',
     date: '2026-05-06',
     kind: 'patch',

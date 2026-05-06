@@ -251,42 +251,89 @@ export async function refreshFromCloud({ force = false } = {}) {
 
   // Binary kinds — fetch metadata, then download any blobs we don't already
   // have (keyed by id) so we don't re-pull images on every page load.
+  //
+  // v4.5.49: two correctness fixes + one perf fix.
+  //   1. NEVER skip the IDB metadata write on blob-download failure.
+  //      Pre-fix: a failed fetch did `continue` and the entire record
+  //      was dropped — cloud row existed but local IDB had nothing,
+  //      so getAllMedia() under-reported by however many blobs the
+  //      hydrate-time fetch couldn't reach. Now the metadata always
+  //      lands in IDB with `cloudBlobMissing: true` so the UI knows
+  //      it exists and can offer a retry. Counts now reconcile.
+  //   2. Surface the missing-blob count in the report so the Files
+  //      page can show "256/340 hydrated, 84 blobs failed — retry".
+  //   3. Blob downloads run in parallel batches of 8 instead of
+  //      sequentially. A 340-blob hydrate at sequential 200ms each
+  //      took ~70s — long enough for users to navigate away. Eight
+  //      concurrent gets it under 10s on a normal connection.
   async function hydrateBlobKind({ kind, store, mapper }) {
+    const reportKey = kind === 'manual-player' ? 'manualPlayers'
+      : kind === 'overlay' ? 'overlays'
+      : kind === 'effect' ? 'effects'
+      : 'media';
     try {
       const rows = await fetchKind(kind);
-      report[kind === 'manual-player' ? 'manualPlayers' : (kind === 'overlay' ? 'overlays' : kind === 'effect' ? 'effects' : 'media')].fetched = rows.length;
+      report[reportKey].fetched = rows.length;
+      report[reportKey].blobsMissing = 0;
+
+      // Step 1 — synchronously stage every record into IDB with
+      // metadata + (for existing rows) the existing blob. This guarantees
+      // that even if blob downloads fail later, the metadata count is
+      // correct. Records without blobs get cloudBlobMissing: true so
+      // the UI can flag them.
+      const needsBlob = []; // [{ row, mapped }]
       for (const r of rows) {
         const mapped = mapper(r);
         const existing = await idbGet(store, r.id).catch(() => null);
-        const needBlob = !existing?.blob && !existing?.imageBlob;
-        if (needBlob && r.signedUrl) {
+        const hasExistingBlob = !!(existing?.blob || existing?.imageBlob);
+        if (hasExistingBlob) {
+          if (store === 'media') mapped.blob = existing.blob;
+          else mapped.imageBlob = existing.imageBlob;
+          mapped.cloudBlobMissing = false;
+          await idbPut(store, mapped).catch(err => report[reportKey].errors.push({ id: r.id, error: err.message }));
+        } else if (r.signedUrl) {
+          // Stage metadata-only record now; blob downloads in step 2.
+          mapped.cloudBlobMissing = true;
+          await idbPut(store, mapped).catch(err => report[reportKey].errors.push({ id: r.id, error: err.message }));
+          needsBlob.push({ r, mapped });
+        } else {
+          // No signed URL — can't fetch the blob. Write metadata anyway.
+          mapped.cloudBlobMissing = true;
+          await idbPut(store, mapped).catch(err => report[reportKey].errors.push({ id: r.id, error: err.message }));
+          report[reportKey].blobsMissing++;
+        }
+      }
+
+      // Step 2 — parallel-batched blob download. Concurrency 8: low
+      // enough not to thrash the connection, high enough that a 340-
+      // blob hydrate finishes in seconds. Each successful download
+      // re-puts the record with the blob attached + cloudBlobMissing
+      // cleared.
+      const CONCURRENCY = 8;
+      let cursor = 0;
+      async function worker() {
+        while (cursor < needsBlob.length) {
+          const idx = cursor++;
+          const { r, mapped } = needsBlob[idx];
           try {
             const blob = await blobFromSignedUrl(r.signedUrl);
             if (store === 'media') mapped.blob = blob;
             else mapped.imageBlob = blob;
-            const key = kind === 'overlay' ? 'overlays' : kind === 'effect' ? 'effects' : 'media';
-            report[key].newBlobs++;
+            mapped.cloudBlobMissing = false;
+            await idbPut(store, mapped).catch(err => report[reportKey].errors.push({ id: r.id, error: err.message }));
+            report[reportKey].newBlobs++;
           } catch (err) {
-            const key = kind === 'overlay' ? 'overlays' : kind === 'effect' ? 'effects' : 'media';
-            report[key].errors.push({ id: r.id, error: err.message });
-            continue; // skip IDB write without a blob
+            // Metadata is already in IDB with cloudBlobMissing: true.
+            // Just log the error so the report can surface it.
+            report[reportKey].errors.push({ id: r.id, error: err.message });
+            report[reportKey].blobsMissing++;
           }
-        } else if (existing) {
-          // Preserve existing blob, merge metadata from cloud.
-          if (store === 'media') mapped.blob = existing.blob;
-          else mapped.imageBlob = existing.imageBlob;
-        } else {
-          // No blob available anywhere — still mirror metadata so the UI
-          // knows about the record. Pages handle blob-less records gracefully.
         }
-        await idbPut(store, mapped).catch(err => {
-          const key = kind === 'overlay' ? 'overlays' : kind === 'effect' ? 'effects' : 'media';
-          report[key].errors.push({ id: r.id, error: err.message });
-        });
       }
+      const workers = Array.from({ length: Math.min(CONCURRENCY, needsBlob.length) }, () => worker());
+      await Promise.all(workers);
     } catch (err) {
-      const key = kind === 'overlay' ? 'overlays' : kind === 'effect' ? 'effects' : 'media';
-      report[key].errors.push({ error: err.message });
+      report[reportKey].errors.push({ error: err.message });
     }
   }
 

@@ -1453,8 +1453,36 @@ export default function Files() {
               {refreshing ? '↻ Refreshing…' : '↻ Refresh from cloud'}
             </OutlineButton>
             {refreshReport && !refreshReport.error && (
-              <div style={{ fontSize: 10, color: '#075985', fontFamily: fonts.condensed, textAlign: 'center' }}>
-                Media +{refreshReport.media?.newBlobs || 0} · Requests {refreshReport.requests?.fetched || 0}
+              <div style={{ fontSize: 11, color: '#075985', fontFamily: fonts.condensed, textAlign: 'center', lineHeight: 1.5 }}>
+                {/* v4.5.49: detailed refresh outcome — fetched count
+                    + newly-downloaded blobs + blobs that failed to
+                    fetch. The previous "Media +0" toast told the user
+                    nothing about the gap. Now they see "fetched 340 ·
+                    +84 blobs · 0 missing" or "fetched 340 · +84 blobs
+                    · 12 STILL MISSING" with a retry suggestion. */}
+                <div>
+                  Media: <strong>{refreshReport.media?.fetched || 0}</strong> records
+                  {' · '}+{refreshReport.media?.newBlobs || 0} new blobs
+                  {refreshReport.media?.blobsMissing > 0 && (
+                    <span style={{ color: '#92400E', fontWeight: 700 }}>
+                      {' · '}{refreshReport.media.blobsMissing} blobs still missing
+                    </span>
+                  )}
+                </div>
+                <div style={{ marginTop: 2 }}>
+                  Overlays: <strong>{refreshReport.overlays?.fetched || 0}</strong>
+                  {' · '}+{refreshReport.overlays?.newBlobs || 0} new
+                  {refreshReport.overlays?.blobsMissing > 0 && (
+                    <span style={{ color: '#92400E', fontWeight: 700 }}>
+                      {' · '}{refreshReport.overlays.blobsMissing} missing
+                    </span>
+                  )}
+                </div>
+                {(refreshReport.media?.blobsMissing > 0 || refreshReport.overlays?.blobsMissing > 0) && (
+                  <div style={{ marginTop: 4, fontStyle: 'italic', opacity: 0.85 }}>
+                    Click ↻ again to retry the missing blobs.
+                  </div>
+                )}
               </div>
             )}
             {refreshReport?.error && (
@@ -1482,6 +1510,52 @@ export default function Files() {
           </div>
         </Card>
       )}
+
+      {/* v4.5.49: Local/cloud gap banner. When the cloud has more
+          files than this browser does, the master/admin sees a
+          loud-but-friendly callout explaining what happened and how
+          to fix it. Triggers when storedMedia.length < cloud media
+          count (from /api/cloud-usage `tables.media.rows` or
+          `storage.media.count`). One click runs the same refresh as
+          the button below — but it's surfaced front-and-center so a
+          newly-signed-in admin doesn't have to scroll to find it. */}
+      {(() => {
+        if (!supabaseConfigured || !usage || usage.error) return null;
+        const cloudMediaCount = usage.tables?.media?.rows ?? usage.storage?.media?.count ?? null;
+        if (cloudMediaCount == null) return null;
+        const localCount = storedMedia.length;
+        const gap = cloudMediaCount - localCount;
+        if (gap <= 0) return null;
+        const blobMissingCount = storedMedia.filter(m => m.cloudBlobMissing).length;
+        return (
+          <Card style={{
+            border: `1px solid rgba(245,158,11,0.5)`,
+            background: 'rgba(245,158,11,0.10)',
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+          }}>
+            <div style={{ fontSize: 22, lineHeight: 1 }}>📥</div>
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ fontFamily: fonts.body, fontSize: 14, fontWeight: 700, color: '#92400E', marginBottom: 2 }}>
+                {gap} file{gap === 1 ? '' : 's'} in cloud not yet on this device
+              </div>
+              <div style={{ fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                Local: <strong>{localCount}</strong> · Cloud: <strong>{cloudMediaCount}</strong>.
+                {blobMissingCount > 0 && (
+                  <> {blobMissingCount} record{blobMissingCount === 1 ? '' : 's'} {blobMissingCount === 1 ? 'has' : 'have'} metadata but the image blob didn\'t download — usually a transient network issue, retry-able.</>
+                )}
+                {' '}Hit Sync to pull the rest down.
+              </div>
+            </div>
+            <RedButton
+              onClick={runRefresh}
+              disabled={refreshing}
+              style={{ padding: '8px 16px', fontSize: 12, whiteSpace: 'nowrap' }}
+            >
+              {refreshing ? '↻ Syncing…' : `↻ Sync ${gap} from cloud`}
+            </RedButton>
+          </Card>
+        );
+      })()}
 
       {/* Upload Zone — drop zone + bulk import side by side. The grid
           uses `align-items: stretch` so both children fill the row
