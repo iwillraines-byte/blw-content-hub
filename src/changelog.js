@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.53',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'Bulk importer: per-file cloud-sync visibility + retry',
+    items: [
+      'saveMedia now AWAITS the cloud sync inline and stamps cloudSyncedAt (or cloudSyncError) on every record before returning. Mirrors the v4.5.46 fix for overlays/effects. Pre-fix, fire-and-forget cloud sync silently dropped failures so a 50-file bulk import could leave a dozen records stuck local-only with no UI signal.',
+      'Bulk importer Done screen now shows the actual cloud-sync split: "✓ All 50 synced to cloud" (green) or "30 synced · 20 stuck local-only" (amber). Lists the first three error reasons inline so you can tell at a glance whether it\'s a payload-too-large issue, an auth issue, or a transient network blip.',
+      'New resyncMedia(id) and resyncAllLocalOnlyMedia() helpers — same shape as the overlay equivalents — for retrying stuck media records.',
+      'Cloud-pulled records get cloudSyncedAt stamped at row→record conversion so other devices\' UI doesn\'t flag them as local-only.',
+    ],
+  },
+  {
     version: '4.5.52',
     date: '2026-05-06',
     kind: 'patch',

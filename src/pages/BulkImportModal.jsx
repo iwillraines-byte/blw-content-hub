@@ -1066,14 +1066,48 @@ function ResultsBody({ results, onClose }) {
     : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB`
     : n < 1024 ** 3 ? `${(n / (1024 ** 2)).toFixed(1)} MB`
     : `${(n / (1024 ** 3)).toFixed(2)} GB`;
+  // v4.5.53: cloud-sync split. saveMedia now stamps cloudSyncedAt on
+  // each returned record; we tally how many actually reached the
+  // cloud vs. how many are stuck local-only. Replaces the silent
+  // "imported X" message that hid every silent failure since launch.
+  const cloudSynced = (results.records || []).filter(r => r?.cloudSyncedAt).length;
+  const localOnly = results.ok - cloudSynced;
+  const sampleErrs = (results.records || [])
+    .filter(r => r?.cloudSyncError)
+    .slice(0, 3)
+    .map(r => `${r.name}: ${r.cloudSyncError}`);
   return (
     <div style={{ padding: 30, textAlign: 'center' }}>
-      <div style={{ fontSize: 38, marginBottom: 8 }}>{results.fail === 0 ? '✓' : '⚠'}</div>
+      <div style={{ fontSize: 38, marginBottom: 8 }}>
+        {results.fail === 0 && localOnly === 0 ? '✓' : '⚠'}
+      </div>
       <div style={{ fontFamily: fonts.heading, fontSize: 18, marginBottom: 6 }}>
         Imported {results.ok} {results.ok === 1 ? 'file' : 'files'}
       </div>
       <div style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 1.6 }}>
-        {results.fail > 0 && <div style={{ color: '#92400E' }}>{results.fail} failed (missing team/lastname tags)</div>}
+        {/* Cloud-sync split — green when everything reached the
+            cloud, amber when some are stuck local-only. */}
+        {results.ok > 0 && (
+          <div style={{
+            color: localOnly === 0 ? '#15803D' : '#92400E', fontWeight: 600, marginTop: 4,
+          }}>
+            {localOnly === 0
+              ? `✓ All ${cloudSynced} synced to cloud — visible to other admins`
+              : `${cloudSynced} synced · ${localOnly} stuck local-only`}
+          </div>
+        )}
+        {localOnly > 0 && (
+          <div style={{ fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>
+            Local-only files appear on this device but won\'t reach other admins until you
+            click <strong>↻ Refresh from cloud</strong> on Files (or use the sync banner).
+            {sampleErrs.length > 0 && (
+              <div style={{ marginTop: 4, color: '#92400E' }}>
+                Recent errors: {sampleErrs.join(' · ')}
+              </div>
+            )}
+          </div>
+        )}
+        {results.fail > 0 && <div style={{ color: '#92400E', marginTop: 4 }}>{results.fail} skipped (missing team/lastname tags)</div>}
         {results.skipped > 0 && <div>{results.skipped} skipped by you</div>}
         {results.savedBytes > 0 && <div>Compression saved <strong>{fmt(results.savedBytes)}</strong> of storage</div>}
       </div>

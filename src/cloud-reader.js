@@ -78,6 +78,10 @@ function rowToMedia(r) {
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
     mimeType: r.mime_type || null,
     sizeBytes: r.size_bytes || null,
+    // v4.5.53: anything pulled from the cloud is — by definition —
+    // already in the cloud. Same pattern as v4.5.46 overlay/effect.
+    cloudSyncedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    cloudSyncError: null,
     // blob filled in by fetchBlobFromSignedUrl
   };
 }

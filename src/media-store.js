@@ -15,7 +15,7 @@
 // They have no team affiliation, so they show up across every team's
 // surfaces and live in a "League photos" bucket on the Files page.
 
-import { cloud } from './cloud-sync';
+import { cloud, cloudAwait } from './cloud-sync';
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Must match overlay-store.js
@@ -204,6 +204,17 @@ function openDB() {
   });
 }
 
+// v4.5.53: saveMedia now AWAITS the cloud sync inline and stamps
+// `cloudSyncedAt` (or `cloudSyncError`) on the record before
+// returning. Pre-fix it was fire-and-forget — mirroring the same
+// silent-failure pattern that bit overlays/effects in v4.5.46. The
+// bulk importer's done screen can now report exactly how many of
+// the imported files made it to the cloud, and per-file failures
+// are retry-able via resyncMedia().
+//
+// Contract: returns the local record. Inspect `record.cloudSyncedAt`
+// (truthy = visible to other admins) and `record.cloudSyncError`
+// (truthy = stuck local, retry-able) to know what really happened.
 export async function saveMedia({ name, blob, width, height, driveFileId, source }) {
   const db = await openDB();
   const id = crypto.randomUUID();
@@ -221,14 +232,84 @@ export async function saveMedia({ name, blob, width, height, driveFileId, source
     createdAt: Date.now(),
     driveFileId: driveFileId || null,
     source: source || 'local',
+    cloudSyncedAt: null,
+    cloudSyncError: null,
   };
 
-  return new Promise((resolve, reject) => {
+  // 1) Always stash to IndexedDB first. Local-only is still a valid
+  //    end-state — we never lose the user's work just because the
+  //    cloud round-trip failed.
+  await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(record);
-    tx.oncomplete = () => { cloud.syncMedia(record); resolve(record); };
+    tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+
+  // 2) Push to cloud, mutate the record + IDB with the outcome.
+  await syncMediaRecordToCloud(record);
+  return record;
+}
+
+// Internal — push a single media record to the cloud, stamp the
+// outcome on the record, persist back to IndexedDB. Used by saveMedia
+// (initial upload) and resyncMedia (manual retry).
+async function syncMediaRecordToCloud(record) {
+  let result;
+  try {
+    result = await cloudAwait.syncMedia(record);
+  } catch (err) {
+    result = { ok: false, error: err?.message || 'sync threw' };
+  }
+  if (result?.ok) {
+    record.cloudSyncedAt = Date.now();
+    record.cloudSyncError = null;
+  } else {
+    record.cloudSyncedAt = null;
+    record.cloudSyncError = result?.error || result?.detail || `sync failed (status ${result?.status || '?'})`;
+  }
+  try {
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(record);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* in-memory at minimum */ }
+  return result;
+}
+
+// v4.5.53: manual retry for one media record by id. Returns the
+// updated record (or null if not found locally).
+export async function resyncMedia(id) {
+  const db = await openDB();
+  const record = await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).get(id);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  if (!record) return null;
+  await syncMediaRecordToCloud(record);
+  return record;
+}
+
+// v4.5.53: bulk recovery for media. Walks every locally-stored media
+// record and re-syncs anything missing cloudSyncedAt. Sequential by
+// design so a flaky network on one record doesn't take down the
+// rest. Returns a summary the caller can surface in a toast.
+export async function resyncAllLocalOnlyMedia() {
+  const all = await getAllMedia();
+  const localOnly = all.filter(m => !m.cloudSyncedAt && m.blob);
+  let synced = 0, failed = 0;
+  const errors = [];
+  for (const record of localOnly) {
+    const result = await syncMediaRecordToCloud(record);
+    if (result?.ok) synced++;
+    else { failed++; errors.push({ id: record.id, name: record.name, error: record.cloudSyncError }); }
+  }
+  return { total: localOnly.length, synced, failed, errors };
 }
 
 export async function getAllMedia() {
