@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.52',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'Hotfix: AI endpoints (ideas/captions/auto-tag) were 401-ing',
+    items: [
+      'v4.5.37 added requireUser() to /api/ideas, /api/captions, and /api/auto-tag — but the FIVE client callsites were still using plain fetch() without the Authorization header. Every AI call (idea generation, caption drafts, auto-tag) has been silently 401-ing since v4.5.37 shipped.',
+      'All callsites now use authedFetch which attaches the Supabase session JWT: src/auto-tag-api.js (1 site), src/idea-card.jsx (2 sites — draft + regenerate), src/pages/ContentStudio.jsx (1 site), src/pages/PlayerPage.jsx (1 site).',
+      'AI features should work end-to-end immediately on next page load.',
+    ],
+  },
+  {
     version: '4.5.51',
     date: '2026-05-06',
     kind: 'patch',

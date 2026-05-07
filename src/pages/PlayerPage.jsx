@@ -13,7 +13,7 @@ import { useAuth, isStaffRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
 import { formatPostName } from '../template-config';
-import { authedJson } from '../authed-fetch';
+import { authedJson, authedFetch } from '../authed-fetch';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
 import { useLeagueContext } from '../league-context';
 import IdeaCard from '../idea-card';
@@ -1659,7 +1659,9 @@ export default function PlayerPage() {
     if (!player || !team) return;
     setGeneratingIdea(true);
     try {
-      const res = await fetch('/api/ideas', {
+      // v4.5.52: was plain fetch — broke after v4.5.37 added requireUser
+      // to /api/ideas. authedFetch attaches the JWT.
+      const res = await authedFetch('/api/ideas', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

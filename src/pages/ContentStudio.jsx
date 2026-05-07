@@ -14,6 +14,7 @@ import { useToast } from '../toast';
 import { fetchRecentGenerates, setGenerateLogHidden } from '../cloud-sync';
 import { useAuth } from '../auth';
 import { formatPostName } from '../template-config';
+import { authedFetch } from '../authed-fetch';
 import IdeaCard from '../idea-card';
 import { Pager, useIdeaPagination, IDEAS_PAGE_SIZE } from '../idea-pager';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
@@ -162,7 +163,9 @@ export default function ContentStudio() {
     setIdeasLoading(true);
     setIdeasError(null);
     try {
-      const res = await fetch('/api/ideas', {
+      // v4.5.52: was plain fetch — broke after v4.5.37 added requireUser
+      // to /api/ideas. authedFetch attaches the JWT.
+      const res = await authedFetch('/api/ideas', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

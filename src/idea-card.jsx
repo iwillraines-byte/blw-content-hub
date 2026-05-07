@@ -26,6 +26,7 @@ import { getTeam } from './data';
 import { TeamChip } from './components';
 import { colors, fonts, radius } from './theme';
 import { useToast } from './toast';
+import { authedFetch } from './authed-fetch';
 
 // Angle taxonomy matches the menu in api/ideas.js — every angle a new
 // idea ships with should fall into one of these. Legacy angles from
@@ -114,7 +115,9 @@ export default function IdeaCard({
   const draftCaptions = async () => {
     setDraftingCaptions(true);
     try {
-      const res = await fetch('/api/captions', {
+      // v4.5.52: was plain fetch — broke after v4.5.37 added requireUser
+      // to /api/captions. authedFetch attaches the JWT.
+      const res = await authedFetch('/api/captions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ idea, leagueContext, athleteVoice }),
@@ -134,7 +137,8 @@ export default function IdeaCard({
   const regeneratePlatform = async (platform) => {
     setRegenerating(platform);
     try {
-      const res = await fetch('/api/captions', {
+      // v4.5.52: was plain fetch — broke after v4.5.37 added requireUser.
+      const res = await authedFetch('/api/captions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ idea, platform, leagueContext, athleteVoice }),

@@ -6,6 +6,7 @@
 
 import { TEAMS, getAllPlayersDirectory } from './data';
 import { getApiKey as getDriveApiKey } from './drive-api';
+import { authedFetch } from './authed-fetch';
 
 const MAX_EDGE = 1024; // Claude downscales to ~1568 internally; 1024 is more than enough
 const JPEG_QUALITY = 0.82;
@@ -154,7 +155,10 @@ export async function autoTagDriveFile(driveFileId) {
 }
 
 async function postAutoTag(body) {
-  const res = await fetch('/api/auto-tag', {
+  // v4.5.52: was plain fetch — broke after v4.5.37 added requireUser
+  // to /api/auto-tag. authedFetch attaches the Supabase session JWT
+  // so the server-side requireUser + requireRole gates pass.
+  const res = await authedFetch('/api/auto-tag', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
