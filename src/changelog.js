@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.54',
+    date: '2026-05-06',
+    kind: 'patch',
+    summary: 'Studio downloads always save as .png (Safari blob fix)',
+    items: [
+      'Reported symptom: a downloaded file occasionally showed up without a .png extension (e.g., "0526 POST 2.2") and macOS treated it as a generic document instead of an image. The file WAS valid PNG data — Safari just dropped the extension during download.',
+      'Root cause: link.href = canvas.toDataURL(\'image/png\') hits a hard cap in Safari (~4 MB of base64). When the data URL exceeded the cap — common on 2× HD exports of full-resolution photos — Safari silently fell back to "open in new tab" and the OS-suggested filename lost the .png.',
+      'Fix: switched the download path to canvas.toBlob + URL.createObjectURL. Blob URLs have no size cap and every browser honors the download attribute reliably, so the filename ends in .png every time. Object URL gets revoked 1 second after click to leave Safari time to read the blob on slower disks.',
+      'Also defensive: every dot in the filename body now becomes a dash, so a player name like "J.J. Smith" or any caption with internal dots can\'t accidentally fool the OS into parsing the wrong segment as the extension.',
+    ],
+  },
+  {
     version: '4.5.53',
     date: '2026-05-06',
     kind: 'patch',

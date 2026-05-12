@@ -1019,55 +1019,104 @@ export default function Generate() {
     // systems, so the date here uses dashes; the dashboard label uses
     // slashes for human reading. Both come from the same data via
     // formatPostName, so changing one source updates both.
+    //
+    // v4.5.54: also strip dots and asterisks from the filename body.
+    // Dots in the middle of a filename can confuse Safari's download
+    // handler — if the user's name was "J.J. Smith" or the template
+    // produced "POST 2.2", macOS sometimes parses ".png" as a second
+    // extension and saves the file as a generic document. Replacing
+    // every `.` in the body with `-` guarantees the only dot is the
+    // one that opens the `.png` extension at the end.
     const niceName = formatPostName(
       { templateType: customType, team: customTeam, settings: { fields: customFields }, createdAt: new Date() },
       getTeam,
     ) || `BLW_${customTeam}_${customType}_${customPlatform}`;
-    const safeName = niceName.replace(/[/\\:?"<>|]/g, '-');
-    const link = document.createElement('a');
-    link.download = `${safeName}${hdSuffix}.png`;
-    link.href = exportCanvas.toDataURL('image/png');
-    link.click();
+    const safeName = niceName.replace(/[/\\:?"<>|.*]/g, '-');
+    const filename = `${safeName}${hdSuffix}.png`;
 
-    // Log the generation to Supabase so the dashboard "Recent posts" strip
-    // and Settings download history have something to show. We build a
-    // small thumbnail (~400 px wide) via an offscreen canvas so the stored
-    // image is dashboard-sized, not full 1080× resolution.
-    try {
-      const thumb = document.createElement('canvas');
-      const targetW = 400;
-      const thumbScale = targetW / customPlat.w;
-      thumb.width = targetW;
-      thumb.height = Math.round(customPlat.h * thumbScale);
-      const tctx = thumb.getContext('2d');
-      // Always use the visible preview canvas for the thumbnail —
-      // the HD offscreen canvas is throwaway after the download.
-      tctx.drawImage(previewCanvas, 0, 0, thumb.width, thumb.height);
-      const thumbnailDataUrl = thumb.toDataURL('image/png');
-      cloud.logGenerate({
-        id: crypto.randomUUID(),
-        team: customTeam,
-        templateType: customType,
-        platform: customPlatform,
-        // Snapshot what made this composition — lets us restore it from
-        // the dashboard / settings history via URL params.
-        settings: {
-          fields: customFields,
-          hiddenFields: Array.from(hiddenFields),
-          selectedPlayer,
-          overlayId: selectedOverlayId,
-          effects: activeEffects.map(e => ({ id: e.id, type: e.type, opacity: e.opacity })),
-        },
-        thumbnailDataUrl,
-      });
-    } catch (err) {
-      console.warn('[generate-log] failed to snapshot', err);
-    }
+    // v4.5.54: Post-download bookkeeping — runs after the file
+    // actually lands on disk. Pulled into a closure so the toBlob
+    // callback below can invoke it.
+    const finishDownloadBookkeeping = () => {
+      // Log the generation to Supabase so the dashboard "Recent posts"
+      // strip and Settings download history have something to show.
+      // We build a small thumbnail (~400 px wide) via an offscreen
+      // canvas so the stored image is dashboard-sized, not full
+      // 1080× resolution.
+      try {
+        const thumb = document.createElement('canvas');
+        const targetW = 400;
+        const thumbScale = targetW / customPlat.w;
+        thumb.width = targetW;
+        thumb.height = Math.round(customPlat.h * thumbScale);
+        const tctx = thumb.getContext('2d');
+        // Always use the visible preview canvas for the thumbnail —
+        // the HD offscreen canvas is throwaway after the download.
+        tctx.drawImage(previewCanvas, 0, 0, thumb.width, thumb.height);
+        const thumbnailDataUrl = thumb.toDataURL('image/png');
+        cloud.logGenerate({
+          id: crypto.randomUUID(),
+          team: customTeam,
+          templateType: customType,
+          platform: customPlatform,
+          // Snapshot what made this composition — lets us restore it
+          // from the dashboard / settings history via URL params.
+          settings: {
+            fields: customFields,
+            hiddenFields: Array.from(hiddenFields),
+            selectedPlayer,
+            overlayId: selectedOverlayId,
+            effects: activeEffects.map(e => ({ id: e.id, type: e.type, opacity: e.opacity })),
+          },
+          thumbnailDataUrl,
+        });
+      } catch (err) {
+        console.warn('[generate-log] failed to snapshot', err);
+      }
 
-    // Restore preview render (with placeholders) right after export
-    render();
-    const hdLabel = scale > 1 ? ` · HD ${customPlat.w * scale}×${customPlat.h * scale}` : '';
-    toast.success('Downloaded', { detail: `${customTeam} · ${customType} · ${customPlat.label}${hdLabel}` });
+      // Restore preview render (with placeholders) right after export
+      render();
+      const hdLabel = scale > 1 ? ` · HD ${customPlat.w * scale}×${customPlat.h * scale}` : '';
+      toast.success('Downloaded', { detail: `${customTeam} · ${customType} · ${customPlat.label}${hdLabel}` });
+    };
+
+    // v4.5.54: BLOB-based download instead of toDataURL.
+    // Pre-fix: link.href = canvas.toDataURL('image/png') worked
+    // reliably for standard 1× exports (~500KB base64) but FAILED
+    // intermittently on 2× HD exports (~4-8MB base64). Safari has a
+    // hard cap on data: URLs in `link.download` — when the URL
+    // exceeds the cap, Safari silently degrades to "open in new tab"
+    // and the OS-suggested filename loses its `.png` extension,
+    // resulting in files saved as generic documents (the "0526 POST
+    // 2.2" symptom).
+    //
+    // Blob URLs have no size cap and every browser honors the
+    // download attribute reliably. canvas.toBlob is async so the
+    // bookkeeping that used to be linear is now wrapped in the
+    // callback above.
+    exportCanvas.toBlob((blob) => {
+      if (!blob) {
+        toast.error('Couldn\'t generate the PNG', {
+          detail: 'Browser refused canvas.toBlob — usually a cross-origin taint. Try removing the headline pill or stat card and re-exporting.',
+        });
+        return;
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = objectUrl;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      // Defer revocation past the click so Safari has time to read
+      // the blob — revoking too soon truncates the download on
+      // slower disk writes.
+      setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+        link.remove();
+      }, 1000);
+      finishDownloadBookkeeping();
+    }, 'image/png');
   };
 
   const toggleFieldHidden = (key) => {
