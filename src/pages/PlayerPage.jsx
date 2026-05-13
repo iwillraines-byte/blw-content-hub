@@ -7,6 +7,7 @@ import { ContentIdeasSection } from '../content-ideas-section';
 import { PageDropZone } from '../page-drop-zone';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
+import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
 import { useAuth, isStaffRole } from '../auth';
@@ -87,7 +88,7 @@ function ExpandableMediaGrid({ items, defaultCap = 10, renderItem }) {
   );
 }
 
-function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls }) {
+function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls, onTileClick }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 1, marginBottom: 6 }}>
@@ -95,11 +96,19 @@ function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls }) {
       </div>
       <ExpandableMediaGrid
         items={items}
-        renderItem={(m) => (
-          <div key={m.id} style={{
-            borderRadius: radius.base, overflow: 'hidden',
-            border: `1px solid ${colors.borderLight}`,
-          }}>
+        renderItem={(m, i, visible) => (
+          <div
+            key={m.id}
+            onClick={onTileClick ? () => onTileClick(visible, i) : undefined}
+            style={{
+              borderRadius: radius.base, overflow: 'hidden',
+              border: `1px solid ${colors.borderLight}`,
+              cursor: onTileClick ? 'zoom-in' : 'default',
+              transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+            }}
+            onMouseEnter={onTileClick ? (e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; } : undefined}
+            onMouseLeave={onTileClick ? (e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
+          >
             <div style={{
               width: '100%', height: 120,
               background: mediaUrls[m.id] ? `url(${mediaUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
@@ -1426,6 +1435,9 @@ export default function PlayerPage() {
   // Full team media (all players + team-scoped assets) for the photo picker.
   // Lazy-loaded the first time the picker opens, then kept in state.
   const [teamMedia, setTeamMedia] = useState([]);
+  // v4.5.60: shared lightbox state — every gallery group on this page
+  // pipes its (items, index) through this hook on tile click.
+  const photoLightbox = usePhotoLightbox();
   // ENTIRE local media store — fed to resolvePlayerAvatar so this page
   // sees the same pool TeamPage's roster card sees. Without this, the
   // avatar resolver only had the strict findPlayerMedia() result + the
@@ -2400,9 +2412,15 @@ export default function PlayerPage() {
             items={items}
             team={team}
             mediaUrls={mediaUrls}
+            onTileClick={(visibleItems, i) => photoLightbox.openAt(visibleItems, i)}
           />
         ))}
       </Card>
+
+      {/* v4.5.60: shared photo lightbox for the gallery groups. Portaled
+          to body via PreviewLightbox so the route transform doesn't
+          trap fixed positioning. */}
+      <PreviewLightbox {...photoLightbox.lightboxProps} />
     </div>
     </PageDropZone>
   );

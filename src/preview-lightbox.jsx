@@ -9,9 +9,52 @@
 // optional sidebar element (used by the bulk modal to show edit
 // fields right next to the photo).
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { colors, fonts, radius } from './theme';
+
+// usePhotoLightbox — small state machine for a photo grid that wants
+// click-to-zoom + arrow-key nav. Returns helpers the grid wires onto
+// each tile and props the page hands to <PreviewLightbox/> at the
+// bottom of its render tree. Lives next to the component so any
+// surface that imports the lightbox gets the hook for free.
+//
+// Usage:
+//   const lb = usePhotoLightbox();
+//   <Tile onClick={() => lb.openAt(items, i)} />
+//   <PreviewLightbox {...lb.lightboxProps()} />
+export function usePhotoLightbox() {
+  const [state, setState] = useState(null); // { items, index } | null
+
+  const openAt = useCallback((items, startIndex = 0) => {
+    if (!Array.isArray(items) || items.length === 0) return;
+    const clamped = Math.max(0, Math.min(items.length - 1, startIndex));
+    setState({ items, index: clamped });
+  }, []);
+  const close = useCallback(() => setState(null), []);
+  const prev = useCallback(() => setState(s => s
+    ? { ...s, index: (s.index - 1 + s.items.length) % s.items.length }
+    : s), []);
+  const next = useCallback(() => setState(s => s
+    ? { ...s, index: (s.index + 1) % s.items.length }
+    : s), []);
+
+  const current = state ? state.items[state.index] : null;
+  const isVideoName = (n) => /\.(mp4|mov|webm|m4v)$/i.test(String(n || ''));
+
+  const lightboxProps = useMemo(() => ({
+    open: !!state,
+    blob: current?.blob || null,
+    isVideo: isVideoName(current?.name),
+    caption: current?.name || '',
+    position: state && state.items.length > 1 ? `${state.index + 1} / ${state.items.length}` : '',
+    onClose: close,
+    onPrev: state && state.items.length > 1 ? prev : null,
+    onNext: state && state.items.length > 1 ? next : null,
+  }), [state, current, close, prev, next]);
+
+  return { openAt, close, prev, next, current, lightboxProps };
+}
 
 export function PreviewLightbox({
   open,

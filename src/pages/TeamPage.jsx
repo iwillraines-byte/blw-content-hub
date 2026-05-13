@@ -10,6 +10,7 @@ import { useAuth } from '../auth';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, Skeleton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
+import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
 import { ContentIdeasSection } from '../content-ideas-section';
 import { percentileFor } from '../percentile-bubble';
@@ -19,7 +20,7 @@ import { PageDropZone } from '../page-drop-zone';
 // v4.5.20: Team media grid with a 2-row default cap and "Show all"
 // expand. Used on the Recent player media section so 60-photo
 // teams don't dominate the page on first paint.
-function ExpandableTeamMediaGrid({ items, team, thumbUrls }) {
+function ExpandableTeamMediaGrid({ items, team, thumbUrls, onTileClick }) {
   const [expanded, setExpanded] = useState(false);
   const DEFAULT_CAP = 10;
   const visible = expanded ? items : items.slice(0, DEFAULT_CAP);
@@ -27,11 +28,19 @@ function ExpandableTeamMediaGrid({ items, team, thumbUrls }) {
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-        {visible.map(m => (
-          <div key={m.id} style={{
-            borderRadius: radius.base, overflow: 'hidden',
-            border: `1px solid ${colors.borderLight}`,
-          }}>
+        {visible.map((m, i) => (
+          <div
+            key={m.id}
+            onClick={onTileClick ? () => onTileClick(visible, i) : undefined}
+            style={{
+              borderRadius: radius.base, overflow: 'hidden',
+              border: `1px solid ${colors.borderLight}`,
+              cursor: onTileClick ? 'zoom-in' : 'default',
+              transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+            }}
+            onMouseEnter={onTileClick ? (e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; } : undefined}
+            onMouseLeave={onTileClick ? (e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
+          >
             <div style={{
               width: '100%', height: 100,
               background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
@@ -96,6 +105,10 @@ export default function TeamPage() {
   const [media, setMedia] = useState([]);
   const [roster, setRoster] = useState([]);
   const [manualPlayers, setManualPlayers] = useState([]);
+  // v4.5.60: shared lightbox state — every photo tile on this page
+  // pipes its (items, index) through this hook on click. See
+  // preview-lightbox.jsx for the helper.
+  const photoLightbox = usePhotoLightbox();
   // Live batting + pitching — populated by fetchAllData() below so the
   // team-filtered stats tables don't have to hit the API twice.
   const [batting, setBatting] = useState([]);
@@ -1152,11 +1165,19 @@ export default function TeamPage() {
         )}
         {teamScopedMedia.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
-            {teamScopedMedia.slice(0, 12).map(m => (
-              <div key={m.id} style={{
-                borderRadius: radius.base, overflow: 'hidden',
-                border: `1px solid ${colors.borderLight}`,
-              }}>
+            {teamScopedMedia.slice(0, 12).map((m, i) => (
+              <div
+                key={m.id}
+                onClick={() => photoLightbox.openAt(teamScopedMedia.slice(0, 12), i)}
+                style={{
+                  borderRadius: radius.base, overflow: 'hidden',
+                  border: `1px solid ${colors.borderLight}`,
+                  cursor: 'zoom-in',
+                  transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
                 <div style={{
                   width: '100%', height: 110,
                   background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
@@ -1306,6 +1327,7 @@ export default function TeamPage() {
             items={playerScopedMedia}
             team={team}
             thumbUrls={thumbUrls}
+            onTileClick={(visibleItems, i) => photoLightbox.openAt(visibleItems, i)}
           />
         )}
       </Card>
@@ -1344,6 +1366,11 @@ export default function TeamPage() {
           bump to game-day × 3 posts; the week after goes light. Pulls games
           from Grand Slam Systems /games (already proxied via /api/gss). */}
       <ContentCalendar team={team} games={games} />
+
+      {/* v4.5.60: shared photo lightbox for the Team Photos + Recent
+          Player Media grids. PreviewLightbox portals to body so the
+          .route-enter transform wrapper doesn't trap it. */}
+      <PreviewLightbox {...photoLightbox.lightboxProps} />
     </div>
     </PageDropZone>
   );

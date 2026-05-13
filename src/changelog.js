@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.60',
+    date: '2026-05-13',
+    kind: 'minor',
+    summary: 'Click any photo tile to preview at full size',
+    items: [
+      'Every photo grid now opens a full-size lightbox on click — Team Photos and Recent Player Media on the team page, plus every grouped gallery (HEADSHOT / PORTRAIT / HITTING / etc.) on the player page. Hover state shows a slight lift + shadow + `zoom-in` cursor so the affordance reads visually.',
+      'Arrow-key nav between photos, ESC to close, click-outside-to-close. The lightbox uses the original full-resolution blob from IndexedDB rather than the compressed thumbnail, so the preview reads the same as the actual stored file.',
+      'Built on a tiny new hook (usePhotoLightbox) next to PreviewLightbox so the same one-liner wires up any future photo grid: drop the hook in, pipe (items, index) into openAt, render <PreviewLightbox {...lightboxProps}> at the bottom.',
+      'Files page + bulk import modal already had this — TeamPage and PlayerPage were the obvious gaps.',
+    ],
+  },
+  {
     version: '4.5.59',
     date: '2026-05-13',
     kind: 'patch',
