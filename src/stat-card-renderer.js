@@ -506,13 +506,16 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
   const barX = x + padX + labelW + 14;
   const barW = w - padX * 2 - labelW - valueW - 28;
 
-  // Bar takes ~40% of row height (was 32%) for stronger presence at
-  // 9-row density. Bubble scales with bar height + a fixed minimum.
-  const barH = Math.max(8, Math.round(rowHeight * 0.40));
+  // Bar takes ~42% of row height (was 40%) for stronger presence in the
+  // newly-shrunken card. Bubble scales with bar height + a fixed minimum.
+  const barH = Math.max(8, Math.round(rowHeight * 0.42));
   const bubbleR = Math.max(barH * 1.0, 12);
 
-  // Row text size: scale up by ~10% from the previous 32% baseline.
-  const rowFontSize = Math.max(13, Math.round(rowHeight * 0.36));
+  // Row text size: v4.5.58 bump from 0.36 → 0.44 so labels + values stay
+  // chunky after the card shrunk. The label/value column still left
+  // breathing room for the bar between them, but the stat numbers now
+  // read as the dominant element of each row.
+  const rowFontSize = Math.max(13, Math.round(rowHeight * 0.44));
 
   rows.forEach((row, i) => {
     const rowY = bodyTop + i * rowHeight + rowHeight / 2;
@@ -627,30 +630,33 @@ export function defaultCardBox(platform, cardType = 'hitting-stats') {
   // bumped up to keep rows readable at the new font sizes.
   const isPct = cardType === 'hitting-percentiles' || cardType === 'pitching-percentiles';
 
+  // v4.5.58: percentile cards trimmed ~13% in height per master
+  // direction — rows were over-spaced for the 9-stat density. Raw
+  // card heights unchanged.
   switch (platform) {
     case 'feed': {
       // 1080×1080
-      const w = 940, h = isPct ? 540 : 240;
+      const w = 940, h = isPct ? 470 : 240;
       return { x: (1080 - w) / 2, y: 1080 - h - 70, w, h };
     }
     case 'portrait': {
       // 1080×1350
-      const w = 940, h = isPct ? 580 : 260;
+      const w = 940, h = isPct ? 505 : 260;
       return { x: (1080 - w) / 2, y: 1350 - h - 80, w, h };
     }
     case 'story': {
       // 1080×1920
-      const w = 940, h = isPct ? 640 : 300;
+      const w = 940, h = isPct ? 555 : 300;
       return { x: (1080 - w) / 2, y: 1920 - h - 200, w, h };
     }
     case 'landscape': {
       // 1200×675 — percentile card too tall here for a true lower-third;
       // anchor to the right side with full canvas height usable.
-      const w = 720, h = isPct ? 540 : 230;
+      const w = 720, h = isPct ? 470 : 230;
       return { x: 1200 - w - 50, y: 675 - h - 40, w, h };
     }
     default: {
-      const w = 940, h = isPct ? 540 : 240;
+      const w = 940, h = isPct ? 470 : 240;
       return { x: (1080 - w) / 2, y: 1080 - h - 70, w, h };
     }
   }

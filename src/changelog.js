@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.58',
+    date: '2026-05-13',
+    kind: 'patch',
+    summary: 'Percentile cards: tighter rows, beefier stat numbers',
+    items: [
+      'Percentile card heights trimmed ~13% across every platform (feed 540→470, portrait 580→505, story 640→555, landscape 540→470). Rows were over-spaced for the 9-stat density and gave the card a stretched feel; pulling the body in makes each row more dense without losing readability.',
+      'Stat-number font multiplier bumped 0.36 → 0.44 of row height, and bar thickness 0.40 → 0.42. The labels on the left and the actual stat values on the right (the numbers flanking the percentile bubble) now read as the dominant element of each row instead of getting outshouted by the bubble.',
+      'Raw stat-card heights unchanged — the issue was specific to the 9-row percentile cards.',
+    ],
+  },
+  {
     version: '4.5.57',
     date: '2026-05-13',
     kind: 'patch',
