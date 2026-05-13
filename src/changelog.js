@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.5.59',
+    date: '2026-05-13',
+    kind: 'patch',
+    summary: 'Hotfix: Studio media picker leaked across cross-team cousins',
+    items: [
+      'Reported symptom: selecting Connor Smith (SDO) in Studio surfaced Cam Smith (MIA) photos in the media picker. Same bug on the player-page gallery.',
+      'Root cause: findPlayerMedia matched by lastname across ALL teams (intentional, so traded players keep their media history), then disambiguated by first-initial and jersey number. When a cross-team cousin shared BOTH lastname and FI — Cam vs Connor Smith — any photo missing an explicit jersey number tag leaked through (untagged-num records pass the disambiguation filter by design). Cam\'s legacy MIA uploads were the culprit.',
+      'Fix: when same-team matches exist after the FI/num filter, drop the cross-team records entirely — mirrors the same-team-first pool restriction in resolvePlayerAvatar. Traded players still get their old-team photos because the fallback kicks in only when zero same-team matches survive.',
+      'Affects both Studio (Generate page media picker) and PlayerPage gallery — both call findPlayerMedia.',
+    ],
+  },
+  {
     version: '4.5.58',
     date: '2026-05-13',
     kind: 'patch',

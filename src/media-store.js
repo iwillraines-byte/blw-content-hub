@@ -422,6 +422,21 @@ export async function findPlayerMedia(team, lastName, optsOrJersey = null) {
     });
   }
 
+  // v4.5.59: Cross-team cousin guard. Cam Smith (MIA, FI='C') and
+  // Connor Smith (SDO, FI='C') share lastname AND first initial — and
+  // if either's photos were uploaded without a jersey number tagged,
+  // they leak across into the other's Studio media picker. Mirrors
+  // the same-team-first pool restriction in resolvePlayerAvatar:
+  // when same-team matches exist, the cross-team ones are dropped
+  // entirely. When no same-team match exists (player just traded;
+  // their old photos are tagged to the previous team), fall back to
+  // the full lastname-matched pool so traded players keep their
+  // history.
+  const sameTeam = matches.filter(f => (f.team || '').toUpperCase() === T);
+  if (sameTeam.length > 0) {
+    matches = sameTeam;
+  }
+
   // Sort: prefer media tagged for the requested team first (typical case
   // — player still on their original team), then everything else (the
   // traded-player fallback). Same-team-first keeps the historical
