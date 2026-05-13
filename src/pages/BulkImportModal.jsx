@@ -9,6 +9,7 @@
 // league archive is an afternoon, not a week.
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { TEAMS } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
@@ -400,7 +401,15 @@ export default function BulkImportModal({ open, onClose, roster, onImported, dri
 
   if (!open) return null;
 
-  return (
+  // v4.5.55: Portal to document.body. Without this, the modal renders
+  // inside the .route-enter wrapper from App.jsx — its `animation: ... both`
+  // keeps an identity transform applied, which creates a containing
+  // block for `position: fixed` descendants. Result: the backdrop
+  // expanded to the page's full scroll height (~18,000px) and the
+  // centered Card landed ~9,000px below the viewport — invisible,
+  // hence the long-running "bulk import button does nothing" report.
+  // Same fix already in PlayerPage modals + PreviewLightbox.
+  const overlay = (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -541,6 +550,8 @@ export default function BulkImportModal({ open, onClose, roster, onImported, dri
       })()}
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }
 
 function DropZone({ dragOver, onDragEnter, onDragLeave, onDragOver, onDrop, onFolderInput }) {

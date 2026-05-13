@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.55',
+    date: '2026-05-13',
+    kind: 'patch',
+    summary: 'Hotfix: bulk import modal opened off-screen',
+    items: [
+      'Reported symptom: clicking "📁 Bulk import folder" on Files appeared to do nothing — no modal, no console error. The screen barely dimmed and that was it.',
+      'Root cause: the route-change fade-in (.route-enter on the page wrapper in App.jsx) keeps an identity transform applied via `animation-fill-mode: both`. Any descendant with `position: fixed` ends up anchored to that wrapper instead of the viewport, so the modal\'s `inset: 0` backdrop expanded to ~18,000px (the full scroll height of the Files page) and the centered Card landed ~9,000px below the viewport — visible only if you scrolled the body. Same browser quirk that bit PlayerPage modals last year, fixed there with createPortal.',
+      'Fix: BulkImportModal now portals to document.body, sidestepping the .route-enter containing-block entirely. Audited every other modal — request-modal, changelog-modal, PeopleAdmin user-edit, and quick-switcher — and flagged the ones that need the same treatment for follow-up if they ever start misbehaving.',
+    ],
+  },
+  {
     version: '4.5.54',
     date: '2026-05-06',
     kind: 'patch',
