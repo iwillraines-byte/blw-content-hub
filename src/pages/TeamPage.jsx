@@ -485,7 +485,15 @@ export default function TeamPage() {
           lastnameUnique: lastnameCount.get(LN) === 1,
         });
         if (headshot?.blob) {
-          urls[`${FI}|${LN}`] = {
+          // v4.5.57: Key by the disambiguated player slug, not just
+          // FI+LN. Logan Rose (#08) and Luke Rose (#05) both produced
+          // the key "L|ROSE", so whichever cousin's avatar resolved
+          // second silently clobbered the first — both ended up
+          // showing Luke's HEADSHOT on the team roster card even
+          // though the resolver itself had picked the right photo
+          // for each. playerSlug differentiates them as
+          // "logan-rose" vs "luke-rose".
+          urls[playerSlug(p)] = {
             url: blobToObjectURL(headshot.blob),
             // Per-player pan/zoom — pulled from the manual_players row so
             // the team roster card matches what the player page hero shows.
@@ -1011,7 +1019,9 @@ export default function TeamPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
             {roster.map((p, idx) => {
               const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
-              const avatar = rosterAvatars[`${FI}|${p.lastName.toUpperCase()}`];
+              // v4.5.57: keyed by playerSlug so cousin pairs sharing FI
+              // (Logan/Luke Rose, James/Justin Lee, etc.) don't collide.
+              const avatar = rosterAvatars[playerSlug(p)];
               const statLabel = p.isBatter && p.isPitcher
                 ? 'Two-Way Player'
                 : p.isBatter ? 'Batter'

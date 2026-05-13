@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.57',
+    date: '2026-05-13',
+    kind: 'patch',
+    summary: 'Hotfix: cousin pairs shared a roster avatar on team pages',
+    items: [
+      'Reported symptom: on the Dallas Pandas team page, Logan Rose (#08) and Luke Rose (#05) showed the SAME headshot on their roster cards, even though clicking through to each player\'s page rendered the right photo for each.',
+      'Root cause: TeamPage stored resolved avatars in a Map keyed by `${firstInitial}|${lastName}` — so both Roses produced "L|ROSE" and the second cousin\'s avatar silently clobbered the first. The avatar resolver was actually doing its job correctly (it returned Logan\'s PORTRAIT and Luke\'s HEADSHOT separately); the storage layer is what threw one of them away.',
+      'Fix: keyed by playerSlug (e.g. "logan-rose" vs "luke-rose") at both the write site (the for-loop building the avatar map) and the read site (the roster-card render). Same bug surface for any other cousin pair sharing first initial — James/Justin Lee on LV, etc. Verified live on DAL.',
+    ],
+  },
+  {
     version: '4.5.56',
     date: '2026-05-13',
     kind: 'patch',
