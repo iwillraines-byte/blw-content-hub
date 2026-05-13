@@ -17,6 +17,7 @@
 // their own email).
 
 import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, Label, RedButton, OutlineButton, TeamLogo, inputStyle, selectStyle } from './components';
 import { colors, fonts, radius } from './theme';
 import { TEAMS, TEMPLATES, getTeam } from './data';
@@ -131,7 +132,11 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
 
   const setF = (key, value) => setFieldValues(prev => ({ ...prev, [key]: value }));
 
-  return (
+  // v4.5.55: Portal to document.body — see BulkImportModal for the full
+  // explainer. Short version: the .route-enter transform wrapper in
+  // App.jsx captures position:fixed, so an unportaled modal lands
+  // off-screen on tall pages.
+  const overlay = (
     <div
       onClick={onClose}
       role="dialog"
@@ -355,6 +360,8 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }
 
 // ─── Dynamic field renderer ────────────────────────────────────────────────

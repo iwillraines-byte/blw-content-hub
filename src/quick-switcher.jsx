@@ -7,6 +7,7 @@
 // by kind priority (page > team > player > template).
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { TEAMS, TEMPLATES, getAllPlayers, playerSlug } from './data';
 import { TEMPLATE_TYPES } from './template-config';
@@ -152,7 +153,11 @@ export function QuickSwitcher() {
 
   if (!open) return null;
 
-  return (
+  // v4.5.55: Portal to document.body for consistency with the other
+  // modals. QuickSwitcher is already mounted outside .route-enter at
+  // App root, so the bug never bit here — but uniform pattern wins
+  // for the next person reading this file.
+  const overlay = (
     <div
       onClick={() => setOpen(false)}
       style={{
@@ -249,4 +254,6 @@ export function QuickSwitcher() {
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }

@@ -8,6 +8,7 @@
 // people management directly).
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TEAMS } from '../data';
@@ -214,7 +215,9 @@ function InviteModal({ invitableRoles, onClose, onSuccess }) {
     }
   };
 
-  return (
+  // v4.5.55: Portal to document.body — see BulkImportModal for the
+  // full explainer on the .route-enter containing-block trap.
+  const overlay = (
     <div
       onClick={onClose}
       style={{
@@ -287,4 +290,6 @@ function InviteModal({ invitableRoles, onClose, onSuccess }) {
       </form>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }

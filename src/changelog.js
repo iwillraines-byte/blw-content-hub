@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.56',
+    date: '2026-05-13',
+    kind: 'patch',
+    summary: 'Portal every remaining modal (defense-in-depth)',
+    items: [
+      'Follow-up to the v4.5.55 BulkImportModal fix. Audited every modal in the app and applied the createPortal-to-body pattern to the four that were still rendering inside the .route-enter wrapper: RequestModal (new content/profile/bug requests), ChangelogModal (release notes from the sidebar footer), InviteModal in PeopleAdmin (master inviting a new user), and QuickSwitcher (Cmd-K).',
+      'QuickSwitcher and ChangelogModal mount outside .route-enter at App root so they never actually hit the bug — but uniform pattern means the next teammate adding a modal doesn\'t have to remember which side of the route wrapper they\'re on.',
+      'Visual behavior is unchanged. The only thing portaling does is anchor position:fixed to the viewport instead of the nearest transformed ancestor.',
+    ],
+  },
+  {
     version: '4.5.55',
     date: '2026-05-13',
     kind: 'patch',

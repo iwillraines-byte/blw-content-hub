@@ -9,6 +9,7 @@
 // pass `open` and `onClose`.
 
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { RELEASES, KIND_TOKENS } from './changelog';
 import { GIT_COMMIT, formattedBuildDate } from './version';
 import { colors, fonts, radius } from './theme';
@@ -33,7 +34,9 @@ export default function ChangelogModal({ open, onClose }) {
 
   if (!open) return null;
 
-  return (
+  // v4.5.55: Portal to document.body so the .route-enter transform
+  // wrapper can't trap our position:fixed centering.
+  const overlay = (
     <div
       onClick={onClose}
       role="dialog"
@@ -136,6 +139,8 @@ export default function ChangelogModal({ open, onClose }) {
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }
 
 function ReleaseBlock({ release, isLatest }) {
