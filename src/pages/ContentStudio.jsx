@@ -13,6 +13,7 @@ import { getUsageToday, recordUsage } from '../ai-usage-store';
 import { useToast } from '../toast';
 import { fetchRecentGenerates, setGenerateLogHidden } from '../cloud-sync';
 import { useAuth } from '../auth';
+import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { formatPostName } from '../template-config';
 import { authedFetch } from '../authed-fetch';
 import IdeaCard from '../idea-card';
@@ -917,6 +918,13 @@ function FirstRunWelcomeCard() {
 function RecentPostsStrip({ posts, loaded, onHide }) {
   const { role } = useAuth();
   const isMaster = role === 'master_admin';
+  // v4.5.63: clicking a recent-post tile now opens a lightbox preview
+  // of the actual rendered PNG instead of deep-linking back into
+  // Studio. The "Open in Studio" hop was useful for re-editing but
+  // most clicks were just "show me the bigger version." We keep
+  // re-edit reachable via a button inside the lightbox actions
+  // slot, so the workflow isn't lost — it's just opt-in.
+  const lightbox = usePhotoLightbox();
   const timeAgo = (d) => {
     if (!d) return '';
     const diff = Date.now() - d.getTime();
@@ -1002,13 +1010,29 @@ function RecentPostsStrip({ posts, loaded, onHide }) {
                   }}
                 >✕</button>
               )}
-              <Link
-                to={buildRegenerateLink(post)}
-                title={`${post.team || 'BLW'} · ${post.templateType || 'template'} · ${post.platform || ''}${dimmed ? ' · marked NOT POSTED' : ''} · click to re-open in Generate`}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  if (!post.thumbnailUrl) return;
+                  // Build a single-item carousel for whichever post the user
+                  // clicked. We pass the URL inline since posts don't have
+                  // local blobs the lightbox can resolve.
+                  const items = [{
+                    id: post.id,
+                    name: formatPostName(post, getTeam) || post.templateType || 'post',
+                    url: post.thumbnailUrl,
+                    post,
+                  }];
+                  lightbox.openAt(items, 0);
+                }}
+                onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && post.thumbnailUrl) e.currentTarget.click(); }}
+                title={`${post.team || 'BLW'} · ${post.templateType || 'template'}${dimmed ? ' · marked NOT POSTED' : ''} · click to preview`}
                 style={{
                   textDecoration: 'none', display: 'block',
                   opacity: dimmed ? 0.55 : 1,
                   transition: 'opacity 200ms ease',
+                  cursor: post.thumbnailUrl ? 'zoom-in' : 'default',
                 }}
               >
                 <div style={{
@@ -1069,12 +1093,32 @@ function RecentPostsStrip({ posts, loaded, onHide }) {
                     <span>{timeAgo(post.createdAt)}</span>
                   </div>
                 </div>
-              </Link>
+              </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* v4.5.63: preview lightbox for recent posts. Actions slot
+          carries an "Open in Studio" link so re-editing is still one
+          click away — just no longer the default click target. */}
+      <PreviewLightbox
+        {...lightbox.lightboxProps}
+        actions={lightbox.current?.post ? (
+          <Link
+            to={buildRegenerateLink(lightbox.current.post)}
+            style={{
+              background: 'transparent', color: '#fff',
+              border: '1px solid rgba(255,255,255,0.45)',
+              borderRadius: radius.sm, padding: '4px 10px',
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+              textTransform: 'uppercase', textDecoration: 'none',
+              fontFamily: fonts.condensed, whiteSpace: 'nowrap',
+            }}
+          >✎ Open in Studio</Link>
+        ) : null}
+      />
     </Card>
   );
 }

@@ -31,6 +31,10 @@ export default function Requests() {
   const targetRequestId = searchParams.get('id');
   const { user, role } = useAuth();
   const isAthlete = role === 'athlete';
+  // v4.5.63: master_admin gets the "remove request" trash icon — needed
+  // for cleaning spam/test rows out of the queue. Non-master staff can
+  // still decline rows but not nuke them.
+  const isMaster = role === 'master_admin';
   // Roster for the player picker in the modal — fetched once on mount.
   // The store hits IDB so this is fast even on first render.
   const [roster, setRoster] = useState([]);
@@ -139,6 +143,45 @@ export default function Requests() {
   };
 
   const updateStatus = (id, status) => setRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r));
+  // v4.5.63: deny-with-reason. Captures the reason as a comment on the
+  // request (so the queue shows WHY it was declined, not just that it
+  // was), flips status, and opens a mailto: pre-filled with the
+  // reason so the master can fire the "sorry, here's why" email in
+  // one click. Stamped notifiedAt the same way the complete-notify
+  // flow does so the chip reads correctly.
+  const denyRequest = (id) => {
+    const r = requests.find(x => x.id === id);
+    if (!r) return;
+    const reason = window.prompt('Reason for declining this request? (Visible to the requester in the email + on the request card.)', '');
+    if (reason == null) return; // cancelled
+    const trimmed = reason.trim();
+    if (!trimmed) return;
+    setRequests(rs => rs.map(x => x.id === id ? { ...x, status: 'declined', declineReason: trimmed } : x));
+    setComments(prev => [...prev, {
+      id: crypto.randomUUID(), requestId: id, author: 'You', role: 'admin',
+      text: `Declined — ${trimmed}`,
+      time: 'just now', createdAt: new Date().toISOString(),
+    }]);
+    // Pre-fill a mailto so the master can send the decline email in
+    // one click. We don't auto-open it — that's annoying — but the
+    // notify-style button will surface on the now-declined row.
+    if (r.requesterEmail) {
+      const subject = encodeURIComponent(`Re: ${r.title || r.type || 'your request'}`);
+      const body = encodeURIComponent(
+        `Hey ${r.requester || 'there'},\n\n` +
+        `Thanks for sending this in — we're not going to be able to move forward with it.\n\n` +
+        `Reason: ${trimmed}\n\n` +
+        `Happy to talk through alternatives.\n\n— BLW Studio`
+      );
+      try { window.open(`mailto:${r.requesterEmail}?subject=${subject}&body=${body}`, '_blank'); } catch { /* user-gesture only — ok to swallow */ }
+    }
+  };
+  // v4.5.63: master-only hard remove. Filters the row out of local
+  // state; the cloud-sync layer will push the delete on next flush.
+  const removeRequest = (id) => {
+    if (!window.confirm('Permanently remove this request? This action cannot be undone.')) return;
+    setRequests(rs => rs.filter(r => r.id !== id));
+  };
   const toggleComments = (id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleDetail = (id) => setExpandedDetail(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -523,7 +566,25 @@ export default function Requests() {
                 <>
                   <button onClick={() => updateStatus(r.id, 'in-progress')} style={btnStyle('#3B82F6')}>Start</button>
                   <button onClick={() => updateStatus(r.id, 'approved')} style={btnStyle('#22C55E')}>Approve</button>
+                  {/* v4.5.63: Deny — prompts for a reason, captures it
+                      as a comment, flips status to 'declined', and
+                      opens a mailto so the requester gets the reason
+                      directly in their inbox. */}
+                  <button onClick={() => denyRequest(r.id)} style={btnStyle('#DC2626')}>Deny</button>
                 </>
+              )}
+              {/* v4.5.63: master-only permanent remove. Sits all the way
+                  to the right so it doesn't compete with the primary
+                  status-flip CTAs on every row. */}
+              {isMaster && (
+                <button
+                  onClick={() => removeRequest(r.id)}
+                  title="Master admin — permanently remove this request"
+                  style={{
+                    ...btnStyle('#6B7280'),
+                    marginLeft: 'auto',
+                  }}
+                >🗑 Remove</button>
               )}
               {!isAthlete && r.status === 'in-progress' && (
                 <>

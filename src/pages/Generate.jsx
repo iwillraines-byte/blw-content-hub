@@ -1144,6 +1144,43 @@ export default function Generate() {
     });
   };
 
+  // v4.5.63: stat-card-only download. Sized to the card's own box
+  // (no full-canvas crop) so the file weight is small + the card
+  // sits flush against the edges. Transparent everywhere outside
+  // the card so designers can stack it on any background.
+  const downloadStatCardOnly = (scale = 2) => {
+    if (customType !== 'stat-card' || !statCardOption) return;
+    const box = defaultCardBox(customPlatform, statCardType);
+    const out = document.createElement('canvas');
+    out.width = Math.round(box.w * scale);
+    out.height = Math.round(box.h * scale);
+    const ctx = out.getContext('2d');
+    ctx.scale(scale, scale);
+    // Translate so the renderer can keep its box.x/box.y math intact
+    // but the card lands at (0,0) in the output canvas.
+    ctx.translate(-box.x, -box.y);
+    statCardRender(ctx, statCardOption);
+
+    const niceName = formatPostName(
+      { templateType: 'stat-card', team: customTeam, settings: { fields: customFields }, createdAt: new Date() },
+      getTeam,
+    ) || `BLW_${customTeam}_stat-card`;
+    const safeName = niceName.replace(/[/\\:?"<>|.*]/g, '-');
+    const filename = `${safeName}_CARD-ONLY.png`;
+    out.toBlob((blob) => {
+      if (!blob) { toast.error('Couldn\'t export stat card'); return; }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Stat card exported', { detail: `${box.w * scale}×${box.h * scale}px · transparent` });
+    }, 'image/png');
+  };
+
   const handleBgDrop = useCallback((e) => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0] || e.target?.files?.[0];
@@ -1544,38 +1581,86 @@ export default function Generate() {
   // owns its own scope keyed off the form's team state.
   const customTeamObjForScope = customTeam ? getTeam(customTeam) : null;
 
-  // v4.5.62: Template Type card pulled BELOW Player in the form flow
-  // (master direction: pick team + player first, THEN figure out
-  // what to make). Also pulled tighter — preview thumbnail dropped
-  // from 72px → 48px and the label sits below in a smaller weight.
-  // No more "monster card at the top of the right column" — the
-  // preview area is now just preview + download.
+  // v4.5.62 / v4.5.63: Template Type card pulled BELOW Player + smaller
+  // tiles + grey-out for overlay-required templates that have no
+  // overlays for the active team. Click on a greyed tile prompts
+  // for an overlay upload instead of silently entering a template
+  // that'll just render the raw photo + text.
+  // Templates that ship without overlays — they own their own chrome,
+  // so the lack of an overlay isn't a foot-gun.
+  const TEMPLATES_OK_WITHOUT_OVERLAY = new Set(['blank-slate', 'stat-card']);
   const templateTypeCard = (
     <Card style={{ padding: 14 }}>
       <Label style={{ marginBottom: 6 }}>Template</Label>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))', gap: 6 }}>
-        {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
-          <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(defaultHiddenFieldsFor(key, customPlatform)); setSelectedOverlayId(null); setOverlayImg(null); setHeadlineFont(null); }} style={{
-            background: customType === key ? colors.accentSoft : colors.white,
-            border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
-            color: customType === key ? colors.accent : colors.textSecondary,
-            borderRadius: radius.base, padding: '5px 4px', cursor: 'pointer',
-            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, textAlign: 'center',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            letterSpacing: 0.3, lineHeight: 1.15,
-          }}>
-            <TemplatePreview
-              templateKey={key}
-              platform={customPlatform}
-              team={customTeam}
-              width={48}
-              height={48}
-            />
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
-              {t.icon} {t.name}
-            </span>
-          </button>
-        ))}
+        {Object.entries(TEMPLATE_TYPES).map(([key, t]) => {
+          const presetCountForTemplate = customTeam ? getPresetOverlays(customTeam, key).length : 0;
+          const uploadedCountForTemplate = overlays.filter(o => o.type === key && (!o.team || o.team === customTeam)).length;
+          const totalOverlays = presetCountForTemplate + uploadedCountForTemplate;
+          const needsOverlay = !TEMPLATES_OK_WITHOUT_OVERLAY.has(key);
+          const greyed = customTeam && needsOverlay && totalOverlays === 0;
+          return (
+            <button
+              key={key}
+              onClick={() => {
+                if (greyed) {
+                  // Prompt the user to upload an overlay. We can't trigger
+                  // the file picker programmatically without a user gesture
+                  // landing on the input element itself, so show a toast
+                  // pointing them to the upload affordance + still set the
+                  // template so they see the "no overlays" empty state in
+                  // the picker below.
+                  toast.warn(
+                    `No ${t.name} overlays for ${customTeam} yet`,
+                    { detail: 'Upload one from the Overlay card below (or pick Blank Slate / Stat Card — those don\'t need overlays).' }
+                  );
+                  return;
+                }
+                setCustomType(key);
+                setCustomFields({});
+                setHiddenFields(defaultHiddenFieldsFor(key, customPlatform));
+                setSelectedOverlayId(null);
+                setOverlayImg(null);
+                setHeadlineFont(null);
+              }}
+              title={greyed
+                ? `No overlays uploaded for ${customTeam} + ${t.name}. Click to see how to add one.`
+                : t.description || t.name}
+              style={{
+                background: customType === key ? colors.accentSoft : colors.white,
+                border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                color: customType === key ? colors.accent : colors.textSecondary,
+                borderRadius: radius.base, padding: '5px 4px',
+                cursor: greyed ? 'not-allowed' : 'pointer',
+                opacity: greyed ? 0.45 : 1,
+                fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, textAlign: 'center',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                letterSpacing: 0.3, lineHeight: 1.15,
+                position: 'relative',
+              }}
+            >
+              <TemplatePreview
+                templateKey={key}
+                platform={customPlatform}
+                team={customTeam}
+                width={48}
+                height={48}
+              />
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                {t.icon} {t.name}
+              </span>
+              {greyed && (
+                <span style={{
+                  position: 'absolute', top: 2, right: 2,
+                  fontSize: 8, fontWeight: 800, color: colors.warningText,
+                  background: colors.warningBg, border: `1px solid ${colors.warningBorder}`,
+                  borderRadius: 2, padding: '0 3px',
+                  fontFamily: fonts.condensed, letterSpacing: 0.4,
+                }}>NO OVERLAY</span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </Card>
   );
@@ -2568,7 +2653,7 @@ export default function Generate() {
               (e.g. 1080×1350). HD = 2× resolution rendered from
               primitives for print, prowiffleball.com hero blocks, and
               video composites. */}
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <RedButton onClick={() => download(1)} style={{ flex: '2 1 auto', padding: '14px 18px', fontSize: 14 }}>
               Download PNG ({customPlat.label})
             </RedButton>
@@ -2580,6 +2665,20 @@ export default function Generate() {
               ⤓ HD 2×
             </OutlineButton>
           </div>
+          {/* v4.5.63: stat-card-only download. Renders just the white
+              stat card onto a transparent canvas matching the card's
+              own dimensions, so designers can drop the card onto a
+              video, print page, or different background without
+              shipping the full post photo behind it. */}
+          {customType === 'stat-card' && statCardOption && (
+            <OutlineButton
+              onClick={() => downloadStatCardOnly(2)}
+              title="Export just the stat card (no background photo) at 2× resolution on a transparent canvas. Drop into Premiere, Keynote, etc."
+              style={{ padding: '10px 14px', fontSize: 12, fontWeight: 800, letterSpacing: 0.4 }}
+            >
+              ⤓ Stat card only (transparent · 2×)
+            </OutlineButton>
+          )}
 
           {/* Photo Adjust — pan/zoom + exposure. Affects ONLY the background photo;
               overlay PNGs and text are untouched. Drag the preview to pan, scroll

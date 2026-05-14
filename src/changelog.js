@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.5.63',
+    date: '2026-05-14',
+    kind: 'minor',
+    summary: 'v4.6 prep wave C-1: Requests + Studio quality of life',
+    items: [
+      'Studio: Templates that need an overlay but have none uploaded for the active team are now greyed out in the picker with a NO OVERLAY chip. Clicking shows a toast pointing the user to the upload affordance instead of silently dropping them into a template that\'ll render the raw photo + text. Blank Slate and Stat Card stay clickable since they own their own chrome.',
+      'Studio: new "Stat card only" export button (2× transparent PNG). Renders just the card with no background photo, sized exactly to the card\'s own box. Drop straight into Premiere, Keynote, video composites, etc.',
+      'Requests: master_admin can now permanently remove a request (🗑 Remove button on every row). Confirms before deleting; the row is filtered from local state and cloud-sync pushes the delete on next flush.',
+      'Requests: Deny button on every pending row. Prompts for a reason, captures it as a comment so the queue shows WHY it was declined, flips status to "declined", and pre-fills a mailto: with the reason so the requester gets the explanation directly. Non-master staff can deny too; only master can fully remove.',
+      'Dashboard: clicking a Recent Posts tile now opens a full-size LIGHTBOX preview of the rendered PNG instead of bouncing to Studio. Re-edit is still one click away via "✎ Open in Studio" inside the lightbox actions slot — it\'s just no longer the default click target.',
+    ],
+  },
+  {
     version: '4.5.62',
     date: '2026-05-14',
     kind: 'patch',
