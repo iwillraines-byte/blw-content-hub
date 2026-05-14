@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.5.66',
+    date: '2026-05-14',
+    kind: 'minor',
+    summary: 'v4.6 prep wave D-2: larger media picker + team branding card',
+    items: [
+      'Studio: player media grid shows a "🔍 Browse larger" button when the player has more than 6 photos. Click to open a fullscreen-ish modal with 220px tiles instead of squinting at 72px thumbs. Tap any tile to select + auto-close the modal. ESC / click-outside closes without selecting.',
+      'Team page: new "Branding & Admin" card at the bottom of every team. Displays logo + name, the three brand colors as copyable hex chips (click to copy), an editable Brand Voice text block (master writes, everyone reads), and a one-click team-scoped request CTA so a content admin or athlete can fire a request directly from the team they\'re looking at. Brand voice persists via app-settings keyed by brand-voice-{TEAMID} so future AI prompts can pull it in for tone-matching.',
+    ],
+  },
+  {
     version: '4.5.65',
     date: '2026-05-14',
     kind: 'minor',

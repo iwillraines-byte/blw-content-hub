@@ -639,6 +639,10 @@ export default function Generate() {
   // Reset whenever a new bgImg loads so each photo starts from identity.
   const [bgTransform, setBgTransform] = useState(DEFAULT_BG_TRANSFORM);
   const [playerMedia, setPlayerMedia] = useState([]);
+  // v4.5.66: "Browse larger" media picker — opens a fullscreen-ish
+  // modal with much bigger tiles when there are >6 media items.
+  // Sidesteps the cramped 72px grid for players with deep archives.
+  const [bigPickerOpen, setBigPickerOpen] = useState(false);
   const [playerMediaUrls, setPlayerMediaUrls] = useState([]);
   const [selectedPlayer, setSelectedPlayer] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -1965,17 +1969,32 @@ export default function Generate() {
                     {/* Media grid — contextual: player's media if selected, else team's */}
                     {playerMediaUrls.length > 0 ? (
                       <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
                           <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8 }}>
                             {selectedPlayer ? `PLAYER MEDIA · ${playerMediaUrls.length}` : `TEAM MEDIA · ${playerMediaUrls.length}`}
                           </div>
-                          {bgUrl && (
-                            <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
-                              background: 'none', border: 'none', color: colors.accent, fontSize: 10,
-                              fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer',
-                              letterSpacing: 0.4,
-                            }}>✕ Clear selection</button>
-                          )}
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                            {/* v4.5.66: >6 photos → "Browse larger" opens a
+                                modal with bigger tiles so users can actually
+                                see the photo content instead of squinting
+                                at 72px thumbnails. */}
+                            {playerMediaUrls.length > 6 && (
+                              <button onClick={() => setBigPickerOpen(true)} style={{
+                                background: colors.accentSoft, color: colors.accent,
+                                border: `1px solid ${colors.accentBorder}`,
+                                borderRadius: radius.sm, padding: '3px 10px',
+                                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                                cursor: 'pointer', letterSpacing: 0.4,
+                              }}>🔍 Browse larger ({playerMediaUrls.length})</button>
+                            )}
+                            {bgUrl && (
+                              <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
+                                background: 'none', border: 'none', color: colors.accent, fontSize: 10,
+                                fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer',
+                                letterSpacing: 0.4,
+                              }}>✕ Clear selection</button>
+                            )}
+                          </div>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
                           {playerMediaUrls.map(m => (
@@ -2993,6 +3012,81 @@ export default function Generate() {
             <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
               <RedButton onClick={submitEffect} disabled={!effectFile} style={{ flex: 1 }}>Save Effect</RedButton>
               <OutlineButton onClick={() => { setShowEffectUpload(false); setEffectFile(null); setEffectName(''); }}>Cancel</OutlineButton>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {/* v4.5.66: "Browse larger" media picker modal. Same player media
+          list as the inline grid but rendered at 200-260px per tile
+          so users can actually evaluate the photo content. Click a
+          tile to select + close. ESC / click-outside close without
+          selecting. */}
+      {bigPickerOpen && createPortal((
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setBigPickerOpen(false); }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)',
+            zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <div style={{
+            background: colors.white, borderRadius: radius.lg,
+            width: '100%', maxWidth: 1100, maxHeight: '90vh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.42)',
+          }}>
+            <div style={{
+              padding: '14px 20px', borderBottom: `1px solid ${colors.borderLight}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ fontFamily: fonts.heading, fontSize: 18, letterSpacing: 0.6, color: colors.text }}>
+                  Browse player media
+                </div>
+                <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, letterSpacing: 0.3, marginTop: 2 }}>
+                  {playerMediaUrls.length} files · click any to select for this post
+                </div>
+              </div>
+              <button
+                onClick={() => setBigPickerOpen(false)}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 24, lineHeight: 1, color: colors.textMuted, padding: 4,
+                }}
+              >×</button>
+            </div>
+            <div style={{ overflowY: 'auto', padding: 16, flex: 1 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+                {playerMediaUrls.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => { selectPlayerMediaAsBg(m.url); setBigPickerOpen(false); }}
+                    style={{
+                      padding: 0, border: bgUrl === m.url ? `3px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                      borderRadius: radius.base, overflow: 'hidden', cursor: 'pointer',
+                      background: colors.white, textAlign: 'left',
+                      transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 24px rgba(0,0,0,0.12)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                  >
+                    <div style={{
+                      width: '100%', aspectRatio: '1 / 1',
+                      background: `url(${m.url}) center/cover`,
+                    }} />
+                    <div style={{ padding: '8px 10px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={m.name}>
+                        {m.name}
+                      </div>
+                      <div style={{ fontSize: 10, fontFamily: fonts.condensed, color: colors.textMuted, marginTop: 2, letterSpacing: 0.3 }}>
+                        {m.assetType || 'FILE'}{m.player ? ` · ${m.player}` : ''}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

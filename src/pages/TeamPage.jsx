@@ -1388,12 +1388,211 @@ export default function TeamPage() {
           from Grand Slam Systems /games (already proxied via /api/gss). */}
       <ContentCalendar team={team} games={games} />
 
+      {/* v4.5.66: Branding & Admin — bottom-of-page reference card
+          for each team. Shows logo, brand colors (with copyable hex
+          chips), an editable Brand Voice block (master_admin can
+          edit, everyone else reads), and a one-click team-scoped
+          request CTA so content admins/athletes can fire a request
+          directly from the team page they're looking at. */}
+      <TeamBrandingAndAdmin team={team} role={authRole} />
+
       {/* v4.5.60: shared photo lightbox for the Team Photos + Recent
           Player Media grids. PreviewLightbox portals to body so the
           .route-enter transform wrapper doesn't trap it. */}
       <PreviewLightbox {...photoLightbox.lightboxProps} />
     </div>
     </PageDropZone>
+  );
+}
+
+// v4.5.66: Per-team "Branding & Admin" card. Pulls voice guidelines
+// from /api/app-settings (key=brand-voice-{TEAMID}). Master writes,
+// everyone reads.
+function TeamBrandingAndAdmin({ team, role }) {
+  const isMaster = role === 'master_admin';
+  const [voice, setVoice] = useState('');
+  const [voiceLoaded, setVoiceLoaded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(null);
+
+  useEffect(() => {
+    if (!team?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authedFetch(`/api/app-settings?key=brand-voice-${team.id}`);
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        const text = json?.value?.text || '';
+        setVoice(text);
+        setDraft(text);
+      } catch { /* silent — falls back to default copy */ }
+      finally { if (!cancelled) setVoiceLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [team?.id]);
+
+  const saveVoice = async () => {
+    if (!isMaster) return;
+    setSaving(true);
+    try {
+      await authedFetch('/api/app-settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: `brand-voice-${team.id}`, value: { text: draft } }),
+      });
+      setVoice(draft);
+      setEditing(false);
+    } catch (err) {
+      // Surface the error inline rather than throwing — voice text
+      // isn't critical so we don't want a flaky save to crash the
+      // page.
+      console.warn('[brand-voice] save failed', err);
+    } finally { setSaving(false); }
+  };
+
+  const copyHex = async (hex, label) => {
+    try {
+      await navigator.clipboard.writeText(hex);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1500);
+    } catch { /* clipboard blocked — silent */ }
+  };
+
+  const chips = [
+    { label: 'Primary', hex: team?.color },
+    { label: 'Dark', hex: team?.dark },
+    { label: 'Accent', hex: team?.accent || '#FFFFFF' },
+  ].filter(c => c.hex);
+
+  const requestLink = `/requests?team=${team.id}&compose=1`;
+
+  return (
+    <Card>
+      <SectionHeading style={{ margin: '0 0 10px' }}>Branding & Admin</SectionHeading>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, auto) 1fr', gap: 18, alignItems: 'start' }}>
+        {/* Logo + name */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+          padding: 16,
+          background: `linear-gradient(135deg, ${team?.color}10, ${team?.color}03)`,
+          border: `1px solid ${colors.borderLight}`, borderRadius: radius.base,
+        }}>
+          <TeamLogo teamId={team.id} size={96} rounded="circle" />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: fonts.heading, fontSize: 16, color: colors.text, letterSpacing: 0.5 }}>
+              {team.name}
+            </div>
+            <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.6, marginTop: 2 }}>
+              {team.id}
+            </div>
+          </div>
+        </div>
+
+        {/* Colors + voice + request CTA */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Color chips — click any to copy hex */}
+          <div>
+            <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6, textTransform: 'uppercase' }}>
+              Brand colors {copied && <span style={{ color: colors.successText, marginLeft: 6 }}>✓ {copied} copied</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {chips.map(c => (
+                <button
+                  key={c.label}
+                  onClick={() => copyHex(c.hex, c.label)}
+                  title={`Click to copy ${c.hex}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: colors.white, border: `1px solid ${colors.borderLight}`,
+                    borderRadius: radius.base, padding: '6px 10px 6px 6px',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  <span style={{ width: 24, height: 24, borderRadius: 4, background: c.hex, border: `1px solid ${colors.borderLight}` }} />
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <span style={{ fontFamily: fonts.condensed, fontSize: 9, color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' }}>{c.label}</span>
+                    <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, fontWeight: 700, color: colors.text }}>{c.hex.toUpperCase()}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Brand voice — readable by all, editable by master */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                Brand voice
+              </div>
+              {isMaster && !editing && (
+                <button onClick={() => { setDraft(voice); setEditing(true); }} style={{
+                  background: 'transparent', border: 'none', color: colors.accent,
+                  cursor: 'pointer', fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700, letterSpacing: 0.4,
+                }}>✎ Edit</button>
+              )}
+            </div>
+            {editing ? (
+              <div>
+                <textarea
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  rows={6}
+                  placeholder="e.g. Confident but not cocky. Lead with stats, never with personality. Avoid em-dashes and overly cute alliteration. Always credit the team before the player."
+                  style={{
+                    ...inputStyle, width: '100%', resize: 'vertical', minHeight: 100,
+                    fontFamily: fonts.body, fontSize: 13, lineHeight: 1.5,
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <RedButton onClick={saveVoice} disabled={saving} style={{ padding: '6px 14px', fontSize: 12 }}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </RedButton>
+                  <OutlineButton onClick={() => { setEditing(false); setDraft(voice); }} disabled={saving} style={{ padding: '6px 14px', fontSize: 12 }}>
+                    Cancel
+                  </OutlineButton>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: colors.bg, border: `1px solid ${colors.borderLight}`,
+                borderRadius: radius.base, padding: '10px 12px',
+                fontSize: 13, lineHeight: 1.55, color: colors.textSecondary,
+                whiteSpace: 'pre-wrap', minHeight: 60,
+              }}>
+                {voiceLoaded
+                  ? (voice || (isMaster
+                      ? 'No voice guidelines set yet. Click ✎ Edit to add the tone, voice rules, and reference brands for this team.'
+                      : 'No voice guidelines set yet. Ask the master admin to add them.'))
+                  : 'Loading…'}
+              </div>
+            )}
+          </div>
+
+          {/* Team-scoped request CTA */}
+          <div>
+            <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6, textTransform: 'uppercase' }}>
+              Need something for this team?
+            </div>
+            <Link
+              to={requestLink}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                background: team?.color || colors.accent, color: '#FFFFFF',
+                border: 'none', borderRadius: radius.base,
+                padding: '10px 16px', textDecoration: 'none',
+                fontFamily: fonts.body, fontSize: 13, fontWeight: 700, letterSpacing: 0.3,
+                boxShadow: '0 4px 10px rgba(0,0,0,0.10)',
+              }}
+            >
+              📨 Submit a {team.id} request
+            </Link>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
