@@ -11,7 +11,7 @@ import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, P
 import { colors, fonts, radius } from '../theme';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
-import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer } from '../player-store';
+import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer, upsertManualPlayer } from '../player-store';
 import { ContentIdeasSection } from '../content-ideas-section';
 import { percentileFor } from '../percentile-bubble';
 import { authedFetch } from '../authed-fetch';
@@ -497,6 +497,27 @@ export default function TeamPage() {
           profileMediaId: overrideId,
           lastnameUnique: lastnameCount.get(LN) === 1,
         });
+        // v4.5.64: pin-on-first-resolve. If the player has NO explicit
+        // profile_media_id set but the heuristic resolved an avatar,
+        // write that media id back as their pin. Locks the choice
+        // so future uploads (e.g. a new ACTION shot) don't shift
+        // the avatar even though they'd outrank the current pick on
+        // the type-priority ladder. The pin is idempotent — once
+        // set we never overwrite it without an explicit user edit.
+        if (!overrideId && headshot?.id) {
+          // Fire and forget — non-blocking. Per-player upsert is
+          // O(few) calls per team page load (only fires for players
+          // without a pin), and never for players who already have
+          // one. Errors are swallowed.
+          upsertManualPlayer({
+            team: p.team,
+            lastName: p.lastName,
+            firstInitial: FI || undefined,
+            firstName: p.firstName || undefined,
+            num: p.num || undefined,
+            updates: { profile_media_id: headshot.id, profileMediaId: headshot.id },
+          }).catch(() => { /* offline / 401 / etc. — page still renders */ });
+        }
         if (headshot?.blob) {
           // v4.5.57: Key by the disambiguated player slug, not just
           // FI+LN. Logan Rose (#08) and Luke Rose (#05) both produced

@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.64',
+    date: '2026-05-14',
+    kind: 'patch',
+    summary: 'Roster avatar pin-on-first-resolve',
+    items: [
+      'Reported: uploading a new HEADSHOT for a player whose avatar was an ACTION shot caused the avatar to silently swap to the new file on the next page load. Master direction: new photos should NOT change a player\'s profile picture automatically — only an explicit edit should.',
+      'Fix: TeamPage now pins the heuristic-resolved avatar as profile_media_id the first time it surfaces for a player without an explicit pin. The pin is idempotent — once set we never overwrite it without an explicit user edit (the "Set as profile photo" affordance on the player page).',
+      'Existing players with no pin will get one written the next time anyone visits their team page. Players who already have a pin are untouched.',
+    ],
+  },
+  {
     version: '4.5.63',
     date: '2026-05-14',
     kind: 'minor',
