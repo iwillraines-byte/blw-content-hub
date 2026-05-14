@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.67',
+    date: '2026-05-14',
+    kind: 'minor',
+    summary: 'Studio: split-screen on Blank Slate',
+    items: [
+      'Blank Slate template gains a Split Screen toggle. When on, the canvas stacks two photos top/bottom with a 4px white hairline divider so the eye reads it as a deliberate split, not a single panoramic shot. The top photo is whichever you\'ve already picked (player media, team upload, etc.); the second slot has its own upload affordance below the toggle.',
+      'V1 keeps it simple: each half gets a center-cover crop, no per-slot pan/zoom yet. The existing Photo Adjust sliders still affect the top photo only. Per-half pan/zoom is a follow-up if usage shows it\'s needed.',
+      'Toggle only surfaces on Blank Slate; other templates ignore the option. Clearing the toggle drops the second photo automatically.',
+    ],
+  },
+  {
     version: '4.5.66',
     date: '2026-05-14',
     kind: 'minor',

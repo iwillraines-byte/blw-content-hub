@@ -321,8 +321,29 @@ function computeBgCrop(bgImg, w, h, transform) {
 const HEADLINE_TOGGLE_BLOCKED_TEMPLATES = new Set(['player-stat']);
 const headlineToggleEligible = (templateType) => !HEADLINE_TOGGLE_BLOCKED_TEMPLATES.has(templateType);
 
+// v4.5.67: Helper to draw an image fully covering a rect (object-fit:
+// cover semantics). Used by the split-screen renderer where each half
+// of the canvas needs an independent center-cover crop. Caller owns
+// the optional pan/zoom math; this just handles the source-rect
+// derivation for a plain center-crop default.
+function drawCovered(ctx, img, dx, dy, dw, dh) {
+  if (!img) return;
+  const imgRatio = img.width / img.height;
+  const dRatio = dw / dh;
+  let sx = 0, sy = 0, sw = img.width, sh = img.height;
+  if (imgRatio > dRatio) {
+    // Source wider than dest — crop horizontally.
+    sw = img.height * dRatio;
+    sx = (img.width - sw) / 2;
+  } else {
+    sh = img.width / dRatio;
+    sy = (img.height - sh) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
 function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
-  const { hiddenFields, forExport, bgTransform, statCard, headlineFont, templateType } = options;
+  const { hiddenFields, forExport, bgTransform, statCard, headlineFont, templateType, splitScreen, bgImg2 } = options;
   const headlineEnabled = !!headlineFont && headlineToggleEligible(templateType);
   // The "headline" is whichever rendered field has the largest fontSize.
   // Computed once so each field's draw block can decide if it's the one.
@@ -334,8 +355,24 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
   ctx.clearRect(0, 0, w, h);
   const teamColor = team?.color;
 
+  // v4.5.67: Split-screen mode (blank-slate only) — stack two photos
+  // top/bottom inside the canvas. Each half gets an independent
+  // center-cover crop; the user's bgTransform pan/zoom only applies
+  // to the top image since the second slot doesn't have its own
+  // transform state yet (kept simple for v1; per-slot transforms can
+  // land in a follow-up). A 4px white divider visually separates
+  // the two halves so the eye knows it's a deliberate stack and not
+  // a single panoramic photo.
+  if (splitScreen && bgImg && bgImg2) {
+    const halfH = Math.floor(h / 2);
+    drawCovered(ctx, bgImg, 0, 0, w, halfH);
+    drawCovered(ctx, bgImg2, 0, halfH, w, h - halfH);
+    // White hairline divider
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, halfH - 2, w, 4);
+  }
   // Layer 1: Background photo (cover crop with pan/zoom + exposure), or team-colored gradient fallback
-  if (bgImg) {
+  else if (bgImg) {
     const { sx, sy, sw, sh } = computeBgCrop(bgImg, w, h, bgTransform);
     const t = bgTransform || DEFAULT_BG_TRANSFORM;
     const filterParts = [];
@@ -643,6 +680,13 @@ export default function Generate() {
   // modal with much bigger tiles when there are >6 media items.
   // Sidesteps the cramped 72px grid for players with deep archives.
   const [bigPickerOpen, setBigPickerOpen] = useState(false);
+  // v4.5.67: split-screen mode (blank-slate only). When on, the
+  // canvas renders bgImg in the top half and bgImg2 in the bottom
+  // half with a white hairline divider. Second photo gets its own
+  // upload / picker slot; v1 has no per-half pan/zoom.
+  const [splitScreen, setSplitScreen] = useState(false);
+  const [bgImg2, setBgImg2] = useState(null);
+  const [bgUrl2, setBgUrl2] = useState(null);
   const [playerMediaUrls, setPlayerMediaUrls] = useState([]);
   const [selectedPlayer, setSelectedPlayer] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -1000,8 +1044,8 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption, headlineFont, templateType: customType });
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption, headlineFont]);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 });
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption, headlineFont, splitScreen, bgImg2]);
 
   // Per-input render — exactly the same shape as before the local-fonts
   // change. Two reasons not to await fonts here: (1) rebinding inside a
@@ -1063,7 +1107,7 @@ export default function Generate() {
       renderCustomTemplate(
         ectx, customPlat.w, customPlat.h, bgImg, overlayImg,
         customFields, fieldConfig, activeEffects, customTeamObj,
-        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType },
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 },
       );
     } else {
       // Standard 1× — re-render the visible canvas without placeholders.
@@ -1071,7 +1115,7 @@ export default function Generate() {
       renderCustomTemplate(
         ctx, customPlat.w, customPlat.h, bgImg, overlayImg,
         customFields, fieldConfig, activeEffects, customTeamObj,
-        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType },
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 },
       );
       exportCanvas = previewCanvas;
     }
@@ -2043,6 +2087,85 @@ export default function Generate() {
               </CollapsibleCard>
                 );
               })()}
+
+              {/* v4.5.67: Split-screen toggle — blank-slate only.
+                  When on, the canvas stacks two photos top/bottom
+                  with a white hairline divider. The second photo
+                  has its own upload affordance below the toggle. */}
+              {customType === 'blank-slate' && (
+                <Card>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Label style={{ marginBottom: 0 }}>Split screen</Label>
+                    <button
+                      onClick={() => {
+                        setSplitScreen(prev => {
+                          const next = !prev;
+                          if (!next) { setBgImg2(null); setBgUrl2(null); }
+                          return next;
+                        });
+                      }}
+                      style={{
+                        background: splitScreen ? (customTeamObj?.color || colors.accent) : colors.white,
+                        color: splitScreen ? '#FFFFFF' : colors.textSecondary,
+                        border: `1px solid ${splitScreen ? (customTeamObj?.color || colors.accent) : colors.border}`,
+                        borderRadius: radius.full, padding: '6px 14px',
+                        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                        letterSpacing: 0.5, textTransform: 'uppercase',
+                        cursor: 'pointer',
+                      }}
+                    >{splitScreen ? 'ON' : 'OFF'}</button>
+                  </div>
+                  <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, lineHeight: 1.45, fontStyle: 'italic', marginBottom: splitScreen ? 12 : 0 }}>
+                    Stack two photos top/bottom in the canvas. The top photo is whichever you've already picked above; the bottom photo uses the second slot below.
+                  </div>
+                  {splitScreen && (
+                    <div>
+                      <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6, textTransform: 'uppercase' }}>
+                        Bottom photo
+                      </div>
+                      {bgUrl2 ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 100, aspectRatio: '1 / 1', borderRadius: radius.base,
+                            background: `url(${bgUrl2}) center/cover`,
+                            border: `1px solid ${colors.border}`,
+                          }} />
+                          <button onClick={() => { setBgImg2(null); setBgUrl2(null); }} style={{
+                            background: 'none', border: 'none', color: colors.accent, fontSize: 11,
+                            fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer',
+                            letterSpacing: 0.4,
+                          }}>✕ Clear</button>
+                        </div>
+                      ) : (
+                        <label style={{
+                          display: 'block', cursor: 'pointer',
+                          border: `2px dashed ${colors.border}`, borderRadius: radius.base,
+                          padding: 18, textAlign: 'center', background: colors.bg,
+                          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                          color: colors.textSecondary, letterSpacing: 0.4,
+                        }}>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file || !file.type.startsWith('image/')) return;
+                              const url = URL.createObjectURL(file);
+                              setBgUrl2(url);
+                              const img = new Image();
+                              img.onload = () => setBgImg2(img);
+                              img.src = url;
+                              e.target.value = '';
+                            }}
+                            style={{ display: 'none' }}
+                          />
+                          + Upload bottom-half photo
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )}
 
               {/* v4.5.31: Stat Card picker — only shown when the active
                   template renders a stat card. Four sub-types: hitting
