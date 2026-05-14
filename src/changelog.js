@@ -18,6 +18,23 @@
 
 export const RELEASES = [
   {
+    version: '4.6.0',
+    date: '2026-05-14',
+    kind: 'major',
+    summary: 'v4.6 — Studio, Requests, Files, AI, Branding overhaul',
+    items: [
+      'Eight patch releases (v4.5.61 → v4.5.68) coalesced into the v4.6 milestone. 28 of 30 punch-list items shipped across UX cleanup, template defaults, request workflow, AI ideas, photo quality, team branding, and roster/avatar handling. Below is the round-up; individual entries (v4.5.61–v4.5.68) below this one have the per-item detail.',
+      'STUDIO: format dropdown removed (all posts 1080×1350 portrait), template picker moved below Player + made smaller, greyed-out for templates without overlays, Split Screen toggle on Blank Slate, stat-card-only transparent export, headline picker pared to Winner Sans + tighter pill, lockedX on news + hype/promo, news defaults updated, caption 2-line wrap, zoom <1.0× for horizontal news photos, suggested stat lines flipped number-first, overlay section hidden on stat-card + blank-slate, redundant preview thumbnail removed, >6-photo media picker modal.',
+      'REQUESTS: League-wide + Any Player options, athlete input field removed, master-only 🗑 Remove, Deny-with-reason on every pending row with auto-mailto, recent-posts tiles open a lightbox preview (not a deep-link back to Studio).',
+      'FILES: keyword multi-token search, Drive folders default collapsed, NEEDS POLISH chip on low-res / blurry photos with one-click download for Topaz round-trip, jersey# recall from prior tagged files when the canonical roster row is missing the number.',
+      'AI IDEAS: 👍/👎 thumbs feedback on every card piped into the prompt as user-preference signal (resolves the "ideas feel static" complaint), Content Ideas section always visible on player pages with an inline Generate CTA in the empty state.',
+      'TEAM PAGE: new Branding & Admin card at the bottom of every team — logo, copyable hex chips, editable Brand Voice block, team-scoped request CTA. Pin-on-first-resolve avatar logic so new photo uploads don\'t silently swap a player\'s profile picture.',
+      'PLAYER PAGE: Branding voice block reads from app-settings (brand-voice-{TEAMID}) for future AI tone-matching.',
+      'HOUSEKEEPING: bell icon removed, Top Fade effect removed, lightbox click-outside-to-close works on every preview surface (was a broken backdrop check).',
+      'STILL ON THE BOARD for v4.6.1: multi-image carousel + zip download, email notify pipeline (requests@blwstudio.com), photo upscale (decided to ship the detection-only path — your Topaz subscription is desktop-only and the cloud API is enterprise-priced).',
+    ],
+  },
+  {
     version: '4.5.68',
     date: '2026-05-14',
     kind: 'minor',
