@@ -32,16 +32,20 @@ export const NEWS_SHADOWS = [
 // (single source of truth). For per-platform variants, fork the
 // template instead of drifting these values.
 //
-// Locked values (per design call 2026-04-29):
-//   x        = 540
+// Locked values (per master direction, v4.5.62 / 2026-05-14):
+//   x        = 540        (lockedX:true — overrides can't drift this)
 //   fontSize = 120
-//   y        = 1010 / 1138 / 1266
+//   y        = 1018 / 1151 / 1288
 //   font     = 'press'
+// The lockedX flag is honored by field-overrides: a saved override
+// for { x: 612 } gets coerced back to x=540 on read. Y, font, font
+// size, and color stay user-editable; just the horizontal anchor
+// is fixed so the lines stay centered against the overlay chyron.
 function makeNewsLines() {
   return [
-    { key: 'line1', label: 'Line 1', x: 540, y: 1010, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-    { key: 'line2', label: 'Line 2', x: 540, y: 1138, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
-    { key: 'line3', label: 'Line 3', x: 540, y: 1266, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS },
+    { key: 'line1', label: 'Line 1', x: 540, y: 1018, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS, lockedX: true },
+    { key: 'line2', label: 'Line 2', x: 540, y: 1151, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS, lockedX: true },
+    { key: 'line3', label: 'Line 3', x: 540, y: 1288, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS, lockedX: true },
   ];
 }
 
@@ -172,9 +176,9 @@ export const TEMPLATE_TYPES = {
         { key: 'teamName', label: 'Team', x: 540, y: 880, fontSize: 20, font: 'condensed', color: 'rgba(255,255,255,0.5)', align: 'center', maxWidth: 400 },
       ],
       portrait: [
-        { key: 'headline', label: 'Headline', x: 540, y: 560, fontSize: 72, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900 },
-        { key: 'subtext', label: 'Subtext', x: 540, y: 660, fontSize: 24, font: 'body', color: 'rgba(255,255,255,0.7)', align: 'center', maxWidth: 800 },
-        { key: 'teamName', label: 'Team', x: 540, y: 1100, fontSize: 20, font: 'condensed', color: 'rgba(255,255,255,0.5)', align: 'center', maxWidth: 400 },
+        { key: 'headline', label: 'Headline', x: 540, y: 560, fontSize: 72, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900, lockedX: true },
+        { key: 'subtext', label: 'Subtext', x: 540, y: 660, fontSize: 24, font: 'body', color: 'rgba(255,255,255,0.7)', align: 'center', maxWidth: 800, lockedX: true },
+        { key: 'teamName', label: 'Team', x: 540, y: 1100, fontSize: 20, font: 'condensed', color: 'rgba(255,255,255,0.5)', align: 'center', maxWidth: 400, lockedX: true },
       ],
       story: [
         { key: 'headline', label: 'Headline', x: 540, y: 800, fontSize: 72, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900 },

@@ -166,6 +166,9 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
     const avgPct = percentileOfValue(battingPool.map(b => parseFloat(b.avg)), parseFloat(batter.avg));
     const hrPct = percentileOfValue(battingPool.map(b => b.hr), batter.hr);
 
+    // v4.5.62: number-first format. Was "OPS+ 117 · 0.890 OPS"; now
+    // "117 OPS+ · 0.890 OPS". Slash line and existing dual-value
+    // strings already lead with numbers and stay as-is.
     recs.push({
       label: 'Slash line',
       value: `${batter.avg} / ${batter.obp} / ${batter.slg}`,
@@ -174,13 +177,13 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
     if (batter.hr > 0) {
       recs.push({
         label: 'Power',
-        value: `HR ${batter.hr} · RBI ${batter.rbi} · ${batter.slg} SLG`,
+        value: `${batter.hr} HR · ${batter.rbi} RBI · ${batter.slg} SLG`,
         badge: pctBadge(hrPct),
       });
     }
     recs.push({
       label: 'Advanced',
-      value: `OPS+ ${batter.ops_plus} · ${batter.ops} OPS`,
+      value: `${batter.ops_plus} OPS+ · ${batter.ops} OPS`,
       badge: pctBadge(opsPct),
     });
   }
@@ -191,7 +194,7 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
 
     recs.push({
       label: 'Dominance',
-      value: `FIP ${typeof pitcher.fip === 'number' ? pitcher.fip.toFixed(2) : pitcher.fip} · K/4 ${pitcher.k4}`,
+      value: `${typeof pitcher.fip === 'number' ? pitcher.fip.toFixed(2) : pitcher.fip} FIP · ${pitcher.k4} K/4`,
       badge: pctBadge(fipPct) || pctBadge(k4Pct),
     });
     recs.push({
@@ -201,7 +204,7 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
     });
     recs.push({
       label: 'Strikeout',
-      value: `K ${pitcher.k} · K/4 ${pitcher.k4} · ${pitcher.ip} IP`,
+      value: `${pitcher.k} K · ${pitcher.k4} K/4 · ${pitcher.ip} IP`,
       badge: pctBadge(k4Pct),
     });
   }
@@ -240,7 +243,7 @@ const FIELD_PLACEHOLDERS = {
   playerName:  'PLAYER NAME',
   number:      '00',
   teamName:    'TEAM NAME',
-  statLine:    'OPS+ 000 · AVG .XXX · HR 0',
+  statLine:    '000 OPS+ · .XXX AVG · 0 HR',
   homeTeam:    'HOME',
   awayTeam:    'AWAY',
   homeRecord:  '0-0',
@@ -860,10 +863,15 @@ export default function Generate() {
     const pitcher = pitchingPool.find(b => b.name === p.name && b.team === p.team);
     const teamObj = getTeam(p.team);
     const mediaJersey = playerMedia.find(m => m.num)?.num || p.num || '';
+    // v4.5.62: number-first stat-line format per master direction.
+    // "OPS+ 117 | AVG .315" reads like a label-then-value pair; the
+    // broadcast / front-office convention is value-then-label so the
+    // number lands first ("117 OPS+ | .315 AVG"). Same shape applied
+    // to every suggestion in buildRecommendations.
     const statLine = batter
-      ? `OPS+ ${batter.ops_plus} | AVG ${batter.avg} | HR ${batter.hr} | OBP ${batter.obp}`
+      ? `${batter.ops_plus} OPS+ | ${batter.avg} AVG | ${batter.hr} HR | ${batter.obp} OBP`
       : pitcher
-        ? `FIP ${pitcher.fip.toFixed(2)} | IP ${pitcher.ip} | W ${pitcher.w} | K/4 ${pitcher.k4}`
+        ? `${pitcher.fip.toFixed(2)} FIP | ${pitcher.ip} IP | ${pitcher.w} W | ${pitcher.k4} K/4`
         : '';
 
     // Per-template field shape:
@@ -1262,11 +1270,13 @@ export default function Generate() {
     if (!bgImg || showLayoutEditor) return;
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015); // smooth, scale-invariant zoom
+    // v4.5.62: news template can letterbox via zoom < 1×; clamp at 0.5.
+    const minZoom = customType === 'player-stat' ? 0.5 : 1;
     setBgTransform(t => {
-      const z = Math.max(1, Math.min(4, t.zoom * factor));
+      const z = Math.max(minZoom, Math.min(4, t.zoom * factor));
       return { ...t, zoom: z };
     });
-  }, [bgImg, showLayoutEditor]);
+  }, [bgImg, showLayoutEditor, customType]);
 
   const resetBgTransform = useCallback(() => setBgTransform(DEFAULT_BG_TRANSFORM), []);
   const patchBgTransform = useCallback((partial) => setBgTransform(t => ({ ...t, ...partial })), []);
@@ -1534,34 +1544,36 @@ export default function Generate() {
   // owns its own scope keyed off the form's team state.
   const customTeamObjForScope = customTeam ? getTeam(customTeam) : null;
 
-  // v4.5.15: extract Template Type card so the same JSX renders in two
-  // spots — top of left column on mobile, top of right column on
-  // desktop. Memoised so the card doesn't re-render on every parent
-  // re-render (e.g. as customFields changes character-by-character).
+  // v4.5.62: Template Type card pulled BELOW Player in the form flow
+  // (master direction: pick team + player first, THEN figure out
+  // what to make). Also pulled tighter — preview thumbnail dropped
+  // from 72px → 48px and the label sits below in a smaller weight.
+  // No more "monster card at the top of the right column" — the
+  // preview area is now just preview + download.
   const templateTypeCard = (
-    <Card>
-      <Label>Template Type</Label>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+    <Card style={{ padding: 14 }}>
+      <Label style={{ marginBottom: 6 }}>Template</Label>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))', gap: 6 }}>
         {Object.entries(TEMPLATE_TYPES).map(([key, t]) => (
           <button key={key} onClick={() => { setCustomType(key); setCustomFields({}); setHiddenFields(defaultHiddenFieldsFor(key, customPlatform)); setSelectedOverlayId(null); setOverlayImg(null); setHeadlineFont(null); }} style={{
             background: customType === key ? colors.accentSoft : colors.white,
             border: customType === key ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
             color: customType === key ? colors.accent : colors.textSecondary,
-            borderRadius: radius.base, padding: 6, cursor: 'pointer',
-            fontFamily: fonts.body, fontSize: 10, fontWeight: 700, textAlign: 'center',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+            borderRadius: radius.base, padding: '5px 4px', cursor: 'pointer',
+            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, textAlign: 'center',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+            letterSpacing: 0.3, lineHeight: 1.15,
           }}>
             <TemplatePreview
               templateKey={key}
               platform={customPlatform}
               team={customTeam}
-              width={72}
-              height={72}
+              width={48}
+              height={48}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ fontSize: 12 }}>{t.icon}</span>
-              <span>{t.name}</span>
-            </div>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+              {t.icon} {t.name}
+            </span>
           </button>
         ))}
       </div>
@@ -1685,56 +1697,52 @@ export default function Generate() {
               Template Type lives above the preview (right col) because it
               fundamentally changes what you're looking at. */}
           <>
-              {/* 1. Team & Format — first, so brand colors drive the preview immediately */}
+              {/* 1. Team — Format dropdown removed in v4.5.62. Every BLW
+                  post is now 1080×1350 portrait (the IG feed format
+                  master is standardizing on), so the format toggle
+                  was just an extra click + a source of off-brand
+                  exports. The renderer still uses customPlatform
+                  ('portrait') under the hood — only the UI is gone. */}
               <Card>
-                <Label>Team & Format</Label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>
-                      Team
-                      {isAthlete && (
-                        <span title="Your role is restricted to this team" style={{
-                          marginLeft: 6, fontSize: 9, fontWeight: 700,
-                          color: colors.textSecondary, letterSpacing: 0.5,
-                        }}>🔒 LOCKED</span>
-                      )}
-                    </label>
-                    <select
-                      value={customTeam}
-                      onChange={e => setCustomTeam(e.target.value)}
-                      disabled={isAthlete}
-                      title={isAthlete ? 'Your role is restricted to your own team' : undefined}
-                      style={{
-                        ...selectStyle,
-                        marginTop: 4,
-                        opacity: isAthlete ? 0.7 : 1,
-                        cursor: isAthlete ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      {isAthlete ? (
-                        // Athlete: only their team is selectable. If the profile
-                        // somehow has no team_id, we degrade to a "no team" state.
-                        athleteLockedTeam ? (
-                          <option value={athleteLockedTeam}>
-                            {athleteLockedTeam} · {TEAMS.find(t => t.id === athleteLockedTeam)?.name || 'Your team'}
-                          </option>
-                        ) : (
-                          <option value="">No team assigned. Ask your admin.</option>
-                        )
-                      ) : (
-                        <>
-                          <option value="">Choose a team…</option>
-                          {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
-                        </>
-                      )}
-                    </select>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>Format</label>
-                    <select value={customPlatform} onChange={e => setCustomPlatform(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-                      {Object.entries(PLATFORMS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                  </div>
+                <Label>Team</Label>
+                <label style={labelStyle}>
+                  Team
+                  {isAthlete && (
+                    <span title="Your role is restricted to this team" style={{
+                      marginLeft: 6, fontSize: 9, fontWeight: 700,
+                      color: colors.textSecondary, letterSpacing: 0.5,
+                    }}>🔒 LOCKED</span>
+                  )}
+                </label>
+                <select
+                  value={customTeam}
+                  onChange={e => setCustomTeam(e.target.value)}
+                  disabled={isAthlete}
+                  title={isAthlete ? 'Your role is restricted to your own team' : undefined}
+                  style={{
+                    ...selectStyle,
+                    marginTop: 4,
+                    opacity: isAthlete ? 0.7 : 1,
+                    cursor: isAthlete ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {isAthlete ? (
+                    athleteLockedTeam ? (
+                      <option value={athleteLockedTeam}>
+                        {athleteLockedTeam} · {TEAMS.find(t => t.id === athleteLockedTeam)?.name || 'Your team'}
+                      </option>
+                    ) : (
+                      <option value="">No team assigned. Ask your admin.</option>
+                    )
+                  ) : (
+                    <>
+                      <option value="">Choose a team…</option>
+                      {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
+                    </>
+                  )}
+                </select>
+                <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 6, letterSpacing: 0.4 }}>
+                  Every post is exported at 1080×1350 (Instagram portrait).
                 </div>
               </Card>
 
@@ -1766,6 +1774,11 @@ export default function Generate() {
                   </CollapsibleCard>
                 );
               })()}
+
+              {/* v4.5.62: Template selector sits HERE — below Team
+                  (and below Player when the template is player-centric),
+                  not floating above the preview anymore. */}
+              {!isMobile && templateTypeCard}
 
               {/* 3. Select Media — gated on team selection so we don't spin up
                   a full team's asset library until the user has committed.
@@ -2500,7 +2513,8 @@ export default function Generate() {
             paddingRight: 4, // breathing room before scrollbar
           }),
         }}>
-          {!isMobile && templateTypeCard}
+          {/* v4.5.62: Template card no longer renders here — it lives
+              below Player in the left controls column now. */}
           <Label>Live Preview {showLayoutEditor && <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.accent, letterSpacing: 0.5, marginLeft: 6 }}>· DRAG FIELDS TO REPOSITION</span>}</Label>
           <div style={{
             background: '#1A1A22', borderRadius: radius.lg, padding: 16,
@@ -2583,8 +2597,16 @@ export default function Generate() {
               <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginBottom: 10, fontStyle: 'italic' }}>
                 Drag preview to pan · Scroll to zoom · Sliders affect photo only
               </div>
+              {/* v4.5.62: Zoom min dropped 1.00 → 0.5 on team/player news
+                  so horizontal source photos (landscape action shots,
+                  group photos) can pad-fit inside the portrait canvas
+                  without losing the sides. The crop window simply
+                  exceeds the source rect; the renderer fills the
+                  outside with the background color so it reads as a
+                  letterbox. Other templates stay clamped to ≥1.00×
+                  because letterboxing them looks broken. */}
               {[
-                { key: 'zoom',       label: 'Zoom',       min: 1,   max: 4,   step: 0.01, fmt: v => `${v.toFixed(2)}×` },
+                { key: 'zoom',       label: 'Zoom',       min: customType === 'player-stat' ? 0.5 : 1,   max: 4,   step: 0.01, fmt: v => `${v.toFixed(2)}×` },
                 { key: 'brightness', label: 'Exposure',   min: 0.4, max: 1.6, step: 0.01, fmt: v => `${Math.round((v - 1) * 100)}%` },
                 { key: 'contrast',   label: 'Contrast',   min: 0.4, max: 1.6, step: 0.01, fmt: v => `${Math.round((v - 1) * 100)}%` },
                 { key: 'saturation', label: 'Saturation', min: 0,   max: 2,   step: 0.01, fmt: v => `${Math.round(v * 100)}%` },

@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.5.62',
+    date: '2026-05-14',
+    kind: 'patch',
+    summary: 'v4.6 prep wave B: Studio template defaults + layout',
+    items: [
+      'Studio: Format dropdown removed. Every BLW post now exports at 1080×1350 portrait (the IG feed format master is standardizing on). Saves a click + eliminates off-brand exports.',
+      'Studio: Template picker moved BELOW Player in the form flow (pick team + player first, THEN pick what to make). Thumbnails shrunk 72px→48px so the strip doesn\'t dominate the column. No longer floats above the preview area.',
+      'Team/Player News template: default Y coordinates updated to 1018 / 1151 / 1288 per design call. Font stays Press Gothic 120pt, X stays 540.',
+      'Team/Player News + Hype/Promo: X-axis is now LOCKED at 540 across all content lines. Saved field-overrides can drift Y / font / size / color but the horizontal anchor stays put so lines stay centered against the chyron.',
+      'Team/Player News: Zoom slider can now go as low as 0.50× (was 1.00× minimum) so landscape source photos can letterbox-fit inside the portrait canvas without losing the sides. Other templates stay clamped to ≥1.00× because letterboxing them looks broken.',
+      'Suggested stat lines: number-first format per master direction. "OPS+ 117 · 0.890 OPS" → "117 OPS+ · 0.890 OPS". Same for power / advanced / dominance / strikeout variants and the placeholder template.',
+    ],
+  },
+  {
     version: '4.5.61',
     date: '2026-05-14',
     kind: 'patch',

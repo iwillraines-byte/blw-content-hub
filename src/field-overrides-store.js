@@ -93,7 +93,12 @@ export function applyOverrides(defaultFields, templateType, platform) {
     if (!o) return f;
     return {
       ...f,
-      x: o.x != null ? o.x : f.x,
+      // v4.5.62: lockedX honored — a field with lockedX:true in the
+      // default config refuses to take an x override. Used for the
+      // Team/Player News and Hype/Promo templates where the
+      // chyron-anchored horizontal centerline shouldn't drift across
+      // posts. Y / fontSize / font / color stay user-editable.
+      x: f.lockedX ? f.x : (o.x != null ? o.x : f.x),
       y: o.y != null ? o.y : f.y,
       fontSize: o.fontSize != null ? o.fontSize : f.fontSize,
       font: o.font != null ? o.font : f.font,
