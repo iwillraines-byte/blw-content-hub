@@ -490,9 +490,53 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
         ctx.fillStyle = '#FFFFFF';
       }
 
+      // v4.5.65: 2-line wrap for caption-style fields BEFORE canvas
+      // squeezes the glyphs to fit maxWidth. Without this, a long
+      // line2 on the Team/Player News template was getting visually
+      // compressed (Canvas's fillText with maxWidth scales the glyph
+      // matrix horizontally, which looks wrong against the matched
+      // line1/line3 weight). Now if the text natural width exceeds
+      // maxWidth, we break at the nearest space to the middle and
+      // render two stacked lines with normal weight.
+      //
+      // Only wraps fields explicitly opted in via `f.wrap2Line: true`
+      // (currently the news caption / hype subtext). Field config
+      // owns the policy so we don't accidentally wrap headlines —
+      // the user wants the HEADLINE never to wrap.
+      const splitTwoLines = (str) => {
+        const words = String(str).split(/\s+/);
+        if (words.length < 2) return [str, ''];
+        // Binary-search-ish: try splits, pick the one that minimizes
+        // |line1.width - line2.width| while keeping both ≤ maxWidth.
+        let best = null;
+        for (let i = 1; i < words.length; i++) {
+          const a = words.slice(0, i).join(' ');
+          const b = words.slice(i).join(' ');
+          const aw = ctx.measureText(a).width;
+          const bw = ctx.measureText(b).width;
+          if (aw <= f.maxWidth && bw <= f.maxWidth) {
+            const balance = Math.abs(aw - bw);
+            if (!best || balance < best.balance) best = { a, b, balance };
+          }
+        }
+        return best ? [best.a, best.b] : [str, ''];
+      };
       const draw = () => {
-        if (f.maxWidth) ctx.fillText(text, f.x, f.y, f.maxWidth);
-        else ctx.fillText(text, f.x, f.y);
+        const naturalW = ctx.measureText(text).width;
+        const shouldWrap = f.wrap2Line && f.maxWidth && naturalW > f.maxWidth;
+        if (shouldWrap) {
+          const [a, b] = splitTwoLines(text);
+          // Line spacing: ~1.05× the font size so the two lines read
+          // as a paragraph block, not split chunks. Top line shifts
+          // up by 0.55×fontSize, bottom line down by 0.55×fontSize.
+          const lh = Math.round(f.fontSize * 1.05);
+          ctx.fillText(a, f.x, f.y - lh / 2, f.maxWidth);
+          if (b) ctx.fillText(b, f.x, f.y + lh / 2, f.maxWidth);
+        } else if (f.maxWidth) {
+          ctx.fillText(text, f.x, f.y, f.maxWidth);
+        } else {
+          ctx.fillText(text, f.x, f.y);
+        }
       };
 
       // Multi-layer drop-shadow stack. Each shadow is applied as its

@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.65',
+    date: '2026-05-14',
+    kind: 'minor',
+    summary: 'v4.6 prep wave D-1: photo quality + caption wrap + jersey recall',
+    items: [
+      'Photo quality detection — every tagged file on the Files page now gets a "✨ NEEDS POLISH" amber chip when it\'s either low-resolution (long edge < 1500px) or soft/blurry (variance of Laplacian < 80). Click the chip to download the original for a Topaz / desktop cleanup round-trip. Detection runs 100% client-side in 5-10ms per photo, $0 in API spend, leverages your existing Topaz subscription instead of inline AI.',
+      'Studio: line 2 on the Team/Player News template and the subtext field on Hype/Promo now wrap to a 2nd line when the text naturally exceeds the line\'s maxWidth, instead of squeezing the glyphs horizontally (which was reading as off-weight against the rest of the press-gothic stack). The headline NEVER wraps — that\'s the master rule. The 2-line break point is balanced so both lines end up close to the same width.',
+      'Files Tag & Rename: jersey number now recalls from prior tagged files when the canonical roster row doesn\'t carry one. Onboarding-era HEADSHOTs uploaded with the number tagged manually pull the number forward so the next file the user tags for that same player inherits the jersey automatically.',
+    ],
+  },
+  {
     version: '4.5.64',
     date: '2026-05-14',
     kind: 'patch',

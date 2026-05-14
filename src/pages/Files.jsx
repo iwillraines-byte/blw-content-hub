@@ -19,6 +19,63 @@ import { authedFetch } from '../authed-fetch';
 import { compressImageBlob, getCompressPreference, setCompressPreference, formatSavings } from '../image-compress';
 import BulkImportModal from './BulkImportModal';
 import { PreviewLightbox } from '../preview-lightbox';
+import { analyzeAndCache, getCachedQuality } from '../photo-quality';
+
+// v4.5.65: Photo quality badge — fires the lazy quality analyzer on
+// mount, then renders a small "NEEDS POLISH" chip if the photo is
+// low-res or soft/blurry. Click the chip to download the original
+// blob so the user can run it through their desktop Topaz workflow
+// (or any cleanup tool) and re-upload. Sits in the top-left of the
+// thumbnail so it doesn't fight with the source-label chip on the
+// right.
+function NeedsPolishBadge({ fileId, qualityMap, setQualityMap, record }) {
+  useEffect(() => {
+    if (!record || !record.blob) return;
+    if (qualityMap[fileId] !== undefined) return;
+    // Tag immediately so we don't fire concurrent analyses for the
+    // same record if the tile re-renders.
+    setQualityMap(prev => ({ ...prev, [fileId]: 'pending' }));
+    analyzeAndCache(record).then(result => {
+      setQualityMap(prev => ({ ...prev, [fileId]: result }));
+    }).catch(() => {
+      setQualityMap(prev => ({ ...prev, [fileId]: null }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, record?.blob]);
+
+  const q = qualityMap[fileId];
+  if (!q || q === 'pending' || !q.needsPolish) return null;
+  const reasonText = q.reasons.map(r => r.message).join('\n');
+  const tooltip = `Suggest cleanup before posting.\n\n${reasonText}\n\nClick to download the original for Topaz / cleanup.`;
+  return (
+    <button
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!record?.blob) return;
+        const url = URL.createObjectURL(record.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = record.name || 'photo.jpg';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }}
+      title={tooltip}
+      style={{
+        position: 'absolute', top: 6, left: 6,
+        background: '#FFFBEB', color: '#92400E',
+        border: '1px solid #F59E0B',
+        borderRadius: 4, padding: '2px 6px',
+        fontSize: 9, fontFamily: 'inherit', fontWeight: 800,
+        letterSpacing: 0.4, textTransform: 'uppercase',
+        cursor: 'pointer',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+      }}
+    >✨ NEEDS POLISH</button>
+  );
+}
 
 // Player-scoped asset types. Renamed v4.3.0:
 //   ACTION    → HITTING   (batting / hitting shots)
@@ -67,7 +124,7 @@ function isProperlyNamed(name) {
 //   - Layer 2 AI auto-tag button (vision AI via /api/auto-tag, costs pennies)
 //   - Manual dropdown overrides so user can correct AI guesses before Apply
 // The parent may also push an AI result via `tagHint` prop (used for bulk runs).
-function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy, onPreview }) {
+function TagRow({ file, thumbUrl, blobRef, roster, priorMedia, tagHint, onUpdate, onDelete, onRequestAiTag, aiBusy, onPreview }) {
   const [tagScope, setTagScope] = useState('player'); // 'player' | 'team' | 'league'
   const [tagTeam, setTagTeam] = useState('');
   const [tagNum, setTagNum] = useState('');
@@ -186,9 +243,28 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
     }
     if (pick && pick.num) {
       const n = String(pick.num).padStart(2, '0');
-      if (n && n !== '00') setTagNum(n);
+      if (n && n !== '00') { setTagNum(n); return; }
     }
-  }, [tagScope, tagTeam, tagName, tagInitial, roster]);
+    // v4.5.65: fallback — if the roster row has no jersey number,
+    // look at the player's prior tagged files for one. People who
+    // were missed during onboarding often have HEADSHOTs uploaded
+    // with the number tagged manually; pull that forward so the
+    // next file the user tags inherits the number automatically.
+    // We prefer the most-recent prior record with a num.
+    if (Array.isArray(priorMedia) && priorMedia.length > 0) {
+      const candidates = priorMedia
+        .filter(m =>
+          (m.team || '').toUpperCase() === tagTeam &&
+          (m.player || '').toUpperCase() === lnUpper &&
+          m.num
+        )
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      if (candidates.length > 0) {
+        const inferredNum = String(candidates[0].num).padStart(2, '0');
+        if (inferredNum && inferredNum !== '00') setTagNum(inferredNum);
+      }
+    }
+  }, [tagScope, tagTeam, tagName, tagInitial, roster, priorMedia]);
 
   const ext = file.name.split('.').pop() || 'png';
   let preview = null;
@@ -817,6 +893,10 @@ export default function Files() {
   const [storedMedia, setStoredMedia] = useState([]);
   const [thumbUrls, setThumbUrls] = useState({});
   const [dragging, setDragging] = useState(false);
+  // v4.5.65: photo quality map — id → { needsPolish, reasons, ... }
+  // Populated lazily as tiles come into view; cached at the module
+  // level so reload-after-fix doesn't re-analyze unchanged blobs.
+  const [qualityMap, setQualityMap] = useState({});
   const [bulkOpen, setBulkOpen] = useState(false);
   // When bulk-importing from Drive we hand the modal the selected file
   // metadata in this seed; the modal downloads in batch and runs each
@@ -1723,6 +1803,7 @@ export default function Files() {
                     thumbUrl={thumbUrls[file.id]}
                     blobRef={raw?.blob}
                     roster={roster}
+                    priorMedia={storedMedia}
                     tagHint={tagHints[file.id]}
                     aiBusy={aiBusyIds.has(file.id)}
                     onUpdate={handleRename}
@@ -1901,6 +1982,7 @@ export default function Files() {
                   background: `${sourceColors[f.source]}15`, borderRadius: 4, padding: '2px 6px',
                   fontSize: 9, fontFamily: fonts.condensed, color: sourceColors[f.source], fontWeight: 700,
                 }}>{sourceLabels[f.source]?.toUpperCase() || 'FILE'}</div>
+                <NeedsPolishBadge fileId={f.id} qualityMap={qualityMap} setQualityMap={setQualityMap} record={storedMedia.find(m => m.id === f.id)} />
               </div>
               <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{f.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

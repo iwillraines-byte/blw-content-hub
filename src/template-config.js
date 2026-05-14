@@ -43,8 +43,13 @@ export const NEWS_SHADOWS = [
 // is fixed so the lines stay centered against the overlay chyron.
 function makeNewsLines() {
   return [
+    // line1 (headline) NEVER wraps — user wants the headline to keep
+    // its single-line treatment even when long. line2 (caption /
+    // stat) can fold to a 2nd line when it naturally exceeds the
+    // 1000px maxWidth so the bar of pressed-gothic glyphs doesn't
+    // get visually squeezed.
     { key: 'line1', label: 'Line 1', x: 540, y: 1018, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS, lockedX: true },
-    { key: 'line2', label: 'Line 2', x: 540, y: 1151, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS, lockedX: true },
+    { key: 'line2', label: 'Line 2', x: 540, y: 1151, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS, lockedX: true, wrap2Line: true },
     { key: 'line3', label: 'Line 3', x: 540, y: 1288, fontSize: 120, font: 'press', color: '#FFFFFF', align: 'center', maxWidth: 1000, shadows: NEWS_SHADOWS, lockedX: true },
   ];
 }
@@ -177,7 +182,7 @@ export const TEMPLATE_TYPES = {
       ],
       portrait: [
         { key: 'headline', label: 'Headline', x: 540, y: 560, fontSize: 72, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 900, lockedX: true },
-        { key: 'subtext', label: 'Subtext', x: 540, y: 660, fontSize: 24, font: 'body', color: 'rgba(255,255,255,0.7)', align: 'center', maxWidth: 800, lockedX: true },
+        { key: 'subtext', label: 'Subtext', x: 540, y: 660, fontSize: 24, font: 'body', color: 'rgba(255,255,255,0.7)', align: 'center', maxWidth: 800, lockedX: true, wrap2Line: true },
         { key: 'teamName', label: 'Team', x: 540, y: 1100, fontSize: 20, font: 'condensed', color: 'rgba(255,255,255,0.5)', align: 'center', maxWidth: 400, lockedX: true },
       ],
       story: [
