@@ -14,6 +14,7 @@ import { useToast } from '../toast';
 import { fetchRecentGenerates, setGenerateLogHidden } from '../cloud-sync';
 import { useAuth } from '../auth';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
+import { getRecentFeedback } from '../idea-feedback-store';
 import { formatPostName } from '../template-config';
 import { authedFetch } from '../authed-fetch';
 import IdeaCard from '../idea-card';
@@ -194,6 +195,10 @@ export default function ContentStudio() {
           // is set (seed scoping takes precedence — they collapse to the
           // same intent in practice).
           team: targetTeam || null,
+          // v4.5.68: pass thumbs feedback so server can bias future
+          // generations away from down-voted patterns. Server treats
+          // this as advisory; safe to drop today.
+          recentFeedback: getRecentFeedback(20),
         }),
       });
       const data = await res.json();

@@ -27,6 +27,7 @@ import { TeamChip } from './components';
 import { colors, fonts, radius } from './theme';
 import { useToast } from './toast';
 import { authedFetch } from './authed-fetch';
+import { getFeedback, setFeedback } from './idea-feedback-store';
 
 // Angle taxonomy matches the menu in api/ideas.js — every angle a new
 // idea ships with should fall into one of these. Legacy angles from
@@ -82,6 +83,16 @@ export default function IdeaCard({
 
   const [expanded, setExpanded] = useState(false);
   const [activePlatform, setActivePlatform] = useState('instagram');
+  // v4.5.68: thumbs feedback. Reads + writes via idea-feedback-store
+  // (localStorage today; can graduate to a Supabase column when the
+  // server prompt actually consumes the signal). The current vote
+  // tints the chip so the user sees their previous pick.
+  const [vote, setVote] = useState(() => getFeedback(idea.id)?.vote || null);
+  const castVote = (v) => {
+    const next = vote === v ? null : v; // toggle off if same vote re-clicked
+    setVote(next);
+    setFeedback(idea, next);
+  };
   // Edit overrides — keyed by platform. Once the user types, we hold their
   // text locally until they Copy or Regenerate.
   const [edits, setEdits] = useState({});
@@ -324,6 +335,36 @@ export default function IdeaCard({
             cursor: 'pointer', letterSpacing: 0.4,
           }}
         >Open in Generate →</button>
+
+        {/* v4.5.68: thumbs feedback. Up = "more like this please",
+            down = "avoid this pattern". Stored locally for now;
+            future server prompt will read getRecentFeedback() to
+            bias generations. Toggling the active chip clears the
+            vote. Tooltip surfaces the why. */}
+        <span style={{ display: 'inline-flex', gap: 4, marginLeft: 4 }}>
+          <button
+            onClick={() => castVote('up')}
+            title={vote === 'up' ? 'You gave this 👍 — click again to clear' : 'Tell the AI: more ideas like this'}
+            style={{
+              background: vote === 'up' ? '#ECFDF5' : 'transparent',
+              border: `1px solid ${vote === 'up' ? '#22C55E' : colors.border}`,
+              color: vote === 'up' ? '#15803D' : colors.textSecondary,
+              borderRadius: radius.sm, padding: '4px 8px', cursor: 'pointer',
+              fontSize: 12, lineHeight: 1, fontFamily: fonts.condensed,
+            }}
+          >👍</button>
+          <button
+            onClick={() => castVote('down')}
+            title={vote === 'down' ? 'You gave this 👎 — click again to clear' : 'Tell the AI: avoid this angle'}
+            style={{
+              background: vote === 'down' ? '#FEF2F2' : 'transparent',
+              border: `1px solid ${vote === 'down' ? '#EF4444' : colors.border}`,
+              color: vote === 'down' ? '#991B1B' : colors.textSecondary,
+              borderRadius: radius.sm, padding: '4px 8px', cursor: 'pointer',
+              fontSize: 12, lineHeight: 1, fontFamily: fonts.condensed,
+            }}
+          >👎</button>
+        </span>
 
         {/* Push the right-side actions to the far edge */}
         <span style={{ flex: 1 }} />

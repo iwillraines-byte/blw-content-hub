@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.5.68',
+    date: '2026-05-14',
+    kind: 'minor',
+    summary: 'AI ideas: thumbs feedback loop + always-visible generate prompt',
+    items: [
+      'Every generated idea card now has 👍/👎 buttons. Click to vote; click the active vote again to clear. Stored locally in idea-feedback-store.',
+      'AI ideas endpoint reads the most recent 20 votes and feeds them into the prompt as a USER FEEDBACK SIGNAL block — up-voted angles bias the model toward more like that, down-voted patterns explicitly tell it what to avoid. Resolves the "ideas feel static" complaint by giving the model real preference signal instead of treating every call as cold-start.',
+      'Player page: Content Ideas section is now ALWAYS visible (no more auto-hide on empty). When no ideas exist for the player yet, the empty state shows a "✦ Generate ideas now" CTA so the prompt sits exactly where ideas would land. Pre-fix users had to know about the hero-button to discover the feature.',
+    ],
+  },
+  {
     version: '4.5.67',
     date: '2026-05-14',
     kind: 'minor',

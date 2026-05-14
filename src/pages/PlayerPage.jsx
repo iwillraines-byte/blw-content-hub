@@ -4,6 +4,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { ContentIdeasSection } from '../content-ideas-section';
+import { getRecentFeedback } from '../idea-feedback-store';
 import { PageDropZone } from '../page-drop-zone';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
@@ -1708,6 +1709,10 @@ export default function PlayerPage() {
           },
           team: player.team || team.id,
           leagueContext: leagueCtx.notes || '',
+          // v4.5.68: pass recent thumbs feedback so the AI biases away
+          // from down-voted angles + towards up-voted ones. Server can
+          // ignore the field today; client side cost is ~kb of JSON.
+          recentFeedback: getRecentFeedback(20),
         }),
       });
       const data = await res.json();
@@ -2319,10 +2324,20 @@ export default function PlayerPage() {
           player_last_name extracted from prefill.playerName). The section
           self-hides when empty so it doesn't clutter pages for less
           frequently-spotlighted players. */}
+      {/* v4.5.68: keep the section visible even when empty, with an
+          inline Generate CTA. Pre-fix the section auto-hid on player
+          pages with no ideas so users had to know to click the
+          Generate Content button at the top of the hero — most never
+          discovered it. Now the prompt sits right where ideas would
+          eventually land. */}
       <ContentIdeasSection
         team={team.id}
         player={player.lastName}
         title={`Content ideas about ${player.firstName || player.name?.split(' ')[0] || ''} ${player.lastName}`.trim()}
+        emptyMessage={`No ideas generated for ${player.firstName || player.lastName} yet. Pull bio + percentile context and surface 3 fresh angles in one click.`}
+        alwaysShow
+        onGenerate={generateIdea}
+        generating={generatingIdea}
       />
 
       {/* Media Gallery */}

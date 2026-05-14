@@ -25,6 +25,13 @@ export function ContentIdeasSection({
   title = 'Content ideas',
   emptyMessage = 'No content ideas yet. Generate fresh ideas from the dashboard and they\'ll show here.',
   limit = 12,
+  // v4.5.68: callers can opt into the "always visible w/ generate CTA"
+  // empty state instead of the auto-hide. PlayerPage uses this so the
+  // "Generate ideas about this player" prompt stays present even when
+  // there's nothing in the queue yet.
+  alwaysShow = false,
+  onGenerate = null,       // () => void — fires the brief generator
+  generating = false,      // bool — disables the CTA + swaps copy
 }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -91,12 +98,11 @@ export function ContentIdeasSection({
     });
   }, [navigate, toast]);
 
-  // Don't render the card at all if the section is empty AND we're on a
-  // surface where empty is the boring default (player pages will have lots
-  // of player-specific empties; we hide rather than nag). Team pages can
-  // still benefit from showing the empty state since users are likely to
-  // want to know.
-  const hideWhenEmpty = !!player;
+  // v4.5.68: alwaysShow overrides the auto-hide. PlayerPage now keeps
+  // this section visible even when empty, with a Generate CTA in the
+  // empty state, so the user knows ideas are a one-click action away
+  // for any player who's never had ideas generated yet.
+  const hideWhenEmpty = !!player && !alwaysShow;
   if (ideasStore.loaded && ideas.length === 0 && hideWhenEmpty) return null;
 
   return (
@@ -131,7 +137,29 @@ export function ContentIdeasSection({
           <div style={{
             fontSize: 13, color: colors.textSecondary,
             maxWidth: 360, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5,
+            marginBottom: onGenerate ? 14 : 0,
           }}>{emptyMessage}</div>
+          {/* v4.5.68: inline Generate CTA in the empty state. Only
+              renders when the parent supplied onGenerate (PlayerPage
+              does so its "Generate ideas about this player" lives
+              right where the user is looking). */}
+          {onGenerate && (
+            <button
+              onClick={onGenerate}
+              disabled={generating}
+              style={{
+                background: generating ? colors.border : colors.text,
+                color: '#FFFFFF', border: 'none',
+                borderRadius: radius.base, padding: '10px 18px',
+                fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
+                letterSpacing: 0.4, cursor: generating ? 'wait' : 'pointer',
+                boxShadow: generating ? 'none' : '0 4px 10px rgba(0,0,0,0.12)',
+                transition: 'background 160ms ease',
+              }}
+            >
+              {generating ? '…Generating' : '✦ Generate ideas now'}
+            </button>
+          )}
         </div>
       )}
 

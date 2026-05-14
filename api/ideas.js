@@ -85,7 +85,7 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch { body = {}; }
   }
-  const { context = {}, count = 6, seedIdea = null, leagueContext = '', team: scopeTeam = null } = body || {};
+  const { context = {}, count = 6, seedIdea = null, leagueContext = '', team: scopeTeam = null, recentFeedback = [] } = body || {};
 
   // ─── Build the cacheable system prompt ─────────────────────────────────────
   // This chunk is stable across a single session, so cache it so "More Like
@@ -308,7 +308,20 @@ ${topPitchers || '(none)'}
 BIGGEST RANK MOVERS:
 ${rankMovers || '(none notable this week)'}
 
-${athleteVoiceBlock}${leagueNarrativesBlock}`;
+${athleteVoiceBlock}${leagueNarrativesBlock}${(() => {
+  // v4.5.68: feedback loop. Recent thumbs up/down reads from the
+  // client (idea-feedback-store). We summarize as "more like this"
+  // (up-voted angles + headline themes) and "avoid this" (down-voted
+  // patterns) so the model has concrete signal about what's resonating.
+  if (!Array.isArray(recentFeedback) || recentFeedback.length === 0) return '';
+  const ups = recentFeedback.filter(f => f.vote === 'up').slice(0, 8);
+  const downs = recentFeedback.filter(f => f.vote === 'down').slice(0, 8);
+  if (ups.length === 0 && downs.length === 0) return '';
+  const upLines = ups.map(f => `- ${f.headline}${f.angle ? ` [${f.angle}]` : ''}`).join('\n');
+  const downLines = downs.map(f => `- ${f.headline}${f.angle ? ` [${f.angle}]` : ''}`).join('\n');
+  return `\nUSER FEEDBACK SIGNAL — recent thumbs from the master / content team. Treat these as strong directional signals:
+${ups.length ? `\nUP-VOTED (do MORE like these — angle, hook, energy):\n${upLines}` : ''}${downs.length ? `\n\nDOWN-VOTED (avoid these — same angle, same headline shape, similar lens):\n${downLines}` : ''}\n`;
+})()}`;
 
   // Extract the seed's scoping signals so we can lock follow-up ideas to
   // the SAME team (and same player when the seed is player-scoped). The
