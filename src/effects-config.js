@@ -47,22 +47,9 @@ export const BUILT_IN_EFFECTS = [
       ctx.restore();
     },
   },
-  {
-    id: 'gradient-top',
-    label: 'Top Fade',
-    icon: '▽',
-    description: 'Dark gradient from top',
-    render(ctx, w, h, opacity) {
-      ctx.save();
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, `rgba(0,0,0,${opacity})`);
-      grad.addColorStop(0.5, `rgba(0,0,0,${opacity * 0.3})`);
-      grad.addColorStop(1, `rgba(0,0,0,0)`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
-    },
-  },
+  // v4.5.61: Top Fade removed per master direction — nobody used it and
+  // the bottom-fade + team-fade cover the same use cases without
+  // shadowing the headline area.
   {
     id: 'gradient-bottom',
     label: 'Bottom Fade',

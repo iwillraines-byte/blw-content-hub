@@ -562,15 +562,8 @@ function TopBar({ isMobile, onMenuToggle }) {
           {TEAMS.map(t => <option key={t.id} value={t.id}>{isMobile ? t.id : `${t.id} · ${t.name}`}</option>)}
         </select>
 
-        {/* Hide bell on very small screens */}
-        {!isMobile && (
-          <div style={{
-            width: 34, height: 34, borderRadius: radius.full,
-            border: `1px solid ${colors.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', fontSize: 14, color: colors.textSecondary,
-          }}>🔔</div>
-        )}
+        {/* v4.5.61: bell icon removed per master direction — it was static
+            and never wired up to anything, so it just took header space. */}
 
         {/* User profile menu (replaces the old hardcoded "WR" avatar) */}
         <ProfileMenu isMobile={isMobile} />

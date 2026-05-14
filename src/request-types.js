@@ -34,7 +34,9 @@ export const REQUEST_TYPES = [
       { key: 'team', label: 'Team', kind: 'team', required: true },
       { key: 'playerLastName', label: 'Player', kind: 'player', required: false },
       { key: 'template', label: 'Template', kind: 'template', required: false },
-      { key: 'athleteInput', label: "Athlete's input (optional)", kind: 'textarea', placeholder: "Anything the player wants on their post — references, jokes, walk-up vibe, photos to use…", required: false },
+      // v4.5.61: athleteInput field removed per master direction — the
+      // universal description box at the bottom covers the same intent
+      // and athletes were filling out both with the same content.
     ],
   },
   {

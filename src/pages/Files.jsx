@@ -524,7 +524,13 @@ function TagRow({ file, thumbUrl, blobRef, roster, tagHint, onUpdate, onDelete, 
 // Shows files inside one publicly-shared Drive folder as an expandable panel,
 // lets user selectively or bulk-import them into the local media store.
 function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRename, onBulkImport }) {
-  const [expanded, setExpanded] = useState(true);
+  // v4.5.61: default to collapsed so a long list of connected Drive
+  // folders doesn't dominate the page on first paint. Click the
+  // header to expand and lazy-load files. The folder rename UI
+  // already lives below so any admin can label them ("LAN
+  // headshots", "Spring training group shots") for the rest of the
+  // team to find quickly.
+  const [expanded, setExpanded] = useState(false);
   const [files, setFiles] = useState(null); // null = not loaded, [] = empty folder
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -968,7 +974,20 @@ export default function Files() {
 
   const filtered = allDisplayFiles.filter(f => {
     if (scopeFilter !== 'all' && f.scope !== scopeFilter) return false;
-    if (search && !f.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      // v4.5.61: multi-token AND search. Pre-fix it was a single
+      // substring match on f.name, so "jaso headshot" missed every
+      // file (the substring isn't literally present in any filename).
+      // Now we tokenize the query on whitespace and require each
+      // token to appear in name, team, player, or assetType — so
+      // "jaso headshot", "lan hype", "jeter ace" all match the
+      // intuitive results.
+      const haystack = [
+        f.name, f.team, f.player, f.firstInitial, f.assetType, f.scope, f.type, f.variant,
+      ].filter(Boolean).join(' ').toLowerCase();
+      const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+      if (!tokens.every(t => haystack.includes(t))) return false;
+    }
     return true;
   });
 

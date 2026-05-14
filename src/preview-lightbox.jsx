@@ -113,9 +113,19 @@ export function PreviewLightbox({
   // the most likely culprit when users say "the modal opens but I
   // have to scroll to find it" — a parent transform was scoping
   // fixed-positioning to the wrong containing block.
+  // v4.5.61: click-anywhere-outside-the-photo closes the lightbox.
+  // Previously the check `e.target === e.currentTarget` only fired
+  // when the user landed a click on the EXACT backdrop element, not
+  // on the empty space around the photo (which is technically a
+  // child div). So most of the dark area felt unclickable. Now we
+  // close on any click that isn't on a button / link / image / video.
+  const handleBackdropClick = (e) => {
+    if (e.target.closest('button, a, img, video')) return;
+    onClose();
+  };
   const overlay = (
     <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={handleBackdropClick}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',

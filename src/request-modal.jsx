@@ -404,6 +404,9 @@ function DynamicField({ field, value, onChange, roster, isAthlete, athleteTeam, 
         <Label>{label}{required && ' *'}</Label>
         <select value={value} onChange={e => onChange(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
           <option value="">Select team…</option>
+          {/* v4.5.61: "League-wide" option for requests that aren't tied
+              to a single team (all-star content, league branding, etc.) */}
+          <option value="BLW">League-wide (BLW)</option>
           {TEAMS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </div>
@@ -415,10 +418,13 @@ function DynamicField({ field, value, onChange, roster, isAthlete, athleteTeam, 
     // the request's player_first_initial column captures the FI when
     // we add it to the modal flow later. For now, the lastname is
     // enough for the staff to find the right player.
-    const teamFiltered = currentTeam
+    const teamFiltered = currentTeam && currentTeam !== 'BLW'
       ? roster.filter(p => p.team === currentTeam)
       : [];
     const sorted = [...teamFiltered].sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+    const placeholder = currentTeam === 'BLW'
+      ? 'Pick a player (or leave on "Any player")'
+      : currentTeam ? 'Select player…' : 'Pick a team first';
     return (
       <div>
         <Label>{label}{required && ' *'}</Label>
@@ -428,7 +434,12 @@ function DynamicField({ field, value, onChange, roster, isAthlete, athleteTeam, 
           style={{ ...selectStyle, marginTop: 4 }}
           disabled={!currentTeam}
         >
-          <option value="">{currentTeam ? 'Select player…' : 'Pick a team first'}</option>
+          <option value="">{placeholder}</option>
+          {/* v4.5.61: "Any player" option — used when the request is
+              cross-roster (best home runs across BLW, league
+              all-star recap, etc.). Selecting it sends the request
+              with playerLastName='*' so the queue badge reads "Any". */}
+          {currentTeam && <option value="*">Any player</option>}
           {sorted.map(p => (
             <option key={`${p.firstInitial}|${p.lastName}|${p.num}`} value={p.lastName.toUpperCase()}>
               {p.firstInitial ? `${p.firstInitial}.` : ''}{p.lastName}{p.num ? ` #${p.num}` : ''}

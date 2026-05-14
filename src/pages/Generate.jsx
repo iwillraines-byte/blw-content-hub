@@ -216,7 +216,12 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
 // clean. Hype/Promo, Blank Slate, and Stat Card all fall in this
 // bucket: the picture (or, for stat-card, the rendered card) IS the
 // content. Adding a headline is opt-in.
-const TEMPLATES_WITH_TEXT_OFF_BY_DEFAULT = new Set(['hype', 'blank-slate', 'stat-card']);
+// v4.5.61: blank-slate + stat-card flipped to text-on-by-default per
+// master direction. The headline pill toggle still lets the user
+// turn it off — this is just the initial state when the template
+// loads. Hype/promo stays text-off so the cinematic image isn't
+// covered on first paint.
+const TEMPLATES_WITH_TEXT_OFF_BY_DEFAULT = new Set(['hype']);
 
 function defaultHiddenFieldsFor(templateType, platform) {
   if (!TEMPLATES_WITH_TEXT_OFF_BY_DEFAULT.has(templateType)) return new Set();
@@ -431,8 +436,12 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
       if (!hasValue) ctx.globalAlpha = 0.32;
 
       if (isHeadlinePill) {
-        const padX = Math.round(f.fontSize * 0.5);
-        const padY = Math.round(f.fontSize * 0.22); // v4.5.43: 0.18 → 0.22, more breathing room
+        // v4.5.61: pill 15% tighter against the text per master direction.
+        // padX 0.5 → 0.425, padY 0.22 → 0.187. Both axes pulled the same
+        // % so the pill stays visually balanced — wider on the X is
+        // still proportional to its height.
+        const padX = Math.round(f.fontSize * 0.425);
+        const padY = Math.round(f.fontSize * 0.187);
         const measured = ctx.measureText(text);
         const textW = Math.min(measured.width, f.maxWidth || measured.width);
         const pillW = textW + padX * 2;
@@ -460,12 +469,11 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
         if ((f.align || 'center') === 'left')        pillX = f.x - padX;
         else if ((f.align || 'center') === 'right')  pillX = f.x - pillW + padX;
         else                                          pillX = f.x - pillW / 2;
-        // v4.5.43: pill corners much more subtle. Was pillH/2.6 (~0.38×
-        // height — gave a stadium/capsule shape). Now scaled to
-        // 18% of pillH and capped at 24px — reads as a softly-rounded
-        // rectangle rather than a capsule, which sits better against
-        // the rest of the BLW chrome.
-        const radius = Math.min(Math.round(pillH * 0.18), 24);
+        // v4.5.61: corners further tightened. Was pillH * 0.18 capped at
+        // 24px — still read as too pill-shaped at large headlines. Now
+        // pillH * 0.10 capped at 14px so the pill looks closer to a
+        // chip / cut-stone than a button.
+        const radius = Math.min(Math.round(pillH * 0.10), 14);
         ctx.save();
         ctx.fillStyle = team?.color || '#DC2626';
         ctx.shadowColor   = 'rgba(0,0,0,0.32)';
@@ -1807,26 +1815,25 @@ export default function Generate() {
                   </div>
                 ) : (
                   <>
-                    {/* Current selection preview */}
-                    {bgUrl && (
-                      <div style={{ marginBottom: 10 }}>
-                        <div style={{
-                          width: '100%', height: 120, borderRadius: radius.base,
-                          background: `url(${bgUrl}) center/cover`,
-                          border: `1px solid ${colors.border}`,
-                        }} />
-                        <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
-                          background: 'none', border: 'none', color: colors.accent, fontSize: 11,
-                          fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer', marginTop: 4,
-                        }}>✕ Clear selection</button>
-                      </div>
-                    )}
+                    {/* v4.5.61: removed the 120px selection-preview thumbnail —
+                        it duplicates the live preview to the right. The
+                        chosen tile is highlighted in the grid below, and
+                        Clear sits inline with the grid header. */}
 
                     {/* Media grid — contextual: player's media if selected, else team's */}
                     {playerMediaUrls.length > 0 ? (
                       <>
-                        <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8, marginBottom: 6 }}>
-                          {selectedPlayer ? `PLAYER MEDIA · ${playerMediaUrls.length}` : `TEAM MEDIA · ${playerMediaUrls.length}`}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                          <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.8 }}>
+                            {selectedPlayer ? `PLAYER MEDIA · ${playerMediaUrls.length}` : `TEAM MEDIA · ${playerMediaUrls.length}`}
+                          </div>
+                          {bgUrl && (
+                            <button onClick={() => { setBgImg(null); setBgUrl(null); }} style={{
+                              background: 'none', border: 'none', color: colors.accent, fontSize: 10,
+                              fontFamily: fonts.condensed, fontWeight: 700, cursor: 'pointer',
+                              letterSpacing: 0.4,
+                            }}>✕ Clear selection</button>
+                          )}
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
                           {playerMediaUrls.map(m => (
@@ -1931,29 +1938,24 @@ export default function Generate() {
                 </Card>
               )}
 
-              {/* v4.5.37 / v4.5.42: Headline picker — six chips
-                  (OFF + five display fonts). Click a font to wrap the
-                  largest visible text field in a team-colored pill
-                  rendered in that face with a soft drop shadow. Click
-                  the active chip again (or "OFF") to remove the pill.
-                  Live preview updates the moment the chip flips —
-                  every face renders from the local-fonts pipeline so
-                  there's no fallback flash on first paint. */}
+              {/* v4.5.61: Headline picker pared back to a single
+                  toggle pair — OFF and Winner Sans. The other display
+                  faces were producing inconsistent brand expression
+                  across posts; locking the headline to Winner Sans
+                  keeps the on-pill chyron typography uniform across
+                  every team.
+                  Click "Winner Sans" to enable; click "OFF" or the
+                  active chip again to remove. */}
               {headlineToggleEligible(customType) && (
                 <Card>
                   <Label style={{ marginBottom: 4 }}>Headline treatment</Label>
                   <div style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, lineHeight: 1.45, fontStyle: 'italic', marginBottom: 12 }}>
-                    Wraps the title in a team-colored pill — TV-chyron energy. Pick a font to enable, click again or hit OFF to remove.
+                    Wraps the title in a team-colored Winner Sans pill — the BLW chyron lockup. Click again to turn off.
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {[
                       { key: null,       label: 'OFF',          familyPreview: null },
                       { key: 'winner',   label: 'Winner Sans',  familyPreview: FONT_MAP.winner },
-                      { key: 'heading',  label: 'Bebas Neue',   familyPreview: FONT_MAP.heading },
-                      { key: 'press',    label: 'Press Gothic', familyPreview: FONT_MAP.press },
-                      { key: 'united',   label: 'United Sans',  familyPreview: FONT_MAP.united },
-                      { key: 'gotham',   label: 'Gotham',       familyPreview: FONT_MAP.gotham },
-                      { key: 'condensed',label: 'Barlow Cond',  familyPreview: FONT_MAP.condensed },
                     ].map(opt => {
                       const active = headlineFont === opt.key;
                       const isOff = opt.key === null;
@@ -1991,8 +1993,13 @@ export default function Generate() {
 
               {/* 4. Overlay Picker — also gated on team. Collapsible like
                   the Media picker; summary surfaces the selected overlay's
-                  name when collapsed. */}
-              {(() => {
+                  name when collapsed.
+                  v4.5.61: hidden entirely on stat-card and blank-slate.
+                  Stat cards have their own header/footer chrome; blank
+                  slate is meant to ship a clean canvas with just the
+                  background + text. Putting an overlay on either was
+                  always a foot-gun. */}
+              {customType !== 'stat-card' && customType !== 'blank-slate' && (() => {
                 const selectedPreset = selectedOverlayId && String(selectedOverlayId).startsWith('preset:')
                   ? presetOverlays.find(p => p.id === selectedOverlayId)
                   : null;

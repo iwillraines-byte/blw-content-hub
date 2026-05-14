@@ -18,6 +18,25 @@
 
 export const RELEASES = [
   {
+    version: '4.5.61',
+    date: '2026-05-14',
+    kind: 'patch',
+    summary: 'v4.6 prep wave A: UX cleanup + copy polish',
+    items: [
+      'Sidebar/header: removed the static bell icon — it was never wired up to anything and just took header space.',
+      'Effects: removed Top Fade preset (Bottom Fade + Team Fade cover the same intent without shadowing the headline area).',
+      'Studio: stat-card and blank-slate templates now default to text VISIBLE instead of hidden. Hype/Promo stays text-off so the cinematic image isn\'t covered on first paint.',
+      'Studio: Overlay section is no longer shown on stat-card or blank-slate. Stat cards have their own chrome; blank-slate is meant to ship a clean canvas. Putting an overlay on either was always a foot-gun.',
+      'Studio: removed the 120px-tall "current selection" thumbnail above the player-media grid — it duplicated the live preview. The selected tile is highlighted in the grid; Clear sits inline with the grid header.',
+      'Studio: Headline picker now only offers OFF + Winner Sans. The other display faces produced inconsistent brand expression. Pill is also 15% tighter against the text and corners are pulled in further (radius 18%→10% capped at 14px) so it reads as a chip, not a capsule.',
+      'Requests modal: Team dropdown gains "League-wide (BLW)" option for content that isn\'t tied to a single team. Player dropdown gains "Any player" option for cross-roster requests (all-star recaps, etc).',
+      'Requests modal: removed the per-content "Athlete\'s input (optional)" textarea — it duplicated the universal description box at the bottom and athletes were filling out both with the same content.',
+      'Files: keyword search now does multi-token AND match across name + team + player + asset type. "jaso headshot", "lan hype", "jeter ace" all match the intuitive results — pre-fix the prefix-substring on filename missed most of them.',
+      'Files: Drive folder panels default to collapsed so a long list doesn\'t dominate the page on first paint. Existing rename UI is still there for labeling them ("LAN headshots", "Spring training group shots") so the whole team can find contents at a glance.',
+      'Photo lightbox (Files, BulkImport, Team page, Player page): clicking ANYWHERE outside the photo now closes — previously the close handler required clicking the exact backdrop element, so the dim area around the image felt unclickable. ESC still works.',
+    ],
+  },
+  {
     version: '4.5.60',
     date: '2026-05-13',
     kind: 'minor',
