@@ -6,6 +6,7 @@ import { colors, fonts, radius } from '../theme';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from '../version';
 import { formatPostName } from '../template-config';
 import ChangelogModal from '../changelog-modal';
+import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { getApiKey, setApiKey, clearApiKey, pushDriveToCloud, getSavedFolders } from '../drive-api';
 import { authedFetch } from '../authed-fetch';
 import { fetchRecentGenerates } from '../cloud-sync';
@@ -146,29 +147,38 @@ export default function Settings() {
           send. Admin sees it land in their existing requests inbox. */}
       {isAthlete && <AthleteMessageCard />}
 
-      <Card>
-        <SectionHeading>API status</SectionHeading>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: 14,
-          background: API_CONFIG.isLive ? colors.successBg : colors.warningBg,
-          border: `1px solid ${API_CONFIG.isLive ? colors.successBorder : colors.warningBorder}`,
-          borderRadius: radius.base,
-        }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: API_CONFIG.isLive ? colors.success : colors.warning }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: API_CONFIG.isLive ? '#15803D' : '#92400E' }}>
-              {API_CONFIG.isLive ? 'Live API Active' : 'Using Cached Data'}
-            </div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-              {API_CONFIG.isLive
-                ? `Connected to ${API_CONFIG.baseUrl}`
-                : 'Add VITE_PWB_API_KEY to Vercel environment variables for live data'}
+      {/* v4.7.1: API status hidden for athletes — they shouldn't be
+          looking at infra status indicators, and "Live API Active"
+          isn't actionable signal for them. Staff still sees it. */}
+      {!isAthlete && (
+        <Card>
+          <SectionHeading>API status</SectionHeading>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: 14,
+            background: API_CONFIG.isLive ? colors.successBg : colors.warningBg,
+            border: `1px solid ${API_CONFIG.isLive ? colors.successBorder : colors.warningBorder}`,
+            borderRadius: radius.base,
+          }}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', background: API_CONFIG.isLive ? colors.success : colors.warning }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: API_CONFIG.isLive ? '#15803D' : '#92400E' }}>
+                {API_CONFIG.isLive ? 'Live API Active' : 'Using Cached Data'}
+              </div>
+              <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                {API_CONFIG.isLive
+                  ? `Connected to ${API_CONFIG.baseUrl}`
+                  : 'Add VITE_PWB_API_KEY to Vercel environment variables for live data'}
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
-      {/* Google Drive Connection */}
+      {/* Google Drive Connection — v4.7.1: athletes don't see it at all.
+          Drive integration is a content-pipeline tool; surfacing it on
+          the athlete settings page risks exposing infra detail that
+          isn't theirs to manage. */}
+      {!isAthlete && (
       <Card>
         <div style={{
           display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
@@ -307,6 +317,7 @@ export default function Settings() {
           </div>
         )}
       </Card>
+      )}
 
       {/* v4.5.16: removed "Team colors" card — replaced by per-team
           brand guidelines that will live under Resources. The codebase
@@ -320,7 +331,7 @@ export default function Settings() {
       {/* Download history — full list of generated posts (currently across
           everyone, per-user scoping lands in Phase 5). Paginated client-side
           to 50 most recent so the page doesn't blow up when there are 1000s. */}
-      <DownloadHistoryCard />
+      <DownloadHistoryCard isAthlete={isAthlete} />
 
       <Card>
         <SectionHeading>About</SectionHeading>
@@ -372,9 +383,14 @@ export default function Settings() {
   );
 }
 
-function DownloadHistoryCard() {
+function DownloadHistoryCard({ isAthlete = false }) {
   const [history, setHistory] = useState(null); // null = loading, [] = empty
   const [visible, setVisible] = useState(20);
+  // v4.7.1: athletes get a Preview lightbox instead of the Regenerate
+  // deep-link. They can't open Studio to re-edit so a deep-link there
+  // is just a dead-end click; previewing the rendered PNG is what
+  // they actually want — "show me the post that was made about me."
+  const lightbox = usePhotoLightbox();
 
   useEffect(() => {
     fetchRecentGenerates(100).then(setHistory);
@@ -399,17 +415,25 @@ function DownloadHistoryCard() {
     });
   };
 
+  // v4.7.1: athlete-facing copy. They see "Recently generated content"
+  // (what was just made about / for them, by content staff) rather than
+  // "Download history" (which framed it as their own outbox).
+  const title = isAthlete ? 'Recently generated content' : 'Download history';
+  const emptyMessage = isAthlete
+    ? 'No content yet. When your team\'s admin generates a post about you, it\'ll show up here.'
+    : null;
+
   return (
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <SectionHeading style={{ margin: 0 }}>Download history</SectionHeading>
+        <SectionHeading style={{ margin: 0 }}>{title}</SectionHeading>
         <span style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.5 }}>
           {history == null ? 'LOADING…' : `${history.length} POST${history.length === 1 ? '' : 'S'}`}
         </span>
       </div>
       {history != null && history.length === 0 && (
         <div style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', padding: 20 }}>
-          No downloads yet. Head to <Link to="/generate" style={{ color: colors.red }}>Generate</Link> and make your first post.
+          {emptyMessage || <>No downloads yet. Head to <Link to="/generate" style={{ color: colors.red }}>Generate</Link> and make your first post.</>}
         </div>
       )}
       {history != null && history.length > 0 && (
@@ -460,18 +484,47 @@ function DownloadHistoryCard() {
                       {fmtDate(post.createdAt)}
                     </div>
                   </div>
-                  <Link
-                    to={buildRegenerateLink(post)}
-                    title="Re-open in Generate with this composition pre-filled"
-                    style={{
-                      background: colors.redLight,
-                      border: `1px solid ${colors.redBorder}`,
-                      color: colors.red,
-                      borderRadius: radius.sm, padding: '5px 10px',
-                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
-                      textDecoration: 'none', whiteSpace: 'nowrap',
-                    }}
-                  >↺ REGENERATE</Link>
+                  {isAthlete ? (
+                    // v4.7.1: athletes get a Preview lightbox. The
+                    // Regenerate link only makes sense for users who
+                    // can open Studio (staff). For athletes the actual
+                    // intent is "show me a bigger view of the post."
+                    <button
+                      onClick={() => {
+                        if (!post.thumbnailUrl) return;
+                        lightbox.openAt([{
+                          id: post.id,
+                          name: formatPostName(post, getTeam) || post.templateType || 'post',
+                          url: post.thumbnailUrl,
+                        }], 0);
+                      }}
+                      disabled={!post.thumbnailUrl}
+                      title="Open this post at full size"
+                      style={{
+                        background: colors.bg,
+                        border: `1px solid ${colors.border}`,
+                        color: colors.textSecondary,
+                        borderRadius: radius.sm, padding: '5px 10px',
+                        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+                        cursor: post.thumbnailUrl ? 'pointer' : 'not-allowed',
+                        opacity: post.thumbnailUrl ? 1 : 0.4,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >🔍 PREVIEW</button>
+                  ) : (
+                    <Link
+                      to={buildRegenerateLink(post)}
+                      title="Re-open in Generate with this composition pre-filled"
+                      style={{
+                        background: colors.redLight,
+                        border: `1px solid ${colors.redBorder}`,
+                        color: colors.red,
+                        borderRadius: radius.sm, padding: '5px 10px',
+                        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+                        textDecoration: 'none', whiteSpace: 'nowrap',
+                      }}
+                    >↺ REGENERATE</Link>
+                  )}
                 </div>
               );
             })}
@@ -485,6 +538,9 @@ function DownloadHistoryCard() {
           )}
         </>
       )}
+      {/* v4.7.1: athlete preview lightbox. Renders nothing when the
+          state is closed; portals to body when open. */}
+      {isAthlete && <PreviewLightbox {...lightbox.lightboxProps} />}
     </Card>
   );
 }

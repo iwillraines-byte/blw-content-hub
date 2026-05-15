@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.7.1',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Athlete Settings: strip infra noise + reframe Download history',
+    items: [
+      'API status card hidden from athletes. "Live API Active" is infra signal — not actionable for the people the content is about.',
+      'Google Drive Connection card hidden from athletes entirely. Drive integration is a content-pipeline tool; surfacing the API-key block on an athlete\'s settings page exposed infra detail that wasn\'t theirs to manage. Staff still sees the full card.',
+      'Athlete-facing "Download history" renamed to "Recently generated content" — closer to what they actually experience (content made about them, by content staff, not their own outbox).',
+      '↺ REGENERATE button replaced with 🔍 PREVIEW for athletes. The regenerate deep-link only made sense for users who can open Studio; athletes hitting it just landed on a 403. Preview opens a full-size lightbox of the actual rendered PNG instead, which is what they wanted anyway.',
+      'Empty-state copy on the athlete view also reframed to match: "No content yet. When your team\'s admin generates a post about you, it\'ll show up here."',
+    ],
+  },
+  {
     version: '4.7.0',
     date: '2026-05-14',
     kind: 'major',
