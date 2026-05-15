@@ -291,12 +291,15 @@ function SpecificAthletePicker() {
     }).catch(() => setLoaded(true));
   }, [realRole]);
 
-  if (realRole !== 'master_admin') return null;
-
-  // Only show athletes who have BOTH a linked user_id AND a team. Without
-  // user_id, the per-player canEdit gate won't actually behave as it does
-  // for that athlete (no signal to match against). Without a team they're
-  // ambiguous in the impersonation routing.
+  // v4.7.11 hotfix: useMemo MUST be called unconditionally to keep
+  // the hook order stable across renders. Pre-fix this lived AFTER
+  // an early `return null` for non-master users, which violated the
+  // rules-of-hooks contract any time `realRole` transitioned (e.g.
+  // a master sign-in resolving while a router transition was in
+  // flight). React threw, the tree white-screened, and a hard
+  // refresh recovered because the offending render never reoccurred
+  // from a cold mount.
+  // Only show athletes who have BOTH a linked user_id AND a team.
   const linked = useMemo(() => {
     const q = search.trim().toLowerCase();
     const arr = (manualPlayers || []).filter(p => p.team && (p.user_id || p.userId));
@@ -308,6 +311,8 @@ function SpecificAthletePicker() {
       return fullName.includes(q) || team.includes(q) || num.includes(q);
     });
   }, [manualPlayers, search]);
+
+  if (realRole !== 'master_admin') return null;
 
   const startView = (p) => {
     const team = getTeam(p.team);

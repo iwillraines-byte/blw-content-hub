@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.7.11',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Hotfix: white-screen on player-page click',
+    items: [
+      'Reported: clicking through to a player page white-screened the app; hard refresh recovered.',
+      'Root cause: v4.7.10\'s new SpecificAthletePicker called useMemo AFTER an early `return null` for non-master users. Violates the rules of hooks — the hook count changed between renders whenever realRole transitioned (master sign-in resolving mid-route, router transition flushing). React threw, the tree blanked, and a hard refresh recovered because the offending render condition didn\'t repeat from cold mount.',
+      'Fix: useMemo hoisted above the early return so the hook order is stable on every render. No behavior change for the picker itself.',
+    ],
+  },
+  {
     version: '4.7.10',
     date: '2026-05-15',
     kind: 'minor',
