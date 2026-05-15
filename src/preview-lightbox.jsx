@@ -44,6 +44,12 @@ export function usePhotoLightbox() {
 
   const lightboxProps = useMemo(() => ({
     open: !!state,
+    // v4.7.2: pass both `url` and `blob` through. Pre-fix the hook
+    // dropped item.url silently, which made every caller that paired
+    // it with cloud thumbnails (Dashboard recent posts, athlete
+    // Recently-generated-content) render the "Preview not available"
+    // fallback. PreviewLightbox uses url first, blob as fallback.
+    url: current?.url || null,
     blob: current?.blob || null,
     isVideo: isVideoName(current?.name),
     caption: current?.name || '',

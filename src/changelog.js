@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.7.2',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Hotfix: lightbox showed "Preview not available" on cloud-thumbnail posts',
+    items: [
+      'Reported: every post on the athlete\'s "Recently generated content" list opened the lightbox to a "Preview not available for this file" fallback. Same code path affected the Dashboard\'s Recent Posts strip — there since the v4.5.63 lightbox-preview rewrite but unnoticed because the dashboard tile click also fell through to that path.',
+      'Root cause: usePhotoLightbox\'s lightboxProps memo only forwarded `blob` and dropped `url` silently. Cloud-rendered posts only have `thumbnailUrl` (no blob), so PreviewLightbox\'s `useResolvedUrl` had nothing to render.',
+      'Fix: lightboxProps now forwards both `url` and `blob`. PreviewLightbox uses `url` first, falls back to `blob`. Affects athlete previews + Dashboard Recent Posts previews.',
+    ],
+  },
+  {
     version: '4.7.1',
     date: '2026-05-15',
     kind: 'patch',
