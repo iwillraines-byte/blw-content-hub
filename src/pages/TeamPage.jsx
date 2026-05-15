@@ -133,6 +133,11 @@ export default function TeamPage() {
   // bar reflects immediately.
   const { role: authRole } = useAuth();
   const isMaster = authRole === 'master_admin';
+  // v4.7.7: athletes don't see the monthly content target / carousel.
+  // The cadence dashboard is a content-ops tool — actionable for staff
+  // tracking their own throughput, but for an athlete on their team's
+  // page it just adds noise about a metric they can't influence.
+  const isAthlete = authRole === 'athlete';
   const [monthlyPostList, setMonthlyPostList] = useState([]);
 
   // v4.5.20: Cloud-synced team socials (master admin owns writes; everyone
@@ -1361,7 +1366,10 @@ export default function TeamPage() {
           cadence × ~4 weeks). Past 12 the bar glows + a "🔥 Above
           target" chip surfaces. Re-derives from server on every
           team-page mount; auto-resets at month rollover via the
-          dynamic `since` filter. */}
+          dynamic `since` filter.
+          v4.7.7: hidden for athletes — it's an ops metric, not signal
+          they can act on. */}
+      {!isAthlete && (
       <MonthlyContentProgress
         team={team}
         count={monthlyPostedCount}
@@ -1369,12 +1377,15 @@ export default function TeamPage() {
         isMaster={isMaster}
         onTargetChange={saveMonthlyTarget}
       />
+      )}
 
       {/* Per-team monthly carousel — every generation for this team
           this month, posted + unposted. Master admin can toggle the
           posted flag with one click. Unposted posts are greyed out
-          and excluded from the counter above. */}
-      {monthlyPostList.length > 0 && (
+          and excluded from the counter above.
+          v4.7.7: athletes don't see the carousel either — same logic;
+          it's the throughput sibling of the progress bar above. */}
+      {!isAthlete && monthlyPostList.length > 0 && (
         <TeamMonthlyCarousel
           team={team}
           posts={monthlyPostList}

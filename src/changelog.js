@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.7.7',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Team page: hide monthly content target + carousel from athletes',
+    items: [
+      'The "Monthly content progress" bar and the per-team monthly carousel below it are now hidden from athletes on team pages. Both are content-ops tools — actionable for staff tracking throughput, but for an athlete looking at their own team page they\'re noise about a metric they can\'t influence.',
+      'Staff (master/admin/content) see both unchanged. Branding & Admin, roster, recent player media, content calendar, and team photos all stay visible for athletes.',
+    ],
+  },
+  {
     version: '4.7.6',
     date: '2026-05-15',
     kind: 'patch',
