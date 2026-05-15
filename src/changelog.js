@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.6.1',
+    date: '2026-05-14',
+    kind: 'patch',
+    summary: 'Hotfix: caption 2-line wrap scoped tightly',
+    items: [
+      'Reverted blanket 2-line wrap on News line2 and Hype subtext — the wrap was producing broken-looking stacks of filler text in the Studio editor at design time. All three news lines + the hype subtext are back to canvas truncation (squeeze to maxWidth).',
+      'The 2-line wrap now only fires on Blank Slate + Stat Card, AND only when the Winner Sans headline pill is toggled on, AND only on supporting caption fields (the pill itself never wraps). This is the original master intent: when you have a chyron lockup, the caption below it can fold to a paragraph; everywhere else, single line.',
+    ],
+  },
+  {
     version: '4.6.0',
     date: '2026-05-14',
     kind: 'major',

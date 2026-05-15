@@ -527,19 +527,20 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
         ctx.fillStyle = '#FFFFFF';
       }
 
-      // v4.5.65: 2-line wrap for caption-style fields BEFORE canvas
-      // squeezes the glyphs to fit maxWidth. Without this, a long
-      // line2 on the Team/Player News template was getting visually
-      // compressed (Canvas's fillText with maxWidth scales the glyph
-      // matrix horizontally, which looks wrong against the matched
-      // line1/line3 weight). Now if the text natural width exceeds
-      // maxWidth, we break at the nearest space to the middle and
-      // render two stacked lines with normal weight.
-      //
-      // Only wraps fields explicitly opted in via `f.wrap2Line: true`
-      // (currently the news caption / hype subtext). Field config
-      // owns the policy so we don't accidentally wrap headlines —
-      // the user wants the HEADLINE never to wrap.
+      // v4.6.1: 2-line wrap is now scoped tightly to avoid the
+      // "filler text reads as broken multi-line stack at design time"
+      // problem master flagged on news + hype. Behavior now:
+      //   • News / Hype / etc.: revert to canvas squeeze (truncation).
+      //   • Blank Slate + Stat Card: wrap allowed BUT ONLY when the
+      //     headline pill is toggled on. The pill itself never wraps
+      //     (skip when f.key === headlineKey), but the supporting
+      //     caption fields under it can fold to two lines so the
+      //     pill+caption block reads as a paragraph.
+      const wrapEligibleTemplate = (templateType === 'blank-slate' || templateType === 'stat-card');
+      const wrapAllowedHere = wrapEligibleTemplate
+        && headlineEnabled
+        && !isHeadlinePill
+        && f.maxWidth;
       const splitTwoLines = (str) => {
         const words = String(str).split(/\s+/);
         if (words.length < 2) return [str, ''];
@@ -560,7 +561,7 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
       };
       const draw = () => {
         const naturalW = ctx.measureText(text).width;
-        const shouldWrap = f.wrap2Line && f.maxWidth && naturalW > f.maxWidth;
+        const shouldWrap = wrapAllowedHere && naturalW > f.maxWidth;
         if (shouldWrap) {
           const [a, b] = splitTwoLines(text);
           // Line spacing: ~1.05× the font size so the two lines read
