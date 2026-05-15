@@ -44,7 +44,10 @@ const navItems = [
   // global-styles.jsx .nav-link:hover .nav-icon-studio) is the visual
   // tell that this is the creative-focal surface of the app.
   { path: "/generate",    label: "Studio",           icon: "✦", iconClass: 'nav-icon-studio' },
-  { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content', 'athlete'] },
+  // v4.7.9: Resources hidden from athletes until more material is in
+  // there — empty Resources is worse than no Resources for the
+  // athlete experience. Re-enable when content lands.
+  { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content'] },
   // v4.5.39: replaced single-codepoint Unicode symbols (☰ ◫ ⚙ ▣) with
   // proper emoji codepoints. The old ones live in the Miscellaneous
   // Symbols block (U+2600-26FF) — supported by Symbola/Noto Sans
@@ -52,7 +55,12 @@ const navItems = [
   // them render as `!` (the browser's missing-glyph fallback) on plenty
   // of admin machines. Full emoji codepoints ship with every OS's
   // emoji font and render universally.
-  { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content'] },
+  // v4.7.9: Requests now visible to athletes. They can submit content
+  // requests, see their own queue (server RLS filters to requester ==
+  // self), and follow status updates on what they've sent in. The
+  // request modal already gates type-pickers + auto-pins the athlete's
+  // team server-side so cross-team noise is impossible.
+  { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content', 'athlete'] },
   { path: "/game-center", label: "ProWiffle Stats",  icon: "📊" },
   { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
   // v4.7.0: AI Memory training surface. Master-only — populates the
@@ -965,7 +973,7 @@ function AppShell() {
             <Route path="/my-stats" element={<MyStats />} />
             <Route path="/generate" element={<Generate />} />
             <Route path="/requests" element={
-              <RequireRole roles={['master_admin', 'admin', 'content']} what="the Requests queue">
+              <RequireRole roles={['master_admin', 'admin', 'content', 'athlete']} what="the Requests queue">
                 <Requests />
               </RequireRole>
             } />

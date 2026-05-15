@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.7.9',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Sidebar: Requests visible to athletes, Resources hidden for now',
+    items: [
+      'Athletes can now see the Requests entry in the sidebar. The page already filters server-side and client-side to just their own requests (existing isAthlete gating), so they see only what they submitted + its status. Lets them follow up on the down-vote notes from v4.7.8 + send fresh requests directly from the sidebar instead of just the in-card prompts.',
+      'Resources hidden from the athlete sidebar for now — the page exists but doesn\'t have enough useful material for athletes yet. Empty Resources is worse than no Resources for the athlete experience. Will re-enable once content lands.',
+      'Route guard on /requests updated to include athlete; /resources stays open at the route level (no hard block) so an existing bookmark still resolves if anyone has one.',
+    ],
+  },
+  {
     version: '4.7.8',
     date: '2026-05-15',
     kind: 'minor',
