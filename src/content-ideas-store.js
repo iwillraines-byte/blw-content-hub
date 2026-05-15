@@ -61,6 +61,33 @@ export function useContentIdeas({ team = null, player = null, limit = 50 } = {})
     fetchNow();
   }, [sig, fetchNow]);
 
+  // v4.7.6: cross-surface event channel. PlayerPage (and any other
+  // caller) dispatches a `blw-idea-persisted` CustomEvent after a
+  // successful /api/ideas write; every mounted useContentIdeas hook
+  // that matches the new idea's team + player filter prepends it
+  // optimistically so the dashboard reflects player-page generations
+  // (and vice versa) without a manual refetch.
+  useEffect(() => {
+    const handler = (e) => {
+      const idea = e?.detail?.idea;
+      if (!idea || !idea.id) return;
+      // Respect this hook's scope filters. If a team filter is set,
+      // only inject when the idea matches; same for player.
+      if (team && idea.team && idea.team !== team) return;
+      if (player) {
+        const ideaPlayer = (idea.playerLastName
+          || idea.player_last_name
+          || (idea.prefill && idea.prefill.playerName
+              ? String(idea.prefill.playerName).trim().split(/\s+/).pop()
+              : '')).toUpperCase();
+        if (!ideaPlayer || ideaPlayer !== String(player).toUpperCase()) return;
+      }
+      setIdeas(prev => prev.some(i => i.id === idea.id) ? prev : [idea, ...prev]);
+    };
+    window.addEventListener('blw-idea-persisted', handler);
+    return () => window.removeEventListener('blw-idea-persisted', handler);
+  }, [team, player]);
+
   // Optimistically prepend new ideas to the local list. Caller still has
   // to re-trigger a fetch to reconcile against the server, but for the
   // dashboard's "Generate Ideas" path we know the server already wrote

@@ -1474,6 +1474,13 @@ export default function PlayerPage() {
   // dropping them into Generate with empty fields.
   const [pendingIdea, setPendingIdea] = useState(null);
   const [generatingIdea, setGeneratingIdea] = useState(false);
+  // v4.7.6: fresh ideas captured from the hero "Generate content" button.
+  // Pushed into the Content Ideas section (this player) AND the
+  // global content_ideas store on the server, so the dashboard picks
+  // them up on its next fetch without us having to manually wire a
+  // cross-page channel. Local state mirrors the server write so the
+  // section shows the idea instantly.
+  const [freshIdeas, setFreshIdeas] = useState([]);
   const leagueCtx = useLeagueContext();
   // Teammate roster (alphabetical by lastName) — drives prev/next navigation.
   // Populated in the same mount effect that loads `player`. We don't need
@@ -1735,6 +1742,17 @@ export default function PlayerPage() {
       const idea = (data.ideas || [])[0];
       if (!idea) throw new Error('No idea returned');
       setPendingIdea(idea);
+      // v4.7.6: also push into the Content Ideas section + bank for
+      // dashboard surface. /api/ideas already persists to content_ideas
+      // on the server, so future fetches pick it up too. The
+      // optimistic local prepend (via freshIdeas prop) updates this
+      // page's section immediately; the CustomEvent dispatch wakes
+      // up any other mounted useContentIdeas hooks (Dashboard,
+      // TeamPage) so they don't have to refetch.
+      setFreshIdeas(prev => [idea, ...prev]);
+      try {
+        window.dispatchEvent(new CustomEvent('blw-idea-persisted', { detail: { idea } }));
+      } catch { /* unsupported runtime — silent */ }
     } catch (err) {
       toast.error('Couldn\'t generate idea', { detail: err.message?.slice(0, 80) });
     } finally {
@@ -2353,6 +2371,7 @@ export default function PlayerPage() {
         alwaysShow
         onGenerate={generateIdea}
         generating={generatingIdea}
+        freshIdeas={freshIdeas}
       />
 
       {/* Media Gallery */}

@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.7.6',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Player Generate-content → idea lands on player page + dashboard',
+    items: [
+      'Reported: clicking ✦ Generate content on a player page produced an idea modal but the idea never appeared in the player\'s Content Ideas section or on the dashboard. The server WAS persisting it to content_ideas correctly; the surfaces just weren\'t refreshing.',
+      'Fix part A: ContentIdeasSection accepts a freshIdeas prop. PlayerPage captures every idea it generates from the hero button into local state and pipes it down. The section optimistically prepends so the new idea shows up the second the modal closes — no refetch needed.',
+      'Fix part B: PlayerPage dispatches a blw-idea-persisted CustomEvent on every successful generation. The useContentIdeas hook listens for it and prepends any matching idea to its own list. This wakes up the Dashboard\'s Content Ideas surface + any TeamPage section that was open in another tab/window — they all show the new idea instantly.',
+      'Scope respect: hooks filter the event against their own team/player scope so a player-page generation on Cam Smith doesn\'t inject into Logan Rose\'s section.',
+    ],
+  },
+  {
     version: '4.7.5',
     date: '2026-05-15',
     kind: 'patch',

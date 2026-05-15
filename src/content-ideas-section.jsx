@@ -7,7 +7,7 @@
 // dashboard, minus "More like this" (regen lives only on the dashboard
 // where the full BLW context is in scope).
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, SectionHeading } from './components';
 import { colors, fonts, radius } from './theme';
@@ -32,6 +32,13 @@ export function ContentIdeasSection({
   alwaysShow = false,
   onGenerate = null,       // () => void — fires the brief generator
   generating = false,      // bool — disables the CTA + swaps copy
+  // v4.7.6: parent-supplied freshly-generated idea(s). PlayerPage's
+  // hero-button generateIdea() drops its result into a local state
+  // bucket and passes it here so the section optimistically prepends
+  // without waiting for a network refetch. We dedupe by id against
+  // whatever's already in the list. Accepts a single idea object OR
+  // an array of ideas.
+  freshIdeas = null,
 }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -39,6 +46,20 @@ export function ContentIdeasSection({
   const ideasStore = useContentIdeas({ team, player, limit });
   const ideas = ideasStore.ideas;
   const { pageItems, pagerProps } = useIdeaPagination(ideas);
+
+  // v4.7.6: prepend any parent-supplied fresh ideas. We track which
+  // ids we've already injected so re-renders with the same idea don't
+  // double-prepend.
+  const injectedIdsRef = useRef(new Set());
+  useEffect(() => {
+    if (!freshIdeas) return;
+    const arr = Array.isArray(freshIdeas) ? freshIdeas : [freshIdeas];
+    const toInject = arr.filter(i => i && i.id && !injectedIdsRef.current.has(i.id));
+    if (toInject.length === 0) return;
+    toInject.forEach(i => injectedIdsRef.current.add(i.id));
+    ideasStore.prependIdeas(toInject);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freshIdeas]);
 
   // Per-card "queued" badge state — same shape as the dashboard's so the
   // IdeaCard renders the post-queue chip identically.
