@@ -615,9 +615,12 @@ function AthleteMessageCard() {
         <RedButton onClick={send} disabled={!text.trim() || sending}>
           {sending ? 'Sending…' : sent ? '✓ Sent' : 'Send'}
         </RedButton>
-        <span style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, letterSpacing: 0.4 }}>
-          {profile?.display_name || user?.email || 'You'} → Master admin
-        </span>
+        {/* v4.7.3: removed the "{your email} → Master admin" subtext.
+            Athlete messages now route to the shared requests inbox
+            (requests@blwstudio.com) anyway, so showing the personal
+            email beside the Send button was both stale (no longer
+            accurate destination) and unnecessarily exposing the user's
+            address in their own UI. */}
       </div>
     </Card>
   );

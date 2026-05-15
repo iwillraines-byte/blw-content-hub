@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.7.3',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Athlete Message card: removed personal-email subtext',
+    items: [
+      'Removed the "{your email} → Master admin" subtext next to the Send button on the athlete Message card. Stale destination (messages now route to the shared requests@blwstudio.com inbox via the existing requests flow) and unnecessarily exposed the user\'s own email in their own UI.',
+      'No functional change to the send pipeline — message still lands in the requests inbox the same way. Just the redundant subtitle is gone.',
+    ],
+  },
+  {
     version: '4.7.2',
     date: '2026-05-15',
     kind: 'patch',
