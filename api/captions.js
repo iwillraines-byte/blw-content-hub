@@ -27,8 +27,9 @@
 //   "usage":    { input_tokens, output_tokens }
 // }
 
-import { requireUser } from './_supabase.js';
+import { requireUser, getServiceClient } from './_supabase.js';
 import { checkRateLimit } from './_rate-limit.js';
+import { fetchMemoryBlock } from './_ai-memory.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 800;
@@ -140,9 +141,28 @@ ${briefs}
     ? `\n\nLEAGUE NARRATIVES (use these to ground tone/specifics if relevant):\n${trimmedLeagueContext}`
     : '';
 
+  // v4.7.0: AI Memory injection for caption writes too. Captions
+  // benefit MORE than ideas from memory because tone + voice rules
+  // are exactly what the memory store is designed to encode.
+  let memoryBlock = '';
+  try {
+    const playerNameParts = (idea?.prefill?.playerName || '').trim().split(/\s+/).filter(Boolean);
+    memoryBlock = await fetchMemoryBlock(getServiceClient(), {
+      scopeTeam: idea?.team && idea.team !== 'BLW' ? idea.team : null,
+      scopePlayer: playerNameParts.length ? {
+        name: idea.prefill.playerName,
+        firstName: playerNameParts[0],
+        lastName: playerNameParts[playerNameParts.length - 1],
+        team: idea?.team || null,
+      } : null,
+      sampledPlayers: [],
+    });
+  } catch { /* silent — degrades to no memory block */ }
+  const memoryPrefix = memoryBlock ? `${memoryBlock}\n` : '';
+
   const userInstruction = `Write the requested caption${platformsToWrite.length === 1 ? '' : 's'} for this idea:
 
-${ideaSummary}${narrativeBlock}${athleteVoiceBlock}`;
+${memoryPrefix}${ideaSummary}${narrativeBlock}${athleteVoiceBlock}`;
 
   const anthropicBody = {
     model,

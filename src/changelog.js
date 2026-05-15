@@ -18,6 +18,23 @@
 
 export const RELEASES = [
   {
+    version: '4.7.0',
+    date: '2026-05-14',
+    kind: 'major',
+    summary: 'AI Memory — train the model to know BLW, not generic baseball',
+    items: [
+      'New ai_memory store + Train AI page (master-only, sidebar 🧠 Train AI). Three workflows for populating it, all shipping in the same release:',
+      '  1. AI-suggested questions — server reads the existing memory and proposes 5-8 specific gap-filling questions ("What pitch types exist in BLW? What\'s the strike zone? Tell me about Cam Smith\'s career arc"). Master answers inline; each answer commits as a memory row.',
+      '  2. Chat-style ingest — write a natural-language paragraph ("So Cam Smith on MIA is X. PHI\'s identity is Y. Wiffle pitches are Z…"). Server distills it into discrete memory rows you can review + selectively commit.',
+      '  3. Manual entry — pick scope + scope_id, type the memory, weight it, save.',
+      'Memory is scoped (league / team / player / rule / history / style) and weighted 1-5. Higher weight always ships in prompts; lower weight ships when relevant.',
+      '/api/ideas + /api/captions now inject a LEAGUE MEMORY block into every prompt. Scoped automatically: league/rule/history/style memories ship every time; team-scoped memories ship when the active generation references that team; player-scoped memories ship when the sample includes that player. Encoded as: "These are FACTS about BLW. Lean on them."',
+      'Memory inspector at the bottom of Train AI shows everything in the store grouped by scope, with inline weight bump (↑↓) and one-click delete. Shows totals per scope (L/T/P/R/H/S) in the page header.',
+      'New SQL: db/014_ai_memory.sql — table + RLS (read = any authed user, write = master_admin/admin) + index on (scope, scope_id) + updated_at trigger.',
+      'Goal: stop relying on "general baseball intuition" as the model\'s default. Make BLW knowledge the canon and let the model build from there.',
+    ],
+  },
+  {
     version: '4.6.1',
     date: '2026-05-14',
     kind: 'patch',

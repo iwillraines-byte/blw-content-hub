@@ -9,6 +9,7 @@ import ChangelogModal from './changelog-modal';
 import ContentStudio from './pages/ContentStudio';
 import Generate from './pages/Generate';
 import Resources from './pages/Resources';
+import TrainAI from './pages/TrainAI';
 import Requests from './pages/Requests';
 import GameCenter from './pages/GameCenter';
 import Files from './pages/Files';
@@ -54,6 +55,10 @@ const navItems = [
   { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content'] },
   { path: "/game-center", label: "ProWiffle Stats",  icon: "📊" },
   { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
+  // v4.7.0: AI Memory training surface. Master-only — populates the
+  // ai_memory store that /api/ideas + /api/captions inject into every
+  // prompt. Hidden for non-master roles since it's an authoring tool.
+  { path: "/train-ai",    label: "Train AI",         icon: "🧠", roles: ['master_admin', 'admin'] },
   { path: "/settings",    label: "Settings",         icon: "⚙️" },
 ];
 
@@ -61,6 +66,7 @@ const pageTitles = {
   '/dashboard': 'Dashboard',
   '/generate': 'Studio',
   '/resources': 'Resources',
+  '/train-ai': 'Train AI',
   '/requests': 'Requests',
   '/game-center': 'ProWiffle Stats',
   '/files': 'Files',
@@ -971,6 +977,11 @@ function AppShell() {
             } />
             <Route path="/settings" element={<Settings />} />
             <Route path="/resources" element={<Resources />} />
+            <Route path="/train-ai" element={
+              <RequireRole roles={['master_admin', 'admin']} what="AI Memory training">
+                <TrainAI />
+              </RequireRole>
+            } />
             <Route path="/teams/:slug" element={<TeamPage />} />
             <Route path="/teams/:slug/players/:lastName" element={<PlayerPage />} />
             {/* Backward-compatible redirects */}

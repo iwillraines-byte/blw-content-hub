@@ -33,6 +33,7 @@
 import { getServiceClient, requireUser } from './_supabase.js';
 import { checkRateLimit } from './_rate-limit.js';
 import { persistIdeas } from './content-ideas.js';
+import { fetchMemoryBlock } from './_ai-memory.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 // Bumped from 1200 — each idea now ships a narrative paragraph, stat pills,
@@ -366,15 +367,36 @@ ${ups.length ? `\nUP-VOTED (do MORE like these — angle, hook, energy):\n${upLi
     ? `\nTEAM SCOPE — REQUIRED:\n- Every idea in this batch MUST be about team ${upperScopeTeam} or a player on team ${upperScopeTeam}. Do NOT pick a different team.\n- Spread across DIFFERENT players and DIFFERENT angle types on ${upperScopeTeam}. Don't repeat the same player.\n- IGNORE the system prompt rule about referencing at least 4 different teams.\n`
     : '';
 
+  // v4.7.0: AI Memory injection. Pull scoped memories from ai_memory
+  // table and prepend the formatted block to the user instruction so
+  // the model sees master-curated league canon (rules, lore, voice,
+  // style constraints) before reading the live stat state. Empty
+  // string when no memories exist or the table isn't there yet.
+  const memorySampled = [...battingSample, ...pitchingSample].map(p => ({ name: p.name, team: p.team }));
+  let memoryBlock = '';
+  try {
+    memoryBlock = await fetchMemoryBlock(getServiceClient(), {
+      scopeTeam: scopeTeam || null,
+      scopePlayer: seedIdea?.prefill?.playerName ? {
+        name: seedIdea.prefill.playerName,
+        lastName: (seedIdea.prefill.playerName || '').trim().split(/\s+/).slice(-1)[0],
+        firstName: (seedIdea.prefill.playerName || '').trim().split(/\s+/)[0],
+        team: seedIdea?.team || null,
+      } : null,
+      sampledPlayers: memorySampled,
+    });
+  } catch { /* silent — degrades to no memory block */ }
+  const memoryPrefix = memoryBlock ? `${memoryBlock}\n` : '';
+
   const userInstruction = seedIdea
-    ? `${stateBlock}
+    ? `${memoryPrefix}${stateBlock}
 
 Generate ${count} more content ideas in the SAME register as this seed. Each must take a DIFFERENT ANGLE TYPE from the menu in the system prompt — no duplicates of the seed's angle either.${seedScopeBlock}
 SEED IDEA:
 ${JSON.stringify(seedIdea, null, 2)}`
-    : `${stateBlock}
+    : `${memoryPrefix}${stateBlock}
 ${teamScopeBlock}
-Generate ${count} fresh content ideas. CRITICAL: each idea must take a different ANGLE TYPE from the menu in the system prompt. Treat the LEAGUE NARRATIVES as research, not as a checklist — you don't have to use every note. Pick the most post-worthy angles you can find, even if they're tangential to what's in the notes.`;
+Generate ${count} fresh content ideas. CRITICAL: each idea must take a different ANGLE TYPE from the menu in the system prompt. Treat the LEAGUE NARRATIVES as research, not as a checklist — you don't have to use every note. Pick the most post-worthy angles you can find, even if they're tangential to what's in the notes. Always defer to LEAGUE MEMORY rows when they\'re relevant — they encode facts about BLW that supersede any baseball intuition you have.`;
 
   const anthropicBody = {
     model,
