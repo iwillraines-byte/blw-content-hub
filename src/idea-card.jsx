@@ -66,10 +66,14 @@ export default function IdeaCard({
   onOpenInGenerate,  // (idea) => void
   onMoreLikeThis,    // (idea) => void           (optional)
   onIdeaUpdate,      // (ideaId, patch) => void   parent merges patch into idea
+  onDelete,          // v4.7.8: (idea) => void   master-only delete; if absent we hide the button
+  onThumbDownNote,   // v4.7.8: (idea, note) => void   athlete fallback: send their "what was wrong" note to Requests
   queuedRequestId,   // string | null
   ideasLoading,      // boolean — disables "More like this"
   leagueContext = '', // master-admin notes — forwarded to /api/captions
   athleteVoice = null, // v4.5.17: self-authored "about me" for the spotlit player
+  isMaster = false,  // v4.7.8: gates the delete button
+  isAthlete = false, // v4.7.8: gates the thumbs-down note prompt
 }) {
   const toast = useToast();
   const team = idea.team && idea.team !== 'BLW' ? getTeam(idea.team) : null;
@@ -88,10 +92,33 @@ export default function IdeaCard({
   // server prompt actually consumes the signal). The current vote
   // tints the chip so the user sees their previous pick.
   const [vote, setVote] = useState(() => getFeedback(idea.id)?.vote || null);
+  // v4.7.8: athlete thumbs-down inline note. When an athlete down-votes
+  // an idea, we open a small inline textarea so they can explain WHAT
+  // was wrong — wrong stat, wrong tone, wrong player angle, etc. That
+  // note gets sent to Requests so the content team can act on the
+  // feedback. Pre-fix the down-vote was a silent signal the athlete
+  // had no way to elaborate on.
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [sendingNote, setSendingNote] = useState(false);
   const castVote = (v) => {
     const next = vote === v ? null : v; // toggle off if same vote re-clicked
     setVote(next);
     setFeedback(idea, next);
+    if (next === 'down' && isAthlete && onThumbDownNote) {
+      setNoteOpen(true);
+    } else {
+      setNoteOpen(false);
+    }
+  };
+  const submitNote = async () => {
+    if (!noteText.trim()) return;
+    setSendingNote(true);
+    try {
+      await onThumbDownNote?.(idea, noteText.trim());
+      setNoteOpen(false);
+      setNoteText('');
+    } finally { setSendingNote(false); }
   };
   // Edit overrides — keyed by platform. Once the user types, we hold their
   // text locally until they Copy or Regenerate.
@@ -404,6 +431,28 @@ export default function IdeaCard({
           );
         })()}
 
+        {/* v4.7.8: master-only delete. Sits all the way at the right so it
+            doesn't compete with the primary CTAs and reads as a destructive
+            action. Confirms before firing — the underlying dismissIdea
+            does a hard DELETE on the row, not a soft-hide. */}
+        {isMaster && onDelete && (
+          <button
+            onClick={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              if (window.confirm('Delete this idea? Cannot be undone.')) onDelete(idea);
+            }}
+            title="Master admin — permanently remove this idea"
+            style={{
+              background: 'transparent',
+              border: `1px solid ${colors.border}`,
+              color: colors.textMuted,
+              borderRadius: radius.sm, padding: '5px 9px',
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+              cursor: 'pointer',
+            }}
+          >🗑</button>
+        )}
+
         {hasCaptions ? (
           <button
             onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
@@ -442,6 +491,62 @@ export default function IdeaCard({
           >{draftingCaptions ? '… DRAFTING' : '✨ DRAFT CAPTIONS'}</button>
         )}
       </div>
+
+      {/* v4.7.8: athlete thumbs-down note prompt. Opens inline below the
+          action row when an athlete clicks 👎 so they can elaborate on
+          what was wrong. Note goes to the requests inbox tied to the
+          idea so content staff sees the specific complaint, not just
+          the silent down-vote signal. */}
+      {noteOpen && (
+        <div style={{
+          marginTop: 10, padding: 12,
+          background: '#FEF2F2', border: '1px solid #FCA5A5',
+          borderRadius: radius.base,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#991B1B', marginBottom: 4 }}>
+            What was wrong with this one?
+          </div>
+          <div style={{ fontSize: 11, color: '#991B1B', lineHeight: 1.5, marginBottom: 8, opacity: 0.85 }}>
+            Tell the content team specifically — wrong stat, wrong tone, wrong angle, missing context. Lands in the requests inbox so they can act on it.
+          </div>
+          <textarea
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="e.g. The HR count is wrong — that was last season. Or: this angle frames me as a slugger but I think of myself as a contact hitter."
+            rows={3}
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              padding: 8, borderRadius: radius.sm,
+              border: '1px solid #FCA5A5', background: '#FFFFFF',
+              fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5,
+              resize: 'vertical', minHeight: 60,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button
+              onClick={submitNote}
+              disabled={sendingNote || !noteText.trim()}
+              style={{
+                background: '#DC2626', color: '#fff', border: 'none',
+                borderRadius: radius.sm, padding: '6px 14px',
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.4,
+                cursor: sendingNote || !noteText.trim() ? 'not-allowed' : 'pointer',
+                opacity: sendingNote || !noteText.trim() ? 0.6 : 1,
+              }}
+            >{sendingNote ? 'Sending…' : 'Send to content team'}</button>
+            <button
+              onClick={() => { setNoteOpen(false); setNoteText(''); }}
+              disabled={sendingNote}
+              style={{
+                background: 'transparent', color: '#991B1B', border: '1px solid #FCA5A5',
+                borderRadius: radius.sm, padding: '6px 14px',
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+                cursor: sendingNote ? 'not-allowed' : 'pointer',
+              }}
+            >Skip</button>
+          </div>
+        </div>
+      )}
 
       {/* Caption drafts panel — tabs + editable textarea + copy/regen.
           Animated open/close via display + grid-template-rows trick. */}

@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.7.8',
+    date: '2026-05-15',
+    kind: 'minor',
+    summary: 'Idea cards: master delete + athlete thumbs-down note → Requests',
+    items: [
+      'Master admin (and the dormant admin tier) now sees a 🗑 delete button on every idea card across Dashboard, Team page, and Player page. Confirms before firing; permanently removes the row from content_ideas. Other surfaces with the same hook mounted drop the idea instantly via the v4.7.6 cross-surface event.',
+      'Athletes get a follow-up prompt when they thumbs-down an idea: a small inline note panel opens below the card asking "What was wrong with this one?" The athlete types their specific complaint (wrong stat, wrong tone, wrong angle, missing context, whatever), and on submit it lands as a new pending Request in the queue with the idea\'s headline + ID attached so the content team can act on it. Pre-fix the down-vote was a silent signal the athlete had no way to elaborate on.',
+      'Skip button on the note panel just dismisses the prompt — down-vote stays recorded for the AI feedback loop even if they don\'t want to write a note.',
+      'Note payload includes: idea headline + angle, target player name (if any), idea ID for traceability, and the athlete\'s free-text complaint. Lands in the existing requests inbox.',
+    ],
+  },
+  {
     version: '4.7.7',
     date: '2026-05-15',
     kind: 'patch',

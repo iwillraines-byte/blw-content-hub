@@ -26,6 +26,13 @@ import { useContentIdeas } from '../content-ideas-store';
 export default function ContentStudio() {
   const navigate = useNavigate();
   const toast = useToast();
+  // v4.7.8: role gating for IdeaCard's delete (master) + thumbs-down
+  // note prompt (athlete). The dashboard is staff-only at the route
+  // level so isAthlete will be false here in practice, but we keep
+  // the conditional for symmetry with ContentIdeasSection.
+  const { user: authUser, profile: authProfile, role: authRole } = useAuth();
+  const isMaster = authRole === 'master_admin' || authRole === 'admin';
+  const isAthlete = authRole === 'athlete';
   // The league-context hook fetches once on mount. Master admins see the
   // editing card; everyone benefits from the value being passed into AI calls.
   const leagueCtx = useLeagueContext();
@@ -302,6 +309,23 @@ export default function ContentStudio() {
       return;
     }
     setSuggestions(prev => prev.map(i => i.id === ideaId ? { ...i, ...patch } : i));
+  };
+
+  // v4.7.8: master-only delete handler for AI-generated ideas. Local
+  // deterministic suggestions aren't persisted server-side so we just
+  // drop them from the local array; AI ideas in the cloud store hit
+  // dismissIdea (DELETE).
+  const deleteIdea = async (idea) => {
+    try {
+      if (aiIdeas.some(i => i.id === idea.id)) {
+        await ideasStore.dismissIdea(idea.id);
+      } else {
+        setSuggestions(prev => prev.filter(i => i.id !== idea.id));
+      }
+      toast.success('Idea removed');
+    } catch (err) {
+      toast.error('Couldn\'t remove', { detail: err?.message?.slice(0, 80) });
+    }
   };
 
   // ─── Live-state card data ─────────────────────────────────────────────────
@@ -606,6 +630,9 @@ export default function ContentStudio() {
                   onOpenInGenerate={(idea) => navigate(buildLink(idea))}
                   onMoreLikeThis={(idea) => requestIdeas(idea, 3)}
                   onIdeaUpdate={patchIdea}
+                  onDelete={isMaster ? deleteIdea : null}
+                  isMaster={isMaster}
+                  isAthlete={isAthlete}
                 />
                 );
               })}

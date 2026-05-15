@@ -13,6 +13,7 @@ import { Card, SectionHeading } from './components';
 import { colors, fonts, radius } from './theme';
 import { useContentIdeas } from './content-ideas-store';
 import { useToast } from './toast';
+import { useAuth } from './auth';
 import { getRequests, saveRequests, buildGenerateLinkFromIdea } from './requests-store';
 import { stashIdeaForGenerate } from './idea-context-store';
 import IdeaCard from './idea-card';
@@ -42,10 +43,61 @@ export function ContentIdeasSection({
 }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user, profile, role } = useAuth();
+  const isMaster = role === 'master_admin' || role === 'admin';
+  const isAthlete = role === 'athlete';
   const leagueCtx = useLeagueContext();
   const ideasStore = useContentIdeas({ team, player, limit });
   const ideas = ideasStore.ideas;
   const { pageItems, pagerProps } = useIdeaPagination(ideas);
+
+  // v4.7.8: master-only delete handler. Confirms first, then calls
+  // dismissIdea (which DELETEs the row server-side). Toast confirms
+  // the removal. Idea disappears from this view AND from every
+  // other surface that has the same hook mounted because
+  // dismissIdea updates local state.
+  const handleDelete = useCallback(async (idea) => {
+    try {
+      await ideasStore.dismissIdea(idea.id);
+      toast.success('Idea removed');
+    } catch (err) {
+      toast.error('Couldn\'t remove', { detail: err?.message?.slice(0, 80) });
+    }
+  }, [ideasStore, toast]);
+
+  // v4.7.8: athlete thumbs-down note handler. Drops a new pending
+  // request into the queue with the athlete's note + a reference
+  // to which idea they were responding to. Content team sees it
+  // alongside other requests so they can act on the specific
+  // feedback instead of guessing at a silent down-vote.
+  const handleThumbDownNote = useCallback(async (idea, note) => {
+    const team = idea.team || profile?.team_id || 'BLW';
+    const playerName = idea?.prefill?.playerName || '';
+    const subjectLine = idea.headline ? `Feedback on idea: ${idea.headline}` : 'Idea feedback';
+    const newRequest = {
+      id: crypto.randomUUID(),
+      type: 'content',
+      title: subjectLine.slice(0, 120),
+      team,
+      template: idea.templateId || null,
+      status: 'pending',
+      priority: 'medium',
+      requester: profile?.display_name || user?.email || 'Athlete',
+      requesterEmail: user?.email || null,
+      requesterUserId: user?.id || null,
+      note: [
+        `👎 Down-voted idea: "${idea.headline || '(no headline)'}"${idea.angle ? ` [${idea.angle}]` : ''}`,
+        playerName ? `Subject: ${playerName}` : null,
+        `Idea ID: ${idea.id}`,
+        '',
+        `Athlete note: ${note}`,
+      ].filter(Boolean).join('\n'),
+      createdAt: Date.now(),
+    };
+    const list = getRequests();
+    saveRequests([newRequest, ...list]);
+    toast.success('Sent to content team', { detail: 'They\'ll see your feedback in Requests.' });
+  }, [profile, user, toast]);
 
   // v4.7.6: prepend any parent-supplied fresh ideas. We track which
   // ids we've already injected so re-renders with the same idea don't
@@ -201,6 +253,12 @@ export function ContentIdeasSection({
                 onQueue={queueIdeaAsRequest}
                 onOpenInGenerate={(i) => navigate(buildLink(i))}
                 onIdeaUpdate={ideasStore.patchIdea}
+                // v4.7.8: master can delete; athletes can elaborate on
+                // down-votes via the inline note prompt.
+                onDelete={isMaster ? handleDelete : null}
+                onThumbDownNote={isAthlete ? handleThumbDownNote : null}
+                isMaster={isMaster}
+                isAthlete={isAthlete}
                 // Intentionally NO onMoreLikeThis — that's a dashboard-only
                 // affordance (it needs the full BLW context to seed a regen).
               />
