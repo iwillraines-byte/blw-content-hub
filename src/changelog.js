@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.7.5',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Player page Recent Posts: tile click opens preview, not Studio',
+    items: [
+      'Clicking a tile in "Recent posts featuring this player" now opens a full-size lightbox preview of the rendered post instead of deep-linking into Studio with the composition pre-filled. The typical click intent on a player page is "show me the bigger version," not "let me re-edit this."',
+      'Staff (master/admin/content) get an "✎ Open in Studio" link inside the lightbox actions slot — re-edit is still one click away when they actually want it. Athletes don\'t see the Studio link since they can\'t open Studio anyway.',
+      'Prev/next arrows + arrow-key nav step through the whole Recent Posts set in order. ESC + click-outside close.',
+    ],
+  },
+  {
     version: '4.7.4',
     date: '2026-05-15',
     kind: 'patch',

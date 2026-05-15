@@ -2652,9 +2652,16 @@ function StickyMiniHero({ active, player, team, avatarUrl, profileOffsetX, profi
 // ─── Recent posts featuring this player ─────────────────────────────────────
 // A small horizontal grid of thumbnails pulled from the global generate-log,
 // filtered to posts where settings.fields.playerName matches this player.
-// Useful for "have we already made a Jaso highlight this week?" — clicking
-// a thumbnail re-opens the same composition in Generate.
+// v4.7.5: clicking a thumbnail now opens a full-size LIGHTBOX preview of
+// the rendered post. Pre-fix the tile deep-linked into Studio with the
+// composition pre-filled — but the typical click intent on a player page
+// is "show me the bigger version of this post," not "let me re-edit it."
+// Re-edit is still reachable via the "Open in Studio" link inside the
+// lightbox actions slot for staff users.
 function PlayerRecentPosts({ posts, team, player }) {
+  const lightbox = usePhotoLightbox();
+  const { role } = useAuth();
+  const canEdit = role === 'master_admin' || role === 'admin' || role === 'content';
   const timeAgo = (d) => {
     if (!d) return '';
     const diff = Date.now() - d.getTime();
@@ -2679,6 +2686,14 @@ function PlayerRecentPosts({ posts, team, player }) {
     }
     return `/generate?${params.toString()}`;
   };
+  // Build a single carousel from the posts so prev/next nav inside the
+  // lightbox steps through the whole "Recent posts" set in order.
+  const carousel = posts.map(p => ({
+    id: p.id,
+    name: formatPostName(p, getTeam) || p.templateType || 'post',
+    url: p.thumbnailUrl,
+    post: p,
+  }));
   const playerFirst = player.firstName || (player.name || '').split(' ')[0] || '';
   const titleName = `${playerFirst} ${player.lastName}`.trim();
 
@@ -2700,12 +2715,18 @@ function PlayerRecentPosts({ posts, team, player }) {
         gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
         gap: 10,
       }}>
-        {posts.map(post => (
-          <Link
+        {posts.map((post, i) => (
+          <div
             key={post.id}
-            to={buildRegenerateLink(post)}
-            title={`${post.templateType || 'post'} · ${post.platform || ''} · ${timeAgo(post.createdAt)} · click to re-open in Generate`}
-            style={{ textDecoration: 'none', display: 'block' }}
+            role="button"
+            tabIndex={0}
+            onClick={() => { if (post.thumbnailUrl) lightbox.openAt(carousel, i); }}
+            onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && post.thumbnailUrl) lightbox.openAt(carousel, i); }}
+            title={`${post.templateType || 'post'} · ${post.platform || ''} · ${timeAgo(post.createdAt)} · click to preview`}
+            style={{
+              textDecoration: 'none', display: 'block',
+              cursor: post.thumbnailUrl ? 'zoom-in' : 'default',
+            }}
           >
             <div style={{
               borderRadius: radius.base, overflow: 'hidden',
@@ -2750,9 +2771,30 @@ function PlayerRecentPosts({ posts, team, player }) {
                 <span>{timeAgo(post.createdAt)}</span>
               </div>
             </div>
-          </Link>
+          </div>
         ))}
       </div>
+
+      {/* v4.7.5: shared preview lightbox for this section. Staff users
+          get an "Open in Studio" CTA in the actions slot so re-edit is
+          still one click away; athletes don't see it since they can't
+          open Studio. */}
+      <PreviewLightbox
+        {...lightbox.lightboxProps}
+        actions={lightbox.current?.post && canEdit ? (
+          <Link
+            to={buildRegenerateLink(lightbox.current.post)}
+            style={{
+              background: 'transparent', color: '#fff',
+              border: '1px solid rgba(255,255,255,0.45)',
+              borderRadius: radius.sm, padding: '4px 10px',
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+              textTransform: 'uppercase', textDecoration: 'none',
+              fontFamily: fonts.condensed, whiteSpace: 'nowrap',
+            }}
+          >✎ Open in Studio</Link>
+        ) : null}
+      />
     </Card>
   );
 }
