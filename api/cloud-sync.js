@@ -67,10 +67,16 @@ import { getServiceClient, missingConfigResponse, requireUser } from './_supabas
 // Phase 5c: kinds that athletes are allowed to write, keyed by the column
 // that stores the team abbreviation. If a kind isn't listed, athletes can't
 // create/update it at all. Admins/content/master_admin can write anything.
+// v4.7.10: 'manual-player' added — athletes can upsert their OWN
+// player record (nickname, vitals, jersey, position, voice). The
+// "OWN" gate is enforced below as an extra check on user_id alongside
+// the team check, so an athlete can\'t patch a teammate\'s row even
+// though both share their team_id.
 const ATHLETE_WRITABLE = {
-  'media':         'team',
-  'request':       'team',
-  'generate-log':  'team',
+  'media':          'team',
+  'request':        'team',
+  'generate-log':   'team',
+  'manual-player':  'team',
 };
 // Kinds athletes are allowed to DELETE. Athletes can only delete their own
 // generate-log records (their own generation history). They cannot delete
@@ -428,6 +434,51 @@ export default async function handler(req, res) {
       if (recordTeam && recordTeam !== userTeamId) {
         res.status(403).json({ error: `Athletes can only write records for team ${userTeamId} (got ${recordTeam})` });
         return;
+      }
+      // v4.7.10: extra athlete guard for manual-player upserts. The
+      // team check above lets them write any row on their team, but
+      // a player record carries personal data — an athlete should
+      // only be able to patch their OWN row (user_id === auth.uid()
+      // or the unset case for a brand-new row they\'re claiming).
+      // Server-side enforcement: fetch the target row by (team, last,
+      // first/num) and require its user_id be NULL or === auth.uid().
+      if (kind === 'manual-player') {
+        const rec = record || {};
+        const t = rec.team || rec.team_id;
+        const ln = rec.lastName || rec.last_name;
+        if (!t || !ln) {
+          res.status(400).json({ error: 'Athlete manual-player upsert needs team + lastName' });
+          return;
+        }
+        // Find candidate rows on this team with this lastname.
+        let q = sb.from('manual_players').select('id, user_id, first_name, num').eq('team', t).ilike('last_name', ln);
+        const { data: candidates, error: lookupErr } = await q;
+        if (lookupErr) {
+          res.status(500).json({ error: 'manual-player lookup failed', detail: lookupErr.message });
+          return;
+        }
+        // Narrow by firstName / num where supplied so cousin pairs work.
+        const fn = rec.firstName || rec.first_name;
+        const num = rec.num != null ? String(rec.num) : null;
+        const narrowed = (candidates || []).filter(c => {
+          if (fn && c.first_name && String(c.first_name).toLowerCase() !== String(fn).toLowerCase()) return false;
+          if (num && c.num != null && String(c.num) !== num) return false;
+          return true;
+        });
+        const match = narrowed[0] || null;
+        if (match && match.user_id && match.user_id !== user.id) {
+          res.status(403).json({
+            error: 'Athletes can only edit their own player record',
+            detail: `Target row is owned by user ${match.user_id.slice(0, 8)}…, you are ${user.id.slice(0, 8)}…`,
+          });
+          return;
+        }
+        // If the row exists with user_id === null we allow the write and
+        // also stamp user_id := auth.uid() so future writes are gated by
+        // the ownership check.
+        if (match && !match.user_id) {
+          record.user_id = user.id;
+        }
       }
     }
   }

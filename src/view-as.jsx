@@ -17,10 +17,12 @@
 // setViewAs). Every page already reads the EFFECTIVE role/teamId from the
 // auth context, so no other surface needs to change.
 
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, ROLE_LABELS } from './auth';
-import { TEAMS, getTeam } from './data';
-import { Card, SectionHeading, TeamLogo } from './components';
+import { TEAMS, getTeam, playerSlug } from './data';
+import { getAllManualPlayers } from './player-store';
+import { Card, SectionHeading, TeamLogo, inputStyle, selectStyle } from './components';
 import { colors, fonts, radius } from './theme';
 
 // Roles available for impersonation. Master admin obviously isn't here —
@@ -71,7 +73,15 @@ export function ViewAsPicker() {
         Switch into an athlete's view to confirm what they see — sidebar restrictions, locked team picker, the My Stats landing page. A banner stays pinned across the top while you're impersonating; click Exit on the banner (or the active row below) to come back.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* v4.7.10: specific-athlete picker. Pre-fix the picker only let you
+          view as "an athlete on TEAM X" — useful for testing role gating
+          but not for verifying per-player edit gates (each athlete should
+          only edit THEIR own player record). Now you can pick a real
+          linked athlete and the impersonation carries their user_id so
+          canEdit() on PlayerPage fires exactly as it would for them. */}
+      <SpecificAthletePicker />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
         {VIEW_AS_ROLES.map(r => (
           <div key={r.id}>
             <div style={{
@@ -257,6 +267,154 @@ export function ImpersonationBanner() {
           flexShrink: 0,
         }}
       >EXIT VIEW</button>
+    </div>
+  );
+}
+
+// ─── Specific-athlete picker ──────────────────────────────────────────────
+// v4.7.10: master picks an actual linked athlete and the impersonation
+// carries that player's user_id, so PlayerPage's per-player edit gate
+// fires as it would for them. Drives off manual_players rows that have
+// both a team_id and a user_id (otherwise there's nobody to impersonate).
+function SpecificAthletePicker() {
+  const navigate = useNavigate();
+  const { realRole, viewingAs, setViewAs } = useAuth();
+  const [manualPlayers, setManualPlayers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (realRole !== 'master_admin') return;
+    getAllManualPlayers().then(rows => {
+      setManualPlayers(rows || []);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, [realRole]);
+
+  if (realRole !== 'master_admin') return null;
+
+  // Only show athletes who have BOTH a linked user_id AND a team. Without
+  // user_id, the per-player canEdit gate won't actually behave as it does
+  // for that athlete (no signal to match against). Without a team they're
+  // ambiguous in the impersonation routing.
+  const linked = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const arr = (manualPlayers || []).filter(p => p.team && (p.user_id || p.userId));
+    if (!q) return arr;
+    return arr.filter(p => {
+      const fullName = `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase();
+      const team = (p.team || '').toLowerCase();
+      const num = String(p.num || '');
+      return fullName.includes(q) || team.includes(q) || num.includes(q);
+    });
+  }, [manualPlayers, search]);
+
+  const startView = (p) => {
+    const team = getTeam(p.team);
+    const fullName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || p.name || 'Athlete';
+    const label = team ? `${fullName} · ${team.name}` : fullName;
+    setViewAs({
+      role: 'athlete',
+      teamId: p.team,
+      userId: p.user_id || p.userId,
+      label,
+      playerName: fullName,
+      playerSlug: playerSlug(p),
+    });
+    // Send the master straight to the impersonated athlete's player page
+    // so they can immediately verify the edit affordances they expected.
+    const slug = playerSlug(p);
+    if (slug) {
+      const teamSlug = (team?.slug) || (team?.id ? team.id.toLowerCase() : '');
+      navigate(`/teams/${teamSlug}/players/${slug}`);
+    } else {
+      navigate('/my-stats');
+    }
+  };
+
+  const activeUserId = viewingAs?.userId || null;
+
+  return (
+    <div style={{
+      borderTop: `1px dashed ${colors.borderLight}`,
+      paddingTop: 14, marginTop: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+        <span style={{ fontFamily: fonts.body, fontSize: 14, fontWeight: 700, color: colors.text }}>
+          View as a specific athlete
+        </span>
+        <span style={{ fontSize: 12, color: colors.textSecondary, lineHeight: 1.5 }}>
+          Carries the athlete's <code style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11 }}>user_id</code> so per-player edit gates fire as they would for them.
+        </span>
+      </div>
+      {loaded && linked.length === 0 ? (
+        <div style={{
+          padding: 14, fontSize: 12, color: colors.textMuted,
+          background: colors.bg, borderRadius: radius.sm,
+          border: `1px dashed ${colors.borderLight}`,
+        }}>
+          No linked athletes yet. On a player page, scroll to the AthleteVoice card and use the "Link athlete account" control to bind a Supabase user to that player.
+        </div>
+      ) : (
+        <>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, team, or jersey #…"
+            style={{ ...inputStyle, marginBottom: 8 }}
+          />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gap: 6,
+            maxHeight: 320, overflowY: 'auto',
+          }}>
+            {linked.slice(0, 60).map(p => {
+              const team = getTeam(p.team);
+              const fullName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || p.name || '—';
+              const uid = p.user_id || p.userId;
+              const active = activeUserId === uid;
+              return (
+                <button
+                  key={p.id || uid}
+                  type="button"
+                  onClick={() => active ? setViewAs(null) : startView(p)}
+                  title={active ? 'Currently viewing — click to exit' : `View as ${fullName}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 10px',
+                    background: active && team ? `${team.color}1A` : colors.white,
+                    border: `1px solid ${active && team ? team.color : colors.borderLight}`,
+                    borderRadius: radius.sm,
+                    cursor: 'pointer', textAlign: 'left',
+                    fontFamily: fonts.body, fontSize: 12, fontWeight: 600,
+                    color: active && team ? (team.dark || team.color) : colors.text,
+                    transition: 'background 160ms ease, border-color 160ms ease',
+                  }}
+                >
+                  {team && <TeamLogo teamId={team.id} size={20} rounded="square" />}
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {fullName}
+                    {p.num && <span style={{ color: colors.textMuted, marginLeft: 4 }}>#{p.num}</span>}
+                  </span>
+                  {active && (
+                    <span style={{
+                      fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+                      letterSpacing: 0.5,
+                      color: team ? (team.dark || team.color) : colors.accent,
+                    }}>● ON</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {linked.length > 60 && (
+            <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 6, fontFamily: fonts.condensed }}>
+              {linked.length - 60} more — narrow with the search box.
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

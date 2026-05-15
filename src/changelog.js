@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.7.10',
+    date: '2026-05-15',
+    kind: 'minor',
+    summary: 'Athlete self-edit + master "view as a specific athlete"',
+    items: [
+      'Athletes can now edit their OWN player record (nickname, vitals, jersey #, position, status, voice block). The ✎ Edit player info button on the hero shows for them on their own page only; on every other player\'s page it stays hidden. The athlete-voice card was already self-edit-gated since v4.4.1; this widens the gate to cover the rest of the manual_players row.',
+      'Server-side enforcement: cloud-sync now allows athlete writes on kind=manual-player with an EXTRA guard beyond the team check — the target row\'s user_id must be NULL (claim path: stamps user_id=auth.uid() on first write) or === auth.uid() (subsequent edits to the row they already own). An athlete cannot patch a teammate\'s row even though they share the team_id. Master/admin/content keep unrestricted write access.',
+      'Master "view as" picker gains a "View as a specific athlete" section. Pick any linked athlete (anyone with both a team_id and a manual_players.user_id) and the impersonation carries their user_id, so the canEdit gate on PlayerPage fires exactly as it would for them. Search box filters by name / team / jersey #. Switching navigates straight to that athlete\'s player page.',
+      'New auth context fields: useAuth().userId returns the EFFECTIVE user id (real session id, or the impersonated athlete\'s user_id when a "view as specific athlete" override is active). useAuth().realUserId is the unimpersonated session id — use it for anywhere a server call\'s auth ownership matters (the JWT going to the server is always master\'s real token).',
+      'The impersonation banner already showed the role + team; specific-athlete impersonation now flows through the same banner with the athlete\'s name.',
+      'Practical workflow: from Dashboard → "View as" card, pick a linked athlete, hit their entry. You land on their player page seeing exactly what they see — sidebar nav restrictions, the ✎ Edit affordance on their hero but not their teammates\'. Verify the edit gating, then click EXIT VIEW on the banner.',
+    ],
+  },
+  {
     version: '4.7.9',
     date: '2026-05-15',
     kind: 'patch',

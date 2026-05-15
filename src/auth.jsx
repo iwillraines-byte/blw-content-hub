@@ -195,11 +195,20 @@ export function AuthProvider({ children }) {
 
   const realRole = profile?.role || null;
   const realTeamId = profile?.team_id || null;
+  const realUserId = session?.user?.id || null;
   // EFFECTIVE values — what every gate / page should read. Override wins
   // when present, real values otherwise. The override teamId may be null
   // for non-athlete impersonation (e.g., view as content user).
   const effectiveRole = viewingAs?.role || realRole;
   const effectiveTeamId = viewingAs?.teamId ?? realTeamId;
+  // v4.7.10: effectiveUserId enables "view as a SPECIFIC athlete" so
+  // PlayerPage's canEdit gates (`player.userId === user.id`) fire as
+  // they would for the real athlete. Server-side calls still use the
+  // real JWT — this is purely a client-side identity simulation for
+  // UI/UX validation. Override is only applied when viewingAs.userId
+  // is explicitly set; default impersonation (role + team, no specific
+  // athlete) leaves effectiveUserId === realUserId.
+  const effectiveUserId = viewingAs?.userId || realUserId;
 
   // v4.5.7: surface time-boxed-access metadata for the countdown banner.
   // roleExpiresAt is a Date when set, null otherwise. expiredRole is the
@@ -216,8 +225,13 @@ export function AuthProvider({ children }) {
     profile,
     role: effectiveRole,
     teamId: effectiveTeamId,
+    // v4.7.10: effectiveUserId is what client-side per-player edit gates
+    // should read. realUserId is the real master's session id; use it
+    // anywhere a SERVER call's auth ownership matters.
+    userId: effectiveUserId,
     realRole,
     realTeamId,
+    realUserId,
     viewingAs,
     setViewAs,
     loading,

@@ -969,7 +969,7 @@ function ExtrasDropdown({ instagramHandle, funFacts }) {
   );
 }
 
-function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, onGenerate, generating = false, canEditPhoto, onEditPhoto, onAdjustPhoto, isMaster = false, onEditInfo = null, prevPlayer = null, nextPlayer = null }) {
+function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, onGenerate, generating = false, canEditPhoto, onEditPhoto, onAdjustPhoto, isMaster = false, onEditInfo = null, canEditInfo = false, prevPlayer = null, nextPlayer = null }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
   const height = formatHeight(v.heightIn);
@@ -1294,11 +1294,17 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                   status without leaving the page. Saves through the
                   same upsertManualPlayer pipeline used by the photo
                   picker — vitals re-render in place after save. */}
-              {isMaster && onEditInfo && (
+              {/* v4.7.10: widened from master-only to canEditInfo —
+                  athletes can edit their OWN player record too. The
+                  tooltip flips based on role context so the button
+                  reads correctly in both cases. */}
+              {canEditInfo && onEditInfo && (
                 <OutlineButton
                   onClick={onEditInfo}
                   style={{ padding: '8px 14px', fontSize: 12 }}
-                  title="Edit nickname, vitals, jersey #, status — master admin only"
+                  title={isMaster
+                    ? 'Edit nickname, vitals, jersey #, status'
+                    : 'Edit your own player info — nickname, vitals, jersey #'}
                 >✎ Edit player info</OutlineButton>
               )}
             </div>
@@ -1422,7 +1428,7 @@ export default function PlayerPage() {
   const navigate = useNavigate();
   const team = getTeam(slug);
   const toast = useToast();
-  const { user, role } = useAuth();
+  const { user, role, userId: effectiveUserId } = useAuth();
   // Photo-edit + pan/zoom buttons surface for ANY staff user (master +
   // content). Picking a player's headshot is daily content work, not a
   // data-management task — locking it to master-only would block the
@@ -1430,6 +1436,13 @@ export default function PlayerPage() {
   const isAdmin = isStaffRole(role);
   const isMaster = role === 'master_admin';
   const isAthlete = role === 'athlete';
+  // v4.7.10: athlete-self-edit gate. Athletes can edit their OWN player
+  // record (bio, vitals, voice). The check matches the effective user_id
+  // from useAuth against the player's linked manual_players.user_id —
+  // which means "view as a specific athlete" impersonation also fires
+  // the gate exactly as it would for that athlete.
+  const isOwnPlayer = isAthlete && !!effectiveUserId && player?.userId === effectiveUserId;
+  const canEditBio = isMaster || isOwnPlayer;
 
   const [player, setPlayer] = useState(null);
   const [media, setMedia] = useState([]);
@@ -2090,7 +2103,12 @@ export default function PlayerPage() {
           onEditPhoto={openPhotoPicker}
           onAdjustPhoto={() => setPositionEditorOpen(true)}
           isMaster={isMaster}
-          onEditInfo={() => setEditInfoOpen(true)}
+          // v4.7.10: athletes can edit their OWN player record too.
+          // isOwnPlayer is true only when the effective user_id matches
+          // player.userId (real athletes OR master impersonating that
+          // specific athlete via the View-as picker).
+          onEditInfo={(canEditBio) ? () => setEditInfoOpen(true) : null}
+          canEditInfo={canEditBio}
         />
       </div>
 
@@ -2147,8 +2165,10 @@ export default function PlayerPage() {
 
       {/* v4.5.37: master-admin player-info editor. Renders when
           editInfoOpen is true. createPortal lifts it out of any
-          transform-having ancestor so the modal centers cleanly. */}
-      {editInfoOpen && isMaster && (
+          transform-having ancestor so the modal centers cleanly.
+          v4.7.10: also opens for athletes editing their OWN player
+          record (canEditBio gate). */}
+      {editInfoOpen && canEditBio && (
         <EditPlayerInfoModal
           player={player}
           team={team}
@@ -2349,7 +2369,7 @@ export default function PlayerPage() {
         player={player}
         team={team}
         isMaster={isMaster}
-        canEdit={isMaster || (isAthlete && !!user?.id && player.userId === user.id)}
+        canEdit={canEditBio}
       />
 
       {/* Content ideas about this player — only shows when there are
