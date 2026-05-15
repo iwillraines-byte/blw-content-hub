@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.7.4',
+    date: '2026-05-15',
+    kind: 'patch',
+    summary: 'Hotfix: cousin-pair leak on player-page Recent Posts',
+    items: [
+      'Reported: Will Marshall\'s player page was showing a post that actually featured Paul Marshall (his cousin on AZS). Same surface affected any cousin pair sharing a lastname — James/Justin Lee on LV, Logan/Luke Rose on DAL, etc.',
+      'Root cause: the "Recent posts featuring this player" filter on PlayerPage allowed an exact-name match OR a same-lastname fallback. The fallback was named "loose" and the comment claimed it checked for FI conflicts, but the code never actually did — so any post tagged with "Paul Marshall" matched Will Marshall\'s page because both names end in "marshall."',
+      'Fix: fallback now requires the post\'s playerName to start with the SAME first initial as the page\'s player when both have an FI on record. Paul → p, Will → w, so cousin pairs disambiguate automatically. Players with no FI on record (legacy data) still get the relaxed lastname-only match so we don\'t drop legitimate hits.',
+    ],
+  },
+  {
     version: '4.7.3',
     date: '2026-05-15',
     kind: 'patch',

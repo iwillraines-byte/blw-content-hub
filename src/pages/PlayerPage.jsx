@@ -1529,15 +1529,30 @@ export default function PlayerPage() {
             if (cancel) return;
             const targetName = (p.name || '').trim().toLowerCase();
             const targetLast = (p.lastName || '').trim().toLowerCase();
+            const targetFI = String(p.firstInitial || (p.firstName || '').charAt(0) || '').toLowerCase();
             const matches = posts.filter(post => {
               if (post.team && post.team !== team.id) return false;
               const fields = post?.settings?.fields || {};
               const pn = String(fields.playerName || '').trim().toLowerCase();
               if (!pn) return false;
               if (targetName && pn === targetName) return true;
-              // Loose fallback: same lastName + (no FI conflict OR matching FI)
-              const lastInPost = pn.split(/\s+/).pop();
-              return targetLast && lastInPost === targetLast;
+              // v4.7.4: cousin-safe fallback. Previously matched any post
+              // whose playerName ended in the same lastName as the page's
+              // player. Paul Marshall and Will Marshall (AZS) both end in
+              // "marshall" so Paul's posts surfaced on Will's page (and
+              // vice versa). Now require that the post's playerName ALSO
+              // starts with the same first initial as the page's player
+              // — Paul → 'p', Will → 'w' — so cousin pairs disambiguate
+              // automatically. If the page's player has no FI on record
+              // (legacy data), accept any matching lastname so we don't
+              // drop legitimate hits.
+              const parts = pn.split(/\s+/);
+              if (parts.length === 0) return false;
+              const lastInPost = parts[parts.length - 1];
+              if (!targetLast || lastInPost !== targetLast) return false;
+              if (!targetFI) return true; // no FI on the page's player — fall back to lastname-only
+              const postFI = (parts[0] || '').charAt(0);
+              return postFI === targetFI;
             });
             setRecentPosts(matches.slice(0, 12));
           }).catch(() => { /* soft-fail */ });
