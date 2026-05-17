@@ -69,6 +69,30 @@ export default function PeopleAdminCard() {
     }
   }, [toast, currentUser?.id, refreshProfile, refresh]);
 
+  // v4.7.12: Send the actual invite email to a silently-created profile.
+  // Pairs with the "Stage silently" toggle on the invite modal — master
+  // pre-stages 10 athletes, links them on their player pages, then
+  // triggers invites in controlled batches.
+  const sendInvite = useCallback(async (p) => {
+    const ok = window.confirm(`Send invite email to ${p.email}? They'll receive a magic link to sign in.`);
+    if (!ok) return;
+    try {
+      const res = await authedJson('/api/admin-people?action=send-invite', {
+        method: 'POST',
+        body: { id: p.id },
+      });
+      setProfiles(prev => prev.map(x => x.id === p.id ? { ...x, pending_invite: false } : x));
+      toast.success(`Invite sent to ${p.email}`);
+      // Surface the action_link as a fallback in case Supabase email
+      // delivery is delayed — master can copy/paste it directly.
+      if (res?.action_link) {
+        console.log('[invite link, fallback]', res.action_link);
+      }
+    } catch (err) {
+      toast.error('Send failed', { detail: err.message });
+    }
+  }, [toast]);
+
   return (
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -79,7 +103,10 @@ export default function PeopleAdminCard() {
       </div>
 
       <p style={{ fontSize: 12, color: colors.textSecondary, margin: '0 0 14px', lineHeight: 1.5 }}>
-        Send a magic-link invitation and set their role + team. Invited emails will receive a link that takes them to the login page and signs them in automatically. Pick <strong>Content</strong> for your social-media team and <strong>Athlete</strong> for players.
+        Send a magic-link invitation and set their role + team. Invited emails will receive a link that signs them in automatically. Pick <strong>Content</strong> for your social-media team and <strong>Athlete</strong> for players.
+        {myTier === 'master_admin' && (
+          <> Use <strong>Stage silently</strong> on the invite modal to pre-create accounts so you can link them on player pages before any emails go out — then trigger invites in batches with the <strong>Send invite</strong> button below.</>
+        )}
       </p>
 
       {error && (
@@ -107,6 +134,7 @@ export default function PeopleAdminCard() {
               myTier={myTier}
               onChangeRole={(role) => patchRow(p.id, { role })}
               onChangeTeam={(team_id) => patchRow(p.id, { team_id })}
+              onSendInvite={() => sendInvite(p)}
             />
           ))}
         </div>
@@ -115,15 +143,26 @@ export default function PeopleAdminCard() {
       {inviteOpen && (
         <InviteModal
           invitableRoles={invitableRoles}
+          isMaster={myTier === 'master_admin'}
           onClose={() => setInviteOpen(false)}
-          onSuccess={() => { setInviteOpen(false); refresh(); toast.success('Invitation sent'); }}
+          onSuccess={(opts) => {
+            setInviteOpen(false);
+            refresh();
+            if (opts?.silent) {
+              toast.success('Account staged — invite not yet sent', {
+                detail: 'Link the athlete on their player page, then click "Send invite" to email them.',
+              });
+            } else {
+              toast.success('Invitation sent');
+            }
+          }}
         />
       )}
     </Card>
   );
 }
 
-function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam }) {
+function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvite }) {
   // Figure out what this admin is allowed to do on this row.
   // - master_admin: can edit anyone (but the server still blocks self-demotion)
   // - admin: can only edit content/athlete rows
@@ -138,20 +177,41 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam }) {
     ? ['master_admin', 'content', 'athlete']
     : ['content', 'athlete'];
 
+  // v4.7.12: silently-staged accounts get a chip + a "Send invite" CTA
+  // so master can fire the email when they're ready (e.g. after linking
+  // the athlete on their player page).
+  const isPending = !!p.pending_invite;
+  const canSendInvite = myTier === 'master_admin' && isPending;
+
   return (
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'minmax(0, 1fr) 130px 110px auto',
       gap: 8, alignItems: 'center',
       padding: 10, borderRadius: radius.base,
-      border: `1px solid ${colors.borderLight}`,
-      background: isSelf ? colors.redLight : colors.white,
+      border: `1px solid ${isPending ? colors.warningBorder || colors.borderLight : colors.borderLight}`,
+      background: isSelf ? colors.redLight : (isPending ? (colors.warningBg || colors.white) : colors.white),
     }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {p.email || '(no email)'}
           {isSelf && (
             <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: colors.red, letterSpacing: 0.5 }}>YOU</span>
+          )}
+          {isPending && (
+            <span
+              title="Account staged silently — invite email not yet sent. Click 'Send invite' when ready."
+              style={{
+                marginLeft: 6,
+                fontFamily: fonts.condensed,
+                fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                color: '#92400E',
+                background: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                padding: '2px 6px',
+                borderRadius: radius.sm,
+              }}
+            >⏳ NOT INVITED</span>
           )}
         </div>
         {p.display_name && (
@@ -181,18 +241,43 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam }) {
         {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
       </select>
 
-      <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3 }}>
-        {p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+        {canSendInvite && (
+          <button
+            type="button"
+            onClick={onSendInvite}
+            title="Email the magic-link invite now"
+            style={{
+              padding: '5px 10px',
+              fontSize: 11,
+              fontFamily: fonts.condensed,
+              fontWeight: 800,
+              letterSpacing: 0.5,
+              color: colors.white,
+              background: colors.red,
+              border: 'none',
+              borderRadius: radius.sm,
+              cursor: 'pointer',
+            }}
+          >SEND INVITE</button>
+        )}
+        <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3 }}>
+          {p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}
+        </div>
       </div>
     </div>
   );
 }
 
-function InviteModal({ invitableRoles, onClose, onSuccess }) {
+function InviteModal({ invitableRoles, isMaster, onClose, onSuccess }) {
   const toast = useToast();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState(invitableRoles.includes('athlete') ? 'athlete' : invitableRoles[0]);
   const [teamId, setTeamId] = useState('');
+  // v4.7.12: silent staging — master can pre-create accounts without
+  // emailing them, so they can be linked on player pages first and
+  // invited in controlled batches later. Only available to master_admin.
+  const [silent, setSilent] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
 
@@ -204,12 +289,12 @@ function InviteModal({ invitableRoles, onClose, onSuccess }) {
     try {
       await authedJson('/api/admin-people', {
         method: 'POST',
-        body: { email: email.trim(), role, team_id: teamId || null },
+        body: { email: email.trim(), role, team_id: teamId || null, silent: silent && isMaster },
       });
-      onSuccess?.();
+      onSuccess?.({ silent: silent && isMaster });
     } catch (e2) {
       setErr(e2.message || 'Failed to send invitation');
-      toast.error('Invite failed', { detail: e2.message?.slice(0, 100) });
+      toast.error(silent ? 'Stage failed' : 'Invite failed', { detail: e2.message?.slice(0, 100) });
     } finally {
       setSending(false);
     }
@@ -273,6 +358,34 @@ function InviteModal({ invitableRoles, onClose, onSuccess }) {
           </div>
         )}
 
+        {isMaster && (
+          <label
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              marginTop: 14, padding: 10,
+              background: silent ? '#FEF3C7' : colors.bg,
+              border: `1px solid ${silent ? '#FCD34D' : colors.borderLight}`,
+              borderRadius: radius.sm,
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={silent}
+              onChange={e => setSilent(e.target.checked)}
+              style={{ marginTop: 2, cursor: 'pointer' }}
+            />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: colors.text }}>
+                Stage silently (don't email yet)
+              </div>
+              <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2, lineHeight: 1.4 }}>
+                Creates the account so you can link it on a player page, but holds the invite email until you click <strong>Send invite</strong> on the People list. Useful for staged rollouts.
+              </div>
+            </div>
+          </label>
+        )}
+
         {err && (
           <div style={{
             marginTop: 10, padding: 8, borderRadius: radius.base,
@@ -284,7 +397,9 @@ function InviteModal({ invitableRoles, onClose, onSuccess }) {
         <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
           <OutlineButton type="button" onClick={onClose} style={{ flex: 1 }}>Cancel</OutlineButton>
           <RedButton type="submit" disabled={sending || !email.trim()} style={{ flex: 1 }}>
-            {sending ? 'Sending…' : 'Send invitation'}
+            {sending
+              ? (silent ? 'Staging…' : 'Sending…')
+              : (silent ? 'Stage account' : 'Send invitation')}
           </RedButton>
         </div>
       </form>

@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.7.12',
+    date: '2026-05-17',
+    kind: 'minor',
+    summary: 'Stage athlete accounts silently, send invites in controlled batches',
+    items: [
+      'Why: the "Link athlete account" picker on a player page only lists athletes who already exist as Supabase auth users. Before today, the only way to create that auth user was to invite them, which sent the magic-link email immediately — there was no way to pre-stage 10 athletes, link them to their player records, and then ship the invites in a controlled batch.',
+      'New: master_admin gets a "Stage silently (don\'t email yet)" checkbox on the Invite-user modal. With it on, the server calls supabase.auth.admin.createUser({ email_confirm: false }) instead of inviteUserByEmail — the auth user + profile row appear in the system, but no email goes out. The new row is marked pending_invite=true and gets a ⏳ NOT INVITED chip in the People list.',
+      'New: staged rows surface a red SEND INVITE button (master-only). Clicking it calls /api/admin-people?action=send-invite which generates the invite link via supabase.auth.admin.generateLink({ type: "invite" }). If the user is already confirmed (edge case), it falls back to a magiclink. Either way the action_link is also logged to the browser console as a copy/paste fallback in case email delivery is delayed. pending_invite flips to false after the send.',
+      'DB: migration 015_pending_invite.sql adds the BOOLEAN column (default FALSE). The select in /api/admin-people gracefully degrades if the migration hasn\'t been applied yet — older deploys keep working without the badge or button.',
+      'Server gating: silent create is master_admin-only (admins can still send normal invites for content/athlete roles). Send-invite reuses the existing admin role check.',
+      'Practical rollout: invite all 10 wave-1 athletes silently → go to each player page → use the Link athlete account dropdown → batch-send invites Monday morning in groups of 3 via the SEND INVITE button. No timing pressure between create and link, no risk that athlete #1 clicks before you finish linking.',
+    ],
+  },
+  {
     version: '4.7.11',
     date: '2026-05-15',
     kind: 'patch',
