@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.7.14',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Hotfix: white-screen when viewing as a specific athlete',
+    items: [
+      'Reported: clicking "View as a specific athlete" white-screened the app every time. v4.7.11 only fixed the SpecificAthletePicker hook-order violation — there was a second crash hiding behind it.',
+      'Root cause: PlayerPage referenced `player?.userId` on line 1444 in the isOwnPlayer derivation, but `const [player, setPlayer] = useState(null)` was declared on line 1447. const/let in the temporal dead zone throws ReferenceError when accessed before their declaration line — optional chaining (?.) only protects against null/undefined, NOT against TDZ. The crash was masked for non-impersonated sessions because `isAthlete && ... && player?.userId` short-circuits on `isAthlete=false`, so JS never tried to read `player` for a real master_admin. The moment you impersonated an athlete, isAthlete flipped to true, evaluation continued, hit the TDZ, threw, and the tree blanked.',
+      'Fix: hoisted the useState declaration above the isOwnPlayer derivation. No behavior change for the gate itself — same logic, just no TDZ hazard.',
+    ],
+  },
+  {
     version: '4.7.13',
     date: '2026-05-17',
     kind: 'minor',

@@ -1436,15 +1436,24 @@ export default function PlayerPage() {
   const isAdmin = isStaffRole(role);
   const isMaster = role === 'master_admin';
   const isAthlete = role === 'athlete';
+
+  const [player, setPlayer] = useState(null);
+
   // v4.7.10: athlete-self-edit gate. Athletes can edit their OWN player
   // record (bio, vitals, voice). The check matches the effective user_id
   // from useAuth against the player's linked manual_players.user_id —
   // which means "view as a specific athlete" impersonation also fires
   // the gate exactly as it would for that athlete.
+  //
+  // v4.7.14: hoisted BELOW the useState(null) declaration. Pre-fix it
+  // referenced `player` before the `const [player, setPlayer]` line —
+  // const/let hoisting throws ReferenceError in the TDZ even with
+  // optional chaining, so any render that reached this line crashed
+  // the tree. The crash was masked when isOwnPlayer wasn't accessed
+  // in the active code path, but impersonating an athlete (effectiveUserId
+  // present + role='athlete') hit it on every render and white-screened.
   const isOwnPlayer = isAthlete && !!effectiveUserId && player?.userId === effectiveUserId;
   const canEditBio = isMaster || isOwnPlayer;
-
-  const [player, setPlayer] = useState(null);
   const [media, setMedia] = useState([]);
   // Full team media (all players + team-scoped assets) for the photo picker.
   // Lazy-loaded the first time the picker opens, then kept in state.
