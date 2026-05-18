@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.7.13',
+    date: '2026-05-17',
+    kind: 'minor',
+    summary: 'Pick the player record to link right inside the invite modal',
+    items: [
+      'Why: v4.7.12 still required a trip to the player page after creating the account — open Settings, invite, then navigate to /teams/<slug>/players/<name>, scroll to AthleteVoiceCard, pick from the dropdown. Two surfaces for one action. The master called it out: "what if when adding an email to the users in settings, choosing the athlete is right there?"',
+      'New: "Link to player (optional)" dropdown inside the Invite-user modal. Appears when role=athlete AND team is picked. Reads from the local manual_players cache (fast, already populated by the rest of the app). Players already linked to another account appear disabled with an "already linked" tag, so you can\'t accidentally steal another athlete\'s binding.',
+      'Server: /api/admin-people POST now accepts link_manual_player_id. After createUser/inviteUserByEmail returns, server does UPDATE manual_players SET user_id = createdId WHERE id = link_manual_player_id, gated by (a) target row\'s team matches the new account\'s team_id (b) target row\'s user_id is NULL. If either fails, account creation still succeeds and a link_warning string comes back so the UI toasts "Linked failed — account created" without blocking the rest of the flow.',
+      'Toast taxonomy: "Invitation sent" / "Invite sent + linked to player" / "Account staged — invite not yet sent" / "Staged + linked to player". Master gets unambiguous feedback about what happened in the one click.',
+      'Player picker resets whenever team changes (preventing cross-team selection bugs). Unlinked players sort first, then alphabetical by lastName.',
+      'Practical impact for the 10-athlete rollout: one screen, three picks (team + player + silent-stage toggle), done. From 2 surfaces → 1.',
+    ],
+  },
+  {
     version: '4.7.12',
     date: '2026-05-17',
     kind: 'minor',

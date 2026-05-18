@@ -7,7 +7,7 @@
 // but never granted today (master_admin handles trades, bio import, and
 // people management directly).
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
@@ -15,6 +15,7 @@ import { TEAMS } from '../data';
 import { useAuth, ROLE_LABELS, isAdminRole } from '../auth';
 import { authedJson } from '../authed-fetch';
 import { useToast } from '../toast';
+import { getAllManualPlayers } from '../player-store';
 
 // What a given admin tier is allowed to assign on invite. Master can
 // assign any non-admin role (admin is omitted on purpose — see header
@@ -148,10 +149,16 @@ export default function PeopleAdminCard() {
           onSuccess={(opts) => {
             setInviteOpen(false);
             refresh();
-            if (opts?.silent) {
-              toast.success('Account staged — invite not yet sent', {
-                detail: 'Link the athlete on their player page, then click "Send invite" to email them.',
+            if (opts?.silent && opts?.linked) {
+              toast.success('Staged + linked to player', {
+                detail: 'Click "Send invite" on the People list when you\'re ready to email them.',
               });
+            } else if (opts?.silent) {
+              toast.success('Account staged — invite not yet sent', {
+                detail: 'Click "Send invite" on the People list when you\'re ready to email them.',
+              });
+            } else if (opts?.linked) {
+              toast.success('Invite sent + linked to player');
             } else {
               toast.success('Invitation sent');
             }
@@ -278,8 +285,43 @@ function InviteModal({ invitableRoles, isMaster, onClose, onSuccess }) {
   // emailing them, so they can be linked on player pages first and
   // invited in controlled batches later. Only available to master_admin.
   const [silent, setSilent] = useState(false);
+  // v4.7.13: link the new account to a manual_players row in the same
+  // POST. Eliminates the "create user → navigate to player page → link"
+  // choreography. Only relevant when role=athlete + team is picked.
+  const [linkPlayerId, setLinkPlayerId] = useState('');
+  const [allPlayers, setAllPlayers] = useState(null); // null = loading
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
+
+  // Pull the roster cache once when the modal mounts. getAllManualPlayers
+  // reads from IndexedDB so this is fast (already populated by the rest
+  // of the app). If it fails, the picker just renders empty and the
+  // master can still create the account without linking.
+  useEffect(() => {
+    let cancel = false;
+    getAllManualPlayers()
+      .then(rows => { if (!cancel) setAllPlayers(rows || []); })
+      .catch(() => { if (!cancel) setAllPlayers([]); });
+    return () => { cancel = true; };
+  }, []);
+
+  // Filter to the picked team + sort unlinked first, then alphabetical
+  // by lastName. Already-linked players are still shown but disabled,
+  // so master can see "this player is already taken by someone else."
+  const teamPlayers = useMemo(() => {
+    if (!teamId || !allPlayers) return [];
+    const list = allPlayers.filter(p => p.team === teamId);
+    return list.sort((a, b) => {
+      const aLinked = !!a.userId;
+      const bLinked = !!b.userId;
+      if (aLinked !== bLinked) return aLinked ? 1 : -1;
+      return String(a.lastName || '').localeCompare(String(b.lastName || ''));
+    });
+  }, [allPlayers, teamId]);
+
+  // Reset the player pick whenever team changes — a player from the old
+  // team would be invalid for the new team.
+  useEffect(() => { setLinkPlayerId(''); }, [teamId]);
 
   const send = async (e) => {
     e.preventDefault();
@@ -287,11 +329,23 @@ function InviteModal({ invitableRoles, isMaster, onClose, onSuccess }) {
     setSending(true);
     setErr('');
     try {
-      await authedJson('/api/admin-people', {
+      const res = await authedJson('/api/admin-people', {
         method: 'POST',
-        body: { email: email.trim(), role, team_id: teamId || null, silent: silent && isMaster },
+        body: {
+          email: email.trim(),
+          role,
+          team_id: teamId || null,
+          silent: silent && isMaster,
+          link_manual_player_id: (role === 'athlete' && linkPlayerId) ? linkPlayerId : null,
+        },
       });
-      onSuccess?.({ silent: silent && isMaster });
+      // Account itself always succeeds first; link is best-effort. Surface
+      // a warning toast if the link couldn't be made so master knows to
+      // bind manually on the player page.
+      if (res?.link_warning) {
+        toast.error('Linked failed — account created', { detail: res.link_warning });
+      }
+      onSuccess?.({ silent: silent && isMaster, linked: !!res?.invited?.linked_player_id });
     } catch (e2) {
       setErr(e2.message || 'Failed to send invitation');
       toast.error(silent ? 'Stage failed' : 'Invite failed', { detail: e2.message?.slice(0, 100) });
@@ -355,6 +409,46 @@ function InviteModal({ invitableRoles, isMaster, onClose, onSuccess }) {
         {role === 'athlete' && !teamId && (
           <div style={{ fontSize: 11, color: colors.warning, marginTop: 4 }}>
             Athletes need a team so they can generate content. You can set it later from the People list too.
+          </div>
+        )}
+
+        {/* v4.7.13: link-to-player picker. Only shown when role=athlete +
+            team picked. Lets master bind the new account to a specific
+            manual_players row in the SAME submit, skipping the trip to
+            the player page. */}
+        {role === 'athlete' && teamId && (
+          <div style={{ marginTop: 12 }}>
+            <Label>Link to player (optional)</Label>
+            {allPlayers === null ? (
+              <div style={{ fontSize: 11, color: colors.textMuted, padding: 6 }}>Loading roster…</div>
+            ) : teamPlayers.length === 0 ? (
+              <div style={{ fontSize: 11, color: colors.textMuted, padding: 6 }}>
+                No player records on this team yet. You can link later from the player page.
+              </div>
+            ) : (
+              <select
+                value={linkPlayerId}
+                onChange={e => setLinkPlayerId(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">— Don't link now (set later on player page) —</option>
+                {teamPlayers.map(p => {
+                  const linked = !!p.userId;
+                  const num = p.num != null && p.num !== '' ? `#${p.num} ` : '';
+                  const name = `${p.firstName || ''} ${p.lastName || ''}`.trim() || '(unnamed)';
+                  return (
+                    <option key={p.id} value={p.id} disabled={linked}>
+                      {num}{name}{linked ? ' · already linked' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+            {linkPlayerId && (
+              <div style={{ fontSize: 11, color: colors.success, marginTop: 4, fontFamily: fonts.condensed, letterSpacing: 0.3 }}>
+                ✓ This account will own that player's record on first login (or immediately, for silent staging).
+              </div>
+            )}
           </div>
         )}
 

@@ -128,7 +128,11 @@ export default async function handler(req, res) {
       }
 
       // ─── Default POST: invite or silent-create a new user ────────────
-      const { email, role, team_id, display_name, silent } = req.body || {};
+      // v4.7.13: link_manual_player_id (optional) lets master pick the
+      // player record to bind in the SAME operation as creating the
+      // account. Eliminates the "create user, navigate to player page,
+      // link, navigate back" choreography.
+      const { email, role, team_id, display_name, silent, link_manual_player_id } = req.body || {};
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: 'email is required' });
       }
@@ -204,6 +208,37 @@ export default async function handler(req, res) {
         }
       }
 
+      // v4.7.13: bind the new user to a manual_players row if the master
+      // picked one in the modal. Only allowed when:
+      //   - role is athlete (the only role that maps to a player record)
+      //   - target row is on the same team_id the new user got
+      //   - target row's user_id is currently NULL (avoid stealing
+      //     another athlete's binding)
+      // Surfaces a warning in the response if the link couldn't be made
+      // so the UI can prompt master to set it manually — the account
+      // creation itself still succeeded.
+      let linkWarning = null;
+      if (createdId && link_manual_player_id && requestedRole === 'athlete') {
+        const { data: targetPlayer, error: lookupErr } = await sb
+          .from('manual_players')
+          .select('id, team, user_id, last_name, first_name')
+          .eq('id', link_manual_player_id)
+          .maybeSingle();
+        if (lookupErr || !targetPlayer) {
+          linkWarning = 'Could not find the selected player record';
+        } else if (targetPlayer.team !== team_id) {
+          linkWarning = `Player record is on team ${targetPlayer.team}, not ${team_id}`;
+        } else if (targetPlayer.user_id && targetPlayer.user_id !== createdId) {
+          linkWarning = `Player record is already linked to another account`;
+        } else {
+          const { error: linkErr } = await sb
+            .from('manual_players')
+            .update({ user_id: createdId })
+            .eq('id', link_manual_player_id);
+          if (linkErr) linkWarning = `Account created but link failed: ${linkErr.message}`;
+        }
+      }
+
       return res.status(200).json({
         invited: {
           id: createdId,
@@ -211,7 +246,9 @@ export default async function handler(req, res) {
           role: requestedRole,
           team_id: team_id || null,
           silent: !!silent,
+          linked_player_id: link_manual_player_id && !linkWarning ? link_manual_player_id : null,
         },
+        link_warning: linkWarning,
       });
     }
 
