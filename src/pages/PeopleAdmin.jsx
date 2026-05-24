@@ -21,9 +21,13 @@ import { getAllManualPlayers } from '../player-store';
 // assign any non-admin role (admin is omitted on purpose — see header
 // comment). The legacy 'admin' tier is left in the map in case anyone
 // still has it on their profile; they can only invite content/athlete.
+// v4.8.0: 'fan' added — public signups default here via the SQL
+// trigger, but master can also explicitly invite a fan-tier account
+// (e.g. for a league sponsor, family member, or anyone who needs
+// view-only access without going through self-signup).
 const INVITABLE_ROLES_BY_ADMIN = {
-  master_admin: ['master_admin', 'content', 'athlete'],
-  admin: ['content', 'athlete'],
+  master_admin: ['master_admin', 'content', 'athlete', 'fan'],
+  admin: ['content', 'athlete', 'fan'],
 };
 
 export default function PeopleAdminCard() {
@@ -177,12 +181,12 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvit
     ? true
     : myTier === 'admin' && !['master_admin', 'admin'].includes(p.role);
 
-  // Master gets master/content/athlete; legacy 'admin' tier (if anyone
-  // still has it) gets content/athlete. Plain 'admin' is intentionally
-  // not assignable from the UI — see header comment for the rationale.
+  // Master gets master/content/athlete/fan; legacy 'admin' tier (if
+  // anyone still has it) gets content/athlete/fan. Plain 'admin' is
+  // intentionally not assignable from the UI — see header comment.
   const roleOptions = myTier === 'master_admin'
-    ? ['master_admin', 'content', 'athlete']
-    : ['content', 'athlete'];
+    ? ['master_admin', 'content', 'athlete', 'fan']
+    : ['content', 'athlete', 'fan'];
 
   // v4.7.12: silently-staged accounts get a chip + a "Send invite" CTA
   // so master can fire the email when they're ready (e.g. after linking

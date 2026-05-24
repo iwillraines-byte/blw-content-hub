@@ -21,7 +21,11 @@
 
 import { requireUser, requireAdmin } from './_supabase.js';
 
-const VALID_ROLES = ['master_admin', 'admin', 'content', 'athlete'];
+// v4.8.0: 'fan' added. Self-registered users default to this tier via
+// the SQL trigger in migration 016. Admins can promote a fan → athlete
+// from the People list (and pick the player record to link in the
+// same operation via the dropdown shipped in v4.7.13).
+const VALID_ROLES = ['master_admin', 'admin', 'content', 'athlete', 'fan'];
 
 // Graceful select — older deploys may not have run migration 015 yet,
 // in which case `pending_invite` doesn't exist on profiles. Mirror the

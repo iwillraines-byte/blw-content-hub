@@ -73,14 +73,25 @@ async function fetchProfile(userId) {
   if (!supabaseConfigured || !userId) return null;
   try {
     // v4.5.7: pull role_expires_at for time-boxed elevated access.
-    // The select includes the new column; if the column doesn't exist
-    // yet (pre-migration deploys), Postgrest 400s and we retry without
-    // it so the app keeps working.
+    // v4.8.0: pull needs_password_setup for the force-set gate.
+    // Each new column is wrapped in a retry-on-error fallback so a
+    // deploy that ran the code update before its SQL migration doesn't
+    // 500 every profile fetch and brick the entire app.
     let { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, team_id, display_name, created_at, updated_at, role_expires_at')
+      .select('id, email, role, team_id, display_name, created_at, updated_at, role_expires_at, needs_password_setup')
       .eq('id', userId)
       .maybeSingle();
+    if (error && /needs_password_setup/i.test(error.message || '')) {
+      // Migration 016 hasn't been applied — drop the column and retry.
+      const retry = await supabase
+        .from('profiles')
+        .select('id, email, role, team_id, display_name, created_at, updated_at, role_expires_at')
+        .eq('id', userId)
+        .maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error && /role_expires_at/i.test(error.message || '')) {
       const fallback = await supabase
         .from('profiles')
@@ -163,6 +174,65 @@ export function AuthProvider({ children }) {
     // onAuthStateChange will fire and clear state.
   }, []);
 
+  // ─── v4.8.0: Password-auth methods ───────────────────────────────────────
+  // Thin wrappers around the Supabase auth client so pages don't have to
+  // import supabase directly. All return { error: string | null } for a
+  // consistent shape — the caller decides how to surface errors.
+
+  const signInWithPassword = useCallback(async (email, password) => {
+    if (!supabaseConfigured) return { error: 'Auth is not configured.' };
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    return { error: error?.message || null };
+  }, []);
+
+  const signUpWithPassword = useCallback(async (email, password) => {
+    if (!supabaseConfigured) return { error: 'Auth is not configured.' };
+    // emailRedirectTo controls where Supabase's "confirm your email"
+    // link lands after the user clicks it. Our /auth/callback handler
+    // already handles both magic-link and confirmation tokens.
+    const { error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    return { error: error?.message || null };
+  }, []);
+
+  const requestPasswordReset = useCallback(async (email) => {
+    if (!supabaseConfigured) return { error: 'Auth is not configured.' };
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    return { error: error?.message || null };
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword) => {
+    if (!supabaseConfigured) return { error: 'Auth is not configured.' };
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { error: error.message };
+    // Clear the force-set gate after a successful set. Best-effort: if
+    // the column doesn't exist yet (migration 016 not applied), the
+    // patch silently fails and the gate stays raised — better than
+    // throwing in the user's face after a successful password change.
+    if (userId) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ needs_password_setup: false })
+          .eq('id', userId);
+        // Re-fetch the profile so the gate clears in the UI.
+        const p = await fetchProfile(userId);
+        setProfile(p);
+      } catch { /* migration 016 not applied yet — no-op */ }
+    }
+    return { error: null };
+  }, [userId]);
+
   const refreshProfile = useCallback(async () => {
     if (!userId) return;
     setProfileLoading(true);
@@ -241,6 +311,12 @@ export function AuthProvider({ children }) {
     isConfigured: supabaseConfigured,
     roleExpiresAt,
     expiredRole,
+    // v4.8.0: password auth + force-set gate
+    needsPasswordSetup: !!profile?.needs_password_setup,
+    signInWithPassword,
+    signUpWithPassword,
+    requestPasswordReset,
+    updatePassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -266,8 +342,13 @@ export const ROLE_LABELS = {
   admin: 'Admin',
   content: 'Content',
   athlete: 'Athlete',
+  fan: 'Fan',
 };
 export const isAdminRole = (role) => role === 'master_admin' || role === 'admin';
 export const isStaffRole = (role) => role === 'master_admin' || role === 'admin' || role === 'content';
 // Athletes are restricted — used for UI gating (hide Files, restrict Generate team, etc).
 export const isAthleteRole = (role) => role === 'athlete';
+// v4.8.0: fans are the public/general-usage tier. Browse-only access to
+// teams, players, stats, recent posts. NO Studio, Files, Requests,
+// Resources, Train AI, Settings (limited), MyStats.
+export const isFanRole = (role) => role === 'fan';

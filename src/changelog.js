@@ -18,6 +18,24 @@
 
 export const RELEASES = [
   {
+    version: '4.8.0',
+    date: '2026-05-17',
+    kind: 'minor',
+    summary: 'Mass launch — password auth, open registration, fan tier',
+    items: [
+      'Why: scaling past 10 hand-managed athletes means moving off invite-only magic-link to a self-serve model. Magic-link is great UX for the inviter (no password to set) but terrible UX for scale (the master has to manually invite every single user, every link expires in <48h, no recovery without re-issuing). Switched to email + password as primary, with magic-link kept as a recovery fallback.',
+      'New /register page (linked from /login). Anyone can self-serve a "fan" account — email + password (8+ chars) + confirm. Supabase sends a confirmation email; account stays unconfirmed until clicked. The SQL trigger in migration 016 inspects auth.users.encrypted_password — if a password is set (= self-signup), the new profile defaults to role=fan with needs_password_setup=false. If no password (= master invited via magic link OR silent-staged via createUser), defaults to role=athlete with needs_password_setup=true so existing flows still work.',
+      'Login page rebuilt: email + password as primary, "Forgot password?" link, "Email me a link" toggle for the legacy magic-link path, "New here? Create an account" CTA. The same form serves master_admin / content / athlete / fan — only difference is what they land on after sign-in.',
+      'Force-set password gate: any signed-in user with profile.needs_password_setup=true is intercepted at the AuthGate level and shown /reset-password in forceMode regardless of what URL they tried. This catches everyone who existed before today (all 10ish accounts) — they hit a "Set your password" screen on their next sign-in, can\'t escape until they pick one. After the set, needs_password_setup flips false and they fall through to normal app surfaces.',
+      'Forgot-password flow: /forgot-password → email + Send → Supabase resetPasswordForEmail → user gets email → clicks → /reset-password → set new password → signed in. Standard pattern, fully working.',
+      'Fan tier wiring: ROLE_LABELS, isFanRole helper, RequireRole guards updated across /dashboard /studio /requests /files /resources /train-ai /my-stats to explicitly EXCLUDE fans. /game-center, /settings, /teams/* are fan-readable. HomeRedirect sends fans to /game-center as their default landing. Sidebar nav for fans shows ProWiffle Stats + Settings only — team pages and player pages reachable via the top-bar Teams dropdown and direct URL.',
+      'Promotion flow: master can change a fan → athlete from the People list row dropdown. Pairs with the v4.7.13 player picker — when promoting to athlete, master can also link them to a specific manual_players row in the same action. Round-trips through the existing PATCH /api/admin-people endpoint, no new code needed beyond adding "fan" to VALID_ROLES.',
+      'DB: migration 016_password_auth_and_fan_role.sql adds fan to the role check constraint, adds needs_password_setup BOOLEAN DEFAULT FALSE, backfills the flag to TRUE for everyone without a password in auth.users, and rewrites the handle_new_user trigger to set role + needs_password_setup based on whether the new user has encrypted_password populated. Additive + idempotent + safe to re-run.',
+      'Email confirmation required: Supabase\'s built-in confirm-email flow runs for every new signup. Users can\'t sign in until they click the confirmation link. Supabase dashboard setting "Confirm email" must be ON (default for new projects) — verify under Auth → Providers → Email.',
+      'Existing-account migration: there\'s no code path for existing users that breaks. They sign in via magic-link → hit needs_password_setup gate → set password → done. After that, password sign-in works for them too. Magic-link stays functional indefinitely as a recovery option.',
+    ],
+  },
+  {
     version: '4.7.14',
     date: '2026-05-17',
     kind: 'patch',

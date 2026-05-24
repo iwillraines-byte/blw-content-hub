@@ -17,6 +17,9 @@ import Settings from './pages/Settings';
 import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
 import Login from './pages/Login';
+import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import AuthCallback from './pages/AuthCallback';
 import MyStats from './pages/MyStats';
 import { TeamLogo } from './components';
@@ -35,39 +38,20 @@ const MOBILE_BREAKPOINT = 768;
 // Nav items. `roles` declares who can see each item — missing means
 // "everyone signed-in". Athletes get a trimmed sidebar (no Files, no
 // request queue admin, no global Settings).
+// v4.8.0: every nav item declares its allowed roles explicitly,
+// including the new 'fan' tier (browse-only). Fans see ProWiffle Stats
+// + Settings in the sidebar; teams + player pages are reachable via
+// the top-bar Teams dropdown and direct URL.
 const navItems = [
   { path: "/my-stats",    label: "My Team",          icon: "★",  roles: ['athlete'] },
   { path: "/dashboard",   label: "Dashboard",        icon: "⚡", roles: ['master_admin', 'admin', 'content'] },
-  // v4.5.16: "Generate" renamed to "Studio". Path stays /generate so
-  // existing bookmarks, deep-links from Dashboard idea cards, and
-  // request CTAs still resolve. The animated sparkle on hover (see
-  // global-styles.jsx .nav-link:hover .nav-icon-studio) is the visual
-  // tell that this is the creative-focal surface of the app.
-  { path: "/generate",    label: "Studio",           icon: "✦", iconClass: 'nav-icon-studio' },
-  // v4.7.9: Resources hidden from athletes until more material is in
-  // there — empty Resources is worse than no Resources for the
-  // athlete experience. Re-enable when content lands.
+  { path: "/generate",    label: "Studio",           icon: "✦", iconClass: 'nav-icon-studio', roles: ['master_admin', 'admin', 'content', 'athlete'] },
   { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content'] },
-  // v4.5.39: replaced single-codepoint Unicode symbols (☰ ◫ ⚙ ▣) with
-  // proper emoji codepoints. The old ones live in the Miscellaneous
-  // Symbols block (U+2600-26FF) — supported by Symbola/Noto Sans
-  // Symbols but missing from default macOS/iOS emoji fonts, which made
-  // them render as `!` (the browser's missing-glyph fallback) on plenty
-  // of admin machines. Full emoji codepoints ship with every OS's
-  // emoji font and render universally.
-  // v4.7.9: Requests now visible to athletes. They can submit content
-  // requests, see their own queue (server RLS filters to requester ==
-  // self), and follow status updates on what they've sent in. The
-  // request modal already gates type-pickers + auto-pins the athlete's
-  // team server-side so cross-team noise is impossible.
   { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content', 'athlete'] },
-  { path: "/game-center", label: "ProWiffle Stats",  icon: "📊" },
+  { path: "/game-center", label: "ProWiffle Stats",  icon: "📊", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
   { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
-  // v4.7.0: AI Memory training surface. Master-only — populates the
-  // ai_memory store that /api/ideas + /api/captions inject into every
-  // prompt. Hidden for non-master roles since it's an authoring tool.
   { path: "/train-ai",    label: "Train AI",         icon: "🧠", roles: ['master_admin', 'admin'] },
-  { path: "/settings",    label: "Settings",         icon: "⚙️" },
+  { path: "/settings",    label: "Settings",         icon: "⚙️", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
 ];
 
 const pageTitles = {
@@ -761,6 +745,9 @@ function HomeRedirect() {
   }
   if (user && !role) return <ProfileNotFound />;
   if (isAthleteRole(role)) return <Navigate to="/my-stats" replace />;
+  // v4.8.0: fans don't have a staff dashboard — send them to the public
+  // stats surface as their default landing.
+  if (role === 'fan') return <Navigate to="/game-center" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -970,8 +957,16 @@ function AppShell() {
                 <ContentStudio />
               </RequireRole>
             } />
-            <Route path="/my-stats" element={<MyStats />} />
-            <Route path="/generate" element={<Generate />} />
+            <Route path="/my-stats" element={
+              <RequireRole roles={['master_admin', 'admin', 'content', 'athlete']} what="My Team">
+                <MyStats />
+              </RequireRole>
+            } />
+            <Route path="/generate" element={
+              <RequireRole roles={['master_admin', 'admin', 'content', 'athlete']} what="Studio">
+                <Generate />
+              </RequireRole>
+            } />
             <Route path="/requests" element={
               <RequireRole roles={['master_admin', 'admin', 'content', 'athlete']} what="the Requests queue">
                 <Requests />
@@ -984,7 +979,11 @@ function AppShell() {
               </RequireRole>
             } />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/resources" element={<Resources />} />
+            <Route path="/resources" element={
+              <RequireRole roles={['master_admin', 'admin', 'content']} what="Resources">
+                <Resources />
+              </RequireRole>
+            } />
             <Route path="/train-ai" element={
               <RequireRole roles={['master_admin', 'admin']} what="AI Memory training">
                 <TrainAI />
@@ -1006,30 +1005,67 @@ function AppShell() {
 }
 
 // Router-level auth gate.
-//   - `/login` and `/auth/callback` are public — always accessible
-//   - Everything else requires a session when Supabase is configured
-//   - When Supabase is NOT configured (dev without env vars), the gate is
-//     disabled entirely so the app behaves like it did pre-5a
+//
+// v4.8.0 (mass launch): expanded public-route allowlist + force-set
+// password gate.
+//
+//   PUBLIC (no session required):
+//     /login, /register, /forgot-password, /reset-password, /auth/callback
+//
+//   SESSION REQUIRED, no role gate yet:
+//     everything else — falls through to AppShell which applies the
+//     per-route RequireRole guards.
+//
+//   FORCE-SET GATE (session + profile loaded + needs_password_setup):
+//     existing magic-link / silent-staged users land on /reset-password
+//     in forceMode regardless of what URL they tried. They can't proceed
+//     to any other surface until they set a password.
+const PUBLIC_PATHS = new Set(['/login', '/register', '/forgot-password', '/reset-password', '/auth/callback']);
+
 function AuthGate() {
-  const { user, loading, isConfigured } = useAuth();
+  const { user, loading, isConfigured, needsPasswordSetup, profileLoading } = useAuth();
   const location = useLocation();
 
   if (isConfigured && loading) return <AuthLoadingSplash />;
 
-  // Public routes — render regardless of auth state. If an already-signed-in
-  // user lands on /login we bounce them to the dashboard.
-  if (location.pathname === '/login') {
-    if (user) return <Navigate to="/dashboard" replace />;
-    return <Routes><Route path="/login" element={<Login />} /></Routes>;
-  }
-  if (location.pathname === '/auth/callback') {
-    return <Routes><Route path="/auth/callback" element={<AuthCallback />} /></Routes>;
+  const isPublic = PUBLIC_PATHS.has(location.pathname);
+
+  // Public routes — render regardless of auth state.
+  if (isPublic) {
+    // Already-signed-in users on /login or /register bounce to home.
+    // /reset-password and /forgot-password stay accessible even when
+    // signed in (recovery flow + force-set gate land here).
+    if (user && (location.pathname === '/login' || location.pathname === '/register')) {
+      return <Navigate to="/" replace />;
+    }
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+      </Routes>
+    );
   }
 
-  // Protected routes.
+  // Protected routes — must be signed in.
   if (isConfigured && !user) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
+  }
+
+  // Force-set gate: any signed-in user whose profile has
+  // needs_password_setup=true is shoved to /reset-password in forceMode
+  // until they pick one. We wait for the profile to finish loading
+  // first to avoid a single-frame flash of the gate before the profile
+  // arrives saying "false."
+  if (isConfigured && user && !profileLoading && needsPasswordSetup) {
+    return (
+      <Routes>
+        <Route path="*" element={<ResetPassword forceMode={true} />} />
+      </Routes>
+    );
   }
 
   return <AppShell />;
