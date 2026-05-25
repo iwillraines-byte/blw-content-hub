@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.8.2',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Auto-unlink player records when their auth user is deleted',
+    items: [
+      'Why: master had to remove a few invited athletes who didn\'t register fast enough. Deleting the auth.users row from the Supabase dashboard worked, but manual_players.user_id stayed pointing at the now-dead UUID — the link picker couldn\'t surface a dropdown option for the dead user, so the row appeared "stuck linked" and required either a manual unlink via the AthleteVoiceCard picker (one player at a time) or a SQL UPDATE to clear orphans.',
+      'Root cause: manual_players.user_id was added in v4.4.1 as a plain UUID column with no foreign-key constraint. Without FK semantics, the column doesn\'t auto-clear when its referenced row disappears.',
+      'Fix: migration 017_manual_players_user_fk.sql clears any existing orphans (idempotent) and adds FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL. Now whenever master deletes an auth user from Supabase, every manual_players row that referenced them auto-clears to NULL, making those player records immediately available for a new athlete to claim via the v4.7.13 link picker.',
+      'Bonus: also prevents the inverse data hazard — you can no longer accidentally point user_id at a non-existent UUID via a bad cloud-sync payload. The constraint now rejects the write at the database level.',
+    ],
+  },
+  {
     version: '4.8.1',
     date: '2026-05-17',
     kind: 'patch',
