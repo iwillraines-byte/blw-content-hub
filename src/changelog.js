@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.8.1',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Team photos now selectable in Studio across every template',
+    items: [
+      'Why: master flagged that team-scoped photos (logos, banners, team-tagged action shots) were unreachable from Studio — they only surfaced on the team page. With no player selected, the picker fell back to "player-scoped only" filter; with a player selected, it fetched ONLY that player\'s photos. Either way, team photos never appeared, blocking any creative that wanted a team-level visual.',
+      'Fix: loadContextMedia in Generate.jsx now always folds team-scoped media into the picker pool, ordered to make sense per context:',
+      '- Player selected → that player\'s photos first (so existing per-player work isn\'t disrupted), team-scoped photos appended below.',
+      '- Team only (no player) → team-scoped photos lead, all player-scoped photos for the team follow as a secondary pool.',
+      'De-duped by id so a record that satisfies both filters appears once.',
+      'Applies to ALL templates that use the background-media picker (every Studio template). No new UI, no new code path — just a wider source filter.',
+    ],
+  },
+  {
     version: '4.8.0',
     date: '2026-05-17',
     kind: 'minor',

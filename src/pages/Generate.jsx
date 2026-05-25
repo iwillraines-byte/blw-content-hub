@@ -915,10 +915,22 @@ export default function Generate() {
     }
   }, [selectedOverlayId, overlays]);
 
-  // Load media for the selected context: player's media if chosen, otherwise team's
+  // Load media for the selected context.
+  //
+  // v4.8.1: team-scoped photos (logos, banners, generic action shots
+  // tagged to the team but not a specific player) are now ALWAYS folded
+  // into the picker. Previously they only surfaced on the team page,
+  // which meant designing on a "team-only" creative (no player) gave
+  // you nothing to pick from. Now:
+  //   - With a player selected → that player's photos FIRST, then any
+  //     team-scoped photos for their team appended after.
+  //   - With only a team selected → team-scoped photos FIRST, then all
+  //     player-scoped photos for that team after.
+  // De-duped by id so a photo that matches both filters only appears once.
   useEffect(() => {
     const loadContextMedia = async () => {
-      let mediaItems = [];
+      let primary = [];
+      let secondary = [];
       if (selectedPlayer) {
         const p = allPlayers.find(pl => `${pl.team}_${pl.name}` === selectedPlayer);
         if (p) {
@@ -926,15 +938,26 @@ export default function Generate() {
           // roster. First-initial alone fails when both players start with
           // the same letter (Logan/Luke Rose, James/Justin Lee, both
           // Marshalls). Jersey number is the unambiguous key — every
-          // canonical entry has it. Legacy records without firstInitial or
-          // num still surface via the fallthrough in findPlayerMedia.
+          // canonical entry has it.
           const firstInitial = (p.firstName || (p.name || '').split(' ')[0] || '').charAt(0);
-          mediaItems = await findPlayerMedia(p.team, p.lastName, { firstInitial, jerseyNum: p.num });
+          primary = await findPlayerMedia(p.team, p.lastName, { firstInitial, jerseyNum: p.num });
+          // Team photos for the same team — appended below the player's
+          // own photos so the player-specific ones still win the top slots.
+          secondary = await findTeamMedia(p.team, { scope: 'team' });
         }
       } else if (customTeam) {
-        // No player selected — show all team media (player-scoped only; team
-        // assets have their own surface on the team page).
-        mediaItems = await findTeamMedia(customTeam, { scope: 'player' });
+        // No player selected — team-scoped photos lead, then all
+        // player-scoped photos for the team follow.
+        primary = await findTeamMedia(customTeam, { scope: 'team' });
+        secondary = await findTeamMedia(customTeam, { scope: 'player' });
+      }
+      // De-dupe by id, preserving primary-list ordering.
+      const seen = new Set();
+      const mediaItems = [];
+      for (const m of [...primary, ...secondary]) {
+        if (!m?.id || seen.has(m.id)) continue;
+        seen.add(m.id);
+        mediaItems.push(m);
       }
       setPlayerMedia(mediaItems);
       setPlayerMediaUrls(mediaItems.map(m => ({
