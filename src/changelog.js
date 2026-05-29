@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '4.8.3',
+    date: '2026-05-17',
+    kind: 'minor',
+    summary: 'Rebrand: San Diego Orcas → Atlanta Ballers',
+    items: [
+      'The San Diego Orcas have rebranded to the Atlanta Ballers. League-wide visual + naming refresh across the app, executed as a pure display-layer change so no data has to migrate.',
+      'Architectural choice: internal team_id stays "SDO". The rebrand changes name, city, slug, colors, logo, and aliases — everything user-facing — but the database primary key stays put. Every manual_players, media, batting_stats, pitching_stats, ranking_history, ai_memory, requests, generate_log, profiles row that referenced SDO continues to work untouched. This mirrors how real leagues handle franchise rebrands (Hornets → Bobcats → Hornets all share an internal franchise ID). The "scars" of an internal name that doesn\'t match the display name are invisible to every user; the alternative (a multi-table data migration) carries real risk for zero user-facing benefit.',
+      'Display: name → "Atlanta Ballers", city → "Atlanta", apiAbbr → "ATL", slug → "atl-ballers". Logo → /team-logos/atl-ballers.png (file dropped by master).',
+      'Colors from the official Atlanta Ballers RGB artsheet: navy #021E42 (primary), light blue #90BFE9 (accent / template highlights — what master called out as the dominant studio color), warm gray #CFD2D4 (supporting). Dark tone for text-on-primary contrast: #01122A.',
+      'URL forward-compat: data.js getTeam() now also resolves legacySlugs, so any bookmark to /teams/sd-orcas still finds the team. TeamPage + PlayerPage detect the legacy-slug arrival and immediately swap the URL to /teams/atl-ballers via navigate(replace), so the back button skips the dead URL and the user\'s next bookmark is correct.',
+      'Server: players-sheet-sync.js TEAM_ALIASES extended for SDO to recognize "atl", "atlanta", "atlanta ballers", "ballers" — so any new Google Sheet rows or bio imports referencing the new name resolve to the right team. Legacy aliases ("orcas", "san diego orcas", "sdo", "sd") stay valid for historical sheet rows.',
+      'Roster + stats: untouched. Every player record under the team carries forward (Brett Caladie, Torin Roth, Jack Roth, Brandon Crone, Trevor Bauer, Cael Foreman, Connor Smith, …). Every linked athlete account stays linked. Every uploaded photo with the SDO_ filename prefix stays findable (findPlayerMedia matches on the team field, not the filename prefix).',
+    ],
+  },
+  {
     version: '4.8.2',
     date: '2026-05-17',
     kind: 'patch',

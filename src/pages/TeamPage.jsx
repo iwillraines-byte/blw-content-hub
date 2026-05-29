@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, canonicalNumOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { formatPostName } from '../template-config';
@@ -90,7 +90,19 @@ function ExpandableTeamMediaGrid({ items, team, thumbUrls, onTileClick }) {
 
 export default function TeamPage() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const team = getTeam(slug);
+
+  // v4.8.3: rebrand-resilient canonical-URL redirect. getTeam resolves
+  // legacySlugs (e.g. "sd-orcas" → Atlanta Ballers), but the URL still
+  // shows the old slug. Replace it with the canonical one so bookmarks,
+  // share links, and copy/paste all update naturally after the rebrand.
+  // Replace (not push) so the back button skips the legacy URL.
+  useEffect(() => {
+    if (team && slug !== team.slug) {
+      navigate(`/teams/${team.slug}`, { replace: true });
+    }
+  }, [team, slug, navigate]);
 
   // Force a scroll-to-top on every team change so the page never opens
   // halfway down (which can happen when the previous route's scroll

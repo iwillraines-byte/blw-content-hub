@@ -1428,6 +1428,17 @@ export default function PlayerPage() {
   const navigate = useNavigate();
   const team = getTeam(slug);
   const toast = useToast();
+
+  // v4.8.3: rebrand-resilient canonical-URL redirect. getTeam resolves
+  // legacySlugs (e.g. "sd-orcas" → Atlanta Ballers), but the URL still
+  // shows the old slug. Replace it with the canonical one so the URL
+  // stays consistent across the post-rebrand lifetime of the app. Replace
+  // (not push) so the back button skips the legacy URL.
+  useEffect(() => {
+    if (team && slug !== team.slug) {
+      navigate(`/teams/${team.slug}/players/${lastName}`, { replace: true });
+    }
+  }, [team, slug, lastName, navigate]);
   const { user, role, userId: effectiveUserId } = useAuth();
   // Photo-edit + pan/zoom buttons surface for ANY staff user (master +
   // content). Picking a player's headshot is daily content work, not a

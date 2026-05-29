@@ -38,10 +38,28 @@ export const TEAMS = [
   { id:"PHI", apiAbbr:"PHI", apiTeamId:47, slug:"phi-wiffleclub", name:"Philadelphia Wiffle Club", city:"Philadelphia", color:"#0D223F", accent:"#A8B8C8", dark:"#08162A", record:"4-5", rank:7, owner:"David Adelman", pct:".444", diff:"+16", logo:"/team-logos/phi-wiffleclub.png", socials: { instagram: '', facebook: '', tiktok: '' } },
   { id:"CHI", apiAbbr:"CHI", apiTeamId:50, slug:"chi-bats", name:"Chicago Bats", city:"Chicago", color:"#EC1C2C", accent:"#FFFFFF", dark:"#B5151F", record:"4-6", rank:8, owner:"", pct:".400", diff:"-7", logo:"/team-logos/chi-bats.png", socials: { instagram: '', facebook: '', tiktok: '' } },
   { id:"MIA", apiAbbr:"MIA", apiTeamId:51, slug:"mia-mirage", name:"Miami Mirage", city:"Miami", color:"#144734", accent:"#7EC6BB", dark:"#0D3024", record:"4-6", rank:9, owner:"", pct:".400", diff:"-1", logo:"/team-logos/mia-mirage.png", socials: { instagram: '', facebook: '', tiktok: '' } },
-  { id:"SDO", apiAbbr:"SD", apiTeamId:46, slug:"sd-orcas", name:"San Diego Orcas", city:"San Diego", color:"#0B3146", accent:"#4BCED8", dark:"#072230", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/sd-orcas.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  // v4.8.3: San Diego Orcas → Atlanta Ballers rebrand. Internal team_id
+  // stays 'SDO' (treat as a stable database key — every manual_players,
+  // media, batting_stats, pitching_stats, ranking_history, ai_memory,
+  // requests row references it and we'd rather not data-migrate the
+  // entire league). Display fields, slug, colors, and logo update.
+  // `legacySlugs` lets `getTeam()` resolve old bookmarks to /teams/sd-orcas.
+  // Colors from the official RGB artsheet: navy #021E42, light blue
+  // #90BFE9 (highlight), warm gray #CFD2D4. Dark is a deeper navy for
+  // text-on-primary contrast.
+  { id:"SDO", apiAbbr:"ATL", apiTeamId:46, slug:"atl-ballers", legacySlugs:["sd-orcas"], name:"Atlanta Ballers", city:"Atlanta", color:"#021E42", accent:"#90BFE9", dark:"#01122A", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/atl-ballers.png", socials: { instagram: '', facebook: '', tiktok: '' } },
 ];
 
-export const getTeam = (id) => TEAMS.find(t => t.id === id || t.slug === id || t.apiAbbr === id);
+// v4.8.3: getTeam now also resolves legacySlugs so old bookmarks
+// (/teams/sd-orcas) still find the team. Pages can detect a legacy-slug
+// arrival by comparing the resolved team.slug to the URL param and
+// issue a redirect to the canonical URL — see TeamPage.jsx + PlayerPage.jsx.
+export const getTeam = (id) => TEAMS.find(t =>
+  t.id === id ||
+  t.slug === id ||
+  t.apiAbbr === id ||
+  (t.legacySlugs && t.legacySlugs.includes(id))
+);
 
 // ─── API STATUS ─────────────────────────────────────────────────────────────
 export const API_CONFIG = {
@@ -683,7 +701,8 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'PHI', name: 'Spencer Foss', num: '32' },
   { team: 'PHI', name: 'Brody Livingston', num: '22' },
   { team: 'PHI', name: 'Jimmy Cole', num: '06' },
-  // San Diego Orcas
+  // Atlanta Ballers (rebranded from San Diego Orcas — v4.8.3; internal
+  // team_id stays 'SDO' for database-key stability)
   { team: 'SDO', name: 'Brett Caladie', num: '28' },
   { team: 'SDO', name: 'Torin Roth', num: '87' },
   { team: 'SDO', name: 'Jack Roth', num: '27' },
