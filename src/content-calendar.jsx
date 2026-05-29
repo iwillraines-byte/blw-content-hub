@@ -240,10 +240,16 @@ export function ContentCalendar({ team, games }) {
   // is a deeper version, team.accent is the "secondary" (often white-ish
   // or a contrast color). Falls back to existing greys when a team has
   // limited palette data so this component stays drop-in safe.
+  // v4.8.5: header band specifically uses themeBg/themeBgDark/themeText
+  // when the team has overrides set (ATL's light-blue treatment). The
+  // body-level tints (todayBg, gameBg, etc.) keep using teamColor so
+  // subtle alpha-on-white accents stay readable across the league.
   const teamColor  = team?.color  || colors.red;
   const teamDark   = team?.dark   || teamColor;
   const teamAccent = team?.accent || '#FFFFFF';
-  const onTeamText = bestTextOn(teamColor);
+  const headerBg     = team?.themeBg     || teamColor;
+  const headerBgDark = team?.themeBgDark || teamDark;
+  const onTeamText   = team?.themeText   || bestTextOn(headerBg);
   const todayBg = `${teamColor}1A`;          // ~10% alpha
   const todayBorder = `${teamColor}66`;       // ~40% alpha
   const gameBg = `${teamColor}14`;            // ~8% alpha — slightly darker than before
@@ -269,7 +275,8 @@ export function ContentCalendar({ team, games }) {
       <div style={{
         position: 'relative',
         padding: '14px 18px 12px',
-        background: `linear-gradient(135deg, ${teamColor} 0%, ${teamDark} 100%)`,
+        // v4.8.5: header band uses themeBg overrides when set.
+        background: `linear-gradient(135deg, ${headerBg} 0%, ${headerBgDark} 100%)`,
         color: onTeamText,
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>

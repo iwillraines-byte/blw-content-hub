@@ -844,8 +844,11 @@ export default function TeamPage() {
               boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             }}>
               <div style={{
-                background: `linear-gradient(135deg, ${team.color}, ${team.dark})`,
-                color: '#fff',
+                // v4.8.5: prefer themeBg/themeBgDark when set (ATL's
+                // light-blue treatment), fall back to brand color/dark
+                // for every other team — no behavior change for them.
+                background: `linear-gradient(135deg, ${team.themeBg || team.color}, ${team.themeBgDark || team.dark})`,
+                color: team.themeText || '#fff',
                 padding: '8px 12px',
                 fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
                 letterSpacing: 1.2, textAlign: 'center', textTransform: 'uppercase',
@@ -1815,11 +1818,16 @@ function MonthlyContentProgress({ team, count, target = 12, isMaster = false, on
   // Color band — empty/dim early, team color in the middle, gold-glow
   // once we cross target. Gradient pulled from the team palette so
   // every team page reads visually consistent with its hero.
+  // v4.8.5: when the team has themeBg/themeBgDark overrides (ATL's
+  // light-blue treatment), use those for the fill. Other teams keep
+  // the navy-style filled bar unchanged.
+  const themeFillBg = team.themeBg || team.color;
+  const themeFillBgDark = team.themeBgDark || team.dark || themeFillBg;
   const barColor = aboveTarget
-    ? `linear-gradient(90deg, ${team.color}, #FFD700, ${team.color})`
-    : `linear-gradient(90deg, ${team.color}, ${team.dark || team.color})`;
+    ? `linear-gradient(90deg, ${themeFillBg}, #FFD700, ${themeFillBg})`
+    : `linear-gradient(90deg, ${themeFillBg}, ${themeFillBgDark})`;
   const glow = aboveTarget
-    ? `0 0 12px ${team.color}66, 0 0 24px ${team.color}33, 0 0 32px rgba(255,215,0,0.35)`
+    ? `0 0 12px ${themeFillBg}66, 0 0 24px ${themeFillBg}33, 0 0 32px rgba(255,215,0,0.35)`
     : 'none';
 
   return (

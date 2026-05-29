@@ -56,7 +56,15 @@ export const TEAMS = [
   //   - altLogo: icon-only monogram (FAB on light blue) for small / inline
   //     contexts. TeamLogo prefers altLogo when size is small enough
   //     that the wordmark would be unreadable.
-  { id:"SDO", apiAbbr:"ATL", apiTeamId:46, slug:"atl-ballers", legacySlugs:["sd-orcas"], name:"Atlanta Ballers", city:"Atlanta", displayAbbr:"ATL", color:"#021E42", accent:"#90BFE9", dark:"#01122A", chipBg:"#90BFE9", chipText:"#021E42", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/atl-ballers.png", altLogo:"/team-logos/atl-ballers-alt.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  // v4.8.5 additions:
+  //   - themeBg / themeBgDark / themeText: override pair for "primary
+  //     surface" theming on the team page and dashboard. ATL keeps navy
+  //     as its `color` (used for borders, tinted backgrounds, accent
+  //     text) but the large filled surfaces (Team Aggregates header,
+  //     Content this Month progress bar, Content Calendar header band)
+  //     swap to light blue with navy text. Without these overrides
+  //     (every other team), the surfaces fall back to color/dark/fff.
+  { id:"SDO", apiAbbr:"ATL", apiTeamId:46, slug:"atl-ballers", legacySlugs:["sd-orcas"], name:"Atlanta Ballers", city:"Atlanta", displayAbbr:"ATL", color:"#021E42", accent:"#90BFE9", dark:"#01122A", chipBg:"#90BFE9", chipText:"#021E42", themeBg:"#90BFE9", themeBgDark:"#5B9BC9", themeText:"#021E42", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/atl-ballers.png", altLogo:"/team-logos/atl-ballers-alt.png", socials: { instagram: '', facebook: '', tiktok: '' } },
 ];
 
 // v4.8.3: getTeam now also resolves legacySlugs so old bookmarks

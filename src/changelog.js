@@ -18,6 +18,22 @@
 
 export const RELEASES = [
   {
+    version: '4.8.5',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Atlanta: primary-fill UI surfaces swap navy → light blue',
+    items: [
+      'After v4.8.4 the chip + dropdowns read ATL in light blue, but the team page hero band (TEAM AGGREGATES), the Content this Month progress bar, and the Content Calendar header all still rendered in navy because they pull from team.color directly. Master flagged that these big navy fills were dominating the page and wanted them in the brand light blue instead.',
+      'Reason for not just swapping team.color: navy is still the right hex for the team\'s tinted borders, alpha-on-white background washes, percentile chart accents, and accent text — light blue text on white reads poorly, and a 1px light-blue border on white is barely visible. The brand needs both colors; the question is just which one wins the big-fill surfaces.',
+      'New override fields on TEAMS: themeBg (primary-fill background), themeBgDark (gradient end), themeText (text on those surfaces). For ATL: themeBg #90BFE9, themeBgDark #5B9BC9, themeText #021E42. Every other team has none of these set, so they keep reading from color/dark/#fff unchanged.',
+      'Updated three surfaces to prefer themeBg/themeBgDark/themeText when present:',
+      '- TeamPage.jsx team aggregates header band (the bar across the top of the right-column AGGREGATES card)',
+      '- TeamPage.jsx "Content this month" progress bar fill + glow tint',
+      '- content-calendar.jsx header band (the dark strip at the top of the calendar card showing the team name and "next 4 weeks" subtitle)',
+      'Body-level tints in the calendar (todayBg, gameBg, gameBorder) intentionally keep using teamColor — those are subtle alpha-on-white treatments where light blue would wash out below readability. Same reasoning for headshot borders, accent text colors, and tinted pill backgrounds elsewhere on the page: they\'re KEPT navy so the brand still anchors visually.',
+    ],
+  },
+  {
     version: '4.8.4',
     date: '2026-05-17',
     kind: 'patch',
