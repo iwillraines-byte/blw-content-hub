@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getAllPlayers, fetchAllData } from '../data';
+import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getTeamAbbr, getAllPlayers, fetchAllData } from '../data';
 import { Card, CollapsibleCard, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
@@ -1209,7 +1209,7 @@ export default function Generate() {
       // Restore preview render (with placeholders) right after export
       render();
       const hdLabel = scale > 1 ? ` · HD ${customPlat.w * scale}×${customPlat.h * scale}` : '';
-      toast.success('Downloaded', { detail: `${customTeam} · ${customType} · ${customPlat.label}${hdLabel}` });
+      toast.success('Downloaded', { detail: `${getTeamAbbr(customTeam)} · ${customType} · ${customPlat.label}${hdLabel}` });
     };
 
     // v4.5.54: BLOB-based download instead of toDataURL.
@@ -1938,7 +1938,7 @@ export default function Generate() {
                   ) : (
                     <>
                       <option value="">Choose a team…</option>
-                      {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
+                      {TEAMS.map(t => <option key={t.id} value={t.id}>{getTeamAbbr(t)} · {t.name}</option>)}
                     </>
                   )}
                 </select>
@@ -1968,7 +1968,7 @@ export default function Generate() {
                       <option value="">{customTeam ? 'Choose a player...' : 'Select a team first'}</option>
                       {filteredPlayers.map(p => (
                         <option key={`${p.team}_${p.name}`} value={`${p.team}_${p.name}`}>
-                          {p.name} · {p.team}
+                          {p.name} · {getTeamAbbr(p.team)}
                         </option>
                       ))}
                     </select>
@@ -3087,7 +3087,7 @@ export default function Generate() {
                 <label style={labelStyle}>Team (or leave blank for Universal)</label>
                 <select value={uploadTeam} onChange={e => setUploadTeam(e.target.value)} style={{ ...selectStyle, marginTop: 3 }}>
                   <option value="">Universal (all teams)</option>
-                  {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
+                  {TEAMS.map(t => <option key={t.id} value={t.id}>{getTeamAbbr(t)} · {t.name}</option>)}
                 </select>
               </div>
             </div>

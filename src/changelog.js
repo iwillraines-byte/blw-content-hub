@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.8.4',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Atlanta Ballers chip displays as "ATL" in light blue + alt icon-logo',
+    items: [
+      'Continuing the v4.8.3 rebrand. Three surface-level polish items the master flagged after seeing v4.8.3 live.',
+      '#1 — Team chips now read "ATL" instead of the internal "SDO". The chips in stats tables, the player dropdown in Studio, and anywhere TeamChip renders all showed the internal team_id. New `displayAbbr` field on TEAMS lets a team\'s user-facing 2-3 letter label diverge from its internal id without touching the database. ATL gets displayAbbr: "ATL"; every other team falls through to their id and stays unchanged.',
+      '#2 — Chip color flipped from navy to light blue. Atlanta\'s primary navy made the chip read as "another dark-pill team" alongside LAN, BOS, PHI. New `chipBg` + `chipText` fields override the chip color pair when present — ATL uses #90BFE9 background with #021E42 text, which reads as a distinctive light-blue pill across stats tables and matches the brand guide\'s emphasis on light blue as the dominant studio color. No other team specifies these overrides, so the rest of the league keeps their existing chip look exactly.',
+      '#3 — Alt logo (the FAB monogram icon) wired into TeamLogo at small sizes. atl-ballers-alt.png is the icon-only version of the logo; the primary logo packs the city name + script wordmark which is unreadable below ~40px (sidebar chips, inline TeamChip, small thumbnails). TeamLogo now prefers the altLogo when size ≤ 32 and the team has one defined, falling through to the primary logo otherwise. Teams without an altLogo (every team except ATL right now) are unaffected.',
+      'Single source of truth: new `getTeamAbbr(teamOrId)` helper in data.js. Studio dropdowns (#1941, #3090), the player picker (#1971), and the download-toast detail all read through it now, so future teams that need a divergent display label only have to set displayAbbr — no per-call updates required.',
+    ],
+  },
+  {
     version: '4.8.3',
     date: '2026-05-17',
     kind: 'minor',

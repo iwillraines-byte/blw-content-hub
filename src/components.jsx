@@ -237,7 +237,8 @@ export const TeamLogo = ({ teamId, size = 40, rounded = 'rounded', background, s
   };
 
   if (!t.logo || errored) {
-    // Fallback: colored ID chip
+    // Fallback: colored ID chip — also respects the displayAbbr override
+    // so a logo-load failure shows "ATL" instead of internal "SDO".
     return (
       <div style={{
         ...baseStyle,
@@ -246,14 +247,22 @@ export const TeamLogo = ({ teamId, size = 40, rounded = 'rounded', background, s
         fontFamily: fonts.heading,
         fontSize: Math.max(10, Math.round(size * 0.38)),
         letterSpacing: 1,
-      }}>{t.id}</div>
+      }}>{t.displayAbbr || t.id}</div>
     );
   }
+
+  // v4.8.4: at small sizes (≤32px) prefer the icon-only altLogo when a
+  // team provides one. The wordmark version of a logo packs the city
+  // name + script + supporting type — unreadable below ~40px. The icon
+  // version (e.g. ATL's FAB monogram) is purpose-built to stay legible
+  // at chip and sidebar sizes. Teams without an altLogo fall through to
+  // their primary logo as before, no behavior change.
+  const logoSrc = (t.altLogo && size <= 32) ? t.altLogo : t.logo;
 
   return (
     <div style={baseStyle}>
       <img
-        src={t.logo}
+        src={logoSrc}
         alt={`${t.name} logo`}
         onError={() => setErrored(true)}
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
@@ -288,13 +297,20 @@ export const TeamChip = ({ teamId, small, withLogo }) => {
   const t = getTeam(teamId);
   if (!t) return <FreeAgentChip small={small} />;
   const logoSize = small ? 11 : 14;
+  // v4.8.4: teams can opt-in to a custom chip color pair (chipBg /
+  // chipText) when their brand calls for a non-default look — Atlanta
+  // Ballers uses light blue background + navy text. Teams without
+  // overrides keep the legacy color/accent pair, so this change is
+  // backward-compatible across the league.
+  const chipBg = t.chipBg || t.color;
+  const chipColor = t.chipText || t.accent;
   return (
     <span style={{
       display: 'inline-flex',
       alignItems: 'center',
       gap: withLogo ? (small ? 4 : 5) : 0,
-      background: t.color,
-      color: t.accent,
+      background: chipBg,
+      color: chipColor,
       padding: small ? '2px 7px' : '3px 10px',
       borderRadius: radius.sm,
       fontSize: small ? 9 : 11,
@@ -305,7 +321,7 @@ export const TeamChip = ({ teamId, small, withLogo }) => {
       {withLogo && t.logo && (
         <TeamLogo teamId={t.id} size={logoSize} rounded="square" background="rgba(255,255,255,0.15)" />
       )}
-      {t.id}
+      {t.displayAbbr || t.id}
     </span>
   );
 };

@@ -47,7 +47,16 @@ export const TEAMS = [
   // Colors from the official RGB artsheet: navy #021E42, light blue
   // #90BFE9 (highlight), warm gray #CFD2D4. Dark is a deeper navy for
   // text-on-primary contrast.
-  { id:"SDO", apiAbbr:"ATL", apiTeamId:46, slug:"atl-ballers", legacySlugs:["sd-orcas"], name:"Atlanta Ballers", city:"Atlanta", color:"#021E42", accent:"#90BFE9", dark:"#01122A", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/atl-ballers.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  // v4.8.4 additions:
+  //   - displayAbbr: chip + dropdown display swaps from internal 'SDO'
+  //     to user-facing 'ATL'. Internal team_id stays SDO everywhere.
+  //   - chipBg / chipText: TeamChip uses light blue as the chip
+  //     background with navy text (per master's direction) instead of
+  //     the default color/accent pair. Other teams keep the default.
+  //   - altLogo: icon-only monogram (FAB on light blue) for small / inline
+  //     contexts. TeamLogo prefers altLogo when size is small enough
+  //     that the wordmark would be unreadable.
+  { id:"SDO", apiAbbr:"ATL", apiTeamId:46, slug:"atl-ballers", legacySlugs:["sd-orcas"], name:"Atlanta Ballers", city:"Atlanta", displayAbbr:"ATL", color:"#021E42", accent:"#90BFE9", dark:"#01122A", chipBg:"#90BFE9", chipText:"#021E42", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/atl-ballers.png", altLogo:"/team-logos/atl-ballers-alt.png", socials: { instagram: '', facebook: '', tiktok: '' } },
 ];
 
 // v4.8.3: getTeam now also resolves legacySlugs so old bookmarks
@@ -60,6 +69,17 @@ export const getTeam = (id) => TEAMS.find(t =>
   t.apiAbbr === id ||
   (t.legacySlugs && t.legacySlugs.includes(id))
 );
+
+// v4.8.4: single source of truth for the user-facing 2-3 letter team
+// label. Accepts a team object OR a team_id. Falls back to id when no
+// displayAbbr override exists, so every team that doesn't need a divergent
+// display label (LAN, AZS, LV, etc.) keeps working without changes.
+// Used in TeamChip, Studio dropdowns, anywhere a short team label renders.
+export const getTeamAbbr = (teamOrId) => {
+  const t = typeof teamOrId === 'string' ? getTeam(teamOrId) : teamOrId;
+  if (!t) return typeof teamOrId === 'string' ? teamOrId : '';
+  return t.displayAbbr || t.id;
+};
 
 // ─── API STATUS ─────────────────────────────────────────────────────────────
 export const API_CONFIG = {
