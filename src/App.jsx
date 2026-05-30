@@ -21,6 +21,7 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AuthCallback from './pages/AuthCallback';
+import Schedule from './pages/Schedule';
 import MyStats from './pages/MyStats';
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
@@ -49,6 +50,11 @@ const navItems = [
   { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content'] },
   { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content', 'athlete'] },
   { path: "/game-center", label: "ProWiffle Stats",  icon: "📊", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
+  // v4.8.6: full 2026 BLW schedule. Visible to everyone signed in so
+  // athletes can see their team's upcoming games + fans can see the
+  // full league slate. Phase 2 will add a season switcher once the
+  // first season ends and archive data exists.
+  { path: "/schedule",    label: "Schedule",         icon: "📅", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
   { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
   { path: "/train-ai",    label: "Train AI",         icon: "🧠", roles: ['master_admin', 'admin'] },
   { path: "/settings",    label: "Settings",         icon: "⚙️", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
@@ -62,6 +68,7 @@ const pageTitles = {
   '/requests': 'Requests',
   '/game-center': 'ProWiffle Stats',
   '/files': 'Files',
+  '/schedule': 'Schedule',
   '/settings': 'Settings',
 };
 
@@ -973,6 +980,7 @@ function AppShell() {
               </RequireRole>
             } />
             <Route path="/game-center" element={<GameCenter />} />
+            <Route path="/schedule" element={<Schedule />} />
             <Route path="/files" element={
               <RequireRole roles={['master_admin', 'admin', 'content']} what="the Files library">
                 <Files />

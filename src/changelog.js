@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '4.8.6',
+    date: '2026-05-17',
+    kind: 'minor',
+    summary: 'Schedule visualization — /schedule page + content calendar integration',
+    items: [
+      'Phase 1 of season-aware data: full 2026 BLW regular season encoded as the source-of-truth SCHEDULE array, with helpers (getAllGameDays, getUpcomingGameDays, getTeamSchedule, getNextGameDay, getGameDayByDate, getGameDaysInRange, getTeamGameCount). Every game day tagged season: "2026" so Phase 2\'s archive flow can filter cleanly without retro-fitting.',
+      'New /schedule page in the sidebar (visible to all signed-in users including fans + athletes). Renders every game day as a stacked card showing date + venue (Assembly Studios, Atlanta GA) + broadcast info (YouTube, first slate also on Fubo + RSNs). Each card lists the 6-8 games for that day with start time + clickable team chips that link to the team page.',
+      'Filter strip at top of /schedule: "All teams" + a chip per team. Active team filter hides game days without that team, AND fades games on remaining days that don\'t feature them (still visible for context, just muted opacity).',
+      'PAST / UPCOMING groups with a divider line — past days dim to 65% opacity so the eye lands on what\'s coming, but they stay visible for full-season reference.',
+      'Content calendar integration: previously calendar said "NO GAMES YET" because nothing was wired to its games prop. Now ContentCalendar falls back to getTeamSchedule(team.id) when no games prop is passed (the existing TeamPage call), so every team page calendar surfaces their game days automatically. Each game day cell shows a "X GAMES" pill (count-aware) plus up to 3 matchup chips reading "vs OPP 1:00" — clicking any chip jumps to /schedule. Existing post-cadence logic still runs on top, so master/content still see "Matchup hype" + "Live highlight" + "Final score" recommended posts on each game day, and the week-before / week-after cadence shifts kick in for game weeks.',
+      'Phase 2 (will ship closer to opening day): manual "Archive 2025 + Start 2026" button in master surface, "Last Season" toggle on stats pages, 0-0 record reset with carried-over rank order. The season tagging in v4.8.6 makes Phase 2 a small flag-flip rather than a refactor.',
+      'Not in scope this release (could ship if useful): per-game deep-links into Studio with team + opponent pre-filled, team-page "Next game day" card, dashboard "this weekend" widget, score columns once games complete, schedule editor UI. Flag any of these for Phase 1.5 if they\'d unlock real workflow value.',
+    ],
+  },
+  {
     version: '4.8.5',
     date: '2026-05-17',
     kind: 'patch',

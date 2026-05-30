@@ -13,6 +13,8 @@ import { SectionHeading } from './components';
 import { colors, fonts, radius } from './theme';
 import { authedFetch } from './authed-fetch';
 import { useAuth } from './auth';
+import { getTeamSchedule, formatGameTime } from './schedule-data';
+import { getTeamAbbr } from './data';
 
 // Heuristic for picking a readable text color on top of an arbitrary
 // hex background. Used by the GAME badge and team-colored day chips
@@ -165,7 +167,38 @@ export function ContentCalendar({ team, games }) {
   const { role } = useAuth();
   const isMaster = role === 'master_admin';
   const today = new Date();
-  const plan = useMemo(() => buildPostPlan(team, games, today, 4), [team, games]);
+
+  // v4.8.6: schedule integration. When the caller passes no `games`
+  // prop (or an empty array), fall back to the static SCHEDULE data
+  // for this team. Convert from the schedule-data shape (game day
+  // with `team1`/`team2`/`time`) to the legacy buildPostPlan shape
+  // ({ home/away, dateTime }) so the cadence logic doesn't need to
+  // know about two formats. The dateTime is built from the game day's
+  // date + the game's 24h time, interpreted as local time.
+  const resolvedGames = useMemo(() => {
+    if (games && games.length > 0) return games;
+    if (!team?.id) return [];
+    const teamDays = getTeamSchedule(team.id);
+    const out = [];
+    for (const gd of teamDays) {
+      for (const g of gd.teamGames) {
+        const [y, m, d] = gd.date.split('-').map(Number);
+        const [hh, mm] = g.time.split(':').map(Number);
+        const dt = new Date(y, m - 1, d, hh, mm).toISOString();
+        out.push({
+          home: { teamId: g.team1 },
+          away: { teamId: g.team2 },
+          dateTime: dt,
+          // Extras the buildPostPlan ignores but downstream rendering can use:
+          opponentId: g.team1 === team.id ? g.team2 : g.team1,
+          time: g.time,
+        });
+      }
+    }
+    return out;
+  }, [team?.id, games]);
+
+  const plan = useMemo(() => buildPostPlan(team, resolvedGames, today, 4), [team, resolvedGames]);
 
   // v4.5.37: Cloud-stored manual marks. Shape: { 'YYYY-MM-DD': postType }.
   // Loaded once per team on mount; saved through /api/app-settings (key
@@ -376,13 +409,52 @@ export function ContentCalendar({ team, games }) {
                           {d.date.getDate()}
                         </span>
                         {hasGame && (
-                          <span title="Game scheduled" style={{
+                          <span title={`${d.dayGames.length} game${d.dayGames.length === 1 ? '' : 's'} scheduled`} style={{
                             fontFamily: fonts.condensed, fontSize: 8, fontWeight: 800,
                             background: teamColor, color: onTeamText,
                             padding: '1px 5px', borderRadius: 2, letterSpacing: 0.6,
-                          }}>GAME</span>
+                          }}>{d.dayGames.length > 1 ? `${d.dayGames.length} GAMES` : 'GAME'}</span>
                         )}
                       </div>
+
+                      {/* v4.8.6: matchup chips per game. Each game on
+                          this day gets a "vs OPP @ 1:00 PM" pill so the
+                          calendar reads as a real schedule, not just
+                          "game day yes/no." Click → opens schedule page
+                          filtered to this team for full context. */}
+                      {hasGame && d.dayGames.slice(0, 3).map((g, gi) => {
+                        const oppId = g.opponentId || (g.home?.teamId === team?.id ? g.away?.teamId : g.home?.teamId);
+                        const timeLabel = g.time ? formatGameTime(g.time, { tz: false }) : '';
+                        return (
+                          <Link
+                            key={`matchup-${gi}`}
+                            to={`/schedule`}
+                            title={`vs ${oppId || ''} at ${timeLabel}`}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700,
+                              color: colors.textSecondary,
+                              background: `${teamColor}15`,
+                              border: `1px solid ${teamColor}40`,
+                              padding: '1px 5px', borderRadius: 3,
+                              letterSpacing: 0.4, textDecoration: 'none',
+                              maxWidth: '100%',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            <span>vs {getTeamAbbr(oppId)}</span>
+                            {timeLabel && <span style={{ opacity: 0.7 }}>{timeLabel}</span>}
+                          </Link>
+                        );
+                      })}
+                      {hasGame && d.dayGames.length > 3 && (
+                        <div style={{
+                          fontFamily: fonts.condensed, fontSize: 8, fontWeight: 700,
+                          color: colors.textMuted, letterSpacing: 0.5,
+                        }}>
+                          +{d.dayGames.length - 3} more
+                        </div>
+                      )}
                       {/* Manual mark badge — only shown when a master has
                           tagged this day with a post type. Sits at the
                           top of the cell so it reads as the primary
