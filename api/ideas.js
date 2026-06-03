@@ -86,7 +86,10 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch { body = {}; }
   }
-  const { context = {}, count = 6, seedIdea = null, leagueContext = '', team: scopeTeam = null, recentFeedback = [] } = body || {};
+  // v4.8.11: default count 6 → 3 per the global "3 at a time" direction.
+  // Both client call-sites pass count explicitly so this default mostly
+  // affects future callers / debug tools.
+  const { context = {}, count = 3, seedIdea = null, leagueContext = '', team: scopeTeam = null, recentFeedback = [] } = body || {};
 
   // ─── Build the cacheable system prompt ─────────────────────────────────────
   // This chunk is stable across a single session, so cache it so "More Like

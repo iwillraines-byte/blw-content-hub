@@ -44,8 +44,11 @@ const MOBILE_BREAKPOINT = 768;
 // + Settings in the sidebar; teams + player pages are reachable via
 // the top-bar Teams dropdown and direct URL.
 const navItems = [
-  { path: "/my-stats",    label: "My Team",          icon: "★",  roles: ['athlete'] },
-  { path: "/dashboard",   label: "Dashboard",        icon: "⚡", roles: ['master_admin', 'admin', 'content'] },
+  // v4.8.11: "My Team" item removed entirely. The dedicated /my-stats
+  // page was redundant with team pages; athletes now land on /dashboard
+  // and navigate to their team via the top-bar Teams dropdown like
+  // everyone else.
+  { path: "/dashboard",   label: "Dashboard",        icon: "⚡", roles: ['master_admin', 'admin', 'content', 'athlete'] },
   { path: "/generate",    label: "Studio",           icon: "✦", iconClass: 'nav-icon-studio', roles: ['master_admin', 'admin', 'content', 'athlete'] },
   { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content'] },
   { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content', 'athlete'] },
@@ -759,9 +762,12 @@ function HomeRedirect() {
     );
   }
   if (user && !role) return <ProfileNotFound />;
-  if (isAthleteRole(role)) return <Navigate to="/my-stats" replace />;
-  // v4.8.0: fans don't have a staff dashboard — send them to the public
-  // stats surface as their default landing.
+  // v4.8.11: athletes default to /dashboard (was /my-stats). The
+  // "My Team" sidebar item + dedicated /my-stats page were redundant
+  // with the full team page surfaces shipped in v4.6; athletes go
+  // straight to a limited dashboard that surfaces ideas + requests
+  // scoped to their team. /my-stats now redirects to /dashboard for
+  // backward-compat (existing bookmarks).
   if (role === 'fan') return <Navigate to="/game-center" replace />;
   return <Navigate to="/dashboard" replace />;
 }
@@ -968,15 +974,13 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/dashboard" element={
-              <RequireRole roles={['master_admin', 'admin', 'content']} what="the Dashboard">
+              <RequireRole roles={['master_admin', 'admin', 'content', 'athlete']} what="the Dashboard">
                 <ContentStudio />
               </RequireRole>
             } />
-            <Route path="/my-stats" element={
-              <RequireRole roles={['master_admin', 'admin', 'content', 'athlete']} what="My Team">
-                <MyStats />
-              </RequireRole>
-            } />
+            {/* v4.8.11: /my-stats removed from the active nav; redirect
+                preserves any existing bookmark or in-app deep-link. */}
+            <Route path="/my-stats" element={<Navigate to="/dashboard" replace />} />
             <Route path="/generate" element={
               <RequireRole roles={['master_admin', 'admin', 'content', 'athlete']} what="Studio">
                 <Generate />

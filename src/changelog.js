@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '4.8.11',
+    date: '2026-05-17',
+    kind: 'minor',
+    summary: 'Athletes land on Dashboard · /my-stats retired · ideas now 3 at a time',
+    items: [
+      'Athletes default to /dashboard (was /my-stats). The dedicated "My Team" page has been redundant since the v4.6 team-page surfaces shipped — same record/stats/aggregates/calendar live on /teams/<slug> with more depth. Athletes now use the same landing surface as content + admin (limited version) and navigate to their team via the top-bar Teams dropdown.',
+      '/my-stats route still works — it redirects to /dashboard so existing bookmarks and in-app deep-links (Settings card, idea CTAs, request links) don\'t break. The MyStats component itself stays in the file tree for now; it just has no nav entry and no default landing.',
+      'Sidebar "My Team" item removed.',
+      'Athlete dashboard is the limited version of master\'s dashboard. Hidden for athletes: Files live-card (athletes don\'t have Files access; showing "0 files in library" with a dead-link CTA was bad UX). LeagueContextCard + ViewAsPicker were already master-only and stay hidden for athletes. Page subtitle changes to "Your team\'s content ideas, recent posts, and open requests" so the surface feels purpose-built rather than scoped-down.',
+      'Visible to athletes on dashboard: Generate live-card, Requests live-card, Content Ideas (team-scoped via their teamId), Recent Posts (team-scoped), athlete-message card (their direct line to master).',
+      'Content ideas: pagination + fresh-batch generation cut from 4 to 3. The IDEAS_PAGE_SIZE constant in idea-pager.jsx is the single source of truth — ContentStudio\'s "Generate more ideas" button reads it for the count param, and the pager renders 3 per page. /api/ideas default count also bumped 6 → 3 for any future callers without explicit count. PlayerPage\'s single-idea modal generator hardcodes count: 1 and stays unaffected.',
+      'ViewAsPicker now hides itself while master is actively impersonating. Pre-fix the picker rendered below the impersonation banner during a view-as session, which undermined the "see exactly what the athlete sees" point of impersonation. Master EXITs via the banner button, then picks again to switch impersonations. Doesn\'t affect athlete sessions (the picker was already hidden for them via realRole check).',
+    ],
+  },
+  {
     version: '4.8.10',
     date: '2026-05-17',
     kind: 'patch',

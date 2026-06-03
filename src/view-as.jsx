@@ -43,6 +43,13 @@ export function ViewAsPicker() {
   const navigate = useNavigate();
   const { realRole, viewingAs, setViewAs } = useAuth();
   if (realRole !== 'master_admin') return null;
+  // v4.8.11: while actively impersonating, hide the picker — the
+  // ImpersonationBanner at the top of AppShell already shows the
+  // current "view as" state with an EXIT button, and re-renderering
+  // the full picker BELOW that during impersonation undermines the
+  // "look exactly like the athlete sees it" point of impersonation.
+  // Master EXITs to return to their real session, then picks again.
+  if (viewingAs) return null;
 
   const startView = (role, teamId) => {
     const teamLabel = teamId ? (getTeam(teamId)?.name || teamId) : null;

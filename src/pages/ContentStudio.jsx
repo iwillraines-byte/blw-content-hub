@@ -373,7 +373,12 @@ export default function ContentStudio() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader title="Dashboard" subtitle="Draft, design, and track BLW content across every team" />
+      <PageHeader
+        title="Dashboard"
+        subtitle={isAthlete
+          ? 'Your team\'s content ideas, recent posts, and open requests'
+          : 'Draft, design, and track BLW content across every team'}
+      />
 
       {/* v4.5.42: First-run welcome card. Renders once per user, scoped
           to the staff tier ('admin' / 'content' — not master-admin who
@@ -407,17 +412,22 @@ export default function ContentStudio() {
           cta={pendingCount > 0 ? 'Review pending →' : '+ New Request'}
           warn={oldestDays != null && oldestDays > 3}
         />
-        <LiveCard
-          icon="◫"
-          label="Files"
-          primary={`${mediaStats.total} file${mediaStats.total === 1 ? '' : 's'} in library`}
-          secondary={mediaStats.untagged === 0
-            ? 'All files tagged ✓'
-            : `${mediaStats.untagged} need${mediaStats.untagged === 1 ? 's' : ''} tagging`}
-          to="/files"
-          cta={mediaStats.untagged > 0 ? 'Tag untagged →' : 'Open Files →'}
-          warn={mediaStats.untagged > 0}
-        />
+        {/* v4.8.11: Files card hidden from athletes — they don't have
+            access to the Files surface, so showing "0 files in library"
+            with a dead-link CTA is bad UX. */}
+        {!isAthlete && (
+          <LiveCard
+            icon="◫"
+            label="Files"
+            primary={`${mediaStats.total} file${mediaStats.total === 1 ? '' : 's'} in library`}
+            secondary={mediaStats.untagged === 0
+              ? 'All files tagged ✓'
+              : `${mediaStats.untagged} need${mediaStats.untagged === 1 ? 's' : ''} tagging`}
+            to="/files"
+            cta={mediaStats.untagged > 0 ? 'Tag untagged →' : 'Open Files →'}
+            warn={mediaStats.untagged > 0}
+          />
+        )}
       </div>
 
       {/* League context — master admin only. Returns null for everyone else,

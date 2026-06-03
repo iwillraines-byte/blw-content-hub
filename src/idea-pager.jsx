@@ -9,7 +9,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { colors, fonts, radius } from './theme';
 
-export const IDEAS_PAGE_SIZE = 4;
+// v4.8.11: 4 → 3 per master direction. Pagination AND fresh-batch
+// generation both read this constant, so ContentStudio's "Generate
+// more ideas" button also requests 3 at a time. PlayerPage's modal
+// generator hardcodes count: 1 (single-idea context) so it's unaffected.
+export const IDEAS_PAGE_SIZE = 3;
 
 // usage:
 //   const { page, totalPages, pageItems, setPage, pagerProps } = useIdeaPagination(ideas);
