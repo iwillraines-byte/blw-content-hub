@@ -31,6 +31,7 @@ import { createPortal } from 'react-dom';
 import { saveMedia, blobToObjectURL, buildPlayerFilename, buildTeamFilename } from './media-store';
 import { compressImageBlob, getCompressPreference } from './image-compress';
 import { useToast } from './toast';
+import { useAuth, isFanRole } from './auth';
 import { colors, fonts, radius } from './theme';
 
 // Asset types per scope. Keep the list TIGHT — these are the ones an
@@ -55,6 +56,13 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
   const [pickerFiles, setPickerFiles] = useState(null); // File[] awaiting type selection
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  // v4.8.7: gate drag-drop + parent-initiated uploads behind role.
+  // Fans are browse-only — they should never see the asset-type picker
+  // and should never trigger an upload pipeline. Other roles pass through
+  // unchanged. We render {children} either way so the page itself still
+  // works for fans; only the upload affordances are disabled.
+  const { role } = useAuth();
+  const uploadBlocked = isFanRole(role);
 
   // v4.5.29: imperative handle so a parent can trigger the asset-type
   // picker from an in-page "+ Add photo" button. Same flow as drag-and-
@@ -62,6 +70,10 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
   // we save with the same canonical filename construction.
   useImperativeHandle(ref, () => ({
     openPicker(files) {
+      if (uploadBlocked) {
+        toast.warn('Read-only account', { detail: 'Fan accounts cannot upload media.' });
+        return;
+      }
       const arr = Array.from(files || []).filter(f =>
         f.type.startsWith('image/') || f.type.startsWith('video/')
       );
@@ -71,13 +83,18 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
       }
       setPickerFiles(arr);
     },
-  }), [toast]);
+  }), [toast, uploadBlocked]);
 
   // Window-level drag handlers. Counter-pattern (incrementing depth on
   // dragenter, decrementing on dragleave) avoids the dragleave/dragenter
   // flicker as the cursor moves between child elements.
+  // v4.8.7: skip the listener registration entirely for fan accounts —
+  // belt-and-suspenders with the server-side block. A fan dragging a
+  // file onto a player page just opens it in a new tab (browser default)
+  // instead of triggering the upload pipeline.
   useEffect(() => {
     if (!team) return undefined;
+    if (uploadBlocked) return undefined;
     let depth = 0;
     const onEnter = (e) => {
       // Only react to file drags — ignore in-page text/element drags.
@@ -119,7 +136,7 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
       window.removeEventListener('dragleave', onLeave);
       window.removeEventListener('drop', onDrop);
     };
-  }, [team, toast]);
+  }, [team, toast, uploadBlocked]);
 
   // ESC closes the asset-type picker (cancel the drop).
   useEffect(() => {

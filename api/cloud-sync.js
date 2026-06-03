@@ -129,6 +129,12 @@ export default async function handler(req, res) {
   const userRole = profile?.role || null;
   const userTeamId = profile?.team_id || null;
   const isAthlete = userRole === 'athlete';
+  // v4.8.7: 'fan' is the public/general tier introduced in v4.8.0.
+  // Fans should NEVER write to cloud-sync — they're browse-only.
+  // Pre-fix, there was no fan check here, so a fan account could
+  // POST any kind (media, manual-player, overlay, effect, etc.)
+  // and the server would accept it. Critical permission leak.
+  const isFan = userRole === 'fan';
 
   // ── GET: list records of a kind ─────────────────────────────────────────
   // Called by src/cloud-reader.js on app mount to hydrate the IndexedDB /
@@ -413,8 +419,16 @@ export default async function handler(req, res) {
   }
 
   // ── Role gating on writes ────────────────────────────────────────────────
+  // Fans are blocked entirely — they're the browse-only public tier.
   // Athletes are restricted — they can only write a small subset of kinds,
   // and only for records pinned to their team. Admins/content bypass this.
+  if (isFan) {
+    res.status(403).json({
+      error: 'Fan accounts are read-only',
+      detail: `Fans cannot write ${kind} records. Sign in with an athlete or content account to make changes.`,
+    });
+    return;
+  }
   if (isAthlete) {
     if (action === 'delete' && !ATHLETE_DELETABLE.has(kind)) {
       res.status(403).json({ error: `Athletes cannot delete ${kind} records` });

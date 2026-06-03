@@ -2437,23 +2437,29 @@ export default function PlayerPage() {
                 path is discoverable. Drag-and-drop still works app-wide
                 via PageDropZone — this button just makes the option
                 visible on touch devices and to admins who haven't
-                noticed the drop hint. */}
-            <button
-              onClick={triggerFilePicker}
-              title={`Add a photo for ${player.name}`}
-              style={{
-                background: colors.accent,
-                border: `1px solid ${colors.accent}`,
-                color: '#fff', cursor: 'pointer',
-                borderRadius: radius.sm, padding: '6px 12px',
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-                letterSpacing: 0.5, whiteSpace: 'nowrap',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
-              <span>ADD PHOTO</span>
-            </button>
+                noticed the drop hint.
+                v4.8.7: hidden for fan accounts (browse-only). Athletes
+                + staff keep the affordance. The server-side block in
+                /api/cloud-sync is the real enforcement; this hide just
+                removes the dead-end button. */}
+            {role !== 'fan' && (
+              <button
+                onClick={triggerFilePicker}
+                title={`Add a photo for ${player.name}`}
+                style={{
+                  background: colors.accent,
+                  border: `1px solid ${colors.accent}`,
+                  color: '#fff', cursor: 'pointer',
+                  borderRadius: radius.sm, padding: '6px 12px',
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                  letterSpacing: 0.5, whiteSpace: 'nowrap',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+                <span>ADD PHOTO</span>
+              </button>
+            )}
           </div>
         </div>
         {media.length === 0 && (
@@ -2466,32 +2472,39 @@ export default function PlayerPage() {
             <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
               No photos for {player.name.split(' ')[0]} yet
             </div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
-              Drag any photo onto this page to auto-tag it for {player.name.split(' ')[0]}, or tap the button below.
-            </div>
-            <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button
-                onClick={triggerFilePicker}
-                style={{
-                  background: colors.accent, border: `1px solid ${colors.accent}`,
-                  color: '#fff', cursor: 'pointer',
-                  borderRadius: radius.base, padding: '8px 16px',
-                  fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                <span style={{ fontSize: 14 }}>+</span>
-                Add a photo
-              </button>
-              <Link to="/files" style={{
-                display: 'inline-flex', alignItems: 'center',
-                fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
-                color: colors.accent, textDecoration: 'none',
-                padding: '8px 14px', borderRadius: radius.base,
-                border: `1px solid ${colors.accentBorder}`,
-                background: colors.accentSoft,
-              }}>Bulk import in Files →</Link>
-            </div>
+            {/* v4.8.7: fans see only the empty state, not the upload CTAs. */}
+            {role !== 'fan' && (
+              <>
+                <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+                  Drag any photo onto this page to auto-tag it for {player.name.split(' ')[0]}, or tap the button below.
+                </div>
+                <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    onClick={triggerFilePicker}
+                    style={{
+                      background: colors.accent, border: `1px solid ${colors.accent}`,
+                      color: '#fff', cursor: 'pointer',
+                      borderRadius: radius.base, padding: '8px 16px',
+                      fontFamily: fonts.body, fontSize: 13, fontWeight: 700,
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>+</span>
+                    Add a photo
+                  </button>
+                  {role !== 'athlete' && (
+                    <Link to="/files" style={{
+                      display: 'inline-flex', alignItems: 'center',
+                      fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
+                      color: colors.accent, textDecoration: 'none',
+                      padding: '8px 14px', borderRadius: radius.base,
+                      border: `1px solid ${colors.accentBorder}`,
+                      background: colors.accentSoft,
+                    }}>Bulk import in Files →</Link>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
         {media.length > 0 && Object.entries(grouped).map(([type, items]) => (

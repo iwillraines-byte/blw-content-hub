@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.8.7',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Hotfix: fans can no longer upload photos · BETA chip replaces LIVE API',
+    items: [
+      'Reported during pre-demo testing: a fan account could add photos to player pages. Root cause was a missing role check at the server. cloud-sync only gated writes for athletes — when fan was introduced in v4.8.0, the gate wasn\'t extended. Fan accounts had the same write privileges as master/admin/content for every kind (media, manual-player, overlay, effect, etc.).',
+      'Server fix: cloud-sync.js now rejects every write from role=fan with HTTP 403 + a clear error message. Authoritative enforcement at the only path media uploads can take.',
+      'Client cleanup: PageDropZone\'s window-level drag handlers no longer register for fan accounts (drag-drop falls back to browser default = opens in new tab). ADD PHOTO buttons on PlayerPage + TeamPage hide for fans. Athletes keep both affordances (uploading photos to their team is legitimate athlete workflow); only fans lose the UI.',
+      'BETA chip: top-bar status indicator swapped from LIVE API / CACHED DATA to a stable BETA chip (amber background, amber dot). Sets correct first-impression expectations for fans and athletes seeing the app for the first time — the underlying API live/cached state is no longer surfaced in the chrome (still available via /api/health for debugging).',
+      'Defense-in-depth audit follow-up: the fan-write check at the server is the authoritative block. Every layer above (button hides, dropzone disable) is a UX nicety on top of it. If a fan inspected the DOM and tried to call cloud-sync directly via fetch, the server would still 403.',
+    ],
+  },
+  {
     version: '4.8.6',
     date: '2026-05-17',
     kind: 'minor',

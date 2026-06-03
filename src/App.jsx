@@ -526,23 +526,31 @@ function TopBar({ isMobile, onMenuToggle }) {
           </button>
         )}
         <style>{`@keyframes syncpulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }`}</style>
-        {/* API Status — hide label on mobile */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 10px', borderRadius: radius.full,
-          background: API_CONFIG.isLive ? colors.successBg : colors.warningBg,
-          border: `1px solid ${API_CONFIG.isLive ? colors.successBorder : colors.warningBorder}`,
-        }}>
+        {/* v4.8.7: BETA chip replaces the previous LIVE API / CACHED
+            DATA status indicator. The app is in pre-launch beta — a
+            stable "BETA" chip sets correct expectations for fans and
+            athletes seeing this for the first time. The underlying
+            API live/cached state is no longer surfaced here (still
+            available via /api/health for debugging). */}
+        <div
+          title="BLW Studio is in beta — surfaces and data may change"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px', borderRadius: radius.full,
+            background: '#FEF3C7',
+            border: '1px solid #FCD34D',
+          }}
+        >
           <div style={{
             width: 6, height: 6, borderRadius: '50%',
-            background: API_CONFIG.isLive ? colors.success : colors.warning,
+            background: '#F59E0B',
           }} />
           {!isMobile && (
             <span style={{
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
-              color: API_CONFIG.isLive ? '#15803D' : '#92400E',
+              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+              color: '#92400E', letterSpacing: 0.8,
             }}>
-              {API_CONFIG.isLive ? 'LIVE API' : 'CACHED DATA'}
+              BETA
             </span>
           )}
         </div>

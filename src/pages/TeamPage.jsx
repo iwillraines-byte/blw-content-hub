@@ -1327,26 +1327,35 @@ export default function TeamPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* v4.5.29: explicit "+ Add photo" affordance for team-page
                 drops. Drag-and-drop still works via PageDropZone — the
-                button just makes the option visible. */}
-            <button
-              onClick={triggerFilePicker}
-              title={`Add a photo for ${team.name}`}
-              style={{
-                background: team.color,
-                border: `1px solid ${team.color}`,
-                color: '#fff', cursor: 'pointer',
-                borderRadius: radius.sm, padding: '6px 12px',
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-                letterSpacing: 0.5, whiteSpace: 'nowrap',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
-              <span>ADD PHOTO</span>
-            </button>
-            <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
-              Go to Files →
-            </Link>
+                button just makes the option visible.
+                v4.8.7: hidden for fans (browse-only). Other roles keep
+                the affordance; server-side block in cloud-sync.js is
+                the real enforcement. */}
+            {authRole !== 'fan' && (
+              <>
+                <button
+                  onClick={triggerFilePicker}
+                  title={`Add a photo for ${team.name}`}
+                  style={{
+                    background: team.color,
+                    border: `1px solid ${team.color}`,
+                    color: '#fff', cursor: 'pointer',
+                    borderRadius: radius.sm, padding: '6px 12px',
+                    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+                    letterSpacing: 0.5, whiteSpace: 'nowrap',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+                  <span>ADD PHOTO</span>
+                </button>
+                {!isAthlete && (
+                  <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
+                    Go to Files →
+                  </Link>
+                )}
+              </>
+            )}
           </div>
         </div>
         {playerScopedMedia.length === 0 && (
