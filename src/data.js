@@ -626,15 +626,26 @@ export function getAllPlayers() {
   const seen = new Set();
   const players = [];
   const addPlayer = (p, statType) => {
+    if (!p?.name || !p?.team) return;
     const key = `${p.team}_${p.name}`;
     if (seen.has(key)) return;
     seen.add(key);
     const lastName = p.name.split(' ').pop();
     players.push({ name: p.name, num: p.num, team: p.team, lastName, statType });
   };
-  // Use cached live data if available, otherwise fallback
+  // Use cached live data if available, otherwise fallback.
   (_battingCache || BATTING_FALLBACK).forEach(p => addPlayer(p, 'batting'));
   (_pitchingCache || PITCHING_FALLBACK).forEach(p => addPlayer(p, 'pitching'));
+  // v4.8.9: include canonical-roster-only players (no batting + no
+  // pitching stats yet — e.g. preseason, position players without
+  // qualifying stat lines, brand-new athletes pre-debut). Pre-fix,
+  // getAllPlayers was stats-only, so the Studio player dropdown
+  // hid stat-less roster members entirely. Tagged statType: 'roster'
+  // so consumers that want to distinguish "has stats" vs "roster only"
+  // (e.g. for percentile cards) still can.
+  for (const c of CANONICAL_ROSTER_2026) {
+    addPlayer({ team: c.team, name: c.name, num: c.num || '' }, 'roster');
+  }
   return players;
 }
 

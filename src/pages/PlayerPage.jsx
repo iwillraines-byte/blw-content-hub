@@ -1980,6 +1980,63 @@ export default function PlayerPage() {
   });
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
 
+  // v4.8.9: auto-pin avatar on first master visit.
+  //
+  // Why: previously the resolver picked an avatar dynamically based on
+  // priority order (HEADSHOT > PORTRAIT > ACTION) every render. When a
+  // new photo of a higher priority got uploaded, the displayed avatar
+  // changed even if a master had been content with the previous pick.
+  // User wants the avatar STABLE once shown and only changeable by master.
+  //
+  // Fix: when master_admin views the page and the player has no pinned
+  // profile_media_id yet but a photo did resolve, persist that choice
+  // by calling the same upsert path the photo picker uses. From then
+  // on resolvePlayerAvatar's "1. profileMediaId override wins" branch
+  // returns the same photo regardless of new uploads. One-time per
+  // player; subsequent visits no-op because profileMediaId is now set.
+  //
+  // Gated to master_admin (NOT all staff) per the user's "only changed
+  // by master admin" requirement. Athletes/content/fans never trigger
+  // this. If master never views a given player page, the avatar stays
+  // dynamic — acceptable for tail-end players.
+  useEffect(() => {
+    if (!isMaster) return;
+    if (!player) return;
+    if (player.profileMediaId) return;       // already pinned — no-op
+    if (!headshot?.id) return;                // nothing to pin
+    if (!team?.id || !player?.lastName) return; // missing key fields
+    let cancelled = false;
+    (async () => {
+      try {
+        await upsertManualPlayer({
+          team: team.id,
+          lastName: player.lastName,
+          firstInitial: player.firstInitial,
+          firstName: player.firstName,
+          num: player.num,
+          updates: { profile_media_id: headshot.id },
+        });
+        if (!cancelled) {
+          setPlayer(prev => prev ? { ...prev, profileMediaId: headshot.id } : prev);
+        }
+      } catch (err) {
+        // Don't toast — this is an invisible-to-user persistence step.
+        // If it fails, the page still works; next master visit will retry.
+        console.warn('[avatar] auto-pin failed', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [
+    isMaster,
+    player?.profileMediaId,
+    headshot?.id,
+    team?.id,
+    player?.lastName,
+    player?.firstInitial,
+    player?.firstName,
+    player?.num,
+  ]);
+
   // ─── Per-stat league-rank lookups ────────────────────────────────────────
   // Rank this player against all BLW batters/pitchers for each displayed stat
   const bTotal = battingLeaders.length;
@@ -2119,7 +2176,7 @@ export default function PlayerPage() {
           pTotal={pTotal}
           onGenerate={generateIdea}
           generating={generatingIdea}
-          canEditPhoto={isAdmin}
+          canEditPhoto={isMaster}
           onEditPhoto={openPhotoPicker}
           onAdjustPhoto={() => setPositionEditorOpen(true)}
           isMaster={isMaster}

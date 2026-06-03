@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.8.9',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Two bugs: stats-less players invisible in Studio · avatar drift on new uploads',
+    items: [
+      'Bug 1: a player without batting OR pitching stats never appeared in the Studio player dropdown. getAllPlayers() (Studio\'s source) was stats-only — it iterated _battingCache + _pitchingCache and that was it. Canonical roster entries were never injected, so brand-new athletes / position players without qualifying lines / anyone pre-debut was invisible to content workflow.',
+      'Bug 1 fix: getAllPlayers() now ALSO injects every CANONICAL_ROSTER_2026 entry after the stats sources. Tagged statType: "roster" so callers that want to distinguish "has stats" from "roster-only" still can. De-dupe by team_name key remains intact.',
+      'Bug 2: the displayed avatar drifted whenever new photos were uploaded. The resolver picks a photo dynamically based on priority order (HEADSHOT > PORTRAIT > ACTION > PITCHING), and a freshly uploaded HEADSHOT would displace an existing ACTION-based avatar — even if master was happy with the previous pick. Felt like content was being silently overwritten.',
+      'Bug 2 fix (part A): the photo picker (avatar swap UI) is now master_admin only. Pre-fix it was open to all staff (master + admin + content) under the "content team handles daily photo work" rationale; the master is now the sole authority on profile photos per direct instruction.',
+      'Bug 2 fix (part B): auto-pin on first master_admin visit. When master opens a player page and the player has no profile_media_id pinned but the resolver returned a valid photo, the page silently writes that photo\'s id to manual_players.profile_media_id. From then on, resolvePlayerAvatar\'s "override wins" branch returns the same photo no matter what new uploads arrive. One-time per player. Athletes / content / fans never trigger the auto-pin (no writes happen on their visits). If master never visits a tail-end player\'s page, the avatar stays dynamic — acceptable given the explicit-control requirement.',
+      'Side effect: existing players whose avatars have been "drifting" will lock to whatever photo is showing the next time master views their page. To swap to a different photo afterwards, click the avatar edit affordance (master only).',
+    ],
+  },
+  {
     version: '4.8.8',
     date: '2026-05-17',
     kind: 'patch',
