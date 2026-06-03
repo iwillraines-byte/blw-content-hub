@@ -1910,6 +1910,70 @@ export default function PlayerPage() {
     if (e.target) e.target.value = ''; // allow re-selecting the same file
   }, []);
 
+  // v4.8.10: auto-pin avatar on first master visit. MUST be placed
+  // ABOVE the early returns below (rules of hooks: hook order must
+  // stay stable between renders, and an early return on the first
+  // render means later hooks are never called → React throws on
+  // the second render when the count changes). The v4.8.9 ship of
+  // this effect lived after the avatar resolution, downstream of
+  // both the !loaded and !player early returns — every first render
+  // tripped the violation and white-screened.
+  //
+  // Behavior unchanged from v4.8.9: when master_admin views a
+  // player page and the player has no profile_media_id but has a
+  // resolvable avatar, write the avatar's id to manual_players
+  // so the resolver's "override wins" branch returns the same
+  // photo regardless of subsequent uploads. One-time per player.
+  // Athletes/content/fans never trigger this. The avatar resolution
+  // happens INSIDE the effect (not against the downstream `headshot`
+  // variable) so we don't depend on a value computed past the
+  // early returns.
+  useEffect(() => {
+    if (!isMaster) return;
+    if (!player) return;
+    if (player.profileMediaId) return;
+    if (!team?.id || !player?.lastName) return;
+    if (!Array.isArray(allMediaPool) || allMediaPool.length === 0) return;
+    const lastnameUnique = !player.candidateCount || player.candidateCount === 1;
+    const resolved = resolvePlayerAvatar(player, allMediaPool, {
+      // Skip the override branch — we're trying to AUTO-PICK the avatar
+      // here. (player.profileMediaId is null by the early-out above,
+      // so this passes through unchanged either way.)
+      profileMediaId: null,
+      lastnameUnique,
+    });
+    if (!resolved?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await upsertManualPlayer({
+          team: team.id,
+          lastName: player.lastName,
+          firstInitial: player.firstInitial,
+          firstName: player.firstName,
+          num: player.num,
+          updates: { profile_media_id: resolved.id },
+        });
+        if (!cancelled) {
+          setPlayer(prev => prev ? { ...prev, profileMediaId: resolved.id } : prev);
+        }
+      } catch (err) {
+        // Silent — the page renders regardless. Next master visit retries.
+        console.warn('[avatar] auto-pin failed', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [
+    isMaster,
+    player?.profileMediaId,
+    team?.id,
+    player?.lastName,
+    player?.firstInitial,
+    player?.firstName,
+    player?.num,
+    allMediaPool,
+  ]);
+
   if (!team) {
     return (
       <Card style={{ textAlign: 'center', padding: 40 }}>
@@ -1979,63 +2043,6 @@ export default function PlayerPage() {
     lastnameUnique,
   });
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
-
-  // v4.8.9: auto-pin avatar on first master visit.
-  //
-  // Why: previously the resolver picked an avatar dynamically based on
-  // priority order (HEADSHOT > PORTRAIT > ACTION) every render. When a
-  // new photo of a higher priority got uploaded, the displayed avatar
-  // changed even if a master had been content with the previous pick.
-  // User wants the avatar STABLE once shown and only changeable by master.
-  //
-  // Fix: when master_admin views the page and the player has no pinned
-  // profile_media_id yet but a photo did resolve, persist that choice
-  // by calling the same upsert path the photo picker uses. From then
-  // on resolvePlayerAvatar's "1. profileMediaId override wins" branch
-  // returns the same photo regardless of new uploads. One-time per
-  // player; subsequent visits no-op because profileMediaId is now set.
-  //
-  // Gated to master_admin (NOT all staff) per the user's "only changed
-  // by master admin" requirement. Athletes/content/fans never trigger
-  // this. If master never views a given player page, the avatar stays
-  // dynamic — acceptable for tail-end players.
-  useEffect(() => {
-    if (!isMaster) return;
-    if (!player) return;
-    if (player.profileMediaId) return;       // already pinned — no-op
-    if (!headshot?.id) return;                // nothing to pin
-    if (!team?.id || !player?.lastName) return; // missing key fields
-    let cancelled = false;
-    (async () => {
-      try {
-        await upsertManualPlayer({
-          team: team.id,
-          lastName: player.lastName,
-          firstInitial: player.firstInitial,
-          firstName: player.firstName,
-          num: player.num,
-          updates: { profile_media_id: headshot.id },
-        });
-        if (!cancelled) {
-          setPlayer(prev => prev ? { ...prev, profileMediaId: headshot.id } : prev);
-        }
-      } catch (err) {
-        // Don't toast — this is an invisible-to-user persistence step.
-        // If it fails, the page still works; next master visit will retry.
-        console.warn('[avatar] auto-pin failed', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [
-    isMaster,
-    player?.profileMediaId,
-    headshot?.id,
-    team?.id,
-    player?.lastName,
-    player?.firstInitial,
-    player?.firstName,
-    player?.num,
-  ]);
 
   // ─── Per-stat league-rank lookups ────────────────────────────────────────
   // Rank this player against all BLW batters/pitchers for each displayed stat

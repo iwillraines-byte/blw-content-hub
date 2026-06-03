@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.8.10',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Hotfix: white page on player pages (avatar auto-pin hook order)',
+    items: [
+      'Reported: every player page white-screened after v4.8.9 shipped. Same family of bug as the v4.7.11 hotfix — a hook placement violated rules of hooks.',
+      'Root cause: v4.8.9 added a useEffect for the avatar auto-pin AFTER the early returns at lines 1913 (!team), 1922 (!loaded), 1926 (!player). On the first render of any player page, `loaded` is false → early return fires → the useEffect never registers. When the data finishes loading on the second render, the useEffect appears in the hook list for the first time. React sees the hook count change and throws. Tree blanks.',
+      'Fix: hoisted the useEffect ABOVE every early return (placed right after the file-input callbacks). Avatar resolution now happens INSIDE the effect against allMediaPool rather than depending on the downstream `headshot` variable that\'s computed past the early returns. Same behavior, safe hook position.',
+      'Verification reasoning: hooks now run in the same order on every render of every player page. !team / !loaded / !player early returns still trip after the effect registers, so an effect with `if (!player) return;` correctly no-ops while waiting for data.',
+    ],
+  },
+  {
     version: '4.8.9',
     date: '2026-05-17',
     kind: 'patch',
