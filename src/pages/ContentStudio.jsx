@@ -397,19 +397,28 @@ export default function ContentStudio() {
           to={topSuggestion ? buildLink(topSuggestion) : '/generate'}
           cta={topSuggestion ? 'Create top idea →' : 'Open Generate →'}
         />
+        {/* v4.8.12: label flips to "My Requests" for athletes. The server
+            already scopes the request list to requester=self for them,
+            so the underlying counts ARE their own — only the framing
+            was misleading. Master/admin/content keep the global view
+            with the original "Requests" label and total counts. */}
         <LiveCard
           icon="☰"
-          label="Requests"
+          label={isAthlete ? "My Requests" : "Requests"}
           primary={pendingCount === 0
-            ? 'No open requests'
-            : `${pendingCount} pending`}
+            ? (isAthlete ? 'No open requests' : 'No open requests')
+            : (isAthlete
+                ? `${pendingCount} of yours pending`
+                : `${pendingCount} pending`)}
           secondary={pendingCount === 0
-            ? 'Click to file a new one'
+            ? (isAthlete ? 'File one for the content team' : 'Click to file a new one')
             : oldestDays != null && oldestDays > 0
               ? `Oldest: ${oldestDays} day${oldestDays === 1 ? '' : 's'} ago`
               : 'Created today'}
           to={pendingCount > 0 ? '/requests?status=pending' : '/requests'}
-          cta={pendingCount > 0 ? 'Review pending →' : '+ New Request'}
+          cta={pendingCount > 0
+            ? (isAthlete ? 'See my requests →' : 'Review pending →')
+            : '+ New Request'}
           warn={oldestDays != null && oldestDays > 3}
         />
         {/* v4.8.11: Files card hidden from athletes — they don't have

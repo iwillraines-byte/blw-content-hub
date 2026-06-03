@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.8.12',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Athlete dashboard Requests card → "My Requests" (own count, own framing)',
+    items: [
+      'For athletes, the dashboard Requests live-card now reads "My Requests" with copy framed around them: "N of yours pending" / "See my requests →" / "File one for the content team."',
+      'Master / admin / content keep the original "Requests" label with the global count and "Review pending →" CTA.',
+      'Behavior note: the underlying count was ALREADY athlete-scoped — server-side RLS on /api/requests filters to requester=self for athletes, so getRequests() never returned other people\'s requests for them. Only the framing was misleading ("3 pending" suggested a global queue when it was actually their own 3). This patch is pure copy, no data plumbing change.',
+    ],
+  },
+  {
     version: '4.8.11',
     date: '2026-05-17',
     kind: 'minor',
