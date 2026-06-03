@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.8.8',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Roster de-dupe: legacy-spelling manual rows no longer create phantom twins',
+    items: [
+      'Reported: two "Mike Stiles" on Miami, two "Drew Baalman" on Chicago. Both real players appeared twice in the roster grid because their manual_players row used a legacy spelling that didn\'t match the canonical name.',
+      'Root cause: getTeamRoster + getAllPlayers key roster entries by the player\'s name. Stats rows are baked through resolveCanonicalName before they hit the cache, so "Mike Stiles" stats become "Michael Stiles" → keyed as michael|stiles. Manual rows bypass that pipeline. A manual row with firstName="Mike" lastName="Stiles" was keyed as mike|stiles, while the canonical roster injection a few lines later added michael|stiles. Two keys, two entries, one player. Same pattern hit "Drew Balmaan" (legacy) vs "Drew Baalman" (canonical) on CHI.',
+      'Fix: both manual-player loops now run rawName through resolveCanonicalName before deriving the key + display name. NAME_ALIASES already had the right mappings ("mike stiles" → "Michael Stiles", "drew balmaan" → "Drew Baalman") — they just weren\'t consulted in this path.',
+      'Side-effect: the player will now render as the canonical name everywhere even if the underlying manual_players row still says "Mike Stiles" or "Drew Balmaan". Cleaning up the actual database rows is optional, not required.',
+    ],
+  },
+  {
     version: '4.8.7',
     date: '2026-05-17',
     kind: 'patch',

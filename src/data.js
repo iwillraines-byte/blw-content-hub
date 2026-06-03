@@ -957,20 +957,31 @@ export async function getAllPlayersDirectory(mediaList = [], manualPlayers = [])
     }
   }
   // Manual players
+  //
+  // v4.8.8: resolve canonical name before keying so manual rows with
+  // legacy spellings ("Mike Stiles" / "Drew Balmaan") collapse into
+  // their canonical entry ("Michael Stiles" / "Drew Baalman") rather
+  // than producing a second "duplicate-looking" row in the directory.
+  // _bakeCanonical handles this for stats sources; manual_players
+  // bypasses that pipeline so we apply NAME_ALIASES directly here.
   for (const p of manualPlayers) {
-    const FI = (p.firstName || '').charAt(0).toUpperCase();
-    const k = key(p.team, FI, p.lastName);
+    const rawName = p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim();
+    const canonical = resolveCanonicalName(rawName);
+    const canonLast = canonical.split(' ').pop();
+    const canonFirst = canonical.split(' ').slice(0, -1).join(' ');
+    const FI = canonFirst.charAt(0).toUpperCase();
+    const k = key(p.team, FI, canonLast);
     const existing = registry.get(k);
     if (existing) {
       registry.set(k, {
         ...existing,
         hasManual: true, manualId: p.id,
         num: existing.num || p.num || '',
-        firstName: existing.firstName || p.firstName || '',
+        firstName: existing.firstName || canonFirst,
         firstInitial: existing.firstInitial || FI,
       });
     } else {
-      upsert(p.team, p.name || p.lastName, { hasManual: true, manualId: p.id, num: p.num || '' });
+      upsert(p.team, canonical, { hasManual: true, manualId: p.id, num: p.num || '' });
     }
   }
 
@@ -1097,18 +1108,32 @@ export function getTeamRoster(teamId, mediaList = [], manualPlayers = []) {
     .forEach(p => addStatPlayer(p, 'pitching'));
 
   // Manual players assigned to this team but with no API stats yet.
+  //
+  // v4.8.8: resolve canonical name BEFORE keying. Pre-fix, a manual
+  // row with name="Mike Stiles" would key as "mike|stiles" while the
+  // canonical injection a few lines down keyed the same player as
+  // "michael|stiles" (canonical spelling), producing two roster
+  // entries for the same person. Same pattern hit "Drew Balmaan" /
+  // "Drew Baalman" on CHI. NAME_ALIASES already maps the legacy
+  // spellings to the canonical name; we just need to apply it here.
   for (const m of manualPlayers) {
     if (m.team !== teamId) continue;
-    const lastName = m.lastName || (m.name || '').split(' ').pop();
-    if (!lastName) continue;
-    const fi = (m.firstName || '').charAt(0).toUpperCase();
-    const key = fullNameKey(m.firstName, lastName);
+    const rawName = m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim();
+    const canonical = resolveCanonicalName(rawName);
+    const canonicalLastName = canonical.split(' ').pop();
+    const canonicalFirstName = canonical.split(' ').slice(0, -1).join(' ');
+    if (!canonicalLastName) continue;
+    const fi = canonicalFirstName.charAt(0).toUpperCase();
+    const key = fullNameKey(canonicalFirstName, canonicalLastName);
     if (roster.has(key)) continue;
     roster.set(key, {
-      name: m.name || `${m.firstName || ''} ${lastName}`.trim(),
-      firstName: m.firstName || '',
+      // Display the canonical name (NOT the raw manual row name), so
+      // "Mike Stiles" renders as "Michael Stiles" everywhere, matching
+      // every other surface that already resolves names.
+      name: canonical,
+      firstName: canonicalFirstName,
       firstInitial: fi,
-      lastName,
+      lastName: canonicalLastName,
       team: teamId,
       num: m.num || '',
       stats: [],
