@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.8.14',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'CRITICAL: athletes claiming entire team rosters (TeamPage auto-pin bug)',
+    items: [
+      'Reported during pre-demo SQL audit: joaquin.jimenezwiffs@gmail.com was linked to all 5 LAN players, jeffreylopes5@gmail.com was linked to all 7 CHI players, etc. Every athlete who visited their team page after registering had silently claimed every teammate\'s manual_players row.',
+      'Root cause: TeamPage.jsx had a pin-on-first-resolve block (v4.5.64) that fired upsertManualPlayer for every roster-card avatar resolution. NO role check. When an athlete\'s session triggered the roster render, every player on their team got an upsert. The server\'s manual-player claim path saw a write from the athlete on a row with user_id=NULL and stamped user_id = auth.uid() — the row was now "claimed" by them.',
+      'Client fix (TeamPage.jsx): gated the pin-on-first-resolve to isMaster only. Athletes / content / fans now browse the roster with zero background writes. Master is the only role that triggers the pin, and they\'re authoritative for it.',
+      'Server fix (cloud-sync.js): hardened the claim path to refuse claims that don\'t include firstName as a narrowing key. Pre-fix, a lastname-only payload would claim the FIRST matching row on the team — fine for unique lastnames, catastrophic for cousins (Roses, Marshalls). Now an athlete-initiated upsert on an unclaimed row must supply firstName; the server returns 400 otherwise.',
+      'Data cleanup required: every existing wrong-claim must be unlinked. SQL below in the deploy notes. Use the People list to relink athletes to their CORRECT player record afterward.',
+    ],
+  },
+  {
     version: '4.8.13',
     date: '2026-05-17',
     kind: 'patch',

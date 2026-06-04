@@ -487,10 +487,27 @@ export default async function handler(req, res) {
           });
           return;
         }
-        // If the row exists with user_id === null we allow the write and
-        // also stamp user_id := auth.uid() so future writes are gated by
-        // the ownership check.
+        // v4.8.14: HARDEN the claim path. Pre-fix, ANY successful match
+        // would stamp user_id := auth.uid() — even when narrowing fell
+        // back to lastname-only (no firstName, no num supplied). When
+        // TeamPage.jsx fired auto-pin upserts for every roster card on
+        // page render, the server happily claimed every teammate's row
+        // for the visiting athlete. Confirmed in production: athletes
+        // claimed entire team rosters.
+        //
+        // New rule: refuse to claim a row from an upsert that didn't
+        // supply BOTH firstName AND lastName as narrowing keys. A claim
+        // is an identity assertion ("this row IS me"); requiring the
+        // full name as a discriminator prevents lastname-only fallbacks
+        // from accidentally claiming cousin/teammate rows.
         if (match && !match.user_id) {
+          if (!fn) {
+            res.status(400).json({
+              error: 'Claim requires firstName',
+              detail: 'Athlete-initiated upsert on an unclaimed manual_players row must include firstName to disambiguate. Refusing to claim by lastname alone.',
+            });
+            return;
+          }
           record.user_id = user.id;
         }
       }

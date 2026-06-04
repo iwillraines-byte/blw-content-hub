@@ -514,18 +514,22 @@ export default function TeamPage() {
           profileMediaId: overrideId,
           lastnameUnique: lastnameCount.get(LN) === 1,
         });
-        // v4.5.64: pin-on-first-resolve. If the player has NO explicit
-        // profile_media_id set but the heuristic resolved an avatar,
-        // write that media id back as their pin. Locks the choice
-        // so future uploads (e.g. a new ACTION shot) don't shift
-        // the avatar even though they'd outrank the current pick on
-        // the type-priority ladder. The pin is idempotent — once
-        // set we never overwrite it without an explicit user edit.
-        if (!overrideId && headshot?.id) {
-          // Fire and forget — non-blocking. Per-player upsert is
-          // O(few) calls per team page load (only fires for players
-          // without a pin), and never for players who already have
-          // one. Errors are swallowed.
+        // v4.5.64: pin-on-first-resolve.
+        //
+        // v4.8.14 CRITICAL FIX: gated to master_admin only. Pre-fix
+        // this fired on every roster-card render for every visitor,
+        // and the server's manual-player claim path stamped
+        // user_id = auth.uid() on any row with NULL user_id. Net
+        // result: any athlete visiting their team page claimed
+        // every teammate's manual_players row. Confirmed in the
+        // wild — joaquin.jimenezwiffs@gmail.com linked to all 5 LAN
+        // players, jeffreylopes5@gmail.com linked to all 7 CHI
+        // players, etc.
+        //
+        // Now: only master triggers the pin (and only for rows
+        // they're authoritative for). Athletes/content/fans browse
+        // the roster without any background writes.
+        if (isMaster && !overrideId && headshot?.id) {
           upsertManualPlayer({
             team: p.team,
             lastName: p.lastName,
