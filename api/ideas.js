@@ -134,12 +134,55 @@ export default async function handler(req, res) {
   const battingSample = stratifiedSample(context.batting || [], 3, 3, 1);
   const pitchingSample = stratifiedSample(context.pitching || [], 3, 3, 1);
 
+  // v4.8.15: same-lastname disambiguation. Pre-fix, when the prompt
+  // listed both Sam Skibbe and Gus Skibbe on NYG, the model would
+  // generate ideas about "Sam Skibbe" but attach Gus's numbers (or
+  // vice versa). Now we precompute a Set of "ambiguous" lastnames
+  // across the FULL provided context (not just the stratified sample,
+  // because the model also reads narratives that may mention either)
+  // and tag each ambiguous stat line with an explicit "DIFFERENT
+  // PLAYER from the [other Skibbe]" warning. Paired with an anti-
+  // conflation rule in the system prompt below, this collapses the
+  // ambiguity at the data layer.
+  const ambiguousLastNames = (() => {
+    const counts = new Map();
+    const allNamed = [...(context.batting || []), ...(context.pitching || [])];
+    for (const p of allNamed) {
+      const parts = (p.name || '').trim().split(/\s+/);
+      const last = (parts[parts.length - 1] || '').toLowerCase();
+      const team = (p.team || '').toUpperCase();
+      if (!last || !team) continue;
+      const key = `${team}|${last}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return new Set([...counts.entries()].filter(([, n]) => n > 1).map(([k]) => k));
+  })();
+
+  // Per-player ambiguity-warning tag — returns the OTHER player(s)
+  // sharing this lastname on the same team so the prompt line can
+  // name them explicitly: "DIFFERENT PLAYER from Gus Skibbe (NYG)".
+  const ambiguityNote = (p) => {
+    const parts = (p.name || '').trim().split(/\s+/);
+    const last = (parts[parts.length - 1] || '').toLowerCase();
+    const team = (p.team || '').toUpperCase();
+    if (!last || !team) return '';
+    if (!ambiguousLastNames.has(`${team}|${last}`)) return '';
+    const siblings = [...(context.batting || []), ...(context.pitching || [])]
+      .filter(o => o.name && o.name !== p.name
+        && (o.team || '').toUpperCase() === team
+        && (o.name.trim().split(/\s+/).slice(-1)[0] || '').toLowerCase() === last)
+      .map(o => o.name);
+    const uniq = [...new Set(siblings)];
+    if (!uniq.length) return '';
+    return ` ⚠️ DIFFERENT PLAYER from ${uniq.join(', ')} (same lastname, same team — never conflate)`;
+  };
+
   const topBatters = battingSample.map(b =>
-    `- ${b.name} (${b.team}): OPS+ ${b.ops_plus}, AVG ${b.avg}, ${b.hr || 0} HR${b.currentRank != null ? `, overall rank #${b.currentRank}` : ''}`
+    `- ${b.name} (${b.team}): OPS+ ${b.ops_plus}, AVG ${b.avg}, ${b.hr || 0} HR${b.currentRank != null ? `, overall rank #${b.currentRank}` : ''}${ambiguityNote(b)}`
   ).join('\n');
 
   const topPitchers = pitchingSample.map(p =>
-    `- ${p.name} (${p.team}): FIP ${typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}, ${p.era} ERA, ${p.w || 0}-${p.l || 0}, ${p.ip} IP${p.currentRank != null ? `, overall rank #${p.currentRank}` : ''}`
+    `- ${p.name} (${p.team}): FIP ${typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}, ${p.era} ERA, ${p.w || 0}-${p.l || 0}, ${p.ip} IP${p.currentRank != null ? `, overall rank #${p.currentRank}` : ''}${ambiguityNote(p)}`
   ).join('\n');
 
   // ─── Athlete voice — self-authored vibe / references / content prefs ───
@@ -246,6 +289,13 @@ ANTI-PARAPHRASE RULE:
 TEAM SPREAD:
 - Reference at least 4 DIFFERENT teams across the batch unless explicitly scoped (see SEED SCOPE in the user message).
 - Never produce two ideas about the same player in the same batch (unless seed-scoped to that player).
+
+SAME-LASTNAME DISAMBIGUATION (critical — read carefully):
+Some BLW teams have multiple players with the same lastname (Roses on Dallas, Marshalls on Arizona, Skibbes on New York). When the player sample shows a "⚠️ DIFFERENT PLAYER from [name]" tag, the two players are SEPARATE PEOPLE — their stats are completely independent. NEVER:
+- Refer to either by lastname alone ("Skibbe broke out" — wrong, ambiguous).
+- Attribute one's stats to the other.
+- Treat them as the same player across two ideas.
+ALWAYS use FIRST + LAST name (and jersey number if available) when writing about either. If you reference one in a stat pill or caption, double-check that the number you cite comes from THAT name's row in the player sample, not the sibling's.
 
 CREATIVE LEAP — ONE-SHOT EXAMPLE:
 

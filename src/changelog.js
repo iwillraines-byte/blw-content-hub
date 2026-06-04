@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.8.15',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'AI stops conflating same-lastname players (Sam Skibbe getting Gus Skibbe\'s stats)',
+    items: [
+      'Reported: content ideas about Sam Skibbe (NYG) were generating with Gus Skibbe\'s stats. Same pattern would hit any same-lastname pair on a team — Roses on DAL, Marshalls on AZS, Lees on LV.',
+      'Root cause: the AI prompt fed both Skibbes\' stat rows in the same player sample with no anti-conflation rule. When the model picked an angle on "Sam Skibbe", it could pull numbers from the sibling row because lastname alone wasn\'t a unique key inside the prompt context.',
+      'Fix at the data layer: api/ideas.js now precomputes a Set of "ambiguous" (team, lastname) keys across the full context (not just the sample), and tags each ambiguous stat line with an explicit "⚠️ DIFFERENT PLAYER from [other name] (same lastname, same team — never conflate)" suffix. The warning carries the OTHER player\'s full name(s) so the model sees exactly who NOT to confuse them with.',
+      'Fix at the prompt layer: new SAME-LASTNAME DISAMBIGUATION section in the system prompt that names the known pairs (Roses/Marshalls/Skibbes), bans lastname-only references for tagged rows, requires first+last+jersey when writing about either, and tells the model to cross-check stat numbers against the correct row.',
+      'Captions endpoint untouched — it doesn\'t use the same stat-sampling pattern, so it wasn\'t affected by the conflation vector.',
+    ],
+  },
+  {
     version: '4.8.14',
     date: '2026-05-17',
     kind: 'patch',
