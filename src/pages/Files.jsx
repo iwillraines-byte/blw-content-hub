@@ -1069,7 +1069,13 @@ export default function Files() {
       if (!tokens.every(t => haystack.includes(t))) return false;
     }
     return true;
-  });
+  })
+  // v4.8.16: sort by most-recently-uploaded first. createdAt is the
+  // canonical upload timestamp (ms epoch) on every record going back
+  // to v4.2; falls back to 0 for any legacy record without it, which
+  // sorts those to the end. Stable across re-renders because the
+  // upstream allDisplayFiles array has stable ids.
+  .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   const scopeCounts = {
     all:     allDisplayFiles.length,

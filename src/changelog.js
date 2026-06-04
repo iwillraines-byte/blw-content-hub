@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '4.8.16',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Files grid sorts by most recently uploaded',
+    items: [
+      'Files page tagged-grid now sorts by createdAt descending — newest uploads at the top. Pre-fix the order was whatever IndexedDB returned (insertion order, basically random after re-indexing).',
+      'Legacy records without a createdAt timestamp sort to the end (treated as createdAt=0). Going forward, every saveMedia / saveOverlay / saveEffect stamps a Date.now() ms epoch.',
+    ],
+  },
+  {
     version: '4.8.15',
     date: '2026-05-17',
     kind: 'patch',
