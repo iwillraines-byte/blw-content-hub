@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.8.13',
+    date: '2026-05-17',
+    kind: 'patch',
+    summary: 'Birthdates off-by-one for every Eastern-time user (UTC parse bug)',
+    items: [
+      'Reported: "a ton of athlete birthdays are wrong by like 1 day." Classic UTC date-string parse bug.',
+      'Root cause: formatBirthdate used `new Date("2003-05-12")` which JS parses as 2003-05-12T00:00:00Z (UTC midnight). toLocaleDateString then shifts that into the user\'s local time zone — for Eastern (UTC-4 during DST), midnight UTC becomes 8pm on the previous day local. So 1972 birthdates all rendered as 1971-12-31 in extreme cases, and every birthdate shifted back by one day in normal cases.',
+      'Fix: split the YYYY-MM-DD string and construct the Date via the (year, month-1, day) constructor — that creates a local-midnight Date that doesn\'t shift on display. Pacific / Mountain / Central / Eastern users now all see the correct day.',
+      'Underlying data is untouched (it was always correct in the database). Refresh + every birthdate display corrects itself.',
+    ],
+  },
+  {
     version: '4.8.12',
     date: '2026-05-17',
     kind: 'patch',

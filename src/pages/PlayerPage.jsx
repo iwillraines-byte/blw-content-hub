@@ -235,7 +235,24 @@ function formatHeight(totalInches) {
 function formatBirthdate(iso) {
   if (!iso) return null;
   try {
-    const d = new Date(iso);
+    // v4.8.13: classic UTC-parse bug. `new Date('2003-05-12')` parses
+    // a date-only ISO string as UTC midnight. When toLocaleDateString
+    // formats that, it shifts into the user's local time zone — for
+    // Eastern (UTC-4 in DST), 2003-05-12T00:00:00Z becomes
+    // 2003-05-11T20:00:00-04:00 → "5/11/2003". Every Eastern-time user
+    // saw every birthdate one day early.
+    //
+    // Fix: split the YYYY-MM-DD string and construct a Date in LOCAL
+    // time so no timezone shift happens. Fall back to the original
+    // parser if the string isn't the expected shape (e.g. a full
+    // ISO with time component).
+    let d;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso).trim());
+    if (m) {
+      d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    } else {
+      d = new Date(iso);
+    }
     if (Number.isNaN(d.getTime())) return null;
     const age = Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
     return `${d.toLocaleDateString('en-US')}${age ? ` (${age})` : ''}`;
