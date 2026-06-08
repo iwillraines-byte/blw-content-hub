@@ -752,7 +752,7 @@ function AccessDenied({ what }) {
 // signed in but has NO profile row (migration 003 hasn't run), route to
 // /settings so the in-page ProfileNotFound card can surface the fix.
 function HomeRedirect() {
-  const { role, user, profileLoading, isConfigured } = useAuth();
+  const { role, user, profileLoading, profileError, isConfigured } = useAuth();
   if (!isConfigured) return <Navigate to="/dashboard" replace />;
   if (profileLoading) {
     return (
@@ -761,6 +761,9 @@ function HomeRedirect() {
       </div>
     );
   }
+  // The read FAILED (error/timeout) — not the same as "no profile row". Show a
+  // retry screen, never the destructive "Profile setup required" card.
+  if (user && !role && profileError) return <ProfileLoadError />;
   if (user && !role) return <ProfileNotFound />;
   // v4.8.11: athletes default to /dashboard (was /my-stats). The
   // "My Team" sidebar item + dedicated /my-stats page were redundant
@@ -775,7 +778,7 @@ function HomeRedirect() {
 // Route gate — wraps a child in an AccessDenied shell if the current role
 // isn't allowed. Used for athlete-hidden routes like /files and /requests.
 function RequireRole({ roles, what, children }) {
-  const { role, isConfigured, profileLoading, user } = useAuth();
+  const { role, isConfigured, profileLoading, profileError, user } = useAuth();
   // Dev without Supabase: show everything.
   if (!isConfigured) return children;
   // Actively loading the profile — render a tiny spinner so the page isn't
@@ -787,13 +790,68 @@ function RequireRole({ roles, what, children }) {
       </div>
     );
   }
-  // Signed in but the profile couldn't be loaded (migration 003 hasn't run,
-  // or the trigger didn't fire for this user). Give them a clear message
-  // instead of a silent-null "page is blank" state.
+  // The read FAILED (error/timeout) — show a retry screen, not the destructive
+  // "Profile setup required" card (which implies the DB row is genuinely gone).
+  if (user && !role && profileError) return <ProfileLoadError />;
+  // Signed in but the profile genuinely has no row (fetch succeeded, empty).
   if (user && !role) return <ProfileNotFound />;
   if (!role) return null;
   if (!roles.includes(role)) return <AccessDenied what={what} />;
   return children;
+}
+
+// Shown when the user is signed in but the profile READ failed (network /
+// Supabase blip / timeout) — NOT when the row is genuinely missing. This is
+// non-destructive: it never tells the user to run SQL or implies their account
+// is gone. Retry re-runs the fetch; Sign out forces a fresh session.
+function ProfileLoadError() {
+  const { refreshProfile, signOut, profileLoading, user } = useAuth();
+  return (
+    <div style={{
+      maxWidth: 520, margin: '60px auto', padding: 32, textAlign: 'center',
+      background: colors.white, borderRadius: radius.lg,
+      border: `1px solid ${colors.borderLight}`,
+      fontFamily: fonts.body, color: colors.text,
+    }}>
+      <div style={{ fontSize: 34, marginBottom: 8 }}>🔌</div>
+      <h1 style={{ fontFamily: fonts.heading, fontSize: 24, margin: 0, letterSpacing: 1, fontWeight: 400 }}>
+        Couldn’t reach the server
+      </h1>
+      <p style={{ fontSize: 14, color: colors.textSecondary, margin: '10px 0 20px', lineHeight: 1.6 }}>
+        We couldn’t load your profile just now — usually a brief network or
+        Supabase hiccup. Your account and access are fine; nothing has changed.
+      </p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => refreshProfile()}
+          disabled={profileLoading}
+          style={{
+            background: colors.red, color: '#fff', border: 'none',
+            borderRadius: radius.sm, padding: '9px 20px', cursor: profileLoading ? 'default' : 'pointer',
+            fontFamily: fonts.condensed, fontSize: 13, fontWeight: 800, letterSpacing: 0.5,
+            opacity: profileLoading ? 0.6 : 1,
+          }}
+        >
+          {profileLoading ? 'Retrying…' : 'Retry'}
+        </button>
+        <button
+          onClick={() => signOut()}
+          style={{
+            background: colors.bg, color: colors.textSecondary, border: `1px solid ${colors.border}`,
+            borderRadius: radius.sm, padding: '9px 20px', cursor: 'pointer',
+            fontFamily: fonts.condensed, fontSize: 13, fontWeight: 700, letterSpacing: 0.5,
+          }}
+        >
+          Sign out &amp; back in
+        </button>
+      </div>
+      {user?.email && (
+        <p style={{ fontSize: 11, color: colors.textMuted, marginTop: 16 }}>
+          Signed in as {user.email}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // Shown when the user is signed in but has no profile row. Tells them
@@ -866,9 +924,12 @@ function AuthLoadingSplash() {
 // has no profile row (migration 003 not run OR auto-create trigger didn't
 // fire). Self-dismissing once the profile appears.
 function ProfileSetupBanner() {
-  const { user, role, profileLoading, isConfigured } = useAuth();
+  const { user, role, profileLoading, profileError, isConfigured } = useAuth();
   if (!isConfigured || profileLoading) return null;
   if (!user || role) return null;
+  // Don't show the "run db/003 SQL" banner when the profile READ just failed —
+  // that's a connection blip, not a missing row. The retry screen covers it.
+  if (profileError) return null;
   return (
     <div style={{
       background: '#FEF3C7', color: '#92400E',

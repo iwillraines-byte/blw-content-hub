@@ -60,6 +60,7 @@ const AuthContext = createContext({
   setViewAs: () => {},
   loading: true,
   profileLoading: false,
+  profileError: false,
   signOut: async () => {},
   refreshProfile: async () => {},
   isConfigured: false,
@@ -138,6 +139,10 @@ export function AuthProvider({ children }) {
   // on a hard refresh before Supabase restores the session from storage.
   const [loading, setLoading] = useState(supabaseConfigured);
   const [profileLoading, setProfileLoading] = useState(false);
+  // True when the profile READ failed (error/timeout) after retries — distinct
+  // from "fetch succeeded but found no row." Gates a non-destructive retry
+  // screen instead of the "Profile setup required" card.
+  const [profileError, setProfileError] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -169,36 +174,39 @@ export function AuthProvider({ children }) {
   // keep the same user id so they don't trigger a re-fetch.
   const userId = session?.user?.id || null;
   useEffect(() => {
-    if (!userId) { setProfile(null); return; }
+    if (!userId) { setProfile(null); setProfileError(false); return; }
     let cancelled = false;
     let attempt = 0;
     setProfileLoading(true);
-    // Race each fetch against a hard timeout so a hung Supabase request
-    // (the query has no built-in timeout) can never leave the whole app
-    // stuck on "Loading your profile…" forever. Retry a few times with
-    // backoff to ride out a transient Cloudflare/Supabase blip, then stop
-    // the spinner so the user always reaches a usable screen.
+    setProfileError(false);
+    // Each attempt races fetchProfile against a GENEROUS 30s timeout. The prior
+    // 12s timeout was too aggressive: Supabase has occasionally taken ~65s on a
+    // cold/refresh handshake, so 12s × retries aborted a slow-but-working load
+    // and dumped the user onto the scary "Profile setup required" screen. 30s
+    // rides out normal slowness; a genuine hang escapes to the retry screen.
     const attemptLoad = () => {
       attempt += 1;
       Promise.race([
         fetchProfile(userId),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('profile-fetch-timeout')), 12000)),
+          setTimeout(() => reject(new Error('profile-fetch-timeout')), 30000)),
       ]).then(p => {
         if (cancelled) return;
-        setProfile(p);
+        setProfile(p);          // row, OR a genuine null (real "no profile")
+        setProfileError(false);
         setProfileLoading(false);
       }).catch(err => {
         if (cancelled) return;
         console.warn(`[auth] profile load attempt ${attempt} failed:`, err?.message || err);
-        if (attempt < 4) {
+        if (attempt < 3) {
           setTimeout(attemptLoad, 1500 * attempt);
         } else {
-          // Give up gracefully rather than spin forever. We do NOT null an
-          // existing profile, so a transient blip can't strip a signed-in
-          // admin of their permissions; on a cold load with no profile yet,
-          // the app falls through to its signed-in-but-no-profile path,
-          // which the user can retry with a refresh.
+          // Exhausted retries. Flag an ERROR (distinct from "fetch succeeded
+          // with no row") so the app shows a non-destructive "couldn't reach
+          // the server — retry" screen, NOT the "Profile setup required" card.
+          // Never null an existing profile, so a blip can't strip a signed-in
+          // user mid-session.
+          setProfileError(true);
           setProfileLoading(false);
         }
       });
@@ -275,13 +283,17 @@ export function AuthProvider({ children }) {
   const refreshProfile = useCallback(async () => {
     if (!userId) return;
     setProfileLoading(true);
+    setProfileError(false);
     try {
       const p = await fetchProfile(userId);
       setProfile(p);
+      setProfileError(false);
     } catch (err) {
       // Keep the existing profile on a transient failure rather than nulling
-      // it (which would bounce the user to the setup screen mid-session).
+      // it (which would bounce the user to the setup screen mid-session), and
+      // flag the error so the retry screen shows instead of "setup required".
       console.warn('[auth] refreshProfile failed', err?.message || err);
+      setProfileError(true);
     } finally {
       setProfileLoading(false);
     }
@@ -352,6 +364,7 @@ export function AuthProvider({ children }) {
     setViewAs,
     loading,
     profileLoading,
+    profileError,
     signOut,
     refreshProfile,
     isConfigured: supabaseConfigured,

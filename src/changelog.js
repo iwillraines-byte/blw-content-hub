@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.9.5',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Fix: slow Supabase login no longer dumps you on the "Profile setup required" screen',
+    items: [
+      'Regression from 4.9.2: the profile-load watchdog timed out each attempt at 12s and gave up after 4 tries, landing on profile=null → the scary "Profile setup required" card. But Supabase has occasionally taken ~65s on a cold handshake, so a slow-BUT-WORKING login was being aborted and mislabeled as "no account".',
+      'Timeout raised 12s → 30s per attempt (rides out normal slowness), retries trimmed to 3.',
+      'New: a failed profile READ (error/timeout) is now tracked separately from "fetch succeeded with no row". A failed read shows a non-destructive "Couldn\'t reach the server — Retry / Sign out" screen; the "Profile setup required" card (with the run-this-SQL steps) only appears when the database genuinely has no profile row. The top "run db/003" banner is likewise suppressed during a connection error.',
+      'An existing profile is never nulled on a blip, so a momentary failure can\'t strip a signed-in user of their role mid-session.',
+    ],
+  },
+  {
     version: '4.9.4',
     date: '2026-06-08',
     kind: 'minor',
