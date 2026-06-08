@@ -17,6 +17,14 @@ import { percentileFor } from '../percentile-bubble';
 import { authedFetch } from '../authed-fetch';
 import { PageDropZone } from '../page-drop-zone';
 
+// 1 → "1st", 2 → "2nd", 3 → "3rd", 4 → "4th", 11 → "11th", 21 → "21st".
+function ordinal(n) {
+  if (n == null) return '';
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
 // v4.5.20: Team media grid with a 2-row default cap and "Show all"
 // expand. Used on the Recent player media section so 60-photo
 // teams don't dominate the page on first paint.
@@ -789,8 +797,8 @@ export default function TeamPage() {
                     padding: '3px 10px', borderRadius: 999,
                     fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
                   }}>
-                    <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>#{liveTeam.rank}</span>
-                    <span>STANDING</span>
+                    <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>{ordinal(liveTeam.rank)}</span>
+                    <span>IN BLW</span>
                   </span>
                 )}
                 {/* v4.5.20: Always render the IG / FB / TikTok chips —

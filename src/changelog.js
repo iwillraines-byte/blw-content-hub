@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.9.3',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Standings order now matches prowiffleball.com exactly; team-page badge reads "Nth in BLW"',
+    items: [
+      'Standings now rank ALL teams together by win pct → run differential → team id, mirroring the official prowiffleball.com standings. The visible change: a winless-but-played team (Atlanta, 0-4, -10) now sits LAST, below the still-0-0 teams (which sit at 0 run diff), and the 0-0 group orders by team id (AZ, NY, DAL, LV, CHI) — exactly as prowiffle shows it. Verified row-for-row against the live games feed.',
+      'Every team now carries a numeric rank (the 0-0 teams show .000 / 0 like prowiffle, instead of an em-dash).',
+      'Team page badge: "#N STANDING" → "Nth in BLW" (1st, 2nd, 3rd, … 10th) — clearer than a bare "#N standing".',
+    ],
+  },
+  {
     version: '4.9.2',
     date: '2026-06-08',
     kind: 'patch',

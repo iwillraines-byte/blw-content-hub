@@ -540,7 +540,7 @@ export const SEASON_START = '2026-06-07';
 // never appears to outrank a team that's earned a win.
 export function computeStandings(games) {
   const acc = new Map();
-  for (const t of TEAMS) acc.set(t.id, { teamId: t.id, w: 0, l: 0, gp: 0, rf: 0, ra: 0 });
+  for (const t of TEAMS) acc.set(t.id, { teamId: t.id, apiTeamId: t.apiTeamId, w: 0, l: 0, gp: 0, rf: 0, ra: 0 });
 
   for (const g of (games || [])) {
     if (g.status !== 'SUBMITTED') continue;
@@ -562,18 +562,23 @@ export function computeStandings(games) {
     return {
       ...r, pctNum, diffNum,
       record: `${r.w}-${r.l}`,
-      pct: dec > 0 ? pctNum.toFixed(3).replace(/^0/, '') : '—',
-      diff: r.gp === 0 ? '—' : (diffNum > 0 ? `+${diffNum}` : `${diffNum}`),
+      pct: pctNum.toFixed(3).replace(/^0/, ''),     // ".000", ".250", "1.000"
+      diff: diffNum > 0 ? `+${diffNum}` : `${diffNum}`, // "+10", "0", "-10"
     };
   });
 
-  const played = rows.filter(r => r.gp > 0).sort((a, b) =>
-    b.pctNum - a.pctNum || b.diffNum - a.diffNum || a.teamId.localeCompare(b.teamId));
-  const unplayed = rows.filter(r => r.gp === 0).sort((a, b) => a.teamId.localeCompare(b.teamId));
-  played.forEach((r, i) => { r.rank = i + 1; });
-  unplayed.forEach(r => { r.rank = null; });
+  // Rank ALL teams together to mirror the official prowiffleball.com standings:
+  // win pct desc → run differential desc → apiTeamId asc as the final tiebreak.
+  // This is what puts winless-but-played Atlanta (0-4, -10) BELOW the still-0-0
+  // teams (which sit at 0 diff), and orders the 0-0 group by team id exactly as
+  // prowiffle does (AZ, NY, DAL, LV, CHI). Every team gets a numeric rank.
+  const ordered = rows.sort((a, b) =>
+    b.pctNum - a.pctNum ||
+    b.diffNum - a.diffNum ||
+    (a.apiTeamId || 0) - (b.apiTeamId || 0)
+  );
+  ordered.forEach((r, i) => { r.rank = i + 1; });
 
-  const ordered = [...played, ...unplayed];
   const map = new Map(ordered.map(r => [r.teamId, r]));
   map.ordered = ordered;
   return map;
