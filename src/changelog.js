@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.9.2',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Auth no longer bricks on a transient Supabase blip (stuck "Loading your profile…" / false "Profile setup required")',
+    items: [
+      'Reported: the app hung on "Loading your profile…" and, after a refresh, showed master_admin a "Profile setup required" screen — even though the profile row was never touched. No database or role changes were made; this was purely a client-side read-resilience bug.',
+      'Root cause 1 (the hang): the profile fetch is a Supabase query with no timeout. If the request hung (Cloudflare/Supabase blip), setProfileLoading(false) never ran and the app spun forever. Fix: the profile load now races each attempt against a 12s timeout and retries up to 4× with backoff before giving up, so it always reaches a usable screen.',
+      'Root cause 2 (the false setup screen): fetchProfile returned null on ANY error, and the app cannot distinguish "read failed" from "no row exists" — so a transient error rendered a fully-provisioned admin as un-provisioned. Fix: fetchProfile now THROWS on a read error (→ retry) and only returns null on a genuine empty result (→ legitimate setup screen for a real new user).',
+      'On give-up, the app never nulls an existing profile, so a momentary blip can no longer strip a signed-in user of their role mid-session. refreshProfile is now also wrapped so a throw can\'t leave it stuck loading.',
+    ],
+  },
+  {
     version: '4.9.1',
     date: '2026-06-08',
     kind: 'patch',

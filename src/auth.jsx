@@ -102,9 +102,15 @@ async function fetchProfile(userId) {
       error = fallback.error;
     }
     if (error) {
-      console.warn('[auth] profile fetch failed', error.message);
-      return null;
+      // A read error (network / RLS / transient Supabase blip) is NOT the
+      // same as "no profile row exists." Returning null here is what showed a
+      // fully-provisioned master_admin the "Profile setup required" screen
+      // over a momentary hiccup. THROW instead, so the caller's retry/backoff
+      // runs and a transient error never strips a user of their profile.
+      throw new Error(`profile fetch failed: ${error.message}`);
     }
+    // Genuine empty result (query succeeded, no row) — this IS a real
+    // un-provisioned account, so returning null (→ setup screen) is correct.
     if (!data) return null;
     // Demote when the elevated role has expired. Keep the original role
     // available as expiredRole so the UI can render an "access expired"
@@ -117,8 +123,11 @@ async function fetchProfile(userId) {
     }
     return data;
   } catch (err) {
+    // Re-throw so the caller (the retrying profile effect) can distinguish a
+    // failed read from a genuine empty result. Swallowing to null here was the
+    // bug that surfaced "Profile setup required" on a transient failure.
     console.warn('[auth] profile fetch threw', err);
-    return null;
+    throw err;
   }
 }
 
@@ -161,11 +170,41 @@ export function AuthProvider({ children }) {
   const userId = session?.user?.id || null;
   useEffect(() => {
     if (!userId) { setProfile(null); return; }
+    let cancelled = false;
+    let attempt = 0;
     setProfileLoading(true);
-    fetchProfile(userId).then(p => {
-      setProfile(p);
-      setProfileLoading(false);
-    });
+    // Race each fetch against a hard timeout so a hung Supabase request
+    // (the query has no built-in timeout) can never leave the whole app
+    // stuck on "Loading your profile…" forever. Retry a few times with
+    // backoff to ride out a transient Cloudflare/Supabase blip, then stop
+    // the spinner so the user always reaches a usable screen.
+    const attemptLoad = () => {
+      attempt += 1;
+      Promise.race([
+        fetchProfile(userId),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('profile-fetch-timeout')), 12000)),
+      ]).then(p => {
+        if (cancelled) return;
+        setProfile(p);
+        setProfileLoading(false);
+      }).catch(err => {
+        if (cancelled) return;
+        console.warn(`[auth] profile load attempt ${attempt} failed:`, err?.message || err);
+        if (attempt < 4) {
+          setTimeout(attemptLoad, 1500 * attempt);
+        } else {
+          // Give up gracefully rather than spin forever. We do NOT null an
+          // existing profile, so a transient blip can't strip a signed-in
+          // admin of their permissions; on a cold load with no profile yet,
+          // the app falls through to its signed-in-but-no-profile path,
+          // which the user can retry with a refresh.
+          setProfileLoading(false);
+        }
+      });
+    };
+    attemptLoad();
+    return () => { cancelled = true; };
   }, [userId]);
 
   const signOut = useCallback(async () => {
@@ -236,9 +275,16 @@ export function AuthProvider({ children }) {
   const refreshProfile = useCallback(async () => {
     if (!userId) return;
     setProfileLoading(true);
-    const p = await fetchProfile(userId);
-    setProfile(p);
-    setProfileLoading(false);
+    try {
+      const p = await fetchProfile(userId);
+      setProfile(p);
+    } catch (err) {
+      // Keep the existing profile on a transient failure rather than nulling
+      // it (which would bounce the user to the setup screen mid-session).
+      console.warn('[auth] refreshProfile failed', err?.message || err);
+    } finally {
+      setProfileLoading(false);
+    }
   }, [userId]);
 
   // ─── View-as override state ─────────────────────────────────────────────
