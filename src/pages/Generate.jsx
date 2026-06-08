@@ -353,6 +353,12 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
         .reduce((best, f) => (best == null || f.fontSize > best.fontSize ? f : best), null)?.key)
     : null;
   ctx.clearRect(0, 0, w, h);
+  // Max-quality resampling for every drawImage below (background photo,
+  // split-screen halves, overlay chrome) so HD exports stay crisp instead of
+  // soft — the canvas default smoothing tier is lower and was contributing to
+  // the "blurry export" look, especially on the 2x export canvas.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   const teamColor = team?.color;
 
   // v4.5.67: Split-screen mode (blank-slate only) — stack two photos

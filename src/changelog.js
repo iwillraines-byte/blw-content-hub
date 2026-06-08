@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.9.4',
+    date: '2026-06-08',
+    kind: 'minor',
+    summary: 'Files: smarter search + sort dropdown · sharper exports · new Texture & Clarity effects',
+    items: [
+      'Files search now matches across filename, player, team, jersey number, asset type, and variant — not just the filename. (The metadata fields the search referenced were never actually populated on the file objects, so search only ever hit the filename.) Matching is substring-anywhere, so "skib" finds Skibbe even mid-filename.',
+      'Files sort dropdown: Newest / Oldest / Largest / Smallest / Team (A–Z) / Player (A–Z) / Filename (A–Z). The "newest first" default also now actually works — it previously sorted on a createdAt field that wasn\'t present on the file objects, so nothing moved.',
+      'Export quality: upload compression raised from 1920px / 0.85 to 2560px / 0.92, and every canvas draw now uses high-quality resampling. This fixes soft/noisy exports — a 1920px stored photo used to get UPSCALED for a 2x HD export and the 0.85 JPEG artifacts showed. New uploads keep enough resolution to render 2x exports without enlarging. (Existing photos already stored at the old ceiling can be re-uploaded for the full benefit.)',
+      'Effects: removed Bottom Fade and Light Leak. Added Texture (tight unsharp mask — crisp fine detail like fabric, stitching, grass) and Clarity (wide unsharp mask — punchy mid-tone local contrast). Both double as a fix for soft photos. Saved designs that used the removed effects simply drop them.',
+    ],
+  },
+  {
     version: '4.9.3',
     date: '2026-06-08',
     kind: 'patch',

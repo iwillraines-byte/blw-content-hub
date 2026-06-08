@@ -17,8 +17,14 @@
 // Caller gets back { blob, width, height, originalBytes, finalBytes,
 //   skippedReason } so the UI can show savings and explain pass-throughs.
 
-const DEFAULT_MAX_DIMENSION = 1920;
-const DEFAULT_QUALITY = 0.85;
+// v4.9.4: raised from 1920px / 0.85 to 2560px / 0.92. The old ceiling was
+// the source of soft/noisy exports: a 1920px stored photo had to UPSCALE for
+// a 2x HD export (a 1080x1920 story renders at 2160px tall), and 0.85 JPEG
+// left visible artifacts that the upscale amplified. 2560px covers every 2x
+// export without enlarging, and 0.92 is near-visually-lossless. Files that end
+// up too big for the 4MB upload payload are still caught by compressToFitUploadLimit.
+const DEFAULT_MAX_DIMENSION = 2560;
+const DEFAULT_QUALITY = 0.92;
 // Bytes below which compression is a waste — encoding overhead can
 // actually grow tiny files.
 const SKIP_BELOW_BYTES = 200 * 1024; // 200 KB
@@ -112,6 +118,10 @@ export async function compressImageBlob(blob, opts = {}) {
     canvas.width = targetW; canvas.height = targetH;
     ctx = canvas.getContext('2d');
   }
+  // High-quality resampling so the downscale stays crisp instead of aliasing
+  // into softness/jaggies (the browser default smoothing tier is lower).
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(bitmap, 0, 0, targetW, targetH);
   if (bitmap.close) bitmap.close(); // release ImageBitmap
 

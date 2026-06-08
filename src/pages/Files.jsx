@@ -890,6 +890,7 @@ export default function Files() {
   // 'league' surfaces just BLW-wide assets so league-event content
   // is one click away regardless of which team's archive you're in.
   const [scopeFilter, setScopeFilter] = useState('all'); // all | player | team | league
+  const [sortBy, setSortBy] = useState('recent'); // recent | oldest | largest | smallest | team | player | name
   const [storedMedia, setStoredMedia] = useState([]);
   const [thumbUrls, setThumbUrls] = useState({});
   const [dragging, setDragging] = useState(false);
@@ -1042,8 +1043,17 @@ export default function Files() {
 
   const allDisplayFiles = tagged.map(m => ({
     id: m.id, name: m.name, team: m.team, type: m.assetType,
+    // Rich metadata carried through so search matches on player / jersey /
+    // type / variant (not just the filename) and the sort dropdown can order
+    // by size, date, team, or player. Previously these were referenced by the
+    // search haystack + sort but never populated — so search only hit the
+    // filename and the "most recent" sort was a no-op (createdAt was absent).
+    player: m.player, firstInitial: m.firstInitial, num: m.num,
+    assetType: m.assetType, variant: m.variant,
     source: m.source || 'local',
+    sizeBytes: m.blob ? m.blob.size : 0,
     size: m.blob ? `${(m.blob.size / 1024 / 1024).toFixed(1)} MB` : '',
+    createdAt: m.createdAt || 0,
     thumbUrl: thumbUrls[m.id],
     // Scope inferred at read time so legacy records (no scope field
     // before this feature shipped) bucket correctly. Reads the team
@@ -1063,19 +1073,28 @@ export default function Files() {
       // "jaso headshot", "lan hype", "jeter ace" all match the
       // intuitive results.
       const haystack = [
-        f.name, f.team, f.player, f.firstInitial, f.assetType, f.scope, f.type, f.variant,
+        f.name, f.team, f.player, f.firstInitial, f.num, f.assetType, f.scope, f.type, f.variant,
       ].filter(Boolean).join(' ').toLowerCase();
       const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
       if (!tokens.every(t => haystack.includes(t))) return false;
     }
     return true;
   })
-  // v4.8.16: sort by most-recently-uploaded first. createdAt is the
-  // canonical upload timestamp (ms epoch) on every record going back
-  // to v4.2; falls back to 0 for any legacy record without it, which
-  // sorts those to the end. Stable across re-renders because the
-  // upstream allDisplayFiles array has stable ids.
-  .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  // Sort by the active dropdown choice. createdAt is the upload timestamp
+  // (ms epoch); sizeBytes is the raw blob size. Legacy records missing a
+  // field fall back to 0 / '' so they sort to the end / start consistently.
+  .sort((a, b) => {
+    switch (sortBy) {
+      case 'oldest':   return (a.createdAt || 0) - (b.createdAt || 0);
+      case 'largest':  return (b.sizeBytes || 0) - (a.sizeBytes || 0);
+      case 'smallest': return (a.sizeBytes || 0) - (b.sizeBytes || 0);
+      case 'team':     return (a.team || '').localeCompare(b.team || '') || (a.name || '').localeCompare(b.name || '');
+      case 'player':   return (a.player || a.name || '').localeCompare(b.player || b.name || '') || (a.name || '').localeCompare(b.name || '');
+      case 'name':     return (a.name || '').localeCompare(b.name || '');
+      case 'recent':
+      default:         return (b.createdAt || 0) - (a.createdAt || 0);
+    }
+  });
 
   const scopeCounts = {
     all:     allDisplayFiles.length,
@@ -1920,25 +1939,48 @@ export default function Files() {
             }}>{t.label}</button>
           ))}
         </div>
-        <input type="text" placeholder="Search by filename, team, or player..." value={search}
+        <input type="text" placeholder="Search by filename, player, team, number, or type…" value={search}
           onChange={e => setSearch(e.target.value)} style={inputStyle} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.condensed }}>
             {filtered.length} tagged file{filtered.length !== 1 ? 's' : ''} found
           </div>
-          <button
-            onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
-            style={{
-              background: selectMode ? colors.redLight : colors.bg,
-              border: `1px solid ${selectMode ? colors.redBorder : colors.border}`,
-              color: selectMode ? colors.red : colors.textSecondary,
-              borderRadius: radius.sm, padding: '4px 12px',
-              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
-              cursor: 'pointer',
-            }}
-          >
-            {selectMode ? '✕ EXIT SELECT' : '☑ SELECT MULTIPLE'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: colors.textMuted, textTransform: 'uppercase' }}>
+              Sort
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                title="Sort files"
+                style={{
+                  ...inputStyle, width: 'auto', padding: '4px 24px 4px 8px',
+                  fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                  letterSpacing: 0.3, color: colors.textSecondary, cursor: 'pointer',
+                }}
+              >
+                <option value="recent">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="largest">Largest size</option>
+                <option value="smallest">Smallest size</option>
+                <option value="team">Team (A–Z)</option>
+                <option value="player">Player (A–Z)</option>
+                <option value="name">Filename (A–Z)</option>
+              </select>
+            </label>
+            <button
+              onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
+              style={{
+                background: selectMode ? colors.redLight : colors.bg,
+                border: `1px solid ${selectMode ? colors.redBorder : colors.border}`,
+                color: selectMode ? colors.red : colors.textSecondary,
+                borderRadius: radius.sm, padding: '4px 12px',
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+                cursor: 'pointer',
+              }}
+            >
+              {selectMode ? '✕ EXIT SELECT' : '☑ SELECT MULTIPLE'}
+            </button>
+          </div>
         </div>
       </Card>
 

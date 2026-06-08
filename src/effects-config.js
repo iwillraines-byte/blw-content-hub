@@ -31,6 +31,47 @@ function hexToRgb(hex) {
   return { r: parseInt(m[0], 16), g: parseInt(m[1], 16), b: parseInt(m[2], 16) };
 }
 
+// Unsharp mask — the engine behind both Clarity and Texture. Snapshots the
+// pixels already drawn (the background photo, since effects render before the
+// overlay), builds a Gaussian-blurred copy, and adds the high-frequency
+// difference back: out = src + (src - blur) * amount. A LARGE blur radius
+// boosts mid-tone local contrast (Clarity / punch); a SMALL radius sharpens
+// fine detail (Texture / crispness). Operates in DEVICE pixels (ctx.canvas.*)
+// so it covers the whole frame even on the 2x-scaled export canvas, where the
+// 2D transform would otherwise make a logical-width getImageData grab only a
+// corner. No-ops on a tainted canvas (cross-origin photo) rather than throwing.
+function applyUnsharp(ctx, radius, amount) {
+  if (amount <= 0) return;
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  if (!w || !h) return;
+  let src;
+  try { src = ctx.getImageData(0, 0, w, h); }
+  catch { return; } // tainted canvas — skip silently
+  // Blurred copy via the GPU-accelerated canvas blur filter.
+  const blurCanvas = document.createElement('canvas');
+  blurCanvas.width = w; blurCanvas.height = h;
+  const bctx = blurCanvas.getContext('2d');
+  if (!bctx) return;
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = w; srcCanvas.height = h;
+  srcCanvas.getContext('2d').putImageData(src, 0, 0);
+  bctx.filter = `blur(${radius}px)`;
+  bctx.drawImage(srcCanvas, 0, 0);
+  const blur = bctx.getImageData(0, 0, w, h).data;
+  const s = src.data;
+  const out = ctx.createImageData(w, h);
+  const d = out.data;
+  for (let i = 0; i < d.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      const detail = s[i + c] - blur[i + c];
+      const v = s[i + c] + detail * amount;
+      d[i + c] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+    d[i + 3] = s[i + 3]; // preserve alpha
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
 export const BUILT_IN_EFFECTS = [
   {
     id: 'vignette',
@@ -41,25 +82,6 @@ export const BUILT_IN_EFFECTS = [
       ctx.save();
       const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.7);
       grad.addColorStop(0, `rgba(0,0,0,0)`);
-      grad.addColorStop(1, `rgba(0,0,0,${opacity})`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
-    },
-  },
-  // v4.5.61: Top Fade removed per master direction — nobody used it and
-  // the bottom-fade + team-fade cover the same use cases without
-  // shadowing the headline area.
-  {
-    id: 'gradient-bottom',
-    label: 'Bottom Fade',
-    icon: '△',
-    description: 'Dark gradient from bottom',
-    render(ctx, w, h, opacity) {
-      ctx.save();
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, `rgba(0,0,0,0)`);
-      grad.addColorStop(0.5, `rgba(0,0,0,${opacity * 0.3})`);
       grad.addColorStop(1, `rgba(0,0,0,${opacity})`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
@@ -81,20 +103,29 @@ export const BUILT_IN_EFFECTS = [
     },
   },
   {
-    id: 'light-leak',
-    label: 'Light Leak',
-    icon: '✦',
-    description: 'Warm orange glow corner',
+    // Lightroom-style "Texture": sharpens fine, high-frequency detail (skin,
+    // fabric weave, stitching, grass) with a tight 1px unsharp radius. Adds
+    // crispness without the haloing a heavy sharpen causes. Doubles as a fix
+    // for soft/blurry exports.
+    id: 'texture',
+    label: 'Texture',
+    icon: '▦',
+    description: 'Crisp fine detail',
     render(ctx, w, h, opacity) {
-      ctx.save();
-      const grad = ctx.createRadialGradient(w * 0.85, h * 0.15, 0, w * 0.85, h * 0.15, Math.max(w, h) * 0.6);
-      grad.addColorStop(0, `rgba(255, 165, 80, ${opacity * 0.9})`);
-      grad.addColorStop(0.4, `rgba(221, 60, 60, ${opacity * 0.3})`);
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grad;
-      ctx.globalCompositeOperation = 'screen';
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
+      applyUnsharp(ctx, 1, opacity * 0.9);
+    },
+  },
+  {
+    // Lightroom-style "Clarity": boosts mid-tone LOCAL contrast with a wide
+    // unsharp radius (scaled to the frame), giving photos punch and depth.
+    // Subtle at low slider, dramatic near 100%.
+    id: 'clarity',
+    label: 'Clarity',
+    icon: '◐',
+    description: 'Punchy local contrast',
+    render(ctx, w, h, opacity) {
+      const radius = Math.max(2, Math.round(Math.min(ctx.canvas.width, ctx.canvas.height) / 110));
+      applyUnsharp(ctx, radius, opacity * 0.7);
     },
   },
   {
