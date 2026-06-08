@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats } from '../data';
+import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats, fetchStandings, teamWithStanding } from '../data';
 import { getAllManualPlayers } from '../player-store';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
@@ -88,6 +88,11 @@ export default function ContentStudio() {
       setRecentPostsLoaded(true);
     });
   }, []);
+
+  // Live standings computed from the GSS games feed (SUBMITTED games on/after
+  // the season opener). Replaces the last-season records baked into TEAMS.
+  const [standings, setStandings] = useState(null);
+  useEffect(() => { fetchStandings().then(setStandings).catch(() => {}); }, []);
 
   // Athlete voices keyed by "{TEAM}|{LASTNAME}" so the AI can pull a
   // self-authored vibe / references / fun-facts block for any player
@@ -179,7 +184,10 @@ export default function ContentStudio() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           context: {
-            teams: TEAMS.map(t => ({ id: t.id, name: t.name, record: t.record, rank: t.rank, color: t.color, accent: t.accent })),
+            teams: TEAMS.map(t => {
+              const lt = teamWithStanding(t, standings); // live record/rank when loaded
+              return { id: t.id, name: t.name, record: lt.record, rank: lt.rank, color: t.color, accent: t.accent };
+            }),
             // Send the FULL stat tables so the API can stratify (top + mid +
             // sleeper). Server slices/randomises from this pool.
             batting: batting.slice(0, 60),
@@ -757,9 +765,12 @@ export default function ContentStudio() {
               <SectionHeading style={{ margin: 0 }}>Standings</SectionHeading>
               <Link to="/game-center" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.red, textDecoration: 'none' }}>View Full →</Link>
             </div>
-            {TEAMS.map(t => (
-              <StandingsRow key={t.id} team={t} navigate={navigate} />
-            ))}
+            {(standings?.ordered || TEAMS).map(row => {
+              const id = row.teamId || row.id;
+              return (
+                <StandingsRow key={id} team={teamWithStanding(getTeam(id), standings)} navigate={navigate} />
+              );
+            })}
           </Card>
         </div>
       </div>
@@ -1228,7 +1239,7 @@ function StandingsRow({ team, navigate }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textSecondary,
         flexShrink: 0,
-      }}>{team.rank}</span>
+      }}>{team.rank ?? '—'}</span>
       <TeamLogo teamId={team.id} size={22} rounded="square" />
       <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</span>
       {hovering ? (

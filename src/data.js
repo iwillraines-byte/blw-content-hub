@@ -95,29 +95,33 @@ export const API_CONFIG = {
   isLive: true, // Now always live — fetches from grandslamsystems.com directly
 };
 
-// ─── CACHED FALLBACK DATA (from April 15, 2026 snapshot) ────────────────────
+// ─── CACHED FALLBACK DATA ───────────────────────────────────────────────────
+// Current-season top leaders, snapshotted from the live GSS feed. Shown ONLY
+// when the API is unreachable, so a transient outage degrades to current-season
+// numbers rather than resurrecting last season's leaderboard. Refresh by
+// re-pulling /leagues/3/batting-stats + pitching-stats and re-baking the top N.
 const BATTING_FALLBACK = [
-  { rank:1, name:"Torin Roth", num:"16", team:"SDO", ops_plus:247, avg:".417", obp:".521", slg:".812", hr:0 },
-  { rank:2, name:"Tommy Hernandez", num:"18", team:"MIA", ops_plus:236, avg:".435", obp:".488", slg:".756", hr:0 },
-  { rank:3, name:"Andrew Ledet", num:"2", team:"AZS", ops_plus:200, avg:".462", obp:".521", slg:".812", hr:7 },
-  { rank:4, name:"Josh Wheeler", num:"40", team:"PHI", ops_plus:194, avg:".310", obp:".465", slg:".692", hr:0 },
-  { rank:5, name:"Logan Rose", num:"8",  team:"DAL", ops_plus:192, avg:".357", obp:".438", slg:".654", hr:0 },
-  { rank:6, name:"Dustin Staggs", num:"28", team:"LV", ops_plus:192, avg:".294", obp:".421", slg:".628", hr:0 },
-  { rank:7, name:"Brice Clark", num:"22", team:"AZS", ops_plus:177, avg:".292", obp:".452", slg:".681", hr:0 },
-  { rank:8, name:"Nick Martinez", num:"10", team:"AZS", ops_plus:174, avg:".292", obp:".412", slg:".602", hr:2 },
-  { rank:9, name:"Konnor Jaso", num:"3", team:"LAN", ops_plus:171, avg:".194", obp:".398", slg:".585", hr:2 },
-  { rank:10, name:"Brody Livingston", num:"19", team:"DAL", ops_plus:159, avg:".227", obp:".398", slg:".585", hr:1 },
+  { rank:1, name:"Mike Stiles", num:"", team:"MIA", ops_plus:325, avg:".750", obp:".857", slg:".750", hr:0 },
+  { rank:2, name:"Tommy Hernandez", num:"", team:"MIA", ops_plus:303, avg:".400", obp:".571", slg:"1.000", hr:1 },
+  { rank:3, name:"Jordan Robles", num:"", team:"LAN", ops_plus:271, avg:".273", obp:".385", slg:"1.091", hr:3 },
+  { rank:4, name:"Preston Kolm", num:"", team:"LAN", ops_plus:270, avg:".625", obp:".769", slg:".625", hr:0 },
+  { rank:5, name:"Chandler Melton", num:"", team:"PHI", ops_plus:263, avg:".600", obp:".600", slg:".800", hr:0 },
+  { rank:6, name:"Dallas Allen", num:"", team:"LAN", ops_plus:235, avg:".400", obp:".500", slg:".800", hr:0 },
+  { rank:7, name:"Jimmy Cole", num:"", team:"PHI", ops_plus:235, avg:".333", obp:".333", slg:"1.000", hr:1 },
+  { rank:8, name:"Sean Hornberger", num:"", team:"MIA", ops_plus:222, avg:".333", obp:".429", slg:".833", hr:1 },
+  { rank:9, name:"Dominic Citrowske", num:"", team:"PHI", ops_plus:211, avg:".250", obp:".250", slg:"1.000", hr:1 },
+  { rank:10, name:"Kyle Vonschleusingen", num:"", team:"BOS", ops_plus:193, avg:".364", obp:".417", slg:".727", hr:1 },
 ];
 
 const PITCHING_FALLBACK = [
-  { rank:1, name:"Myc Witty", num:"1", team:"LAN", fip:-1.85, era:"0.00", ip:"25.0", k4:"11.68", w:4, l:0 },
-  { rank:2, name:"Will Smithey", num:"5", team:"NYG", fip:-1.79, era:"0.00", ip:"19.0", k4:"10.74", w:3, l:1 },
-  { rank:3, name:"Jordan Robles", num:"8", team:"LAN", fip:-1.41, era:"0.00", ip:"30.0", k4:"9.87", w:7, l:1 },
-  { rank:4, name:"Jordan Bohnet", num:"6", team:"LAN", fip:-1.07, era:"0.00", ip:"14.0", k4:"9.43", w:2, l:1 },
-  { rank:5, name:"Konnor Jaso", num:"3", team:"LAN", fip:-0.31, era:"0.00", ip:"31.0", k4:"9.81", w:5, l:1 },
-  { rank:6, name:"Randy Dalbey", num:"13", team:"BOS", fip:-0.18, era:"0.00", ip:"36.0", k4:"9.44", w:5, l:4 },
-  { rank:7, name:"Steve Trzpis", num:"4", team:"LAN", fip:-0.02, era:"0.00", ip:"36.0", k4:"9.22", w:8, l:0 },
-  { rank:8, name:"Preston Kolm", num:"21", team:"LV",  fip:0.26, era:"0.00", ip:"17.0", k4:"10.82", w:3, l:0 },
+  { rank:1, name:"Mike Stiles", num:"", team:"MIA", fip:-2.52, era:"0.00", ip:"3.0", k4:"10.67", w:1, l:0 },
+  { rank:2, name:"Brody Livingston", num:"", team:"PHI", fip:-1.52, era:"0.00", ip:"3.0", k4:"10.67", w:1, l:0 },
+  { rank:3, name:"Jordan Robles", num:"", team:"LAN", fip:-1.19, era:"0.00", ip:"6.0", k4:"8.00", w:2, l:0 },
+  { rank:4, name:"Kyle Vonschleusingen", num:"", team:"BOS", fip:-1.19, era:"0.00", ip:"3.0", k4:"8.00", w:1, l:0 },
+  { rank:5, name:"Jimmy Cole", num:"", team:"PHI", fip:0.81, era:"1.50", ip:"4.0", k4:"10.00", w:1, l:0 },
+  { rank:6, name:"Dallas Allen", num:"", team:"LAN", fip:1.15, era:"0.00", ip:"3.0", k4:"9.33", w:1, l:0 },
+  { rank:7, name:"Cael Foreman", num:"", team:"SDO", fip:1.74, era:"1.29", ip:"4.2", k4:"11.43", w:0, l:2 },
+  { rank:8, name:"Randy Dalbey", num:"", team:"BOS", fip:2.31, era:"3.00", ip:"2.0", k4:"4.00", w:0, l:1 },
 ];
 
 // ─── DATA CACHE ─────────────────────────────────────────────────────────────
@@ -536,6 +540,112 @@ export function gamesForTeam(games, teamId) {
   return games
     .filter(g => g.home?.teamId === teamId || g.away?.teamId === teamId)
     .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
+}
+
+// ─── STANDINGS (computed live from /games) ──────────────────────────────────
+// The record/rank/pct/diff baked onto each TEAMS row is LAST season's final
+// standings — kept only as a pre-load fallback so sync consumers (search hints,
+// AI prompt context) aren't blank. Real standings compute from SUBMITTED games
+// on or after the season opener. GSS serves preseason exhibition games (Feb–Mar)
+// in the same feed, so we gate on SEASON_START to exclude them — matching the
+// game counts the GSS stats endpoint itself reports.
+export const SEASON_START = '2026-06-07';
+
+// Build W-L / pct / run-diff for every BLW team from a games array (the output
+// of fetchGames()). Only SUBMITTED games between two BLW teams on/after
+// SEASON_START count. Returns a Map keyed by teamId → standing row, with an
+// `.ordered` array (ranked) attached for table consumers. Teams that haven't
+// played yet appear at 0-0 with rank null (rendered as "—") so an unplayed team
+// never appears to outrank a team that's earned a win.
+export function computeStandings(games) {
+  const acc = new Map();
+  for (const t of TEAMS) acc.set(t.id, { teamId: t.id, w: 0, l: 0, gp: 0, rf: 0, ra: 0 });
+
+  for (const g of (games || [])) {
+    if (g.status !== 'SUBMITTED') continue;
+    const hId = g.home?.teamId, aId = g.away?.teamId;
+    if (!hId || !aId || !acc.has(hId) || !acc.has(aId)) continue; // both must be BLW
+    const date = (g.dateTime || '').slice(0, 10);
+    if (date < SEASON_START) continue;
+    const hs = Number(g.home.score), as = Number(g.away.score);
+    if (!Number.isFinite(hs) || !Number.isFinite(as)) continue;
+    const H = acc.get(hId), A = acc.get(aId);
+    H.gp++; A.gp++; H.rf += hs; H.ra += as; A.rf += as; A.ra += hs;
+    if (hs > as) { H.w++; A.l++; } else if (as > hs) { A.w++; H.l++; }
+  }
+
+  const rows = [...acc.values()].map(r => {
+    const dec = r.w + r.l;
+    const pctNum = dec > 0 ? r.w / dec : 0;
+    const diffNum = r.rf - r.ra;
+    return {
+      ...r, pctNum, diffNum,
+      record: `${r.w}-${r.l}`,
+      pct: dec > 0 ? pctNum.toFixed(3).replace(/^0/, '') : '—',
+      diff: r.gp === 0 ? '—' : (diffNum > 0 ? `+${diffNum}` : `${diffNum}`),
+    };
+  });
+
+  const played = rows.filter(r => r.gp > 0).sort((a, b) =>
+    b.pctNum - a.pctNum || b.diffNum - a.diffNum || a.teamId.localeCompare(b.teamId));
+  const unplayed = rows.filter(r => r.gp === 0).sort((a, b) => a.teamId.localeCompare(b.teamId));
+  played.forEach((r, i) => { r.rank = i + 1; });
+  unplayed.forEach(r => { r.rank = null; });
+
+  const ordered = [...played, ...unplayed];
+  const map = new Map(ordered.map(r => [r.teamId, r]));
+  map.ordered = ordered;
+  return map;
+}
+
+let _standingsCache = null;
+let _standingsFetchedAt = 0;
+
+// Cached async: fetch games then compute live standings. The Map it returns
+// carries `.ordered` (ranked rows). On feed failure, computeStandings([]) still
+// returns a valid all-0-0 map rather than throwing.
+export async function fetchStandings() {
+  if (_standingsCache && (Date.now() - _standingsFetchedAt) < CACHE_TTL) return _standingsCache;
+  const games = await fetchGames();
+  _standingsCache = computeStandings(games);
+  _standingsFetchedAt = Date.now();
+  return _standingsCache;
+}
+
+// Synchronous accessor for consumers that can't await (quick-switcher hint,
+// etc). Returns the live standing if the cache is warm, else null so the caller
+// can fall back to the team's baked record.
+export function cachedStanding(teamId) {
+  return _standingsCache ? _standingsCache.get(teamId) || null : null;
+}
+
+// Merge live standings over a team object: returns { ...team, record, pct,
+// diff, rank } using live values when available, else the team's baked
+// fallback. `standings` is the Map from computeStandings/fetchStandings.
+export function teamWithStanding(team, standings) {
+  if (!team) return team;
+  const s = standings && standings.get ? standings.get(team.id) : null;
+  if (!s) return team;
+  // Use live values verbatim — including a null rank for teams that haven't
+  // played yet, so consumers render "—" instead of last season's rank.
+  return { ...team, record: s.record, pct: s.pct, diff: s.diff, rank: s.rank };
+}
+
+// Final-score lookup keyed by `${date}T${HH:MM}` (e.g. "2026-06-07T19:45") for
+// the schedule overlay. Schedule rows store date + 24h "HH:MM"; GSS dateTime is
+// "2026-06-07T19:45:00" — slicing to 16 chars yields the same key, which
+// uniquely identifies a game even when two teams meet twice in one day.
+export function scoresByDateTime(games) {
+  const map = new Map();
+  for (const g of (games || [])) {
+    if (!g.dateTime) continue;
+    map.set(g.dateTime.slice(0, 16), {
+      homeId: g.home?.teamId, homeScore: g.home?.score,
+      awayId: g.away?.teamId, awayScore: g.away?.score,
+      final: g.status === 'SUBMITTED',
+    });
+  }
+  return map;
 }
 
 // ─── TEAM ROSTER API ────────────────────────────────────────────────────────
@@ -1655,15 +1765,20 @@ export function generateContentSuggestions(batting, pitching, rankings) {
     });
   }
 
-  // Top team streak
-  const topTeam = TEAMS[0];
-  if (topTeam && parseFloat(topTeam.pct) > 0.800) {
-    suggestions.push({
-      id: 'top-team-streak', type: 'streak',
-      headline: `${topTeam.name} are ${topTeam.record} — create a streak graphic`,
-      description: 'The #1 team in BLW is dominating. Celebrate it.',
-      team: topTeam.id, templateId: 'standings', prefill: {},
-    });
+  // Top team streak — sourced from LIVE standings (warm cache) so we never
+  // print last season's record. Skipped until standings load rather than
+  // falling back to a stale baked record.
+  const topRow = _standingsCache?.ordered?.find(r => r.gp > 0);
+  if (topRow && topRow.pctNum > 0.800) {
+    const topTeam = getTeam(topRow.teamId);
+    if (topTeam) {
+      suggestions.push({
+        id: 'top-team-streak', type: 'streak',
+        headline: `${topTeam.name} are ${topRow.record} — create a streak graphic`,
+        description: 'The #1 team in BLW is dominating. Celebrate it.',
+        team: topTeam.id, templateId: 'standings', prefill: {},
+      });
+    }
   }
 
   // Undefeated pitcher

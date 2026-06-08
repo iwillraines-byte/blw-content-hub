@@ -18,11 +18,11 @@
 // click-game-to-open-Studio-with-matchup-prefilled, score columns
 // once games complete.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { TEAMS, getTeam, getTeamAbbr } from '../data';
+import { TEAMS, getTeam, getTeamAbbr, fetchGames, scoresByDateTime } from '../data';
 import {
   SCHEDULE,
   getAllGameDays,
@@ -35,6 +35,14 @@ const CURRENT_SEASON = '2026';
 
 export default function Schedule() {
   const [teamFilter, setTeamFilter] = useState('');  // '' = all teams
+
+  // Final scores, keyed by `${date}T${HH:MM}`, pulled live from the GSS games
+  // feed. Completed games render their score + a FINAL tag; upcoming games keep
+  // showing their start time. Null until loaded (schedule still renders).
+  const [scores, setScores] = useState(null);
+  useEffect(() => {
+    fetchGames().then(g => setScores(scoresByDateTime(g))).catch(() => {});
+  }, []);
 
   // Sort all game days ascending. Past/upcoming split is computed below
   // so the same render code handles both groups identically.
@@ -103,7 +111,7 @@ export default function Schedule() {
           <GroupHeading label={`Past · ${pastDays.length} game day${pastDays.length === 1 ? '' : 's'}`} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {pastDays.map(gd => (
-              <GameDayCard key={gd.id} gameDay={gd} teamFilter={teamFilter} dimmed />
+              <GameDayCard key={gd.id} gameDay={gd} teamFilter={teamFilter} scores={scores} dimmed />
             ))}
           </div>
         </div>
@@ -117,7 +125,7 @@ export default function Schedule() {
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {upcomingDays.map(gd => (
-              <GameDayCard key={gd.id} gameDay={gd} teamFilter={teamFilter} />
+              <GameDayCard key={gd.id} gameDay={gd} teamFilter={teamFilter} scores={scores} />
             ))}
           </div>
         </div>
@@ -180,15 +188,30 @@ function GroupHeading({ label }) {
 
 // ─── Game day card — date header + list of games ───────────────────────────
 
-function GameDayCard({ gameDay, teamFilter, dimmed = false }) {
+function GameDayCard({ gameDay, teamFilter, scores, dimmed = false }) {
   // Tag every game with whether it features the active team filter.
   // When a filter is on, off-team games render faded but visible, so
   // the user gets full context without losing focus.
   const isFilteredOn = !!teamFilter;
-  const games = gameDay.games.map(g => ({
-    ...g,
-    featuresFilter: !isFilteredOn || g.team1 === teamFilter || g.team2 === teamFilter,
-  }));
+  const games = gameDay.games.map(g => {
+    // Match this scheduled game to its live final score by date+time, then
+    // map home/away scores back onto team1/team2 order. Only attach when both
+    // teams line up, so a key collision can never show a mismatched score.
+    const raw = scores ? scores.get(`${gameDay.date}T${g.time}`) : null;
+    let scoreInfo = null;
+    if (raw && raw.final) {
+      if (raw.homeId === g.team1 && raw.awayId === g.team2) {
+        scoreInfo = { s1: raw.homeScore, s2: raw.awayScore };
+      } else if (raw.awayId === g.team1 && raw.homeId === g.team2) {
+        scoreInfo = { s1: raw.awayScore, s2: raw.homeScore };
+      }
+    }
+    return {
+      ...g,
+      featuresFilter: !isFilteredOn || g.team1 === teamFilter || g.team2 === teamFilter,
+      scoreInfo,
+    };
+  });
 
   return (
     <Card style={{
@@ -235,6 +258,8 @@ function GameDayCard({ gameDay, teamFilter, dimmed = false }) {
 // ─── Single game row: time + team1 vs team2 ───────────────────────────────
 
 function GameRow({ game }) {
+  const sc = game.scoreInfo;
+  const final = !!sc;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
@@ -247,24 +272,28 @@ function GameRow({ game }) {
       minWidth: 0,
     }}>
       <div style={{
-        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-        color: colors.textSecondary, letterSpacing: 0.5,
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+        color: final ? colors.red : colors.textSecondary, letterSpacing: 0.5,
         minWidth: 64, whiteSpace: 'nowrap',
       }}>
-        {formatGameTime(game.time)}
+        {final ? 'FINAL' : formatGameTime(game.time)}
       </div>
-      <TeamSlot teamId={game.team1} />
+      <TeamSlot teamId={game.team1} winner={final && sc.s1 > sc.s2} loser={final && sc.s1 < sc.s2} />
       <div style={{
-        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
-        color: colors.textMuted, letterSpacing: 1, padding: '0 2px',
-      }}>VS</div>
-      <TeamSlot teamId={game.team2} />
+        fontFamily: final ? fonts.heading : fonts.condensed,
+        fontSize: final ? 14 : 10, fontWeight: 800,
+        color: final ? colors.text : colors.textMuted,
+        letterSpacing: final ? 0.5 : 1, padding: '0 2px',
+        fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+      }}>{final ? `${sc.s1}–${sc.s2}` : 'VS'}</div>
+      <TeamSlot teamId={game.team2} winner={final && sc.s2 > sc.s1} loser={final && sc.s2 < sc.s1} />
     </div>
   );
 }
 
-// Team slot — logo + abbr + linked to team page.
-function TeamSlot({ teamId }) {
+// Team slot — logo + abbr + linked to team page. When a game is final the
+// winner's abbr bolds and the loser dims, so a glance reads the result.
+function TeamSlot({ teamId, winner = false, loser = false }) {
   const t = getTeam(teamId);
   if (!t) {
     return (
@@ -280,12 +309,13 @@ function TeamSlot({ teamId }) {
         display: 'inline-flex', alignItems: 'center', gap: 5,
         textDecoration: 'none', color: colors.text,
         minWidth: 0, flex: 1,
+        opacity: loser ? 0.5 : 1,
       }}
       title={t.name}
     >
       <TeamLogo teamId={t.id} size={18} rounded="square" />
       <span style={{
-        fontFamily: fonts.body, fontSize: 12, fontWeight: 600,
+        fontFamily: fonts.body, fontSize: 12, fontWeight: winner ? 800 : 600,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{getTeamAbbr(t)}</span>
     </Link>

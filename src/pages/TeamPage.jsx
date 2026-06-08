@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, canonicalNumOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats } from '../data';
+import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, canonicalNumOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats, computeStandings, teamWithStanding } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { formatPostName } from '../template-config';
 import { TierBadge } from '../tier-badges';
@@ -127,6 +127,13 @@ export default function TeamPage() {
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
   const [games, setGames] = useState([]);
+  // Live standing for this team, computed from the loaded games feed. Falls
+  // back to the team's baked record until games arrive. Drives the RECORD /
+  // PCT / DIFF tiles and the rank badge so they reflect the current season.
+  const liveTeam = useMemo(
+    () => (games.length ? teamWithStanding(team, computeStandings(games)) : team),
+    [team, games]
+  );
   // Avatars keyed by "FI|LASTNAME" (e.g. "C|ROSE") so same-lastname players
   // each get their own headshot. Legacy records without a firstInitial are
   // keyed by "|LASTNAME" and used as a fallback.
@@ -774,7 +781,7 @@ export default function TeamPage() {
                 {team.name}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {team.rank != null && (
+                {liveTeam.rank != null && (
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
                     background: `${team.color}15`, color: team.color,
@@ -782,8 +789,8 @@ export default function TeamPage() {
                     padding: '3px 10px', borderRadius: 999,
                     fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
                   }}>
-                    <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>#{team.rank}</span>
-                    <span>COMPOSITE</span>
+                    <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>#{liveTeam.rank}</span>
+                    <span>STANDING</span>
                   </span>
                 )}
                 {/* v4.5.20: Always render the IG / FB / TikTok chips —
@@ -814,14 +821,14 @@ export default function TeamPage() {
           {/* Col 2 — Record / PCT / Diff mini stats */}
           <div style={{ display: 'flex', gap: 20, flex: '1 1 240px', minWidth: 240, justifyContent: 'space-around' }}>
             {[
-              { label: 'RECORD', value: team.record, color: colors.text },
-              { label: 'PCT',    value: team.pct,    color: colors.text },
+              { label: 'RECORD', value: liveTeam.record, color: colors.text },
+              { label: 'PCT',    value: liveTeam.pct,    color: colors.text },
               {
                 label: 'DIFF',
-                value: team.diff,
-                color: team.diff?.startsWith('+') && team.diff !== '0'
+                value: liveTeam.diff,
+                color: liveTeam.diff?.startsWith('+') && liveTeam.diff !== '0'
                   ? '#15803D'
-                  : team.diff === '0' ? colors.textSecondary : '#991B1B',
+                  : (liveTeam.diff === '0' || liveTeam.diff === '—') ? colors.textSecondary : '#991B1B',
               },
             ].map(s => (
               <div key={s.label} style={{ textAlign: 'center' }}>

@@ -60,10 +60,10 @@ function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
   return (
     <th
       style={{
-        padding: '10px 12px', textAlign: align,
-        fontFamily: fonts.condensed, fontWeight: 700, fontSize: 11,
+        padding: '8px 5px', textAlign: align,
+        fontFamily: fonts.condensed, fontWeight: 700, fontSize: 10,
         color: active ? colors.red : colors.textMuted,
-        textTransform: 'uppercase', letterSpacing: 0.5,
+        textTransform: 'uppercase', letterSpacing: 0.2,
         cursor: sortKey ? 'pointer' : 'default',
         userSelect: 'none', whiteSpace: 'nowrap',
       }}
@@ -84,9 +84,9 @@ function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
 function cellFor(sort, key) {
   const active = sort.key === key;
   return {
-    padding: '10px 12px',
+    padding: '7px 5px',
     textAlign: 'right',
-    fontSize: active ? 14 : 13,
+    fontSize: active ? 13 : 12,
     fontWeight: active ? 800 : 500,
     color: active ? colors.red : colors.text,
     whiteSpace: 'nowrap',

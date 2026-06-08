@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026 } from '../data';
+import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026, fetchStandings, teamWithStanding } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, FreeAgentChip, OutlineButton, Skeleton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
@@ -13,10 +13,10 @@ import { ProWiffleBallBlurb } from '../stats-tables';
 function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
   const active = currentSort.key === sortKey;
   const thStyle = {
-    padding: '10px 12px', textAlign: align,
-    fontFamily: fonts.condensed, fontWeight: 700, fontSize: 11,
+    padding: '8px 5px', textAlign: align,
+    fontFamily: fonts.condensed, fontWeight: 700, fontSize: 10,
     color: active ? colors.red : colors.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+    textTransform: 'uppercase', letterSpacing: 0.2,
     cursor: sortKey ? 'pointer' : 'default',
     userSelect: 'none',
     whiteSpace: 'nowrap',
@@ -44,9 +44,9 @@ function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
 function cellFor(sort, key) {
   const active = sort.key === key;
   return {
-    padding: '10px 12px',
+    padding: '7px 5px',
     textAlign: 'right',
-    fontSize: active ? 14 : 13,
+    fontSize: active ? 13 : 12,
     fontWeight: active ? 800 : 500,
     color: active ? colors.red : colors.text,
     whiteSpace: 'nowrap',
@@ -340,6 +340,9 @@ export default function GameCenter() {
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Live standings (W-L / pct / run diff) computed from the GSS games feed.
+  const [standings, setStandings] = useState(null);
+  useEffect(() => { fetchStandings().then(setStandings).catch(() => {}); }, []);
 
   const [players, setPlayers] = useState([]);
 
@@ -962,7 +965,7 @@ export default function GameCenter() {
       {!loading && tab === 'standings' && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}` }}>
-            <SectionHeading style={{ margin: 0 }}>2025-26 BLW standings</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>2026 BLW standings</SectionHeading>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -978,8 +981,9 @@ export default function GameCenter() {
                 </tr>
               </thead>
               <tbody>
-                {TEAMS.map((t, i) => {
-                  const [w, l] = t.record.split('-');
+                {(standings?.ordered || TEAMS).map((row, i) => {
+                  const t = teamWithStanding(getTeam(row.teamId || row.id), standings);
+                  const [w, l] = (t.record || '0-0').split('-');
                   // Average composite = mean compositePoints across ranked players on this team
                   const teamRanked = rankings.filter(p => p.team === t.id && typeof p.compositePoints === 'number');
                   const avgComp = teamRanked.length > 0
@@ -987,7 +991,7 @@ export default function GameCenter() {
                     : null;
                   return (
                     <tr key={t.id} style={{ borderBottom: `1px solid ${colors.divider}`, background: i % 2 === 0 ? colors.white : colors.bg }}>
-                      <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{t.rank}</td>
+                      <td style={{ ...tdStyle(false), textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{t.rank ?? '—'}</td>
                       <td style={{ ...tdStyle(false), textAlign: 'left' }}>
                         <Link to={`/teams/${t.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1001,7 +1005,7 @@ export default function GameCenter() {
                       <td style={{ ...tdStyle(true), fontSize: 15 }}>{t.pct}</td>
                       <td style={{
                         ...tdStyle(false), fontWeight: 700,
-                        color: t.diff.startsWith('+') && t.diff !== '0' ? '#16A34A' : t.diff === '0' ? colors.textMuted : '#DC2626',
+                        color: t.diff?.startsWith('+') && t.diff !== '0' ? '#16A34A' : (t.diff === '0' || t.diff === '—') ? colors.textMuted : '#DC2626',
                       }}>{t.diff}</td>
                       <td style={{ ...tdStyle(false), fontWeight: 700, color: colors.textSecondary }}>
                         {avgComp != null ? avgComp.toFixed(0) : <span style={{ color: colors.textMuted }}>—</span>}

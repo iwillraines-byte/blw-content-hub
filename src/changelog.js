@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.9.0',
+    date: '2026-06-08',
+    kind: 'minor',
+    summary: 'Live standings + final scores from the games feed; denser stat tables',
+    items: [
+      'Standings are now COMPUTED LIVE from the Grand Slam Systems /games feed (SUBMITTED games on/after the 2026-06-07 opener) instead of last season\'s baked records. Drives the dashboard standings card, the Game Center standings tab, and each team page\'s RECORD / PCT / DIFF tiles + rank badge. Teams that haven\'t played yet read "—" rather than a stale rank.',
+      'Why standings looked wrong: the record/rank/pct/diff baked onto each TEAMS row were last season\'s finals (17-1, 2-7, .944). The live leaderboards were already current — only these hardcoded standings were stale.',
+      'Final scores now show on the Schedule tab. Completed games swap their start time for a FINAL tag and the score, bold the winner, and dim the loser. Scores match by date+time so two meetings of the same teams on one day never collide.',
+      'Refreshed the offline stat fallback to a current-season snapshot, so a transient feed outage degrades to this season\'s leaders rather than resurrecting last season\'s leaderboard.',
+      'Content-idea streak headlines and the AI league context now read live records too — no more "are 17-1" from last year.',
+      'Batting + pitching stat tables tightened (smaller cell padding + font) so all columns fit without horizontal scrolling on desktop.',
+    ],
+  },
+  {
     version: '4.8.16',
     date: '2026-05-17',
     kind: 'patch',
