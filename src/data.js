@@ -395,27 +395,18 @@ function _dedupByCanonical(rows) {
 export async function fetchBattingLeaders() {
   if (!isCacheStale() && _battingCache) return _battingCache;
   try {
-    const [res, allRosters] = await Promise.all([
-      fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=true`),
-      fetchAllRostersOnce(),
-    ]);
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    // The current-season batting-stats endpoint (showAll) IS the complete list
+    // of players who have batted THIS season. We deliberately do NOT enrich
+    // from the team-roster endpoint: that endpoint returns CAREER totals, so
+    // enriching surfaced career stats (e.g. Andrew Ledet's 78 AB / .282) for
+    // players who haven't played a single game this season. Players with no
+    // current-season stats are handled as a "no stats this season" bucket by
+    // the consumers (GameCenter pads them from the canonical roster with "—").
     const baseRows = _bakeCanonical(transformBatting(data));
-
-    // Enrich with team-roster players who have at-bats but didn't make
-    // the league leaderboard.
-    const enrichments = _bakeCanonical(
-      allRosters
-        .filter(r => (r.atBats || 0) > 0)
-        .map(rosterToBatting)
-    );
-
-    _battingCache = _renumberRank(
-      _filterToBlwRoster(
-        _dedupByCanonical([...baseRows, ...enrichments])
-      )
-    );
+    _battingCache = _renumberRank(_filterToBlwRoster(_dedupByCanonical(baseRows)));
     _lastFetch = Date.now();
     return _battingCache;
   } catch (e) {
@@ -427,25 +418,15 @@ export async function fetchBattingLeaders() {
 export async function fetchPitchingLeaders() {
   if (!isCacheStale() && _pitchingCache) return _pitchingCache;
   try {
-    const [res, allRosters] = await Promise.all([
-      fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=true`),
-      fetchAllRostersOnce(),
-    ]);
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    // Current-season pitching-stats (showAll) is the complete list of players
+    // who've pitched THIS season. No team-roster enrichment — that endpoint
+    // carries CAREER totals (career W-L, ERA, IP) and was surfacing last
+    // season's lines for pitchers who haven't thrown a pitch this season.
     const baseRows = _bakeCanonical(transformPitching(data));
-
-    const enrichments = _bakeCanonical(
-      allRosters
-        .filter(r => r.isPitcher || (parseFloat(r.ip || 0) > 0))
-        .map(rosterToPitching)
-    );
-
-    _pitchingCache = _renumberRank(
-      _filterToBlwRoster(
-        _dedupByCanonical([...baseRows, ...enrichments])
-      )
-    );
+    _pitchingCache = _renumberRank(_filterToBlwRoster(_dedupByCanonical(baseRows)));
     _lastFetch = Date.now();
     return _pitchingCache;
   } catch (e) {

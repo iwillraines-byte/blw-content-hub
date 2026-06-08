@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.9.1',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Stat tables no longer show career stats for players who haven\'t played this season',
+    items: [
+      'Reported: the batting/pitching leaderboards listed players like Andrew Ledet with full lines (AB 78, HR 7, RBI 29, .282, 1.019 OPS) even though they haven\'t played a game this season.',
+      'Root cause: fetchBattingLeaders / fetchPitchingLeaders enriched the current-season leaderboard with the team-roster endpoint, which returns CAREER totals. Any rostered player with career at-bats got injected into the list with last season\'s / career numbers. The exact fields that leaked (AB, H, HR, RBI, AVG for hitters; W-L, SV, IP, K, ERA, WHIP for pitchers) are precisely the roster-endpoint fields.',
+      'Fix: removed the career enrichment. The current-season batting-stats / pitching-stats endpoints (showAll=true) already return every player who has actually played this season, so enrichment was both obsolete and wrong.',
+      'Players with no current-season stats now route to the existing "no stats this season" handling — they show em-dashes on team pages and only appear in Game Center via the opt-in "show players with no stats" toggle, instead of carrying career numbers into the live leaderboard.',
+    ],
+  },
+  {
     version: '4.9.0',
     date: '2026-06-08',
     kind: 'minor',
