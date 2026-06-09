@@ -6,16 +6,65 @@
 // Master-admin only. Pulls its queue from the auto-updating
 // "BLW WEEK 1 ALL PHOTOS" collection, showing only assets without a Player tag.
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TEAMS, getTeam, getTeamAbbr, CANONICAL_ROSTER_2026 } from '../data';
 import { authedJson } from '../authed-fetch';
+import { compressImageBlob } from '../image-compress';
+import { saveMedia, buildPlayerFilename, buildTeamFilename } from '../media-store';
 
 const CONTENT_TYPES = ['Headshot', 'Action', 'Hitting', 'Pitching', 'Celebration', 'Candid', 'Hype', 'Team'];
 
+// Map a Content Type to the BLW assetType used in filenames / gallery grouping.
+const CONTENT_TYPE_TO_ASSET = {
+  Headshot: 'HEADSHOT', Action: 'ACTION', Hitting: 'HITTING', Pitching: 'PITCHING',
+  Celebration: 'CELEBRATION', Candid: 'CANDID', Hype: 'HYPE', Team: 'TEAMPHOTO',
+};
+
 const pad2 = (n) => String(n || '').padStart(2, '0');
 const teamRoster = (teamId) => CANONICAL_ROSTER_2026.filter(p => p.team === teamId);
+
+// Compress a full Shade original to high quality but ≤ 4MB (presigned upload
+// handles it; keeps it well under the user's 5MB ceiling). Tries progressively
+// gentler passes and takes the first that fits, so most land at 3000–4096px.
+async function compressForImport(blob) {
+  const passes = [
+    { maxDimension: 4096, quality: 0.95 },
+    { maxDimension: 3840, quality: 0.92 },
+    { maxDimension: 3200, quality: 0.90 },
+    { maxDimension: 2560, quality: 0.88 },
+  ];
+  let last = null;
+  for (const p of passes) {
+    const r = await compressImageBlob(blob, p);
+    last = r;
+    if (r.finalBytes <= 4 * 1024 * 1024) return r;
+  }
+  return last;
+}
+
+// Download a Shade original, compress it, and save into BLW Media tagged to the
+// player (or team) — exactly like a manual upload, just sourced from Shade.
+async function importOne({ asset, sel }) {
+  const { url } = await authedJson('/api/shade', { method: 'POST', body: { action: 'download', assetId: asset.id } });
+  const resp = await fetch(url); // R2 signed URL — CORS-open
+  if (!resp.ok) throw new Error(`download HTTP ${resp.status}`);
+  const full = await resp.blob();
+  const c = await compressForImport(full);
+  const ext = (c.blob.type === 'image/png') ? 'png' : 'jpg';
+  const assetType = CONTENT_TYPE_TO_ASSET[sel.type] || 'ACTION';
+  let filename;
+  if (sel.player) {
+    const lastName = sel.player.split(/\s+/).slice(-1)[0].toUpperCase();
+    const firstInitial = sel.player.charAt(0).toUpperCase();
+    const entry = CANONICAL_ROSTER_2026.find(p => p.team === sel.team && p.name === sel.player);
+    filename = buildPlayerFilename({ team: sel.team, num: entry?.num || '', firstInitial, lastName, assetType, ext });
+  } else {
+    filename = buildTeamFilename({ team: sel.team, assetType, ext });
+  }
+  await saveMedia({ name: filename, blob: c.blob, width: c.width, height: c.height, source: 'shade' });
+}
 
 // Resolve a player from team + jersey number — only when it's unambiguous.
 function playerForNum(teamId, num) {
@@ -38,6 +87,24 @@ export default function RapidTag() {
   const [aiLoading, setAiLoading] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
+
+  // Background import: tagging stays snappy while full images download +
+  // compress + save into BLW Media. Capped concurrency so we don't fire a
+  // dozen 30MB downloads at once.
+  const importQ = useRef([]);
+  const workers = useRef(0);
+  const [imp, setImp] = useState({ pending: 0, done: 0, failed: 0 });
+  const pump = useCallback(() => {
+    const MAX = 2;
+    while (workers.current < MAX && importQ.current.length) {
+      const job = importQ.current.shift();
+      workers.current++;
+      importOne(job)
+        .then(() => setImp(s => ({ ...s, done: s.done + 1, pending: Math.max(0, s.pending - 1) })))
+        .catch(e => { console.warn('[rapid-tag import]', e); setImp(s => ({ ...s, failed: s.failed + 1, pending: Math.max(0, s.pending - 1) })); })
+        .finally(() => { workers.current--; pump(); });
+    }
+  }, []);
 
   const current = queue[idx] || null;
 
@@ -109,11 +176,16 @@ export default function RapidTag() {
         method: 'POST',
         body: { action: 'tag', assetId: current.id, team: sel.team, player: sel.player, contentType: sel.type },
       });
+      // Queue the BLW Media import (download original → compress → saveMedia) in
+      // the background so the next photo is ready instantly.
+      importQ.current.push({ asset: current, sel: { ...sel } });
+      setImp(s => ({ ...s, pending: s.pending + 1 }));
+      pump();
       setDoneCount(c => c + 1);
       setIdx(i => i + 1);
     } catch (e) { setErr(e.message); }
     finally { setTagging(false); }
-  }, [current, sel, tagging]);
+  }, [current, sel, tagging, pump]);
 
   // N/A — photo has no athlete (crowd, venue, staff, sponsor). Marks Content
   // Type "N/A" (so it leaves the queue) and advances. No team/player needed.
@@ -202,7 +274,7 @@ export default function RapidTag() {
     <div>
       <PageHeader
         title="Rapid Tag"
-        subtitle={`Tagging "${config?.collection || 'Shade'}" · ✓ ${doneCount} done this session`}
+        subtitle={`Tagging "${config?.collection || 'Shade'}" · ✓ ${doneCount} tagged · ⬆ ${imp.done} imported${imp.pending ? ` (${imp.pending} in flight)` : ''}${imp.failed ? ` · ⚠ ${imp.failed} failed` : ''}`}
       />
       {err && (
         <Card style={{ marginBottom: 12, background: '#FEF2F2', border: '1px solid #FECACA' }}>

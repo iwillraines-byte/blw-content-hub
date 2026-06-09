@@ -296,6 +296,28 @@ async function getTaggedIndex(key) {
   return _index;
 }
 
+// Return a signed URL to the asset's ORIGINAL full-resolution file. The
+// browser fetches it directly (the R2 URLs send Access-Control-Allow-Origin: *),
+// compresses it client-side, and saves it into BLW Media like a normal upload.
+async function doDownload(key, body) {
+  const { assetId } = body;
+  if (!assetId) throw new Error('assetId required');
+  const r = await fetch(`${SHADE_BASE}/assets/${assetId}/download?drive_id=${DRIVE_ID}&origin_type=SOURCE`, {
+    headers: shadeHeaders(key),
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`Shade download HTTP ${r.status}: ${text.slice(0, 200)}`);
+  // Response may be a bare URL string, a JSON-quoted string, or an object.
+  let url = text.trim();
+  try {
+    const j = JSON.parse(text);
+    url = typeof j === 'string' ? j : (j.url || j.signed_url || j.download_url || j.signedUrl || url);
+  } catch { /* plain string */ }
+  url = String(url).replace(/^"|"$/g, '');
+  if (!/^https?:\/\//.test(url)) throw new Error(`Shade download returned no URL: ${text.slice(0, 120)}`);
+  return { url };
+}
+
 async function doPlayer(key, body) {
   const name = body.player;
   if (!name) throw new Error('player required');
@@ -344,6 +366,7 @@ export default async function handler(req, res) {
     }
     if (action === 'queue')   { res.status(200).json(await doQueue(key, body || {})); return; }
     if (action === 'player')  { res.status(200).json(await doPlayer(key, body || {})); return; }
+    if (action === 'download'){ res.status(200).json(await doDownload(key, body || {})); return; }
     if (action === 'suggest') { res.status(200).json(await doSuggest(key, body || {})); return; }
     if (action === 'tag')     { res.status(200).json(await doTag(key, body || {})); return; }
     res.status(400).json({ error: `unknown action: ${action}` });

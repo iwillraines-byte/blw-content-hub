@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.12.0',
+    date: '2026-06-08',
+    kind: 'minor',
+    summary: 'Rapid Tag now imports photos into BLW Media like any normal upload',
+    items: [
+      'Tagging a photo in Rapid Tag now downloads the full original from Shade, compresses it (high quality, ≤4MB — well under the 5MB ceiling), and saves it into BLW Media tagged to the player — same pipeline as a manual upload (filename, IndexedDB, cloud-sync). It shows up in the player\'s Media section, in Files, and is usable in Studio.',
+      'The import runs in the background with capped concurrency, so tagging stays fast; the header shows live import progress (⬆ imported / in flight / failed).',
+      'Full images are fetched straight from Shade\'s R2 URLs (CORS-open) and resized client-side — no server-side piping of 30MB files.',
+      'Removed the separate "Shade Photos" gallery on player pages — the photos now live in the normal Media section, one home.',
+      'N/A (non-athlete) photos are tagged in Shade but not imported, keeping BLW Media to actual player/team content.',
+    ],
+  },
+  {
     version: '4.11.0',
     date: '2026-06-08',
     kind: 'minor',
