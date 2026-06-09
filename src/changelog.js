@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.10.0',
+    date: '2026-06-08',
+    kind: 'minor',
+    summary: 'Rapid Tag — 3-tap photo categorization straight into Shade, with AI pre-fill',
+    items: [
+      'New master-admin tool at /rapid-tag: blast through onsite photos and categorize them by Team → Player → Type in a few taps. Tags write back onto the Shade asset metadata — Shade stays the source of truth, no 47GB import.',
+      'Queue auto-pulls from the auto-updating "BLW WEEK 1 ALL PHOTOS" collection, showing only photos that don\'t have a Player tag yet.',
+      'AI pre-fills the guess: Claude vision reads the photo and pre-selects Team + Type (and Player when a jersey number is legible) via the existing auto-tag engine; you confirm or correct, then it saves and auto-advances. Keyboard: ↵ save, S skip, ← back.',
+      'Shade setup done: created Player (70 roster players) and Content Type (Headshot/Action/Hitting/Pitching/Celebration/Candid/Hype/Team) fields, and added the 4 missing teams to the Teams field.',
+      'Requires a SHADE_API_KEY env var in Vercel (Shade → Settings → API Keys). Until it\'s set, the widget shows a clean "Connect Shade" setup card instead of erroring.',
+    ],
+  },
+  {
     version: '4.9.6',
     date: '2026-06-08',
     kind: 'patch',

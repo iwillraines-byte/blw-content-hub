@@ -13,6 +13,7 @@ import TrainAI from './pages/TrainAI';
 import Requests from './pages/Requests';
 import GameCenter from './pages/GameCenter';
 import Files from './pages/Files';
+import RapidTag from './pages/RapidTag';
 import Settings from './pages/Settings';
 import TeamPage from './pages/TeamPage';
 import PlayerPage from './pages/PlayerPage';
@@ -59,6 +60,7 @@ const navItems = [
   // first season ends and archive data exists.
   { path: "/schedule",    label: "Schedule",         icon: "📅", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
   { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
+  { path: "/rapid-tag",   label: "Rapid Tag",        icon: "🏷️", roles: ['master_admin'] },
   { path: "/train-ai",    label: "Train AI",         icon: "🧠", roles: ['master_admin', 'admin'] },
   { path: "/settings",    label: "Settings",         icon: "⚙️", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
 ];
@@ -1057,6 +1059,11 @@ function AppShell() {
             <Route path="/files" element={
               <RequireRole roles={['master_admin', 'admin', 'content']} what="the Files library">
                 <Files />
+              </RequireRole>
+            } />
+            <Route path="/rapid-tag" element={
+              <RequireRole roles={['master_admin']} what="Rapid Tag">
+                <RapidTag />
               </RequireRole>
             } />
             <Route path="/settings" element={<Settings />} />
