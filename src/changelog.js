@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.10.1',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Rapid Tag: N/A button for non-athlete photos',
+    items: [
+      'Added an "N/A · not a player" button (keyboard: N) for crowd, venue, staff, and sponsor shots — one tap marks the photo and moves on, no team/player needed.',
+      'Switched the queue\'s "done" marker from Player to Content Type, so non-athlete photos (Content Type = N/A) and team/group photos (no single player) now correctly leave the queue instead of reappearing.',
+      'Added an "N/A" option to the Shade Content Type field.',
+    ],
+  },
+  {
     version: '4.10.0',
     date: '2026-06-08',
     kind: 'minor',

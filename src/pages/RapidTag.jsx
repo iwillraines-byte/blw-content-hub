@@ -115,17 +115,34 @@ export default function RapidTag() {
     finally { setTagging(false); }
   }, [current, sel, tagging]);
 
-  // Keyboard: Enter saves, S skips, ← back.
+  // N/A — photo has no athlete (crowd, venue, staff, sponsor). Marks Content
+  // Type "N/A" (so it leaves the queue) and advances. No team/player needed.
+  const markNA = useCallback(async () => {
+    if (!current || tagging) return;
+    setTagging(true);
+    try {
+      await authedJson('/api/shade', {
+        method: 'POST',
+        body: { action: 'tag', assetId: current.id, contentType: 'N/A' },
+      });
+      setDoneCount(c => c + 1);
+      setIdx(i => i + 1);
+    } catch (e) { setErr(e.message); }
+    finally { setTagging(false); }
+  }, [current, tagging]);
+
+  // Keyboard: Enter saves, N marks N/A, S skips, ← back.
   useEffect(() => {
     const onKey = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'Enter') { e.preventDefault(); saveAndNext(); }
+      else if (e.key.toLowerCase() === 'n') markNA();
       else if (e.key.toLowerCase() === 's') setIdx(i => i + 1);
       else if (e.key === 'ArrowLeft') setIdx(i => Math.max(0, i - 1));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [saveAndNext]);
+  }, [saveAndNext, markNA]);
 
   // ─── States ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -294,12 +311,15 @@ export default function RapidTag() {
               style={{ ...btnStyle(colors.red, '#fff'), opacity: (!sel.team || !sel.type || tagging) ? 0.5 : 1, flex: '1 1 auto' }}>
               {tagging ? 'Saving…' : '✓ Save & Next'} <span style={{ opacity: 0.7, fontSize: 11 }}>↵</span>
             </button>
+            <button onClick={markNA} disabled={tagging}
+              title="No athlete in this photo (crowd, venue, staff, sponsor) — mark N/A and move on"
+              style={btnStyle('#FEF3C7', '#92400E', '#FDE68A')}>N/A · not a player</button>
             <button onClick={() => setIdx(i => i + 1)} style={btnStyle(colors.bg, colors.textSecondary, colors.border)}>Skip</button>
             <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
               style={{ ...btnStyle(colors.bg, colors.textSecondary, colors.border), opacity: idx === 0 ? 0.4 : 1 }}>← Back</button>
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed }}>
-            Image {idx + 1} of {queue.length} loaded{loadingMore ? ' · loading more…' : ''} · ↵ save · S skip · ← back
+            Image {idx + 1} of {queue.length} loaded{loadingMore ? ' · loading more…' : ''} · ↵ save · N n/a · S skip · ← back
           </div>
         </Card>
       </div>

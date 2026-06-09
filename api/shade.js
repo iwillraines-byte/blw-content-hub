@@ -92,8 +92,11 @@ async function doQueue(key, body) {
     collection_id: COLLECTION_ID,
     limit,
     offset,
-    // Server-side filter: only assets whose Player field is still empty.
-    filters: [{ id: FIELD.player, options: [], clause: 'is empty' }],
+    // Server-side filter: only assets that haven't been categorized yet.
+    // Content Type is the universal "processed" marker — every photo gets one
+    // (a player type, "Team", or "N/A" for non-athletes), so it's a cleaner
+    // queue gate than Player (which is empty for team/crowd/venue shots).
+    filters: [{ id: FIELD.type, options: [], clause: 'is empty' }],
   };
   const r = await fetch(`${SHADE_BASE}/search`, {
     method: 'POST', headers: shadeHeaders(key), body: JSON.stringify(search),
@@ -102,9 +105,9 @@ async function doQueue(key, body) {
   const raw = await r.json();
   const list = Array.isArray(raw) ? raw : (raw.assets || raw.results || []);
   // Belt-and-suspenders: even if the server ignores the filter, only surface
-  // assets that genuinely lack a Player tag yet.
+  // assets that haven't been given a Content Type yet.
   const assets = list
-    .filter(a => !metaValue(a, FIELD.player, 'Player'))
+    .filter(a => !metaValue(a, FIELD.type, 'Content Type'))
     .map(a => ({
       id: a.id,
       name: a.name,
