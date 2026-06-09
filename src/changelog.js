@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.12.1',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Numberless players\' media no longer hides on their player page',
+    items: [
+      'Bug: players with no jersey number in the roster got "00" stamped on their imported/uploaded photo filenames, but their player page knows their real number (set elsewhere) — so findPlayerMedia rejected the "00" files as a number mismatch and their Media came up empty.',
+      'Fix: the "00" placeholder is now treated as "no number tagged" (same as a blank), so a numberless player\'s photos match by team + last name + first initial regardless of number. Affects the player-page Media gallery and the Studio media picker.',
+      'A jersey number now only ever disambiguates same-name teammates — it is never required for a player\'s media to show.',
+    ],
+  },
+  {
     version: '4.12.0',
     date: '2026-06-08',
     kind: 'minor',

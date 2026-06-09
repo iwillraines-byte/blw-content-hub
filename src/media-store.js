@@ -417,7 +417,13 @@ export async function findPlayerMedia(team, lastName, optsOrJersey = null) {
     const wantNumStr = String(wantNum);
     matches = matches.filter(f => {
       const num = f.num;
-      if (!num) return true; // legacy / untagged — can't be ruled out
+      // No number, OR the "00" placeholder buildPlayerFilename stamps when a
+      // player has no roster number — both mean "untagged number," so they
+      // can't be ruled out. Without this, a photo of a numberless player
+      // (file num "00") was rejected on a page that knows the player's real
+      // number, hiding their media entirely. (The two genuine "00" players —
+      // Grant Miller, Cael Foreman — have no same-name teammate to leak to.)
+      if (!num || num === '00') return true;
       return num === padded || num === wantNumStr;
     });
   }
