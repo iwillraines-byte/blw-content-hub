@@ -249,17 +249,74 @@ async function doTag(key, body) {
       throw new Error(`Shade write failed (HTTP ${r.status}) on field ${w.metaId}: ${(await r.text()).slice(0, 200)}`);
     }
   }
+  _index = null; // bust the player-gallery index so a freshly tagged photo shows immediately
   return { ok: true, written: writes.length, unresolved };
+}
+
+// ─── Player gallery: index the collection's tagged assets by player ─────────
+// One cached pass over the collection groups every tagged asset under its
+// Player, so any player's photos resolve without depending on the exact
+// "equals" filter-clause syntax. Tolerant of however Shade returns the value
+// (option id, name, object, or array).
+let _index = null;
+let _indexAt = 0;
+function playerNameFromValue(v, idToName) {
+  let s = Array.isArray(v) ? v[0] : v;
+  if (s && typeof s === 'object') s = s.name || s.id || s.value;
+  if (s == null) return null;
+  const low = String(s).toLowerCase();
+  return idToName[low] || String(s); // resolve option id → name, else it's already the name
+}
+async function getTaggedIndex(key) {
+  if (_index && Date.now() - _indexAt < 5 * 60 * 1000) return _index;
+  const maps = await getOptionMaps(key);
+  const idToName = {};
+  for (const [name, id] of Object.entries(maps.player)) idToName[String(id).toLowerCase()] = name;
+  const byPlayer = {}; // lowercased player name → [{id,name,previewUrl}]
+  let offset = 0;
+  for (let page = 0; page < 20; page++) { // safety cap (≈4000 assets)
+    const r = await fetch(`${SHADE_BASE}/search`, {
+      method: 'POST', headers: shadeHeaders(key),
+      body: JSON.stringify({ drive_id: DRIVE_ID, collection_id: COLLECTION_ID, limit: 200, offset }),
+    });
+    if (!r.ok) throw new Error(`Shade search HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    const raw = await r.json();
+    const list = Array.isArray(raw) ? raw : (raw.assets || raw.results || []);
+    for (const a of list) {
+      const name = playerNameFromValue(metaValue(a, FIELD.player, 'Player'), idToName);
+      if (!name) continue;
+      const k = name.toLowerCase();
+      (byPlayer[k] = byPlayer[k] || []).push({ id: a.id, name: a.name, previewUrl: previewUrlOf(a) });
+    }
+    if (list.length < 200) break;
+    offset += list.length;
+  }
+  _index = { byPlayer, builtAt: Date.now() };
+  _indexAt = Date.now();
+  return _index;
+}
+
+async function doPlayer(key, body) {
+  const name = body.player;
+  if (!name) throw new Error('player required');
+  const { byPlayer } = await getTaggedIndex(key);
+  const assets = (byPlayer[String(name).toLowerCase()] || []).filter(a => a.previewUrl);
+  return { player: name, count: assets.length, assets };
 }
 
 export default async function handler(req, res) {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
-  if (requireRole(res, ctx.profile, ['master_admin'])) return;
 
   let body = req.method === 'POST' ? req.body : req.query;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
   const action = body?.action || req.query?.action;
+
+  // Reads (viewing a player's tagged photos) are open to staff; the
+  // queue/suggest/tag mutations + diagnostics stay master-only.
+  const READ_ACTIONS = new Set(['player', 'config']);
+  const allowed = READ_ACTIONS.has(action) ? ['master_admin', 'admin', 'content'] : ['master_admin'];
+  if (requireRole(res, ctx.profile, allowed)) return;
 
   const key = shadeKey();
   if (action === 'config') {
@@ -286,6 +343,7 @@ export default async function handler(req, res) {
       return;
     }
     if (action === 'queue')   { res.status(200).json(await doQueue(key, body || {})); return; }
+    if (action === 'player')  { res.status(200).json(await doPlayer(key, body || {})); return; }
     if (action === 'suggest') { res.status(200).json(await doSuggest(key, body || {})); return; }
     if (action === 'tag')     { res.status(200).json(await doTag(key, body || {})); return; }
     res.status(400).json({ error: `unknown action: ${action}` });

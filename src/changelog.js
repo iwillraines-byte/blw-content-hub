@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.11.0',
+    date: '2026-06-08',
+    kind: 'minor',
+    summary: 'Closes the Shade loop — a player\'s tagged photos now show on their player page',
+    items: [
+      'New "Shade Photos" gallery on every player page: pulls that player\'s onsite shots live from Shade, based on the tags applied in Rapid Tag. Tag in Rapid Tag → it appears under the player. Staff-only; self-hides when Shade isn\'t connected or the player has no tagged photos yet.',
+      'Backend: new /api/shade?action=player indexes the WEEK 1 collection by player (one cached pass, tolerant of however Shade returns the value) and serves each player\'s assets. Read access opened to staff (master/admin/content); the queue/suggest/tag mutations stay master-only.',
+      'Tagging now busts the gallery cache, so a freshly tagged photo shows on the player page immediately.',
+    ],
+  },
+  {
     version: '4.10.2',
     date: '2026-06-08',
     kind: 'patch',

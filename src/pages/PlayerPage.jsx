@@ -6,6 +6,7 @@ import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, Positi
 import { ContentIdeasSection } from '../content-ideas-section';
 import { getRecentFeedback } from '../idea-feedback-store';
 import { PageDropZone } from '../page-drop-zone';
+import { ShadePlayerGallery } from '../shade-player-gallery';
 import { colors, fonts, radius } from '../theme';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
@@ -2599,6 +2600,11 @@ export default function PlayerPage() {
           />
         ))}
       </Card>
+
+      {/* Shade Photos — this player's onsite shots, pulled live from Shade by
+          the tags applied in Rapid Tag. Closes the tag→display loop. Staff-only;
+          self-hides when Shade isn't connected or nothing's tagged yet. */}
+      <ShadePlayerGallery playerName={pn} />
 
       {/* v4.5.60: shared photo lightbox for the gallery groups. Portaled
           to body via PreviewLightbox so the route transform doesn't
