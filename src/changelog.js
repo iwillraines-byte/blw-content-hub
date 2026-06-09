@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.10.2',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Rapid Tag: fix silent save failures (tags were not reaching Shade)',
+    items: [
+      'Bug: the tag endpoint returned HTTP 200 even when a write failed (e.g. option ids didn\'t resolve), so the widget showed "Save & Next" and advanced without writing anything to Shade. Tags appeared to save but didn\'t.',
+      'Fix: the endpoint now fails LOUD — any unresolved option or failed write throws, so the widget surfaces the real error and stays on the photo instead of silently moving on.',
+      'Hardened the metadata-schema parse (the likely root cause) to tolerate a wrapped response shape, and added an /api/shade?action=diag check that reports how many options resolved.',
+      'No data was lost: since nothing was written, every photo is still in the queue to re-tag once confirmed working.',
+    ],
+  },
+  {
     version: '4.10.1',
     date: '2026-06-08',
     kind: 'patch',

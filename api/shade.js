@@ -53,16 +53,27 @@ let _mapsAt = 0;
 async function getOptionMaps(key) {
   if (_maps && Date.now() - _mapsAt < 5 * 60 * 1000) return _maps;
   const r = await fetch(`${SHADE_BASE}/workspaces/drives/${DRIVE_ID}/metadata`, { headers: shadeHeaders(key) });
-  if (!r.ok) throw new Error(`Shade schema HTTP ${r.status}`);
-  const fields = await r.json();
+  const text = await r.text();
+  if (!r.ok) throw new Error(`Shade schema HTTP ${r.status}: ${text.slice(0, 200)}`);
+  let parsed; try { parsed = JSON.parse(text); } catch { throw new Error('Shade schema response was not JSON'); }
+  // Tolerate a top-level array OR a wrapped object.
+  const fields = Array.isArray(parsed)
+    ? parsed
+    : (parsed.metadata || parsed.fields || parsed.attributes || parsed.data || parsed.results || []);
   const maps = { team: {}, player: {}, type: {} };
+  const counts = { team: 0, player: 0, type: 0 };
   for (const f of (Array.isArray(fields) ? fields : [])) {
-    const which = f.id === FIELD.team ? 'team' : f.id === FIELD.player ? 'player' : f.id === FIELD.type ? 'type' : null;
+    const fid = f.id || f.metadata_id || f.attribute_id || f.metadataId;
+    const which = fid === FIELD.team ? 'team' : fid === FIELD.player ? 'player' : fid === FIELD.type ? 'type' : null;
     if (!which) continue;
-    for (const o of (f.options || [])) {
-      if (o?.name && o?.id) maps[which][String(o.name).toLowerCase()] = o.id;
+    for (const o of (f.options || f.values || f.choices || [])) {
+      const oid = o.id || o.option_id || o.optionId || o.value;
+      const oname = o.name || o.label || o.value;
+      if (oname && oid) { maps[which][String(oname).toLowerCase()] = oid; counts[which]++; }
     }
   }
+  maps._counts = counts;
+  maps._fieldCount = Array.isArray(fields) ? fields.length : 0;
   _maps = maps;
   _mapsAt = Date.now();
   return maps;
@@ -202,41 +213,43 @@ Return ONLY: {"team":"LAN"|null,"contentType":"Action"|null,"num":"03"|null,"con
 
 async function doTag(key, body) {
   const { assetId, team, player, contentType } = body;
-  if (!assetId) return { error: 'assetId required' };
+  if (!assetId) throw new Error('assetId required');
   const maps = await getOptionMaps(key);
 
   const writes = [];
+  const unresolved = [];
   // Team → multi_select (array of option ids)
   if (team) {
     const shadeLabel = TEAM_TO_SHADE[team] || team;
     const optId = maps.team[String(shadeLabel).toLowerCase()];
-    if (optId) writes.push({ metaId: FIELD.team, value: [optId] });
+    if (optId) writes.push({ metaId: FIELD.team, value: [optId] }); else unresolved.push(`team "${team}"→"${shadeLabel}"`);
   }
   // Player → single_select (option id)
   if (player) {
     const optId = maps.player[String(player).toLowerCase()];
-    if (optId) writes.push({ metaId: FIELD.player, value: optId });
+    if (optId) writes.push({ metaId: FIELD.player, value: optId }); else unresolved.push(`player "${player}"`);
   }
   // Content Type → single_select (option id)
   if (contentType) {
     const optId = maps.type[String(contentType).toLowerCase()];
-    if (optId) writes.push({ metaId: FIELD.type, value: optId });
+    if (optId) writes.push({ metaId: FIELD.type, value: optId }); else unresolved.push(`type "${contentType}"`);
   }
-  if (!writes.length) return { error: 'nothing to write (no matching options)' };
+  // Fail LOUD — never report success when nothing was written.
+  if (!writes.length) {
+    throw new Error(`No metadata written. Unresolved: ${unresolved.join(', ') || '(none provided)'}. Option counts loaded: ${JSON.stringify(maps._counts)} (fields seen: ${maps._fieldCount}).`);
+  }
 
-  const results = [];
   for (const w of writes) {
     const r = await fetch(`${SHADE_BASE}/assets/${assetId}/metadata/${w.metaId}/value`, {
       method: 'PUT',
       headers: shadeHeaders(key),
       body: JSON.stringify({ drive_id: DRIVE_ID, metadata_attribute_value: w.value }),
     });
-    results.push({ metaId: w.metaId, ok: r.ok, status: r.status });
     if (!r.ok) {
-      return { error: `Shade write failed (${r.status}) on ${w.metaId}: ${(await r.text()).slice(0, 200)}`, results };
+      throw new Error(`Shade write failed (HTTP ${r.status}) on field ${w.metaId}: ${(await r.text()).slice(0, 200)}`);
     }
   }
-  return { ok: true, results };
+  return { ok: true, written: writes.length, unresolved };
 }
 
 export default async function handler(req, res) {
@@ -264,6 +277,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (action === 'diag') {
+      const maps = await getOptionMaps(key);
+      res.status(200).json({
+        ok: true, fieldsSeen: maps._fieldCount, counts: maps._counts,
+        teams: Object.keys(maps.team), types: Object.keys(maps.type), playerCount: Object.keys(maps.player).length,
+      });
+      return;
+    }
     if (action === 'queue')   { res.status(200).json(await doQueue(key, body || {})); return; }
     if (action === 'suggest') { res.status(200).json(await doSuggest(key, body || {})); return; }
     if (action === 'tag')     { res.status(200).json(await doTag(key, body || {})); return; }
