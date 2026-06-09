@@ -150,13 +150,25 @@ export function AuthProvider({ children }) {
       return undefined;
     }
 
-    // 1) Pull any existing session out of storage on mount.
+    // 1) Pull any existing session out of storage on mount. getSession() has
+    // no built-in timeout — if Supabase Auth is slow/unreachable it can hang,
+    // leaving the app stuck on the loading splash forever ("taking forever to
+    // load"). A 15s watchdog forces us past the splash so the user at least
+    // reaches the login screen and can attempt a fresh sign-in.
+    let settled = false;
+    const finishLoading = () => { if (!settled) { settled = true; setLoading(false); } };
+    const sessionWatchdog = setTimeout(() => {
+      console.warn('[auth] getSession timed out — proceeding to login');
+      finishLoading();
+    }, 15000);
     supabase.auth.getSession().then(({ data }) => {
+      clearTimeout(sessionWatchdog);
       setSession(data?.session || null);
-      setLoading(false);
+      finishLoading();
     }).catch(err => {
+      clearTimeout(sessionWatchdog);
       console.warn('[auth] getSession failed', err);
-      setLoading(false);
+      finishLoading();
     });
 
     // 2) Subscribe to future changes — sign-in, sign-out, token refresh.

@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.9.6',
+    date: '2026-06-08',
+    kind: 'patch',
+    summary: 'Session restore can no longer hang the loading splash forever',
+    items: [
+      'The session-restore call (supabase.auth.getSession) had no timeout, so if Supabase Auth was slow/unreachable the app could spin on the loading splash indefinitely ("taking forever to load", "failing to fetch my email").',
+      'Added a 15s watchdog: if the session handshake doesn\'t return in time, the app proceeds to the login screen so the user can attempt a fresh sign-in instead of staring at a spinner.',
+      'Companion to 4.9.5 (which hardened the separate profile-load path). Note: neither change can fix an actual Supabase outage — if Auth itself is down, sign-in will still fail until the service recovers; check status.supabase.com and the project dashboard.',
+    ],
+  },
+  {
     version: '4.9.5',
     date: '2026-06-08',
     kind: 'patch',
