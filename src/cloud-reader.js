@@ -57,6 +57,24 @@ function idbPut(storeName, record) {
   }));
 }
 
+function idbGetAll(storeName) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+function idbDelete(storeName, id) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
 // ─── Cloud → local mappers (inverse of cloud-sync.js mappers) ───────────────
 
 function rowToMedia(r) {
@@ -345,17 +363,11 @@ export async function refreshFromCloud({ force = false } = {}) {
   await hydrateBlobKind({ kind: 'overlay', store: 'overlays', mapper: rowToOverlay });
   await hydrateBlobKind({ kind: 'effect',  store: 'effects',  mapper: rowToEffect });
 
-  // Manual players — no blob, simple IDB upsert into 'players' store.
-  try {
-    const rows = await fetchKind('manual-player');
-    report.manualPlayers.fetched = rows.length;
-    for (const r of rows) {
-      await idbPut('players', rowToPlayer(r)).catch(err =>
-        report.manualPlayers.errors.push({ id: r.id, error: err.message })
-      );
-    }
-  } catch (err) {
-    report.manualPlayers.errors.push({ error: err.message });
+  // Manual players — no blob; upsert + reconcile via the shared helper.
+  {
+    const mp = await hydrateManualPlayers();
+    report.manualPlayers.fetched = mp.fetched;
+    report.manualPlayers.errors.push(...mp.errors);
   }
 
   // Requests + comments — localStorage. Merge by id preserving any local-only
@@ -422,6 +434,51 @@ export async function refreshFromCloud({ force = false } = {}) {
 
   try { localStorage.setItem(LS_HYDRATED_AT, String(Date.now())); } catch {}
   return report;
+}
+
+// Shared manual-players hydrate: upsert every cloud row into the local
+// 'players' IDB store, then RECONCILE — delete local rows whose id no longer
+// exists in the cloud (e.g. a duplicate manual_players row merged/deleted by
+// an admin would otherwise haunt every device's cache forever, since idbPut
+// never removes anything). Two safety guards:
+//   1. Deletion only runs when the cloud fetch itself succeeded — a partial
+//      or failed fetch must never be interpreted as "everything was deleted".
+//   2. Local rows created in the last 10 minutes are spared — an offline-
+//      created row that hasn't synced up yet isn't in the cloud set, and
+//      deleting it here would eat the user's brand-new player.
+async function hydrateManualPlayers() {
+  const summary = { fetched: 0, deleted: 0, errors: [] };
+  try {
+    const rows = await fetchKind('manual-player');
+    summary.fetched = rows.length;
+    const cloudIds = new Set();
+    for (const r of rows) {
+      cloudIds.add(r.id);
+      await idbPut('players', rowToPlayer(r)).catch(err =>
+        summary.errors.push({ id: r.id, error: err.message })
+      );
+    }
+    // Reconcile — guarded by the successful fetch above.
+    const FRESH_MS = 10 * 60 * 1000;
+    const local = await idbGetAll('players').catch(() => []);
+    for (const p of local) {
+      if (cloudIds.has(p.id)) continue;
+      if (p.createdAt && Date.now() - p.createdAt < FRESH_MS) continue;
+      await idbDelete('players', p.id).then(() => { summary.deleted++; })
+        .catch(err => summary.errors.push({ id: p.id, error: err.message }));
+    }
+  } catch (err) {
+    summary.errors.push({ error: err.message });
+  }
+  return summary;
+}
+
+// Focused manual-players refresh — used by PlayerPage on mount so a profile
+// photo (or any roster edit) made on another device shows up immediately,
+// without waiting out the global hydrate throttle. One round trip, no blobs.
+export async function refreshManualPlayersFromCloud() {
+  if (!supabaseConfigured) return { skipped: 'not-configured', fetched: 0 };
+  return hydrateManualPlayers();
 }
 
 // Focused overlay refresh — used by Generate when the user picks a team

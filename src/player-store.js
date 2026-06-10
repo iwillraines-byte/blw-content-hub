@@ -2,7 +2,7 @@
 // For players signed to teams but not yet appearing in the Grand Slam Systems
 // API (e.g., preseason signings, practice squad). Persisted in the browser.
 
-import { cloud } from './cloud-sync';
+import { cloud, cloudAwait } from './cloud-sync';
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Bumped from 2 to add players store
@@ -97,7 +97,12 @@ export async function getManualPlayersByTeam(teamId) {
 // If the matching rule is ambiguous (rule 3 or 4 matches multiple records),
 // we create a NEW record instead of overwriting one of them — losing data
 // is worse than having a duplicate that an admin can clean up.
-export async function upsertManualPlayer({ team, lastName, firstInitial, firstName, num, updates = {} }) {
+// awaitCloud: when true, the cloud write is awaited and the promise resolves
+// { record, cloud } where cloud is { ok } / { ok:false, status?, error } /
+// { skipped:true }. Callers that must be sure the change is visible to other
+// devices (e.g. profile photo picks) use this; background heuristics keep the
+// default fire-and-forget shape (resolves the bare record).
+export async function upsertManualPlayer({ team, lastName, firstInitial, firstName, num, updates = {}, awaitCloud = false }) {
   if (!team || !lastName) throw new Error('team + lastName required');
   const all = await getAllManualPlayers();
   const lnNorm = String(lastName).toLowerCase();
@@ -148,7 +153,16 @@ export async function upsertManualPlayer({ team, lastName, firstInitial, firstNa
         merged.name = `${merged.firstName || ''} ${merged.lastName || ''}`.trim();
       }
       store.put(merged);
-      tx.oncomplete = () => { cloud.syncManualPlayer(merged); resolve(merged); };
+      tx.oncomplete = () => {
+        if (awaitCloud) {
+          cloudAwait.syncManualPlayer(merged)
+            .then(c => resolve({ record: merged, cloud: c }))
+            .catch(err => resolve({ record: merged, cloud: { ok: false, error: err?.message || 'sync failed' } }));
+        } else {
+          cloud.syncManualPlayer(merged);
+          resolve(merged);
+        }
+      };
       tx.onerror = () => reject(tx.error);
     });
   }
@@ -171,7 +185,16 @@ export async function upsertManualPlayer({ team, lastName, firstInitial, firstNa
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(record);
-    tx.oncomplete = () => { cloud.syncManualPlayer(record); resolve(record); };
+    tx.oncomplete = () => {
+      if (awaitCloud) {
+        cloudAwait.syncManualPlayer(record)
+          .then(c => resolve({ record, cloud: c }))
+          .catch(err => resolve({ record, cloud: { ok: false, error: err?.message || 'sync failed' } }));
+      } else {
+        cloud.syncManualPlayer(record);
+        resolve(record);
+      }
+    };
     tx.onerror = () => reject(tx.error);
   });
 }

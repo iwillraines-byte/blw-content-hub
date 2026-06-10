@@ -101,7 +101,7 @@ export const API_CONFIG = {
 // numbers rather than resurrecting last season's leaderboard. Refresh by
 // re-pulling /leagues/3/batting-stats + pitching-stats and re-baking the top N.
 const BATTING_FALLBACK = [
-  { rank:1, name:"Mike Stiles", num:"", team:"MIA", ops_plus:325, avg:".750", obp:".857", slg:".750", hr:0 },
+  { rank:1, name:"Michael Stiles", num:"", team:"MIA", ops_plus:325, avg:".750", obp:".857", slg:".750", hr:0 },
   { rank:2, name:"Tommy Hernandez", num:"", team:"MIA", ops_plus:303, avg:".400", obp:".571", slg:"1.000", hr:1 },
   { rank:3, name:"Jordan Robles", num:"", team:"LAN", ops_plus:271, avg:".273", obp:".385", slg:"1.091", hr:3 },
   { rank:4, name:"Preston Kolm", num:"", team:"LAN", ops_plus:270, avg:".625", obp:".769", slg:".625", hr:0 },
@@ -114,7 +114,7 @@ const BATTING_FALLBACK = [
 ];
 
 const PITCHING_FALLBACK = [
-  { rank:1, name:"Mike Stiles", num:"", team:"MIA", fip:-2.52, era:"0.00", ip:"3.0", k4:"10.67", w:1, l:0 },
+  { rank:1, name:"Michael Stiles", num:"", team:"MIA", fip:-2.52, era:"0.00", ip:"3.0", k4:"10.67", w:1, l:0 },
   { rank:2, name:"Brody Livingston", num:"", team:"PHI", fip:-1.52, era:"0.00", ip:"3.0", k4:"10.67", w:1, l:0 },
   { rank:3, name:"Jordan Robles", num:"", team:"LAN", fip:-1.19, era:"0.00", ip:"6.0", k4:"8.00", w:2, l:0 },
   { rank:4, name:"Kyle Vonschleusingen", num:"", team:"BOS", fip:-1.19, era:"0.00", ip:"3.0", k4:"8.00", w:1, l:0 },
@@ -1480,7 +1480,27 @@ export { parsePlayerSlug };
 // if there are multiple, we return the first and flag `ambiguous: true` so
 // the UI can warn.
 export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []) {
-  const { firstName: WANT_FN, firstInitial: WANT_FI, lastName: LN_NORM } = parsePlayerSlug(lastNameSlug);
+  let { firstName: WANT_FN, firstInitial: WANT_FI, lastName: LN_NORM } = parsePlayerSlug(lastNameSlug);
+
+  // v4.13.0: canonicalize the slug itself. A legacy slug like "mike-stiles"
+  // names a real player whose canonical identity is "Michael Stiles" — the
+  // alias table knows this, but the slug-derived WANT_FN ("mike") would never
+  // match the canonical records, so the page either 404'd or resolved against
+  // a stray legacy row (creating a second page for the same player). Run the
+  // slug's full name through resolveCanonicalName and re-derive the wants
+  // from the canonical form when they differ.
+  if (WANT_FN) {
+    const slugFullName = `${WANT_FN} ${LN_NORM.replace(/-/g, ' ')}`;
+    const canonical = resolveCanonicalName(slugFullName);
+    if (canonical && _normName(canonical) !== _normName(slugFullName)) {
+      const parts = canonical.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        WANT_FN = slugify(parts[0]);
+        WANT_FI = parts[0].charAt(0).toUpperCase();
+        LN_NORM = slugify(parts.slice(1).join(' '));
+      }
+    }
+  }
 
   const matchLast = (name) => slugify(String(name || '').split(' ').pop()) === LN_NORM;
 

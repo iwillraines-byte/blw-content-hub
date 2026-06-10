@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.13.0',
+    date: '2026-06-10',
+    kind: 'minor',
+    summary: 'Profile photos save globally + the two Mike Stiles pages are one again',
+    items: [
+      'Profile photo & position saves are now VERIFIED against the cloud: the success toast only fires after Supabase confirms the write. If the sync fails you see "Saved locally — cloud sync failed" with the reason, instead of a silent false success that other devices never receive.',
+      'Player pages now pull the freshest manual_players data from the cloud on every visit (one cheap round trip) — a photo picked on one device shows up on another immediately, not after a hard refresh.',
+      'Two Mike Stiles pages resolved: the player goes by Michael, but legacy URLs/slugs ("mike-stiles") resolved against separate data — so a photo saved there landed on a duplicate database row that the real page never read. Slugs now run through the canonical-name alias table, and a legacy URL self-heals to the canonical one (replace, so back-button skips it).',
+      'Stale fallback leaderboard rows updated to the canonical "Michael Stiles" spelling.',
+      'Device caches now reconcile deletions: when an admin removes/merges a duplicate player row in the cloud, every device drops its cached copy on the next hydrate (with guards: never on a failed fetch, never for rows created in the last 10 minutes that may not have synced up yet).',
+      'Run db/018_merge_mike_stiles.sql in Supabase to merge the duplicate row\'s data (photo, voice, vitals) into the canonical Michael Stiles row and delete the dup.',
+    ],
+  },
+  {
     version: '4.12.1',
     date: '2026-06-08',
     kind: 'patch',

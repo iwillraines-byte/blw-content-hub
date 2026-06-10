@@ -14,6 +14,7 @@ import { TierBadge } from '../tier-badges';
 import { useAuth, isStaffRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
+import { refreshManualPlayersFromCloud } from '../cloud-reader';
 import { formatPostName } from '../template-config';
 import { authedJson, authedFetch } from '../authed-fetch';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
@@ -1456,6 +1457,13 @@ export default function PlayerPage() {
       navigate(`/teams/${team.slug}/players/${lastName}`, { replace: true });
     }
   }, [team, slug, lastName, navigate]);
+
+  // v4.13.0: same self-healing treatment for the PLAYER slug. Legacy or
+  // aliased slugs ("mike-stiles", "m-stiles", bare "stiles") resolve to the
+  // canonical player record below; once it loads, replace the URL with the
+  // canonical full-name slug so one player = one URL everywhere (bookmarks,
+  // shares, analytics). Replace (not push) so back skips the legacy URL.
+  // The effect itself lives below the `player` state declaration.
   const { user, role, userId: effectiveUserId } = useAuth();
   // Photo-edit + pan/zoom buttons surface for ANY staff user (master +
   // content). Picking a player's headshot is daily content work, not a
@@ -1482,6 +1490,14 @@ export default function PlayerPage() {
   // present + role='athlete') hit it on every render and white-screened.
   const isOwnPlayer = isAthlete && !!effectiveUserId && player?.userId === effectiveUserId;
   const canEditBio = isMaster || isOwnPlayer;
+
+  useEffect(() => {
+    if (!player || !team) return;
+    const canon = playerSlug(player);
+    if (canon && canon !== lastName) {
+      navigate(`/teams/${team.slug}/players/${canon}`, { replace: true });
+    }
+  }, [player, team, lastName, navigate]);
   const [media, setMedia] = useState([]);
   // Full team media (all players + team-scoped assets) for the photo picker.
   // Lazy-loaded the first time the picker opens, then kept in state.
@@ -1543,7 +1559,15 @@ export default function PlayerPage() {
     // Load stats AND team roster AND ALL manual players in parallel.
     // We pass the FULL manual_players list (not just this team's) so
     // cross-team trade overrides resolve correctly.
-    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), getAllManualPlayers(), getAllMedia()])
+    //
+    // v4.13.0: pull the latest manual_players from the cloud BEFORE reading
+    // the local list. The global hydrate runs once per session, so a profile
+    // photo picked on another device wouldn't show here until a hard refresh.
+    // One extra round trip per player-page visit; soft-fails to local cache.
+    const freshManualPlayers = refreshManualPlayersFromCloud()
+      .catch(() => null)
+      .then(() => getAllManualPlayers());
+    Promise.all([fetchAllData(), fetchTeamRosterFromApi(team.id), freshManualPlayers, getAllMedia()])
       .then(async ([allData, , manualList, all]) => {
         if (cancel) return;
         setBattingLeaders(allData.batting || []);
@@ -1669,13 +1693,14 @@ export default function PlayerPage() {
     if (!team?.id || !player?.lastName) return;
     setSavingPhoto(true);
     try {
-      await upsertManualPlayer({
+      const result = await upsertManualPlayer({
         team: team.id,
         lastName: player.lastName,
         firstInitial: player.firstInitial,
         firstName: player.firstName,
         num: player.num,
         updates: { profile_media_id: mediaId || null },
+        awaitCloud: true,
       });
       setPlayer(prev => prev ? {
         ...prev,
@@ -1686,7 +1711,12 @@ export default function PlayerPage() {
         profileOffsetY: null,
         profileZoom: null,
       } : prev);
-      toast.success(mediaId ? 'Profile photo updated' : 'Profile photo reset');
+      const cloudResult = result?.cloud;
+      if (cloudResult && cloudResult.ok === false) {
+        toast.error('Saved locally — cloud sync failed', { detail: String(cloudResult.error || '').slice(0, 120) });
+      } else {
+        toast.success(mediaId ? 'Profile photo updated' : 'Profile photo reset');
+      }
       setPhotoPickerOpen(false);
     } catch (err) {
       toast.error('Failed to save', { detail: err.message?.slice(0, 80) });
@@ -1702,7 +1732,7 @@ export default function PlayerPage() {
     if (!team?.id || !player?.lastName) return;
     setSavingPosition(true);
     try {
-      await upsertManualPlayer({
+      const result = await upsertManualPlayer({
         team: team.id,
         lastName: player.lastName,
         firstInitial: player.firstInitial,
@@ -1713,6 +1743,7 @@ export default function PlayerPage() {
           profile_offset_y: offsetY,
           profile_zoom: zoom,
         },
+        awaitCloud: true,
       });
       setPlayer(prev => prev ? {
         ...prev,
@@ -1720,7 +1751,12 @@ export default function PlayerPage() {
         profileOffsetY: offsetY,
         profileZoom: zoom,
       } : prev);
-      toast.success('Position saved');
+      const cloudResult = result?.cloud;
+      if (cloudResult && cloudResult.ok === false) {
+        toast.error('Saved locally — cloud sync failed', { detail: String(cloudResult.error || '').slice(0, 120) });
+      } else {
+        toast.success('Position saved');
+      }
       setPositionEditorOpen(false);
     } catch (err) {
       toast.error('Failed to save', { detail: err.message?.slice(0, 80) });
