@@ -26,6 +26,7 @@ import Schedule from './pages/Schedule';
 import MyStats from './pages/MyStats';
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
+import { useUnreadRequests } from './request-unread-store';
 import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
 import { hydrateDriveFromCloud } from './drive-api';
 import { supabaseConfigured } from './supabase-client';
@@ -175,6 +176,16 @@ function TeamsDropdown({ location }) {
 }
 
 function Sidebar({ isMobile, open, onClose }) {
+  // v4.15.0: unread thread badge on the Requests nav item. The hook
+  // refreshes on mount + every 60s + window focus; markRead happens on
+  // the Requests page when a thread opens.
+  const { user: navUser, role: navRole } = useAuth();
+  const navUnread = useUnreadRequests({
+    userId: navUser?.id,
+    email: navUser?.email,
+    isAthlete: navRole === 'athlete',
+    enabled: !!navUser?.id && ['master_admin', 'admin', 'content', 'athlete'].includes(navRole),
+  });
   const location = useLocation();
   const { role, isConfigured } = useAuth();
   // Changelog popup state. Lives at the Sidebar level (not page-global)
@@ -271,6 +282,15 @@ function Sidebar({ isMobile, open, onClose }) {
                   style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: active ? 1 : 0.6, display: 'inline-block', transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
                 >{n.icon}</span>
                 {n.label}
+                {n.path === '/requests' && navUnread.totalUnread > 0 && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    background: colors.red, color: '#fff',
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                    borderRadius: 999, padding: '1px 7px',
+                    letterSpacing: 0.4, lineHeight: 1.6,
+                  }}>{navUnread.totalUnread > 99 ? '99+' : navUnread.totalUnread}</span>
+                )}
               </Link>
             );
           })}

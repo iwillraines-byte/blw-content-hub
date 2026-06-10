@@ -8,6 +8,9 @@ import { stashIdeaForGenerate } from '../idea-context-store';
 import { useAuth } from '../auth';
 import { REQUEST_TYPES, getRequestType, getPriority } from '../request-types';
 import { RequestModal } from '../request-modal';
+import { RequestThread } from '../request-thread';
+import { useUnreadRequests } from '../request-unread-store';
+import { refreshRequestsFromCloud } from '../cloud-reader';
 
 const STATUS_LABELS = {
   pending: 'Pending',
@@ -17,12 +20,6 @@ const STATUS_LABELS = {
   completed: 'Completed',
 };
 
-const roleColors = {
-  admin: { bg: '#DBEAFE', text: '#1E40AF' },
-  team: { bg: '#D1FAE5', text: '#065F46' },
-  athlete: { bg: '#FEF3C7', text: '#92400E' },
-  owner: { bg: '#EDE9FE', text: '#5B21B6' },
-};
 
 export default function Requests() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -59,6 +56,26 @@ export default function Requests() {
   // and drive the dashboard "N pending" card.
   const [requests, setRequestsState] = useState(() => getRequests());
   const [comments, setCommentsState] = useState(() => getComments());
+
+  // v4.15.0: localStorage is now a CACHE, not the read source. The thread
+  // is two-way — the other party's messages only exist in Supabase — so we
+  // pull both kinds fresh on mount (merge-prefer-newer into localStorage,
+  // then mirror into state).
+  useEffect(() => {
+    let cancel = false;
+    refreshRequestsFromCloud().then(({ requests: r, comments: c }) => {
+      if (cancel) return;
+      if (r) setRequestsState(r);
+      if (c) setCommentsState(c);
+    }).catch(() => {});
+    return () => { cancel = true; };
+  }, []);
+
+  // Server-side per-user unread markers — drives the per-card unread dot
+  // and clears the nav badge when a thread is opened.
+  const unread = useUnreadRequests({
+    userId: user?.id, email: user?.email, isAthlete, enabled: !!user?.id,
+  });
   const [showNew, setShowNew] = useState(false);
   // Detail-panel expansion is independent of the comments thread because
   // the two surfaces are visually different and serve different jobs:
@@ -67,7 +84,6 @@ export default function Requests() {
   // requests auto-open the detail panel on first paint.
   const [expandedDetail, setExpandedDetail] = useState({});
   const [expandedComments, setExpandedComments] = useState({});
-  const [commentInputs, setCommentInputs] = useState({});
   const [newTeam, setNewTeam] = useState('');
   const [newTemplate, setNewTemplate] = useState('');
   const [newPriority, setNewPriority] = useState('medium');
@@ -125,9 +141,27 @@ export default function Requests() {
   const filteredByStatus = statusFilter === 'ALL'
     ? visibleRequests
     : visibleRequests.filter(r => r.status === statusFilter);
-  const filtered = typeFilter === 'ALL'
+  const filteredUnsorted = typeFilter === 'ALL'
     ? filteredByStatus
     : filteredByStatus.filter(r => (r.type || 'content') === typeFilter);
+
+  // v4.15.0 queue order: actionable first. Open statuses (pending →
+  // in-progress → revision) lead, then by priority, then OLDEST first
+  // within a bucket so nothing quietly rots at the bottom. Terminal
+  // statuses (approved/completed/declined) trail, newest first.
+  const filtered = useMemo(() => {
+    const statusRank = { pending: 0, 'in-progress': 1, revision: 2, approved: 3, completed: 4, declined: 5 };
+    const prioRank = { critical: 0, high: 1, medium: 2, low: 3 };
+    const isOpen = (s) => (statusRank[s] ?? 0) <= 2;
+    return [...filteredUnsorted].sort((a, b) => {
+      const sa = statusRank[a.status] ?? 0, sb = statusRank[b.status] ?? 0;
+      if (sa !== sb) return sa - sb;
+      const pa = prioRank[a.priority] ?? 2, pb = prioRank[b.priority] ?? 2;
+      if (pa !== pb) return pa - pb;
+      const ca = a.createdAt || 0, cb = b.createdAt || 0;
+      return isOpen(a.status) ? ca - cb : cb - ca;
+    });
+  }, [filteredUnsorted]);
 
   const setStatusFilter = (status) => {
     const next = new URLSearchParams(searchParams);
@@ -142,39 +176,42 @@ export default function Requests() {
     setSearchParams(next, { replace: true });
   };
 
-  const updateStatus = (id, status) => setRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r));
-  // v4.5.63: deny-with-reason. Captures the reason as a comment on the
-  // request (so the queue shows WHY it was declined, not just that it
-  // was), flips status, and opens a mailto: pre-filled with the
-  // reason so the master can fire the "sorry, here's why" email in
-  // one click. Stamped notifiedAt the same way the complete-notify
-  // flow does so the chip reads correctly.
+  // v4.15.0: shared comment factory — every thread entry carries the
+  // author's user id (mine-vs-theirs bubbles + unread counting), a kind
+  // (comment | status | decline), and a real epoch createdAt so ordering
+  // and unread comparisons don't depend on display strings.
+  const makeComment = (requestId, text, kind = 'comment') => ({
+    id: crypto.randomUUID(),
+    requestId,
+    author: user?.email || (isAthlete ? 'Athlete' : 'Staff'),
+    role: isAthlete ? 'athlete' : 'admin',
+    text,
+    kind,
+    authorUserId: user?.id || null,
+    createdAt: Date.now(),
+    time: new Date().toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+  });
+
+  // Status flips also append a system pill to the thread so the requester
+  // sees progress in-line ("Status → In progress") without the admin
+  // having to type anything.
+  const updateStatus = (id, status) => {
+    setRequests(rs => rs.map(r => r.id === id ? { ...r, status } : r));
+    setComments(prev => [...prev, makeComment(id, `Status → ${STATUS_LABELS[status] || status}`, 'status')]);
+  };
+  // v4.15.0: deny-with-reason, in-app only. The structured decline lands
+  // in the THREAD (kind:'decline') where the requester sees it with an
+  // unread badge — no more mailto round-trip.
   const denyRequest = (id) => {
     const r = requests.find(x => x.id === id);
     if (!r) return;
-    const reason = window.prompt('Reason for declining this request? (Visible to the requester in the email + on the request card.)', '');
+    const reason = window.prompt('Reason for declining this request? (The requester sees it in the request thread.)', '');
     if (reason == null) return; // cancelled
     const trimmed = reason.trim();
     if (!trimmed) return;
     setRequests(rs => rs.map(x => x.id === id ? { ...x, status: 'declined', declineReason: trimmed } : x));
-    setComments(prev => [...prev, {
-      id: crypto.randomUUID(), requestId: id, author: 'You', role: 'admin',
-      text: `Declined — ${trimmed}`,
-      time: 'just now', createdAt: new Date().toISOString(),
-    }]);
-    // Pre-fill a mailto so the master can send the decline email in
-    // one click. We don't auto-open it — that's annoying — but the
-    // notify-style button will surface on the now-declined row.
-    if (r.requesterEmail) {
-      const subject = encodeURIComponent(`Re: ${r.title || r.type || 'your request'}`);
-      const body = encodeURIComponent(
-        `Hey ${r.requester || 'there'},\n\n` +
-        `Thanks for sending this in — we're not going to be able to move forward with it.\n\n` +
-        `Reason: ${trimmed}\n\n` +
-        `Happy to talk through alternatives.\n\n— BLW Studio`
-      );
-      try { window.open(`mailto:${r.requesterEmail}?subject=${subject}&body=${body}`, '_blank'); } catch { /* user-gesture only — ok to swallow */ }
-    }
+    setComments(prev => [...prev, makeComment(id, trimmed, 'decline')]);
+    setExpandedComments(prev => ({ ...prev, [id]: true }));
   };
   // v4.5.63: master-only hard remove. Filters the row out of local
   // state; the cloud-sync layer will push the delete on next flush.
@@ -182,18 +219,39 @@ export default function Requests() {
     if (!window.confirm('Permanently remove this request? This action cannot be undone.')) return;
     setRequests(rs => rs.filter(r => r.id !== id));
   };
-  const toggleComments = (id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }));
+  // Opening a thread marks it read (server-side, per-user) so the unread
+  // dot + nav badge clear everywhere this user is signed in.
+  const toggleComments = (id) => {
+    setExpandedComments(prev => {
+      const opening = !prev[id];
+      if (opening) unread.markRead(id);
+      return { ...prev, [id]: !prev[id] };
+    });
+  };
   const toggleDetail = (id) => setExpandedDetail(prev => ({ ...prev, [id]: !prev[id] }));
 
-  const addComment = (requestId) => {
-    const text = commentInputs[requestId]?.trim();
-    if (!text) return;
-    setComments(prev => [...prev, {
-      id: crypto.randomUUID(), requestId, author: 'You', role: 'admin', text,
-      time: new Date().toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
-    }]);
-    setCommentInputs(prev => ({ ...prev, [requestId]: '' }));
+  const sendThreadMessage = (requestId, text) => {
+    setComments(prev => [...prev, makeComment(requestId, text)]);
+    // Sending also bumps your own read marker — your message shouldn't
+    // re-badge you, and anything you've just seen is read by definition.
+    unread.markRead(requestId);
   };
+
+  // v4.15.0: while at least one thread is open, poll comments every 30s so
+  // the other party's replies stream in without a manual refresh. Comments
+  // only — re-merging requests mid-edit could stomp an in-flight status
+  // flip (see refreshRequestsFromCloud).
+  const anyThreadOpen = Object.values(expandedComments).some(Boolean);
+  useEffect(() => {
+    if (!anyThreadOpen) return;
+    const tick = () => {
+      refreshRequestsFromCloud({ commentsOnly: true }).then(({ comments: c }) => {
+        if (c) setCommentsState(c);
+      }).catch(() => {});
+    };
+    const interval = setInterval(tick, 30 * 1000);
+    return () => clearInterval(interval);
+  }, [anyThreadOpen]);
 
   const submit = () => {
     if (!newTeam || !newTemplate) return;
@@ -335,6 +393,21 @@ export default function Requests() {
         const reqComments = comments.filter(c => c.requestId === r.id);
         const expanded = expandedComments[r.id];
         const isFlashing = flashingId === r.id;
+        // v4.15.0: thread footer signals — last human message preview,
+        // unread count from the server-side read markers, and an aging
+        // chip so old open requests visibly demand attention.
+        const humanMsgs = reqComments.filter(c => (c.kind || 'comment') !== 'status');
+        const lastMsg = humanMsgs.length ? humanMsgs.reduce((a, b) => ((a.createdAt || 0) >= (b.createdAt || 0) ? a : b)) : null;
+        const unreadCount = unread.unreadByRequest[r.id] || 0;
+        const ageMeta = (() => {
+          if (!r.createdAt) return null;
+          const days = Math.floor((Date.now() - r.createdAt) / 86400000);
+          const open = ['pending', 'in-progress', 'revision'].includes(r.status);
+          if (!open || days < 1) return null;
+          if (days >= 10) return { label: `${days}d old`, color: '#991B1B', bg: 'rgba(153,27,27,0.10)' };
+          if (days >= 5) return { label: `${days}d old`, color: '#92400E', bg: 'rgba(146,64,14,0.10)' };
+          return { label: `${days}d`, color: colors.textMuted, bg: 'transparent' };
+        })();
         // Pull the structured idea-payload out of the note (if any).
         // Old requests without a payload fall back to plain prose +
         // a degraded detail panel that just shows what we have.
@@ -430,6 +503,17 @@ export default function Requests() {
                   color: needByLabel.color,
                   letterSpacing: 0.4,
                 }}>{needByLabel.label}</span>
+              )}
+              {ageMeta && (
+                <span
+                  title={`Waiting ${ageMeta.label.replace(' old', '')} since submission`}
+                  style={{
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                    letterSpacing: 0.5, color: ageMeta.color,
+                    background: ageMeta.bg,
+                    padding: '2px 7px', borderRadius: 999,
+                  }}
+                >⏱ {ageMeta.label}</span>
               )}
               <StatusBadge status={r.status} />
             </div>
@@ -536,28 +620,17 @@ export default function Requests() {
                 >Open in Generate →</Link>
               )}
 
-              {/* Notify requester — surfaces ONLY when status='completed'
-                  AND we have an email on the row AND the user isn't an
-                  athlete (athletes see only their own requests, no need
-                  to notify themselves). Opens a pre-filled mailto: so
-                  the master can send the "your request is done" email
-                  in one click. notified_at gets stamped when clicked so
-                  duplicate sends are avoided. Real Resend/SendGrid
-                  pipeline lands later. */}
-              {!isAthlete && r.status === 'completed' && r.requesterEmail && (
-                <NotifyButton
-                  request={r}
-                  onMarkNotified={() => setRequests(rs => rs.map(x => x.id === r.id ? { ...x, notifiedAt: new Date().toISOString() } : x))}
-                />
+              {/* v4.15.0: "Post update to thread" replaces the mailto
+                  notify button. Completed work gets announced IN the
+                  thread, where the requester has an unread badge waiting
+                  — no mail client round-trip. */}
+              {!isAthlete && r.status === 'completed' && (
+                <button
+                  onClick={() => { if (!expandedComments[r.id]) toggleComments(r.id); }}
+                  title="Open the thread to tell the requester their request is done"
+                  style={btnStyle('#22C55E')}
+                >✓ Post update</button>
               )}
-
-              <button onClick={() => toggleComments(r.id)} style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                fontSize: 12, fontWeight: 600, color: colors.textSecondary,
-                fontFamily: fonts.body, padding: '4px 8px',
-              }}>
-                {reqComments.length} comment{reqComments.length !== 1 ? 's' : ''}
-              </button>
 
               {/* Status-flip buttons — staff-only. Athletes see status
                   updates (via the badge above) but can't drive the
@@ -597,44 +670,56 @@ export default function Requests() {
               )}
             </div>
 
+            {/* v4.15.0: persistent thread footer — last message preview +
+                unread dot, always visible so the conversation is one click
+                away instead of buried behind a count. */}
+            <button
+              onClick={() => toggleComments(r.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', textAlign: 'left',
+                marginTop: 10, padding: '8px 12px',
+                background: unreadCount > 0 ? 'rgba(220,38,38,0.05)' : colors.bg,
+                border: `1px solid ${unreadCount > 0 ? 'rgba(220,38,38,0.25)' : colors.borderLight}`,
+                borderRadius: radius.sm, cursor: 'pointer',
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 13 }}>💬</span>
+              {unreadCount > 0 && (
+                <span style={{
+                  background: colors.red, color: '#fff',
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                  borderRadius: 999, padding: '1px 7px', letterSpacing: 0.4,
+                }}>{unreadCount} NEW</span>
+              )}
+              <span style={{
+                flex: 1, fontSize: 12.5, color: colors.textSecondary,
+                fontFamily: fonts.body,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {lastMsg
+                  ? <>
+                      <strong style={{ color: colors.text }}>
+                        {user?.id && lastMsg.authorUserId === user.id ? 'You' : (lastMsg.author || 'Unknown')}:
+                      </strong>{' '}
+                      {lastMsg.text}
+                      {lastMsg.time ? <span style={{ color: colors.textMuted }}> · {lastMsg.time}</span> : null}
+                    </>
+                  : (isAthlete ? 'Message the content team about this request' : 'Start a thread with the requester')}
+              </span>
+              <span style={{
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                color: colors.textMuted, letterSpacing: 0.5,
+              }}>{expanded ? 'HIDE ▴' : 'OPEN ▾'}</span>
+            </button>
+
             {expanded && (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${colors.divider}`, paddingLeft: 16 }}>
-                {reqComments.length === 0 && (
-                  <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>No comments yet.</div>
-                )}
-                {reqComments.map(c => {
-                  const rc = roleColors[c.role] || roleColors.admin;
-                  // Thread-reply indent — structural, kept at 1px so it
-                  // reads as a divider rather than an accent stripe.
-                  return (
-                    <div key={c.id} style={{ marginBottom: 10, paddingLeft: 12, borderLeft: `1px solid ${rc.bg}` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{c.author}</span>
-                        <span style={{
-                          fontSize: 11, fontFamily: fonts.condensed, fontWeight: 700,
-                          padding: '3px 10px', borderRadius: radius.sm,
-                          background: rc.bg, color: rc.text, textTransform: 'uppercase', letterSpacing: 0.4,
-                        }}>{c.role}</span>
-                        <span style={{ fontSize: 11, color: colors.textMuted }}>{c.time}</span>
-                      </div>
-                      <div style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 1.5 }}>{c.text}</div>
-                    </div>
-                  );
-                })}
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <input
-                    type="text"
-                    value={commentInputs[r.id] || ''}
-                    onChange={e => setCommentInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && addComment(r.id)}
-                    placeholder="Add a comment..."
-                    style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <RedButton onClick={() => addComment(r.id)} disabled={!commentInputs[r.id]?.trim()} style={{ padding: '8px 16px', fontSize: 12 }}>
-                    Post
-                  </RedButton>
-                </div>
-              </div>
+              <RequestThread
+                request={r}
+                comments={reqComments}
+                meUserId={user?.id || null}
+                onSend={(text) => sendThreadMessage(r.id, text)}
+              />
             )}
             </Card>
           </div>
@@ -915,47 +1000,3 @@ function RequestDetailPanel({ request, idea, template, team, generateLink }) {
   );
 }
 
-// ─── Notify requester button ───────────────────────────────────────────────
-// Opens the user's default mail client with a pre-filled "Your request
-// is done" email and stamps `notifiedAt` on the request so a follow-up
-// click reads as "Re-notify" instead of fresh. Resend/SendGrid pipeline
-// can land later; this gets the master admin a one-click path to the
-// requester's inbox today.
-function NotifyButton({ request, onMarkNotified }) {
-  const r = request;
-  const subject = encodeURIComponent(`✅ Your BLW Studio request is done — ${r.title || r.template || 'request'}`);
-  const greeting = r.requester || 'there';
-  const teamLine = r.team && r.team !== 'BLW' ? `\nTeam: ${r.team}` : '';
-  const titleLine = r.title ? `\nWhat: ${r.title}` : '';
-  const body = encodeURIComponent(
-    `Hey ${greeting},\n\n` +
-    `Your request is complete and live in the BLW Studio.\n` +
-    teamLine + titleLine + `\n\n` +
-    `Let me know if anything needs to be tweaked — happy to revise.\n\n` +
-    `— BLW Studio`
-  );
-  const href = `mailto:${r.requesterEmail}?subject=${subject}&body=${body}`;
-  const alreadyNotified = !!r.notifiedAt;
-  return (
-    <a
-      href={href}
-      onClick={() => onMarkNotified?.()}
-      title={alreadyNotified
-        ? `Already notified ${new Date(r.notifiedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} — click to send again`
-        : `Open mail client to email ${r.requesterEmail}`}
-      style={{
-        background: alreadyNotified ? colors.bg : '#22C55E',
-        color: alreadyNotified ? colors.textSecondary : '#fff',
-        border: alreadyNotified ? `1px solid ${colors.border}` : 'none',
-        borderRadius: radius.sm,
-        padding: '7px 14px',
-        textDecoration: 'none',
-        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-        letterSpacing: 0.6, textTransform: 'uppercase',
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-      }}
-    >
-      ✉ {alreadyNotified ? 'Re-notify' : 'Notify requester'}
-    </a>
-  );
-}

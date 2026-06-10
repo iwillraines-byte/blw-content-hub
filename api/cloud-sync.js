@@ -184,6 +184,24 @@ export default async function handler(req, res) {
         );
       }
 
+      // v4.15.0: same scoping for comment THREADS. Comments become real
+      // two-way conversation in 4.15, so an athlete must only be able to
+      // read threads on their own requests — not the whole league's.
+      // Two-step: resolve their request ids, then filter the comment query.
+      if (kind === 'request-comment' && isAthlete) {
+        const { data: ownReqs, error: ownErr } = await sb.from('requests').select('id').or(
+          `requester_user_id.eq.${user.id}` +
+          (user.email ? `,requester_email.eq.${user.email}` : '')
+        );
+        if (ownErr) throw ownErr;
+        const ownIds = (ownReqs || []).map(r => r.id);
+        if (ownIds.length === 0) {
+          res.status(200).json({ records: [] });
+          return;
+        }
+        q = q.in('request_id', ownIds);
+      }
+
       if (kind === 'generate-log') {
         // Optional team + since + posted filters drive the team-page
         // monthly progress bar + carousel without needing a separate

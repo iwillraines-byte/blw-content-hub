@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '4.15.0',
+    date: '2026-06-10',
+    kind: 'minor',
+    summary: 'Requests overhaul — real two-way threads between players and admins, unread badges, smarter queue',
+    items: [
+      'Every request now has a real conversation thread: chat-style bubbles (yours right, theirs left, role-tinted), with status changes rendered as system pills so the full history of a request reads in one place. The thread footer sits on every card — last message preview + unread count — instead of a buried "N comments" toggle.',
+      'Unread tracking is per-USER and server-side (request_reads table): a red badge on the Requests nav item and a "💬 N unread replies" line on the dashboard card; opening a thread clears it on every device you\'re signed into. Threads poll every 30 seconds while open, so replies stream in live.',
+      'Reads are cloud-first now — the other party\'s messages only ever existed in Supabase, so the page pulls fresh requests + comments on mount instead of trusting this device\'s localStorage cache.',
+      'Decline flow rebuilt: the reason lands as a structured card IN the thread (no more mailto popping your mail client), and the requester sees it with an unread badge. The completed-request mailto button is now "Post update" — it opens the thread.',
+      'Queue order is actionable-first: open requests (pending → in-progress → revision) by priority then OLDEST first so nothing rots; finished ones trail. Open requests older than 5 days get an amber ⏱ age chip, 10+ days red.',
+      'Athletes get a confirmation toast on submit ("We\'ll reply in the request\'s thread"), and a server-side fix means athletes can now only read comment threads on their OWN requests (previously the comment feed wasn\'t scoped).',
+      'Run db/020_request_threads.sql in Supabase for the new columns + read-marker table. Until then: threads still post (tolerant upsert), badges just stay at zero.',
+    ],
+  },
+  {
     version: '4.14.0',
     date: '2026-06-10',
     kind: 'minor',

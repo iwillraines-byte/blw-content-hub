@@ -203,6 +203,7 @@ function rowToRequest(r) {
     playerLastName: r.player_last_name || '',
     playerFirstInitial: r.player_first_initial || '',
     notifiedAt: r.notified_at || null,
+    declineReason: r.decline_reason || '',
   };
 }
 
@@ -216,6 +217,11 @@ function rowToComment(r) {
     time: r.created_at
       ? new Date(r.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
       : '',
+    // v4.15.0: raw epoch for unread comparisons + thread ordering, plus
+    // thread metadata (kind: comment|status|decline, authorUserId).
+    createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    kind: r.kind || 'comment',
+    authorUserId: r.author_user_id || null,
   };
 }
 
@@ -479,6 +485,39 @@ async function hydrateManualPlayers() {
 export async function refreshManualPlayersFromCloud() {
   if (!supabaseConfigured) return { skipped: 'not-configured', fetched: 0 };
   return hydrateManualPlayers();
+}
+
+// Focused requests + comments refresh (v4.15.0). The thread UI is two-way
+// communication between DIFFERENT users — the other party's messages are
+// never in this device's localStorage, so reads must come from the cloud.
+// Fetches both kinds fresh (no throttle), merges into the localStorage
+// stores the requests page already reads, and returns the merged lists.
+// Soft-fails per-kind: a failed fetch leaves that store untouched.
+// opts.commentsOnly: the 30s thread poll only pulls comments — re-merging
+// requests mid-edit could momentarily stomp a local status flip whose
+// fire-and-forget sync hasn't landed yet.
+export async function refreshRequestsFromCloud({ commentsOnly = false } = {}) {
+  if (!supabaseConfigured) return { skipped: 'not-configured', requests: null, comments: null };
+  const out = { requests: null, comments: null };
+  if (!commentsOnly) try {
+    const rows = await fetchKind('request');
+    const mapped = rows.map(rowToRequest);
+    const localRaw = localStorage.getItem('blw_requests_v1');
+    const local = localRaw ? JSON.parse(localRaw) : [];
+    const merged = mergeByIdPreferNewer(local, mapped);
+    localStorage.setItem('blw_requests_v1', JSON.stringify(merged));
+    out.requests = merged;
+  } catch { /* keep local */ }
+  try {
+    const rows = await fetchKind('request-comment');
+    const mapped = rows.map(rowToComment);
+    const localRaw = localStorage.getItem('blw_request_comments_v1');
+    const local = localRaw ? JSON.parse(localRaw) : [];
+    const merged = mergeByIdPreferNewer(local, mapped);
+    localStorage.setItem('blw_request_comments_v1', JSON.stringify(merged));
+    out.comments = merged;
+  } catch { /* keep local */ }
+  return out;
 }
 
 // Focused overlay refresh — used by Generate when the user picks a team

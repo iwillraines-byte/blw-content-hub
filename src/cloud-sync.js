@@ -142,6 +142,9 @@ function mapRequestToRow(r) {
     player_last_name: r.playerLastName || null,
     player_first_initial: r.playerFirstInitial || null,
     notified_at: r.notifiedAt || null,
+    // v4.15.0 (db/020): structured decline reason. Tolerant upsert strips
+    // it on pre-migration schemas.
+    decline_reason: r.declineReason || null,
     // createdAt is a ms epoch on the local record — Supabase has its own
     // created_at default + updated_at, so we don't force it here.
   };
@@ -154,6 +157,10 @@ function mapCommentToRow(c) {
     author: c.author || null,
     role: c.role || null,
     text: c.text,
+    // v4.15.0 (db/020): thread metadata. kind drives system-pill vs bubble
+    // rendering; author_user_id drives mine-vs-theirs + unread counting.
+    kind: c.kind || 'comment',
+    author_user_id: c.authorUserId || null,
   };
 }
 

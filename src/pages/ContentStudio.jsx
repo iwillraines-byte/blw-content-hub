@@ -20,6 +20,7 @@ import { authedFetch } from '../authed-fetch';
 import IdeaCard from '../idea-card';
 import { Pager, useIdeaPagination, IDEAS_PAGE_SIZE } from '../idea-pager';
 import { buildRecentResults, buildUpcomingSlate, buildPhotoInventory, buildPostingCadence } from '../idea-context-builders';
+import { useUnreadRequests } from '../request-unread-store';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
 import { ViewAsPicker } from '../view-as';
 import { useContentIdeas } from '../content-ideas-store';
@@ -40,6 +41,11 @@ export default function ContentStudio() {
   const [suggestions, setSuggestions] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [requests, setRequests] = useState([]);
+  // v4.15.0: unread thread replies — surfaces "N unread replies" on the
+  // Requests dashboard card so conversations don't silently stall.
+  const requestsUnread = useUnreadRequests({
+    userId: authUser?.id, email: authUser?.email, isAthlete, enabled: !!authUser?.id,
+  });
   const [mediaStats, setMediaStats] = useState({ total: 0, untagged: 0 });
   // Live batting + pitching for the Stats Leaders teaser at the bottom of the
   // dashboard. Shares the same fetchAllData() call so nothing hits twice.
@@ -441,16 +447,20 @@ export default function ContentStudio() {
             : (isAthlete
                 ? `${pendingCount} of yours pending`
                 : `${pendingCount} pending`)}
-          secondary={pendingCount === 0
-            ? (isAthlete ? 'File one for the content team' : 'Click to file a new one')
-            : oldestDays != null && oldestDays > 0
-              ? `Oldest: ${oldestDays} day${oldestDays === 1 ? '' : 's'} ago`
-              : 'Created today'}
-          to={pendingCount > 0 ? '/requests?status=pending' : '/requests'}
-          cta={pendingCount > 0
-            ? (isAthlete ? 'See my requests →' : 'Review pending →')
-            : '+ New Request'}
-          warn={oldestDays != null && oldestDays > 3}
+          secondary={requestsUnread.totalUnread > 0
+            ? `💬 ${requestsUnread.totalUnread} unread repl${requestsUnread.totalUnread === 1 ? 'y' : 'ies'}`
+            : pendingCount === 0
+              ? (isAthlete ? 'File one for the content team' : 'Click to file a new one')
+              : oldestDays != null && oldestDays > 0
+                ? `Oldest: ${oldestDays} day${oldestDays === 1 ? '' : 's'} ago`
+                : 'Created today'}
+          to={requestsUnread.totalUnread > 0 ? '/requests' : (pendingCount > 0 ? '/requests?status=pending' : '/requests')}
+          cta={requestsUnread.totalUnread > 0
+            ? 'Read replies →'
+            : pendingCount > 0
+              ? (isAthlete ? 'See my requests →' : 'Review pending →')
+              : '+ New Request'}
+          warn={requestsUnread.totalUnread > 0 || (oldestDays != null && oldestDays > 3)}
         />
         {/* v4.8.11: Files card hidden from athletes — they don't have
             access to the Files surface, so showing "0 files in library"

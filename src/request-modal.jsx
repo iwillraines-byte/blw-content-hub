@@ -24,8 +24,10 @@ import { TEAMS, TEMPLATES, getTeam } from './data';
 import { useAuth } from './auth';
 import { REQUEST_TYPES, PRIORITY_LEVELS, getRequestType, visibleRequestTypes } from './request-types';
 import { getRequests, saveRequests } from './requests-store';
+import { useToast } from './toast';
 
 export function RequestModal({ open, onClose, onSubmitted, defaultType = 'content', defaultTeam = '', roster = [] }) {
+  const toast = useToast();
   const { user, role, teamId: profileTeamId } = useAuth();
   const isAthlete = role === 'athlete';
 
@@ -124,6 +126,9 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
     saveRequests(next);
     setSubmitting(false);
     onSubmitted?.(newReq);
+    // v4.15.0: explicit confirmation — replies land in the request's
+    // thread (with an unread badge), so point the requester there.
+    toast.success('Request sent', { detail: "We'll reply in the request's thread — watch for the badge on Requests." });
     // Reset for next open
     setTitle(''); setDescription(''); setPriority('medium'); setNeedBy('');
     setFieldValues({});
