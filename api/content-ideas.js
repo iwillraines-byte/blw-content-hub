@@ -64,7 +64,7 @@ const MAX_LIMIT = 200;
 const ROW_FIELDS = [
   'id', 'headline', 'narrative', 'description', 'team',
   'player_last_name', 'player_first_initial', 'template_id', 'angle',
-  'data_points', 'captions', 'prefill', 'source', 'created_by',
+  'data_points', 'captions', 'prefill', 'source', 'timeliness', 'created_by',
 ];
 
 // Map an idea object (camelCase, as it lives in JS) into a row (snake_case).
@@ -99,6 +99,10 @@ export function ideaToRow(idea, { createdBy = null } = {}) {
     captions: idea.captions && typeof idea.captions === 'object' ? idea.captions : {},
     prefill: idea.prefill && typeof idea.prefill === 'object' ? idea.prefill : {},
     source: idea.source || (idea.aiGenerated ? 'ai' : 'deterministic'),
+    // v4.14.0: "this-week" (anchored in recent results / upcoming slate)
+    // vs "evergreen". Column added in db/019; persistIdeas retries without
+    // it when the migration hasn't run yet.
+    timeliness: idea.timeliness === 'this-week' || idea.timeliness === 'evergreen' ? idea.timeliness : null,
     created_by: createdBy,
   };
   return row;
@@ -119,6 +123,7 @@ export function rowToIdea(row) {
     captions: row.captions && typeof row.captions === 'object' ? row.captions : {},
     prefill: row.prefill && typeof row.prefill === 'object' ? row.prefill : {},
     aiGenerated: row.source === 'ai',
+    timeliness: row.timeliness || null,
     createdAt: row.created_at,
     playerLastName: row.player_last_name || null,
     playerFirstInitial: row.player_first_initial || null,
@@ -135,7 +140,13 @@ export async function persistIdeas(sb, ideas, { createdBy = null } = {}) {
   if (rows.length === 0) return { inserted: 0, errors: [] };
   // Upsert so a regenerated idea with the same id replaces the old row
   // instead of dropping a constraint error.
-  const { data, error } = await sb.from(TABLE).upsert(rows, { onConflict: 'id' }).select('id');
+  let { data, error } = await sb.from(TABLE).upsert(rows, { onConflict: 'id' }).select('id');
+  // Pre-migration tolerance: if the timeliness column (db/019) doesn't exist
+  // yet, retry the upsert without it rather than dropping the whole batch.
+  if (error && /timeliness/i.test(error.message || '')) {
+    const stripped = rows.map(({ timeliness, ...rest }) => rest);
+    ({ data, error } = await sb.from(TABLE).upsert(stripped, { onConflict: 'id' }).select('id'));
+  }
   if (error) {
     // Soft-fail: idea generation should still succeed even if persistence
     // is broken (table missing, RLS misconfigured). Caller logs but doesn't

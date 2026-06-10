@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.14.0',
+    date: '2026-06-10',
+    kind: 'minor',
+    summary: 'Generate Content overhaul — ideas now pull from live games, schedule, photos & posting gaps',
+    items: [
+      'The AI idea generator now sees FOUR new data sources on every call: recent final scores (last 14 days, this-week games flagged as the freshest storylines), the upcoming game slate (real matchups + dates for gameday/preview ideas), the tagged-photo inventory (ideas favor players we can actually illustrate; zero-photo players get text-led templates), and per-team posting cadence (content-starved teams get biased into every batch).',
+      'Ideas now carry a timeliness tag — 🔥 THIS WEEK (anchored in recent results or the upcoming slate) vs EVERGREEN (stat/character angles that post anytime). Chips render on every idea card, and the dashboard gets an ALL / THIS WEEK / EVERGREEN filter.',
+      'Thumbs votes are now GLOBAL: a new idea_feedback table persists every up/down server-side, and generation reads the whole team\'s recent votes — not just whatever was in your own browser\'s localStorage. Your local votes still apply instantly; the cloud write is a background dual-write.',
+      'All new context blocks are line-capped (small token cost) and optional — a feed outage degrades idea freshness, never breaks the Generate button. The cacheable system prompt only grew by the timeliness output field.',
+      'Run db/019_idea_feedback.sql in Supabase to create the feedback table and the content_ideas.timeliness column. Everything works (minus global feedback + persistent tags) until you do.',
+    ],
+  },
+  {
     version: '4.13.0',
     date: '2026-06-10',
     kind: 'minor',

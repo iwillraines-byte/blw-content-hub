@@ -236,6 +236,79 @@ export default async function handler(req, res) {
     .map(r => `- ${r.name}: ${r.rankChange > 0 ? 'UP' : 'DOWN'} ${Math.abs(r.rankChange)} spots → now #${r.currentRank}`)
     .join('\n');
 
+  // ─── v4.14.0 enrichment blocks ─────────────────────────────────────────
+  // Recent finals, the upcoming slate, the photo inventory, and posting
+  // cadence — each optional (the client soft-fails them to null), each
+  // line-capped so the user-message token cost stays small.
+
+  // RECENT RESULTS — the freshest storylines. This-week games lead.
+  const recentResultsBlock = (() => {
+    const rr = Array.isArray(context.recentResults) ? context.recentResults.slice(0, 12) : [];
+    if (!rr.length) return '';
+    const lines = rr.map(g =>
+      `- ${g.date}: ${g.home} ${g.homeScore}–${g.awayScore} ${g.away}${g.thisWeek ? ' [THIS WEEK]' : ''}`
+    );
+    return `\nRECENT RESULTS (newest first — [THIS WEEK] games are the freshest storylines; ideas anchored in these should set timeliness to "this-week"):\n${lines.join('\n')}\n`;
+  })();
+
+  // UPCOMING SLATE — fuels gameday/preview angles with real matchups.
+  const upcomingSlateBlock = (() => {
+    const s = context.upcomingSlate;
+    if (!s || !Array.isArray(s.games) || !s.games.length) return '';
+    const when = s.daysUntil === 0 ? 'TODAY' : s.daysUntil === 1 ? 'TOMORROW' : `in ${s.daysUntil} days`;
+    const lines = s.games.slice(0, 8).map(g => `- ${g.time} ET: ${g.team1} vs ${g.team2}`);
+    return `\nUPCOMING SLATE (next game day ${s.date}, ${when}${s.venue ? `, at ${s.venue}` : ''} — gameday/preview ideas anchored here are "this-week"):\n${lines.join('\n')}\n`;
+  })();
+
+  // PHOTO INVENTORY — only for the players actually in the sample, plus
+  // team-scoped counts for any team-level idea. Keys mirror athleteVoices
+  // (TEAM|FI|LASTNAME with TEAM|LASTNAME fallback).
+  const photoInventoryBlock = (() => {
+    const inv = context.photoInventory && typeof context.photoInventory === 'object'
+      ? context.photoInventory : null;
+    if (!inv) return '';
+    const lines = [];
+    const seenInvKeys = new Set();
+    for (const p of [...battingSample, ...pitchingSample]) {
+      const parts = (p.name || '').split(/\s+/).filter(Boolean);
+      const last = (parts[parts.length - 1] || '').toUpperCase();
+      const fi = (parts[0] || '').charAt(0).toUpperCase();
+      const team = (p.team || '').toUpperCase();
+      const composite = team && fi && last ? `${team}|${fi}|${last}` : null;
+      const fallback = team && last ? `${team}|${last}` : null;
+      const key = (composite && inv[composite] && composite) || (fallback && inv[fallback] && fallback) || null;
+      if (!key || seenInvKeys.has(key)) continue;
+      seenInvKeys.add(key);
+      const counts = Object.entries(inv[key]).map(([t, n]) => `${n} ${t}`).join(', ');
+      if (counts) lines.push(`- ${p.name} (${p.team}): ${counts}`);
+    }
+    const zeroPhoto = [...battingSample, ...pitchingSample].filter(p => {
+      const parts = (p.name || '').split(/\s+/).filter(Boolean);
+      const last = (parts[parts.length - 1] || '').toUpperCase();
+      const fi = (parts[0] || '').charAt(0).toUpperCase();
+      const team = (p.team || '').toUpperCase();
+      return !inv[`${team}|${fi}|${last}`] && !inv[`${team}|${last}`];
+    }).map(p => p.name);
+    if (!lines.length && !zeroPhoto.length) return '';
+    return `\nPHOTO INVENTORY (tagged photos available for the sampled players — prefer ideas for players we can illustrate; for a player with NO photos, pick a text-led template like player-stat):\n${lines.join('\n') || '(none of the sampled players have tagged photos)'}${zeroPhoto.length ? `\nNo photos yet: ${[...new Set(zeroPhoto)].slice(0, 7).join(', ')}` : ''}\n`;
+  })();
+
+  // POSTING CADENCE — which teams are starving for content.
+  const cadenceBlock = (() => {
+    const c = Array.isArray(context.cadence) ? context.cadence : [];
+    if (!c.length) return '';
+    const lines = c
+      .slice()
+      .sort((a, b) => (b.daysSince ?? 999) - (a.daysSince ?? 999))
+      .slice(0, 10)
+      .map(t => {
+        const since = t.daysSince == null ? 'no posts yet' : `${t.daysSince} day${t.daysSince === 1 ? '' : 's'} since last post`;
+        const starved = (t.daysSince == null || t.daysSince > 5) ? ' ← NEEDS CONTENT' : '';
+        return `- ${t.team}: ${since}, ${t.monthCount} post${t.monthCount === 1 ? '' : 's'} this month${starved}`;
+      });
+    return `\nPOSTING CADENCE (bias at least one idea in the batch toward the most content-starved team, unless the batch is team/seed-scoped):\n${lines.join('\n')}\n`;
+  })();
+
   // Master-admin-supplied free text — trades, draft results, storylines,
   // rivalries, anything that isn't in the live stats. Treated as RESEARCH
   // material, not as content to paraphrase. The reframing in the block
@@ -323,6 +396,7 @@ REQUIRED OUTPUT SHAPE — return ONLY a JSON object, no markdown, no code fence:
       "team": "LAN" | "AZS" | ... | "BLW",     // "BLW" for league-wide concepts
       "templateId": "player-stat" | "gameday" | ...,
       "angle": "stat-spotlight | contrarian | comparison | arc | storyline | undertold | character | prediction",
+      "timeliness": "this-week" | "evergreen",   // "this-week" when anchored in RECENT RESULTS or the UPCOMING SLATE; "evergreen" for stat/character angles that post any time. Aim for a mix when both kinds of data are present.
       "dataPoints": ["171 OPS+", "3 HR", "+5 spots"],   // 2-4 short stat pills, ≤ 18 chars each
       "captions": {
         "instagram": "Long-form caption (3-6 lines), can use emoji sparingly, ends with 4-7 hashtags on a new line. Lead with the hook, then the story, then the stat. ≤ 500 chars.",
@@ -347,6 +421,34 @@ RULES:
 - Quality bar: would a sports beat-writer share this on their personal account? If not, rewrite or skip it.
 `;
 
+  // v4.14.0: server-side feedback. Thumbs votes now persist in the
+  // idea_feedback table (see /api/idea-feedback), so EVERY user's votes
+  // shape generation — not just whatever happens to be in the calling
+  // device's localStorage. Server rows win on dedupe; the client's
+  // body.recentFeedback fills in anything not yet synced. Soft-fails to
+  // client-only signal when the table doesn't exist yet (db/019 unrun).
+  let mergedFeedback = Array.isArray(recentFeedback) ? recentFeedback.slice(0, 30) : [];
+  try {
+    const sbFb = getServiceClient();
+    if (sbFb) {
+      const { data: fbRows } = await sbFb.from('idea_feedback')
+        .select('idea_id, vote, headline, angle, team, created_at')
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (Array.isArray(fbRows) && fbRows.length) {
+        const serverRows = fbRows.map(r => ({
+          id: r.idea_id, vote: r.vote,
+          headline: r.headline || '', angle: r.angle || '', team: r.team || '',
+        }));
+        const seenFb = new Set(serverRows.map(r => r.id));
+        mergedFeedback = [
+          ...serverRows,
+          ...mergedFeedback.filter(f => f.id && !seenFb.has(f.id)),
+        ].slice(0, 30);
+      }
+    }
+  } catch { /* degrade to client-only feedback */ }
+
   // ─── Per-call user message (NOT cached — randomised samples + dynamic context) ─
   const stateBlock = `BLW CURRENT STATE:
 
@@ -361,15 +463,15 @@ ${topPitchers || '(none)'}
 
 BIGGEST RANK MOVERS:
 ${rankMovers || '(none notable this week)'}
-
+${recentResultsBlock}${upcomingSlateBlock}${photoInventoryBlock}${cadenceBlock}
 ${athleteVoiceBlock}${leagueNarrativesBlock}${(() => {
   // v4.5.68: feedback loop. Recent thumbs up/down reads from the
   // client (idea-feedback-store). We summarize as "more like this"
   // (up-voted angles + headline themes) and "avoid this" (down-voted
   // patterns) so the model has concrete signal about what's resonating.
-  if (!Array.isArray(recentFeedback) || recentFeedback.length === 0) return '';
-  const ups = recentFeedback.filter(f => f.vote === 'up').slice(0, 8);
-  const downs = recentFeedback.filter(f => f.vote === 'down').slice(0, 8);
+  if (!Array.isArray(mergedFeedback) || mergedFeedback.length === 0) return '';
+  const ups = mergedFeedback.filter(f => f.vote === 'up').slice(0, 8);
+  const downs = mergedFeedback.filter(f => f.vote === 'down').slice(0, 8);
   if (ups.length === 0 && downs.length === 0) return '';
   const upLines = ups.map(f => `- ${f.headline}${f.angle ? ` [${f.angle}]` : ''}`).join('\n');
   const downLines = downs.map(f => `- ${f.headline}${f.angle ? ` [${f.angle}]` : ''}`).join('\n');

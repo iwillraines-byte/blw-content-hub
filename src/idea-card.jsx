@@ -248,6 +248,22 @@ export default function IdeaCard({
               padding: '2px 6px', borderRadius: 3,
             }}>✨ AI</span>
           )}
+          {idea.timeliness === 'this-week' && (
+            <span style={{
+              fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+              letterSpacing: 0.7, color: '#B45309',
+              background: 'rgba(245,158,11,0.14)',
+              padding: '2px 6px', borderRadius: 3,
+            }}>🔥 THIS WEEK</span>
+          )}
+          {idea.timeliness === 'evergreen' && (
+            <span style={{
+              fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
+              letterSpacing: 0.7, color: '#047857',
+              background: 'rgba(5,150,105,0.10)',
+              padding: '2px 6px', borderRadius: 3,
+            }}>EVERGREEN</span>
+          )}
         </div>
         {team
           ? <TeamChip teamId={idea.team} small withLogo />

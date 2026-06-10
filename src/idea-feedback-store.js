@@ -1,6 +1,8 @@
-// Per-idea thumbs feedback. Stored locally for now; the AI prompt
-// pipeline can read getRecentFeedback() to bias future generations
-// away from down-voted patterns and toward up-voted ones.
+// Per-idea thumbs feedback. localStorage gives the instant UI flip;
+// v4.14.0 adds a fire-and-forget dual-write to /api/idea-feedback so
+// votes persist server-side and EVERY user's feedback biases generation
+// (the /api/ideas prompt reads the table directly), not just this
+// device's localStorage.
 //
 // Shape: { [ideaId]: { vote: 'up' | 'down', at: epoch_ms,
 //                      headline: string, angle: string, team: string } }
@@ -8,6 +10,8 @@
 // We snapshot the headline + angle + team alongside the vote so
 // downstream consumers can build a "last 10 ups / downs" prompt
 // without having to round-trip the original idea row.
+
+import { authedJson } from './authed-fetch';
 
 const KEY = 'blw-idea-feedback-v1';
 
@@ -43,6 +47,20 @@ export function setFeedback(idea, vote /* 'up' | 'down' | null */) {
     };
   }
   writeAll(map);
+  // Fire-and-forget cloud write — soft-fails silently (offline, table
+  // missing, fan role). localStorage above is already the UI's truth.
+  try {
+    authedJson('/api/idea-feedback', {
+      method: 'POST',
+      body: {
+        ideaId: idea.id,
+        vote: vote ?? null,
+        headline: idea.headline || '',
+        angle: idea.angle || '',
+        team: idea.team || '',
+      },
+    }).catch(() => {});
+  } catch { /* no session yet — local-only */ }
 }
 
 // Recent feedback ordered newest-first. Used by the AI prompt to

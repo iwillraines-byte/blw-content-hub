@@ -19,6 +19,7 @@ import { formatPostName } from '../template-config';
 import { authedFetch } from '../authed-fetch';
 import IdeaCard from '../idea-card';
 import { Pager, useIdeaPagination, IDEAS_PAGE_SIZE } from '../idea-pager';
+import { buildRecentResults, buildUpcomingSlate, buildPhotoInventory, buildPostingCadence } from '../idea-context-builders';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
 import { ViewAsPicker } from '../view-as';
 import { useContentIdeas } from '../content-ideas-store';
@@ -177,6 +178,17 @@ export default function ContentStudio() {
     setIdeasLoading(true);
     setIdeasError(null);
     try {
+      // v4.14.0: enriched context. Recent finals, the upcoming slate, the
+      // photo inventory, and per-team posting cadence all feed the prompt so
+      // ideas anchor to what's actually happening (and what we can actually
+      // produce graphics for). Each builder soft-fails to null — a feed
+      // outage degrades idea quality, never blocks generation.
+      const [recentResults, photoInventory, cadence] = await Promise.all([
+        buildRecentResults(),
+        buildPhotoInventory(),
+        buildPostingCadence(),
+      ]);
+      const upcomingSlate = buildUpcomingSlate();
       // v4.5.52: was plain fetch — broke after v4.5.37 added requireUser
       // to /api/ideas. authedFetch attaches the JWT.
       const res = await authedFetch('/api/ideas', {
@@ -198,6 +210,11 @@ export default function ContentStudio() {
             // whichever players it samples. Empty object skips the
             // ATHLETE VOICE block in the prompt entirely.
             athleteVoices,
+            // v4.14.0 enrichment — all optional, server tolerates absence.
+            recentResults,
+            upcomingSlate,
+            photoInventory,
+            cadence,
           },
           count,
           seedIdea,
@@ -349,10 +366,16 @@ export default function ContentStudio() {
   // re-orders existing ideas so a refresh feels alive without
   // burning AI tokens on a regenerate.
   const [ideasFilter, setIdeasFilter] = useState('');
+  // v4.14.0: timeliness filter — all | this-week | evergreen. Ideas
+  // generated before v4.14.0 have no timeliness and only show on "all".
+  const [timelinessFilter, setTimelinessFilter] = useState('all');
   const [ideasShuffleSeed, setIdeasShuffleSeed] = useState(0);
   const ideasListBase = aiIdeas.length > 0 ? aiIdeas : suggestions;
   const ideasList = useMemo(() => {
     let list = ideasListBase;
+    if (timelinessFilter !== 'all') {
+      list = list.filter(s => s.timeliness === timelinessFilter);
+    }
     const q = ideasFilter.trim().toLowerCase();
     if (q) {
       list = list.filter(s => {
@@ -376,7 +399,7 @@ export default function ContentStudio() {
       list = arr;
     }
     return list;
-  }, [ideasListBase, ideasFilter, ideasShuffleSeed]);
+  }, [ideasListBase, ideasFilter, ideasShuffleSeed, timelinessFilter]);
   const { pageItems: ideasPageItems, pagerProps: ideasPagerProps } = useIdeaPagination(ideasList);
 
   return (
@@ -479,6 +502,27 @@ export default function ContentStudio() {
                   >
                     ✨ {usageToday.ideas} TODAY
                   </span>
+                )}
+                {/* v4.14.0: timeliness filter — only renders once at least
+                    one visible idea carries a timeliness tag, so the chips
+                    don't clutter the header on pre-4.14 idea pools. */}
+                {ideasListBase.some(i => i.timeliness) && (
+                  <div style={{ display: 'inline-flex', gap: 4 }}>
+                    {[['all', 'ALL'], ['this-week', '🔥 THIS WEEK'], ['evergreen', 'EVERGREEN']].map(([val, label]) => (
+                      <button
+                        key={val}
+                        onClick={() => setTimelinessFilter(val)}
+                        style={{
+                          background: timelinessFilter === val ? 'rgba(245,158,11,0.14)' : colors.white,
+                          border: `1px solid ${timelinessFilter === val ? 'rgba(245,158,11,0.5)' : colors.border}`,
+                          color: timelinessFilter === val ? '#B45309' : colors.textMuted,
+                          borderRadius: 999, padding: '4px 9px',
+                          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                          letterSpacing: 0.5, cursor: 'pointer',
+                        }}
+                      >{label}</button>
+                    ))}
+                  </div>
                 )}
                 {/* Team scope picker — drives both the generation request
                     and the visible list filter. Background drifts to the

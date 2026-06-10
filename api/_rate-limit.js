@@ -39,6 +39,14 @@ const LIMITS = {
     content:      400,
     athlete:       60,
   },
+  'idea-feedback': {
+    // Cheap DB upsert, no AI spend — the cap bounds a runaway client
+    // loop. Votes are one-per-idea-per-user via the table PK anyway.
+    master_admin: 600,
+    admin:        600,
+    content:      600,
+    athlete:      120,
+  },
   'auto-tag': {
     // Auto-tag is staff-only at the auth layer (see api/auto-tag.js).
     // We still set explicit caps so a compromised staff account can't
