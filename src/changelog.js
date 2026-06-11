@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.16.0',
+    date: '2026-06-11',
+    kind: 'minor',
+    summary: 'Dashboard polish — live stats ticker, real Standings card template, signup email alerts',
+    items: [
+      'Quick-stats ticker on the dashboard: an auto-scrolling strip of live league numbers — top-3 standings records, the latest final score, OPS+/FIP/HR leaders, the week\'s biggest rank climber, and the next game day. Built entirely from data the page already loads; pauses on hover; items click through to Stats/Schedule.',
+      'The Standings template in Studio now renders the REAL standings table — all 10 teams with rank, team chip, W-L, PCT, and run diff, drawn live from the games feed in the same card style as the stat cards (so it always matches prowiffleball.com). Picking a team in Studio tints that team\'s row for a "from their POV" post.',
+      'New-signup email alerts: when someone registers, you get an email with their address, default role, and a link to People Admin. Server-verified (only fires for signups that actually just happened) and silently disabled until you add RESEND_API_KEY + NOTIFY_EMAIL in Vercel.',
+      'Recent posts strip verified healthy in production — the long-standing "blank recent posts" report traced to the same auth/DNS fetch failures fixed in 4.9.x; all tiles render with thumbnails.',
+    ],
+  },
+  {
     version: '4.15.0',
     date: '2026-06-10',
     kind: 'minor',

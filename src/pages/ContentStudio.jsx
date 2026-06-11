@@ -21,6 +21,7 @@ import IdeaCard from '../idea-card';
 import { Pager, useIdeaPagination, IDEAS_PAGE_SIZE } from '../idea-pager';
 import { buildRecentResults, buildUpcomingSlate, buildPhotoInventory, buildPostingCadence } from '../idea-context-builders';
 import { useUnreadRequests } from '../request-unread-store';
+import { QuickStatsTicker } from '../quick-stats-ticker';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
 import { ViewAsPicker } from '../view-as';
 import { useContentIdeas } from '../content-ideas-store';
@@ -423,6 +424,10 @@ export default function ContentStudio() {
           stamp lives in localStorage keyed by user.id so the card
           stays gone after the first visit. */}
       <FirstRunWelcomeCard />
+
+      {/* v4.16.0: quick-stats ticker — live league numbers in one glance.
+          Hides itself until enough data has loaded to be worth the chrome. */}
+      <QuickStatsTicker batting={batting} pitching={pitching} standings={standings} rankings={rankings} />
 
       {/* Live-state cards — each reflects current state, not just a nav shortcut */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>

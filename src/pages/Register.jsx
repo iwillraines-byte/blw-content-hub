@@ -58,6 +58,16 @@ export default function Register() {
       setErrorMsg(error);
       return;
     }
+    // v4.16.0: ping the master's inbox. Fire-and-forget — the endpoint
+    // verifies server-side that this email really just signed up, and a
+    // failure here must never block the registrant's flow.
+    try {
+      fetch('/api/notify-signup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      }).catch(() => {});
+    } catch { /* non-blocking */ }
     setSent(true);
   };
 

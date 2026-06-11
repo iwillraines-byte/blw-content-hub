@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getTeamAbbr, getAllPlayers, fetchAllData } from '../data';
+import { TEAMS, PLATFORMS, BATTING_LEADERS, PITCHING_LEADERS, getTeam, getTeamAbbr, getAllPlayers, fetchAllData, fetchStandings } from '../data';
 import { Card, CollapsibleCard, Label, PageHeader, SectionHeading, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
 import { TEMPLATE_TYPES, FONT_MAP, STAT_CARD_TYPES, getFieldConfig, formatPostName } from '../template-config';
-import { renderStatCard as statCardRender, defaultCardBox, ensureProwiffleLogoReady } from '../stat-card-renderer';
+import { renderStatCard as statCardRender, defaultCardBox, ensureProwiffleLogoReady, renderStandingsCard, defaultStandingsBox } from '../stat-card-renderer';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage, resyncOverlay, resyncAllLocalOnlyOverlays } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
@@ -343,7 +343,7 @@ function drawCovered(ctx, img, dx, dy, dw, dh) {
 }
 
 function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig, activeEffects = [], team, options = {}) {
-  const { hiddenFields, forExport, bgTransform, statCard, headlineFont, templateType, splitScreen, bgImg2 } = options;
+  const { hiddenFields, forExport, bgTransform, statCard, standingsCard, headlineFont, templateType, splitScreen, bgImg2 } = options;
   const headlineEnabled = !!headlineFont && headlineToggleEligible(templateType);
   // The "headline" is whichever rendered field has the largest fontSize.
   // Computed once so each field's draw block can decide if it's the one.
@@ -444,6 +444,13 @@ function renderCustomTemplate(ctx, w, h, bgImg, overlayImg, fields, fieldConfig,
   // percentile bubbles or two-column raw stats).
   if (statCard?.cardType && statCard?.player && statCard?.box) {
     statCardRender(ctx, statCard);
+  }
+
+  // Layer 3.6: live standings card (v4.16.0). Same canvas-primitive
+  // approach as the stat card — the table draws from the live games feed
+  // so the export always matches prowiffleball.com.
+  if (standingsCard?.standings && standingsCard?.box) {
+    renderStandingsCard(ctx, standingsCard);
   }
 
   // Layer 4: Dynamic text fields
@@ -784,6 +791,14 @@ export default function Generate() {
     });
   }, []);
 
+  // v4.16.0: live standings for the Standings template. The Map carries
+  // `.ordered` (ranked rows) — see computeStandings. Soft-fails to null;
+  // the standings card simply doesn't draw until the feed answers.
+  const [liveStandings, setLiveStandings] = useState(null);
+  useEffect(() => {
+    fetchStandings().then(setLiveStandings).catch(() => {});
+  }, []);
+
   // Field layout overrides (x / y / fontSize / font per field, per template/platform).
   // Version counter forces re-render of the preview + download when the user
   // edits a position or font. The actual source of truth is localStorage;
@@ -1066,6 +1081,21 @@ export default function Generate() {
     };
   }, [customType, selectedPlayer, liveBatting, livePitching, customTeam, customPlatform, statCardType]);
 
+  // v4.16.0: standings-card payload — mirrors statCardOption. Spotlight
+  // row follows the team picker so "post the standings from LAN's POV"
+  // tints their row.
+  const standingsCardOption = useMemo(() => {
+    const t = TEMPLATE_TYPES[customType];
+    if (!t?.rendersStandings) return null;
+    if (!liveStandings?.ordered?.length) return null;
+    return {
+      standings: liveStandings,
+      teams: TEAMS,
+      box: defaultStandingsBox(customPlatform),
+      spotlightTeamId: customTeam && customTeam !== 'BLW' ? customTeam : null,
+    };
+  }, [customType, liveStandings, customPlatform, customTeam]);
+
   // ── Render ──
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1074,8 +1104,8 @@ export default function Generate() {
     const ctx = canvas.getContext('2d');
     const fieldConfig = applyOverrides(getFieldConfig(customType, customPlatform), customType, customPlatform);
     const customTeamObj = getTeam(customTeam);
-    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 });
-  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption, headlineFont, splitScreen, bgImg2]);
+    renderCustomTemplate(ctx, customPlat.w, customPlat.h, bgImg, overlayImg, customFields, fieldConfig, activeEffects, customTeamObj, { hiddenFields, bgTransform, statCard: statCardOption, standingsCard: standingsCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 });
+  }, [customType, customTeam, customPlatform, customFields, bgImg, overlayImg, customPlat, activeEffects, hiddenFields, bgTransform, overridesVersion, statCardOption, standingsCardOption, headlineFont, splitScreen, bgImg2]);
 
   // Per-input render — exactly the same shape as before the local-fonts
   // change. Two reasons not to await fonts here: (1) rebinding inside a
@@ -1137,7 +1167,7 @@ export default function Generate() {
       renderCustomTemplate(
         ectx, customPlat.w, customPlat.h, bgImg, overlayImg,
         customFields, fieldConfig, activeEffects, customTeamObj,
-        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 },
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, standingsCard: standingsCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 },
       );
     } else {
       // Standard 1× — re-render the visible canvas without placeholders.
@@ -1145,7 +1175,7 @@ export default function Generate() {
       renderCustomTemplate(
         ctx, customPlat.w, customPlat.h, bgImg, overlayImg,
         customFields, fieldConfig, activeEffects, customTeamObj,
-        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 },
+        { hiddenFields, forExport: true, bgTransform, statCard: statCardOption, standingsCard: standingsCardOption, headlineFont, templateType: customType, splitScreen: customType === "blank-slate" && splitScreen, bgImg2 },
       );
       exportCanvas = previewCanvas;
     }

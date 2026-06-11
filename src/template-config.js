@@ -322,8 +322,9 @@ export const TEMPLATE_TYPES = {
   'standings': {
     name: 'Standings',
     icon: '📈',
-    description: 'Current league standings graphic',
+    description: 'The live BLW standings table rendered as a card — records, PCT, and run diff straight from the games feed',
     playerCentric: false,
+    rendersStandings: true,   // signals Generate.jsx to draw the live standings card
     fields: {
       feed: [
         { key: 'title', label: 'Title', x: 540, y: 70, fontSize: 44, font: 'heading', color: '#FFFFFF', align: 'center', maxWidth: 800 },

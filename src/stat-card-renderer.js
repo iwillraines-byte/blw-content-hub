@@ -661,3 +661,157 @@ export function defaultCardBox(platform, cardType = 'hitting-stats') {
     }
   }
 }
+
+// ─── Standings card (v4.16.0) ───────────────────────────────────────────────
+// The full 10-team BLW standings table as a canvas card — same white-body /
+// gradient-header / drop-shadow visual language as the raw stat card, with
+// one row per team: rank, team chip, name, W-L, PCT, DIFF. Rows for the
+// generating user's spotlight team (optional) get a soft team-color tint.
+//
+// standings: the Map from computeStandings()/fetchStandings() — only its
+//            `.ordered` array is read, so a plain { ordered: [...] } works.
+// teams:     TEAMS from data.js (color/accent/name lookups).
+// spotlightTeamId: optional team id whose row gets the accent treatment.
+
+export function defaultStandingsBox(platform) {
+  switch (platform) {
+    case 'feed':      return { x: (1080 - 940) / 2, y: 200, w: 940, h: 740 };
+    case 'portrait':  return { x: (1080 - 940) / 2, y: 240, w: 940, h: 880 };
+    case 'story':     return { x: (1080 - 940) / 2, y: 420, w: 940, h: 1000 };
+    case 'landscape': return { x: (1200 - 760) / 2, y: 110, w: 760, h: 520 };
+    default:          return { x: (1080 - 940) / 2, y: 200, w: 940, h: 740 };
+  }
+}
+
+export function renderStandingsCard(ctx, { box, standings, teams, spotlightTeamId = null }) {
+  const ordered = standings?.ordered || [];
+  if (!box || !ordered.length) return;
+  const { x, y, w, h } = box;
+  const cond = FONT_COND;
+  const head = FONT_HEAD;
+  const teamById = new Map((teams || []).map(t => [t.id, t]));
+
+  ctx.save();
+
+  // Card body — identical treatment to the raw stat card.
+  ctx.shadowColor = 'rgba(15,23,42,0.45)';
+  ctx.shadowBlur = 52;
+  ctx.shadowOffsetY = 18;
+  ctx.fillStyle = '#FFFFFF';
+  roundRect(ctx, x, y, w, h, 14);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 10;
+  ctx.lineJoin = 'round';
+  roundRect(ctx, x, y, w, h, 14);
+  ctx.stroke();
+
+  // Header — league-neutral dark gradient (standings belong to the league,
+  // not one team) with the season title + prowiffleball wordmark credit.
+  const headerH = Math.max(48, Math.round(h * 0.105));
+  ctx.save();
+  roundRect(ctx, x, y, w, h, 14);
+  ctx.clip();
+  const grad = ctx.createLinearGradient(x, y, x + w, y + headerH);
+  grad.addColorStop(0, '#151C28');
+  grad.addColorStop(1, '#2A3344');
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, w, headerH);
+  ctx.restore();
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = `700 ${Math.round(headerH * 0.46)}px ${cond}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${SEASON_LABEL} BLW STANDINGS`, x + w / 2, y + headerH / 2);
+  drawProwiffleLogoInHeader(ctx, 'white', x, y, w, headerH);
+
+  // Column layout. Fractions of card width:
+  //   rank 7% | chip 11% | name flex | W-L 12% | PCT 12% | DIFF 12%
+  const padX = Math.round(w * 0.035);
+  const colRank = x + padX + w * 0.030;
+  const colChip = x + padX + w * 0.075;
+  const colName = x + padX + w * 0.165;
+  const colWL   = x + w - padX - w * 0.250;
+  const colPct  = x + w - padX - w * 0.125;
+  const colDiff = x + w - padX - w * 0.010;
+
+  // Column header row.
+  const colHeadH = Math.round(h * 0.05);
+  const colHeadY = y + headerH + colHeadH / 2 + 4;
+  ctx.fillStyle = '#9CA3AF';
+  ctx.font = `700 ${Math.max(12, Math.round(colHeadH * 0.62))}px ${cond}`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText('W-L', colWL, colHeadY);
+  ctx.fillText('PCT', colPct, colHeadY);
+  ctx.textAlign = 'right';
+  ctx.fillText('DIFF', colDiff, colHeadY);
+
+  // Team rows.
+  const rowsTop = y + headerH + colHeadH + 8;
+  const rowsBottom = y + h - Math.round(h * 0.025);
+  const rowH = (rowsBottom - rowsTop) / ordered.length;
+  const nameFont = Math.max(15, Math.round(rowH * 0.40));
+  const statFont = Math.max(15, Math.round(rowH * 0.40));
+
+  ordered.forEach((row, i) => {
+    const t = teamById.get(row.teamId);
+    const cy = rowsTop + i * rowH + rowH / 2;
+    const isSpot = spotlightTeamId && row.teamId === spotlightTeamId;
+
+    // Row tint — zebra striping, spotlight row gets the team color wash.
+    if (isSpot && t) {
+      ctx.fillStyle = `${t.color}1F`;
+      roundRect(ctx, x + padX * 0.5, cy - rowH / 2 + 2, w - padX, rowH - 4, 8);
+      ctx.fill();
+    } else if (i % 2 === 1) {
+      ctx.fillStyle = 'rgba(15,23,42,0.030)';
+      roundRect(ctx, x + padX * 0.5, cy - rowH / 2 + 2, w - padX, rowH - 4, 8);
+      ctx.fill();
+    }
+
+    // Rank.
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = `700 ${Math.round(statFont * 0.85)}px ${cond}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(row.rank ?? i + 1), colRank, cy);
+
+    // Team chip — rounded square in team color with the abbr.
+    const chipH = Math.round(rowH * 0.56);
+    const chipW = Math.round(chipH * 1.55);
+    if (t) {
+      ctx.fillStyle = t.color || '#334155';
+      roundRect(ctx, colChip - chipW / 2, cy - chipH / 2, chipW, chipH, 6);
+      ctx.fill();
+      ctx.fillStyle = t.accent || '#FFFFFF';
+      ctx.font = `800 ${Math.round(chipH * 0.52)}px ${cond}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(t.id, colChip, cy + 1);
+    }
+
+    // Team name.
+    ctx.fillStyle = '#151C28';
+    ctx.font = `600 ${nameFont}px ${head}`;
+    ctx.textAlign = 'left';
+    ctx.fillText(t?.name || row.teamId, colName, cy);
+
+    // W-L / PCT / DIFF.
+    ctx.font = `700 ${statFont}px ${cond}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#151C28';
+    ctx.fillText(row.record || `${row.w}-${row.l}`, colWL, cy);
+    ctx.fillStyle = '#475569';
+    ctx.fillText(row.pct || '.000', colPct, cy);
+    const diffNum = row.diffNum ?? 0;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = diffNum > 0 ? '#047857' : diffNum < 0 ? '#B91C1C' : '#9CA3AF';
+    ctx.fillText(row.diff || '0', colDiff, cy);
+  });
+
+  ctx.restore();
+}
