@@ -3,6 +3,7 @@
 // API (e.g., preseason signings, practice squad). Persisted in the browser.
 
 import { cloud, cloudAwait } from './cloud-sync';
+import { canonicalTeamId, resolveCanonicalName } from './data';
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Bumped from 2 to add players store
@@ -59,14 +60,19 @@ export async function getAllManualPlayers() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const req = tx.objectStore(STORE_NAME).getAll();
-    req.onsuccess = () => resolve(req.result || []);
+    // v4.17.0: canonicalize team ids on read so cached rows written
+    // before the SDO → ATL migration keep resolving.
+    req.onsuccess = () => resolve((req.result || []).map(p =>
+      p?.team ? { ...p, team: canonicalTeamId(p.team) } : p
+    ));
     req.onerror = () => reject(req.error);
   });
 }
 
 export async function getManualPlayersByTeam(teamId) {
   const all = await getAllManualPlayers();
-  return all.filter(p => p.team === teamId);
+  const want = canonicalTeamId(teamId);
+  return all.filter(p => p.team === want);
 }
 
 // Upsert a manual_players row from a "team + lastName (+ firstInitial / num /
@@ -120,6 +126,23 @@ export async function upsertManualPlayer({ team, lastName, firstInitial, firstNa
     match = sameTeamLast.find(p => {
       const pFn = String(p.firstName || '').trim().toLowerCase();
       return pFn && pFn === fnNorm;
+    });
+  }
+  // Rule 1b (v4.17.0): alias-aware firstName match. Some players go by
+  // multiple first names ("Eddie"/"Nick" Martinez) and rows written from
+  // different sources disagree. Pre-fix, a save from the canonical page
+  // ("Nick") couldn't find the row stored as "Eddie" → Rule 3 failed on
+  // the initial mismatch → a NEW stub row was created and the edit (photo,
+  // account link, voice) landed on a duplicate the page never reads.
+  // Compare the alias-resolved canonical full names instead.
+  if (!match && fnNorm) {
+    const canonFull = (fn, ln) =>
+      resolveCanonicalName(`${fn || ''} ${ln || ''}`.trim())
+        .toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+    const want = canonFull(firstName, lastName);
+    match = sameTeamLast.find(p => {
+      const pFn = String(p.firstName || '').trim();
+      return pFn && canonFull(pFn, p.lastName) === want;
     });
   }
   // Rule 2: jersey + lastName + team

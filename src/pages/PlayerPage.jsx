@@ -3228,10 +3228,15 @@ function LinkAthleteAccount({ player, team, linkedUserId, onLink }) {
     authedJson('/api/admin-people')
       .then(data => {
         if (cancel) return;
-        // Only show athletes — content/admin profiles aren't bound to
-        // player records. Sort by team for ergonomic scanning.
+        // v4.17.0: athletes AND fans. Self-registered accounts default to
+        // the 'fan' tier, so a player who signs up on /register was
+        // invisible here — the master "couldn't link their email" because
+        // it never appeared in this picker. Fans now list in their own
+        // group; picking one promotes them to athlete + pins their team
+        // as part of the link. Staff roles stay excluded — they aren't
+        // bound to player records.
         const list = (data.profiles || [])
-          .filter(p => p.role === 'athlete')
+          .filter(p => p.role === 'athlete' || p.role === 'fan')
           .sort((a, b) => {
             const tCmp = (a.team_id || '').localeCompare(b.team_id || '');
             if (tCmp !== 0) return tCmp;
@@ -3244,8 +3249,32 @@ function LinkAthleteAccount({ player, team, linkedUserId, onLink }) {
   }, []);
 
   const linked = profiles?.find(p => p.id === linkedUserId);
-  const teamProfiles = (profiles || []).filter(p => !p.team_id || p.team_id === team.id);
-  const otherProfiles = (profiles || []).filter(p => p.team_id && p.team_id !== team.id);
+  const athletes = (profiles || []).filter(p => p.role === 'athlete');
+  const fans = (profiles || []).filter(p => p.role === 'fan');
+  const teamProfiles = athletes.filter(p => !p.team_id || p.team_id === team.id);
+  const otherProfiles = athletes.filter(p => p.team_id && p.team_id !== team.id);
+
+  // Selecting a fan-tier account promotes it to athlete (pinned to this
+  // team) before linking — one action instead of "promote in People
+  // Admin, come back, link".
+  const handlePick = async (value) => {
+    const picked = (profiles || []).find(p => p.id === value);
+    if (picked && picked.role === 'fan') {
+      try {
+        await authedJson('/api/admin-people', {
+          method: 'PATCH',
+          body: { id: picked.id, role: 'athlete', team_id: team.id },
+        });
+        setProfiles(prev => (prev || []).map(p =>
+          p.id === picked.id ? { ...p, role: 'athlete', team_id: team.id } : p
+        ));
+      } catch (err) {
+        setError(`Couldn't promote ${picked.email} to athlete: ${err.message}`);
+        return;
+      }
+    }
+    onLink(value || null);
+  };
 
   return (
     <div style={{
@@ -3278,7 +3307,7 @@ function LinkAthleteAccount({ player, team, linkedUserId, onLink }) {
       {profiles !== null && !error && (
         <select
           value={linkedUserId || ''}
-          onChange={e => onLink(e.target.value || null)}
+          onChange={e => handlePick(e.target.value)}
           style={{
             fontSize: 12, fontFamily: fonts.body,
             padding: '5px 8px',
@@ -3305,6 +3334,15 @@ function LinkAthleteAccount({ player, team, linkedUserId, onLink }) {
               {otherProfiles.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.team_id || '?'} · {p.email}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {fans.length > 0 && (
+            <optgroup label="Fan accounts (linking promotes to athlete)">
+              {fans.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.email}{p.display_name ? ` · ${p.display_name}` : ''} · fan
                 </option>
               ))}
             </optgroup>

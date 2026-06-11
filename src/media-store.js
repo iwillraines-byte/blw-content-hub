@@ -16,6 +16,7 @@
 // surfaces and live in a "League photos" bucket on the Files page.
 
 import { cloud, cloudAwait } from './cloud-sync';
+import { canonicalTeamId } from './data';
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3; // Must match overlay-store.js
@@ -23,7 +24,7 @@ const STORE_NAME = 'media';
 
 // Sentinel used in the team field for league-wide assets. NOT one of the
 // 10 BLW team codes — those are LAN, AZS, LV, NYG, DAL, BOS, PHI, CHI,
-// MIA, SDO. "BLW" denotes the league itself.
+// MIA, ATL. "BLW" denotes the league itself.
 export const LEAGUE_TEAM_CODE = 'BLW';
 
 // Asset types that belong to the team itself, not any one player.
@@ -63,7 +64,10 @@ export function inferScope(assetType, teamCode = '') {
 export function parseFilename(name) {
   const base = String(name || '').replace(/\.[^.]+$/, '');
   const parts = base.split('_');
-  const team = (parts[0] || '').toUpperCase();
+  // v4.17.0: canonicalize the team prefix so files saved before the
+  // SDO → ATL migration ("SDO_07_…") keep matching ATL players/pages.
+  // Renaming ~hundreds of stored blobs is riskier than aliasing on read.
+  const team = canonicalTeamId((parts[0] || '').toUpperCase());
 
   // League-scoped form: BLW_{TYPE}[_VARIANT]
   // Recognised when the prefix is the literal league code "BLW".

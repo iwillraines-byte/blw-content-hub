@@ -10,7 +10,7 @@ const BLW_LEAGUE_ID = 3;
 // rename the API's 'LV' must resolve to 'LV' (not the legacy 'LVS')
 // so stat rows land on the right team and canonical overlays match.
 const TEAM_MAP = {
-  'LA': 'LAN', 'AZ': 'AZS', 'SD': 'SDO', 'LV': 'LV',
+  'LA': 'LAN', 'AZ': 'AZS', 'SD': 'ATL', 'LV': 'LV',
   'NY': 'NYG', 'BOS': 'BOS', 'DAL': 'DAL', 'PHI': 'PHI',
   'CHI': 'CHI', 'MIA': 'MIA',
 };
@@ -38,18 +38,13 @@ export const TEAMS = [
   { id:"PHI", apiAbbr:"PHI", apiTeamId:47, slug:"phi-wiffleclub", name:"Philadelphia Wiffle Club", city:"Philadelphia", color:"#0D223F", accent:"#A8B8C8", dark:"#08162A", record:"4-5", rank:7, owner:"David Adelman", pct:".444", diff:"+16", logo:"/team-logos/phi-wiffleclub.png", socials: { instagram: '', facebook: '', tiktok: '' } },
   { id:"CHI", apiAbbr:"CHI", apiTeamId:50, slug:"chi-bats", name:"Chicago Bats", city:"Chicago", color:"#EC1C2C", accent:"#FFFFFF", dark:"#B5151F", record:"4-6", rank:8, owner:"", pct:".400", diff:"-7", logo:"/team-logos/chi-bats.png", socials: { instagram: '', facebook: '', tiktok: '' } },
   { id:"MIA", apiAbbr:"MIA", apiTeamId:51, slug:"mia-mirage", name:"Miami Mirage", city:"Miami", color:"#144734", accent:"#7EC6BB", dark:"#0D3024", record:"4-6", rank:9, owner:"", pct:".400", diff:"-1", logo:"/team-logos/mia-mirage.png", socials: { instagram: '', facebook: '', tiktok: '' } },
-  // v4.8.3: San Diego Orcas → Atlanta Ballers rebrand. Internal team_id
-  // stays 'SDO' (treat as a stable database key — every manual_players,
-  // media, batting_stats, pitching_stats, ranking_history, ai_memory,
-  // requests row references it and we'd rather not data-migrate the
-  // entire league). Display fields, slug, colors, and logo update.
-  // `legacySlugs` lets `getTeam()` resolve old bookmarks to /teams/sd-orcas.
+  // v4.8.3: San Diego Orcas → Atlanta Ballers rebrand. Display fields,
+  // slug, colors, and logo updated; `legacySlugs` lets `getTeam()`
+  // resolve old bookmarks to /teams/sd-orcas.
   // Colors from the official RGB artsheet: navy #021E42, light blue
   // #90BFE9 (highlight), warm gray #CFD2D4. Dark is a deeper navy for
   // text-on-primary contrast.
   // v4.8.4 additions:
-  //   - displayAbbr: chip + dropdown display swaps from internal 'SDO'
-  //     to user-facing 'ATL'. Internal team_id stays SDO everywhere.
   //   - chipBg / chipText: TeamChip uses light blue as the chip
   //     background with navy text (per master's direction) instead of
   //     the default color/accent pair. Other teams keep the default.
@@ -64,7 +59,12 @@ export const TEAMS = [
   //     Content this Month progress bar, Content Calendar header band)
   //     swap to light blue with navy text. Without these overrides
   //     (every other team), the surfaces fall back to color/dark/fff.
-  { id:"SDO", apiAbbr:"ATL", apiTeamId:46, slug:"atl-ballers", legacySlugs:["sd-orcas"], name:"Atlanta Ballers", city:"Atlanta", displayAbbr:"ATL", color:"#021E42", accent:"#90BFE9", dark:"#01122A", chipBg:"#90BFE9", chipText:"#021E42", themeBg:"#90BFE9", themeBgDark:"#5B9BC9", themeText:"#021E42", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/atl-ballers.png", altLogo:"/team-logos/atl-ballers-alt.png", socials: { instagram: '', facebook: '', tiktok: '' } },
+  // v4.17.0: full SDO → ATL id migration. Atlanta is the league's most
+  // popular brand now (~2.5k IG followers in month one) — the internal id
+  // matches the public identity. `legacyIds:["SDO"]` + canonicalTeamId()
+  // keep every old row, filename, bookmark, and localStorage value
+  // resolving; db/021 migrates the Supabase rows themselves.
+  { id:"ATL", apiAbbr:"ATL", apiTeamId:46, slug:"atl-ballers", legacySlugs:["sd-orcas"], legacyIds:["SDO"], name:"Atlanta Ballers", city:"Atlanta", color:"#021E42", accent:"#90BFE9", dark:"#01122A", chipBg:"#90BFE9", chipText:"#021E42", themeBg:"#90BFE9", themeBgDark:"#5B9BC9", themeText:"#021E42", record:"2-7", rank:10, owner:"", pct:".222", diff:"-6", logo:"/team-logos/atl-ballers.png", altLogo:"/team-logos/atl-ballers-alt.png", socials: { instagram: '', facebook: '', tiktok: '' } },
 ];
 
 // v4.8.3: getTeam now also resolves legacySlugs so old bookmarks
@@ -75,8 +75,19 @@ export const getTeam = (id) => TEAMS.find(t =>
   t.id === id ||
   t.slug === id ||
   t.apiAbbr === id ||
-  (t.legacySlugs && t.legacySlugs.includes(id))
+  (t.legacySlugs && t.legacySlugs.includes(id)) ||
+  (t.legacyIds && t.legacyIds.includes(id))
 );
+
+// v4.17.0: canonical team id resolver. Old Supabase rows, media filenames,
+// and localStorage values may still say 'SDO' — run any team id read from
+// a persisted source through this so the rest of the app only ever sees
+// 'ATL'. Unknown ids pass through untouched.
+export const canonicalTeamId = (id) => {
+  if (!id) return id;
+  const t = getTeam(id);
+  return t ? t.id : id;
+};
 
 // v4.8.4: single source of truth for the user-facing 2-3 letter team
 // label. Accepts a team object OR a team_id. Falls back to id when no
@@ -120,7 +131,7 @@ const PITCHING_FALLBACK = [
   { rank:4, name:"Kyle Vonschleusingen", num:"", team:"BOS", fip:-1.19, era:"0.00", ip:"3.0", k4:"8.00", w:1, l:0 },
   { rank:5, name:"Jimmy Cole", num:"", team:"PHI", fip:0.81, era:"1.50", ip:"4.0", k4:"10.00", w:1, l:0 },
   { rank:6, name:"Dallas Allen", num:"", team:"LAN", fip:1.15, era:"0.00", ip:"3.0", k4:"9.33", w:1, l:0 },
-  { rank:7, name:"Cael Foreman", num:"", team:"SDO", fip:1.74, era:"1.29", ip:"4.2", k4:"11.43", w:0, l:2 },
+  { rank:7, name:"Cael Foreman", num:"", team:"ATL", fip:1.74, era:"1.29", ip:"4.2", k4:"11.43", w:0, l:2 },
   { rank:8, name:"Randy Dalbey", num:"", team:"BOS", fip:2.31, era:"3.00", ip:"2.0", k4:"4.00", w:0, l:1 },
 ];
 
@@ -837,14 +848,14 @@ export const CANONICAL_ROSTER_2026 = [
   { team: 'PHI', name: 'Brody Livingston', num: '22' },
   { team: 'PHI', name: 'Jimmy Cole', num: '06' },
   // Atlanta Ballers (rebranded from San Diego Orcas — v4.8.3; internal
-  // team_id stays 'SDO' for database-key stability)
-  { team: 'SDO', name: 'Brett Caladie', num: '28' },
-  { team: 'SDO', name: 'Torin Roth', num: '87' },
-  { team: 'SDO', name: 'Jack Roth', num: '27' },
-  { team: 'SDO', name: 'Brandon Crone', num: '08' },
-  { team: 'SDO', name: 'Trevor Bauer' },
-  { team: 'SDO', name: 'Cael Foreman', num: '00' },
-  { team: 'SDO', name: 'Connor Smith', num: '02' },
+  // v4.17.0: ids migrated SDO → ATL)
+  { team: 'ATL', name: 'Brett Caladie', num: '28' },
+  { team: 'ATL', name: 'Torin Roth', num: '87' },
+  { team: 'ATL', name: 'Jack Roth', num: '27' },
+  { team: 'ATL', name: 'Brandon Crone', num: '08' },
+  { team: 'ATL', name: 'Trevor Bauer' },
+  { team: 'ATL', name: 'Cael Foreman', num: '00' },
+  { team: 'ATL', name: 'Connor Smith', num: '02' },
 ];
 
 // Name aliases — maps any-known-form-of-a-player's-name to their canonical
@@ -863,6 +874,10 @@ const NAME_ALIASES_RAW = {
   'edward martinez':  'Nick Martinez',
   'eddie martinez':   'Nick Martinez',
   'ed martinez':      'Nick Martinez',
+  // v4.17.0: the CSV/import form 'Eddie "Nick" Martinez' normalizes to
+  // three words — _normName only strips single-letter middle initials,
+  // so the nickname needs its own alias entry.
+  'eddie nick martinez': 'Nick Martinez',
   // LAN's outfielder is "Vin Lea" in BLW — old roster CSV had Vincent.
   'vincent lea':      'Vin Lea',
   // MIA's "Johnny Gunn" appears as "John Paul Gunn" in some sources.

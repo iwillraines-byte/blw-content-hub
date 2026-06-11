@@ -144,7 +144,7 @@ For each row, pick:
        | 'history'(past seasons, milestones, all-star history, trades, controversies)
        | 'style'  (voice / tone examples + anti-examples)
 
-  scope_id: team code ('LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO')
+  scope_id: team code ('LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'ATL')
             OR player slug ('logan-rose', 'cam-smith', etc.) when relevant
             OR null for league/rule/history/style
 

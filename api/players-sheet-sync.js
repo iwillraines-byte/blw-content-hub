@@ -58,7 +58,7 @@ const TEAM_ALIASES = {
   // v4.8.3: post-rebrand. Atlanta Ballers aliases lead; legacy SD/Orcas
   // aliases stay valid so historical sheet rows + pre-rebrand bio imports
   // still resolve to the same team_id.
-  SDO: ['atl', 'atl ballers', 'atlanta', 'atlanta ballers', 'ballers', 'sdo', 'sd', 'sd orcas', 'san diego orcas', 'orcas'],
+  ATL: ['atl', 'atl ballers', 'atlanta', 'atlanta ballers', 'ballers', 'sdo', 'sd', 'sd orcas', 'san diego orcas', 'orcas'],
 };
 
 // Name aliases — same set as src/data.js NAME_ALIASES. Server-side

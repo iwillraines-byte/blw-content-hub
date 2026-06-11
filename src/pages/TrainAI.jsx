@@ -357,7 +357,7 @@ export default function TrainAI() {
         <textarea
           value={chatMessage}
           onChange={e => setChatMessage(e.target.value)}
-          placeholder="e.g. So Cam Smith on MIA — he was the second-overall pick last year, came over from a rec league. His thing is line-drive contact. Connor Smith on SDO is unrelated, despite the name. PHI's identity is 'the city's team' — gritty, blue-collar tone. Wiffle ball pitches in BLW are riser, drop, slider, screwball — no curveballs because the ball shape physics."
+          placeholder="e.g. So Cam Smith on MIA — he was the second-overall pick last year, came over from a rec league. His thing is line-drive contact. Connor Smith on ATL is unrelated, despite the name. PHI's identity is 'the city's team' — gritty, blue-collar tone. Wiffle ball pitches in BLW are riser, drop, slider, screwball — no curveballs because the ball shape physics."
           rows={6}
           style={{ ...inputStyle, width: '100%', resize: 'vertical', minHeight: 120, fontSize: 13, lineHeight: 1.5 }}
         />

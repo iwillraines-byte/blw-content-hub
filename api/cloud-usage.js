@@ -51,7 +51,7 @@ export default async function handler(req, res) {
   //
   // Fallback safety: rows with a missing or non-canonical team code
   // still land in OTHER so the chart never silently drops bytes.
-  const BLW_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO']);
+  const BLW_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'ATL', 'SDO']); // SDO = legacy alias
   const byTeam = {};
   try {
     let from = 0;

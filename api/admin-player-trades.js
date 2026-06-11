@@ -21,7 +21,7 @@ import { requireUser, requireAdmin } from './_supabase.js';
 // One-click apply via the admin tool. Idempotent — re-running just
 // re-asserts the assignment (no dupes thanks to the upsert logic).
 const PRESET_TRADES_2026 = [
-  { name: 'Cael Foreman',          team: 'SDO' },
+  { name: 'Cael Foreman',          team: 'ATL' },
   { name: 'Jeff Lopes',            team: 'CHI' },
   { name: 'Brody Livingston',      team: 'PHI' },
   { name: 'Michael Stiles',        team: 'MIA' },
@@ -29,7 +29,7 @@ const PRESET_TRADES_2026 = [
   { name: 'Ben Dulin',             team: 'DAL' },
   { name: 'Jackson Richardson',    team: 'AZS' },
   { name: 'Kyle VonSchleusingen',  team: 'BOS' },     // canonical spelling
-  { name: 'Connor Smith',          team: 'SDO' },
+  { name: 'Connor Smith',          team: 'ATL' },
   { name: 'Grant Miller',          team: 'CHI' },
   { name: 'Jimmy Cole',            team: 'PHI' },
   { name: 'Sean Hornberger',       team: 'MIA' },
@@ -44,7 +44,7 @@ const PRESET_TRADES_2026 = [
 // Accept either LV (canonical) or the legacy LVS while we migrate any
 // out-of-band callers. The DB migration 008 has already converted any
 // existing rows; this just protects against stale clients.
-const VALID_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'SDO']);
+const VALID_TEAMS = new Set(['LAN', 'AZS', 'LV', 'NYG', 'DAL', 'BOS', 'PHI', 'CHI', 'MIA', 'ATL', 'SDO']); // SDO = legacy alias, kept so stale clients don't 400
 const LEGACY_TEAM_ALIAS = { LVS: 'LV' };
 
 // Split "First Last" or "First Middle Last" into { firstName, lastName }.

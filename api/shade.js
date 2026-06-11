@@ -33,7 +33,7 @@ const FIELD = {
 // Our internal team id → the option label that exists in Shade's Teams field.
 const TEAM_TO_SHADE = {
   LAN: 'LA', AZS: 'AZ', LV: 'LV', NYG: 'NYK', DAL: 'DAL',
-  BOS: 'BOS', PHI: 'PHI', CHI: 'CHI', MIA: 'MIA', SDO: 'ATL',
+  BOS: 'BOS', PHI: 'PHI', CHI: 'CHI', MIA: 'MIA', ATL: 'ATL', SDO: 'ATL',
 };
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
@@ -169,7 +169,7 @@ CONTENT TYPES — pick the single best fit:
 - Team       (group/team photo, multiple players posed)
 
 YOUR TASK — return:
-- team: the BLW internal id (e.g. "LAN","SDO") or null if unsure
+- team: the BLW internal id (e.g. "LAN","ATL") or null if unsure
 - contentType: one label from the list above or null
 - num: the most prominent jersey NUMBER as a 2-digit string (e.g. "03") or null. OCR it from chest/back/cap even if small; 0-pad single digits.
 - confidence: "high" | "medium" | "low"

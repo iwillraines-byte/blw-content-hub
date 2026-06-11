@@ -5,7 +5,7 @@
 // each game day also airs on Fubo + regional sports networks.
 //
 // Conventions:
-//   - Internal team_ids are used (SDO is the Atlanta Ballers' stable
+//   - Internal team_ids are used (ATL — migrated from legacy SDO in v4.17.0; the Atlanta Ballers' stable
 //     id even after the v4.8.3 rebrand — see data.js).
 //   - Times are Eastern. Stored as 24h "HH:MM" strings.
 //   - All games are neutral-site (single-venue tournament format) so
@@ -29,13 +29,13 @@ export const SCHEDULE = [
     broadcast: 'YouTube',
     firstSlateAlso: 'Fubo + regional sports networks',
     games: [
-      { time: '13:00', team1: 'SDO', team2: 'LAN' },
+      { time: '13:00', team1: 'ATL', team2: 'LAN' },
       { time: '13:45', team1: 'BOS', team2: 'PHI' },
-      { time: '14:30', team1: 'SDO', team2: 'MIA' },
+      { time: '14:30', team1: 'ATL', team2: 'MIA' },
       { time: '15:15', team1: 'BOS', team2: 'LAN' },
-      { time: '17:30', team1: 'SDO', team2: 'PHI' },
+      { time: '17:30', team1: 'ATL', team2: 'PHI' },
       { time: '18:15', team1: 'LAN', team2: 'MIA' },
-      { time: '19:00', team1: 'BOS', team2: 'SDO' },
+      { time: '19:00', team1: 'BOS', team2: 'ATL' },
       { time: '19:45', team1: 'LAN', team2: 'BOS' },
     ],
   },
@@ -90,8 +90,8 @@ export const SCHEDULE = [
     firstSlateAlso: 'Fubo + regional sports networks',
     games: [
       { time: '13:00', team1: 'CHI', team2: 'AZS' },
-      { time: '13:45', team1: 'DAL', team2: 'SDO' },
-      { time: '17:30', team1: 'LV',  team2: 'SDO' },
+      { time: '13:45', team1: 'DAL', team2: 'ATL' },
+      { time: '17:30', team1: 'LV',  team2: 'ATL' },
       { time: '18:15', team1: 'CHI', team2: 'DAL' },
       { time: '19:00', team1: 'NYG', team2: 'LV' },
       { time: '19:45', team1: 'NYG', team2: 'AZS' },

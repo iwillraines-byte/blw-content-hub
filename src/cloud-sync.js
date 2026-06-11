@@ -13,6 +13,7 @@
 import { supabaseConfigured } from './supabase-client';
 import { authedFetch } from './authed-fetch';
 import { compressToFitUploadLimit } from './image-compress';
+import { canonicalTeamId } from './data';
 
 // ─── Blob helpers ────────────────────────────────────────────────────────────
 
@@ -484,7 +485,7 @@ export async function fetchRecentGenerates(limit = 10) {
     const data = await res.json();
     return (data.records || []).map(r => ({
       id: r.id,
-      team: r.team,
+      team: canonicalTeamId(r.team), // v4.17.0: legacy 'SDO' rows resolve to 'ATL'
       templateType: r.template_type,
       platform: r.platform,
       settings: r.settings || {},
@@ -557,7 +558,7 @@ export async function fetchTeamMonthlyPosts(team) {
     const data = await res.json();
     return (data.records || []).map(r => ({
       id: r.id,
-      team: r.team,
+      team: canonicalTeamId(r.team), // v4.17.0: legacy 'SDO' rows resolve to 'ATL'
       templateType: r.template_type,
       platform: r.platform,
       settings: r.settings || {},

@@ -58,7 +58,11 @@ export default function ContentStudio() {
   // the visible ideas list so the dashboard reflects the active scope.
   // Persisted in localStorage so a refresh keeps the user's last filter.
   const [targetTeam, setTargetTeamState] = useState(() => {
-    try { return localStorage.getItem('blw_dashboard_target_team') || null; }
+    try {
+      const raw = localStorage.getItem('blw_dashboard_target_team') || null;
+      // v4.17.0: a stored legacy 'SDO' resolves to 'ATL'
+      return raw ? (getTeam(raw)?.id || raw) : null;
+    }
     catch { return null; }
   });
   const setTargetTeam = (next) => {

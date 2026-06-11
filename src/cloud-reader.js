@@ -16,6 +16,7 @@
 
 import { supabaseConfigured, supabase } from './supabase-client';
 import { authedFetch } from './authed-fetch';
+import { canonicalTeamId } from './data';
 
 const DB_NAME = 'blw-content-hub';
 const DB_VERSION = 3;
@@ -141,7 +142,7 @@ function rowToPlayer(r) {
     name: `${r.first_name || ''} ${r.last_name || ''}`.trim(),
     firstName: r.first_name || '',
     lastName: r.last_name || '',
-    team: r.team || '',
+    team: canonicalTeamId(r.team) || '', // v4.17.0: legacy 'SDO' rows → 'ATL'
     num: r.num || '',
     position: r.position || '',
     notes: r.notes || '',
@@ -182,7 +183,7 @@ function rowToPlayer(r) {
 function rowToRequest(r) {
   return {
     id: r.id,
-    team: r.team,
+    team: canonicalTeamId(r.team), // v4.17.0: legacy 'SDO' rows → 'ATL'
     template: r.template || '',
     status: r.status || 'pending',
     priority: r.priority || 'medium',

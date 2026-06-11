@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.17.0',
+    date: '2026-06-11',
+    kind: 'minor',
+    summary: 'Atlanta is ATL everywhere now + fan accounts can be linked to players',
+    items: [
+      'Full SDO → ATL migration: Atlanta\'s internal team id now matches its public identity everywhere — code, schedule, rosters, templates, Shade tagging. Old data keeps working: \'SDO\' resolves as a legacy alias on every read path (cloud rows, cached records, media filenames like "SDO_07_…", old bookmarks, saved dashboard filters).',
+      'Run db/021_sdo_to_atl.sql in Supabase to migrate the stored rows (requests, players, generate log, ideas, media, profiles, AI memory, calendar marks). Safe in either order with the deploy; media filenames are intentionally left alone (aliased at read time).',
+      'Account-linking fix: self-registered players (like Eddie "Nick" Martinez) land as FAN accounts, which the player-page link picker silently excluded — that\'s why his email couldn\'t be linked. Fan accounts now appear in their own group, and picking one promotes it to athlete + pins their team as part of the link.',
+      'Alias-aware player matching: saves from a canonical page ("Nick Martinez") now find rows stored under a known alias ("Eddie Martinez" / "Eddie \'Nick\' Martinez") instead of spawning a duplicate row — same class of bug as the Mike Stiles split, fixed at the matching layer for every aliased player.',
+    ],
+  },
+  {
     version: '4.16.0',
     date: '2026-06-11',
     kind: 'minor',
