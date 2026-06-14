@@ -76,6 +76,14 @@ function playerForNum(teamId, num) {
 
 export default function RapidTag() {
   const [config, setConfig] = useState(null);
+  const [collections, setCollections] = useState([]);
+  const [folders, setFolders] = useState([]);
+  // Active tagging source: a collection (curated bin) OR a folder (raw intake
+  // drop). Shape: { type:'collection'|'folder', value, label }. value is the
+  // collection id or the folder path. The ref mirror lets the stable loadBatch
+  // callback read the live selection without re-creating itself.
+  const [source, setSource] = useState(null);
+  const sourceRef = useRef(null);
   const [queue, setQueue] = useState([]);
   const [idx, setIdx] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -107,28 +115,64 @@ export default function RapidTag() {
   }, []);
 
   const current = queue[idx] || null;
+  const sourceLabel = source?.label || config?.collection || 'Shade';
+  const sourceKey = source ? `${source.type === 'folder' ? 'f' : 'c'}:${source.value}` : '';
 
-  const loadBatch = useCallback(async (off) => {
+  const loadBatch = useCallback(async (off, src = sourceRef.current) => {
     if (off === 0) setLoading(true); else setLoadingMore(true);
     try {
-      const r = await authedJson(`/api/shade?action=queue&offset=${off}&limit=24`);
+      const params = new URLSearchParams({ action: 'queue', offset: String(off), limit: '24' });
+      if (src?.type === 'folder') params.set('folderPath', src.value);
+      else if (src?.type === 'collection' && src.value) params.set('collectionId', src.value);
+      const r = await authedJson(`/api/shade?${params.toString()}`);
       setQueue(prev => (off === 0 ? r.assets : [...prev, ...r.assets]));
       setOffset(off + (r.assets?.length || 0));
     } catch (e) { setErr(e.message); }
     finally { setLoading(false); setLoadingMore(false); }
   }, []);
 
-  // Initial: config + first batch.
+  // Switch the collection/folder we're tagging from — reset the queue + reload.
+  const switchSource = useCallback((src) => {
+    if (!src || (sourceRef.current && sourceRef.current.type === src.type && sourceRef.current.value === src.value)) return;
+    sourceRef.current = src;
+    setSource(src);
+    setQueue([]); setIdx(0); setOffset(0);
+    setSel({ team: null, player: null, type: null }); setAi(null); setErr(null);
+    loadBatch(0, src);
+  }, [loadBatch]);
+
+  // Initial: config + collection/folder lists + first batch.
   useEffect(() => {
     (async () => {
       try {
         const cfg = await authedJson('/api/shade?action=config');
         setConfig(cfg);
-        if (cfg.connected) await loadBatch(0);
-        else setLoading(false);
+        if (cfg.connected) {
+          const def = { type: 'collection', value: cfg.defaultCollectionId || null, label: cfg.collection || 'All photos' };
+          sourceRef.current = def;
+          setSource(def);
+          // Best-effort source lists — the queue still loads if these fail.
+          authedJson('/api/shade?action=collections').then(r => setCollections(r.collections || [])).catch(() => {});
+          authedJson('/api/shade?action=folders').then(r => setFolders(r.folders || [])).catch(() => {});
+          await loadBatch(0, def);
+        } else setLoading(false);
       } catch (e) { setErr(e.message); setLoading(false); }
     })();
   }, [loadBatch]);
+
+  // Translate a picker <option> value ("c:<id>" / "f:<path>") into a source.
+  const pickSource = useCallback((key) => {
+    if (!key) return;
+    if (key.startsWith('c:')) {
+      const id = key.slice(2);
+      const c = collections.find(x => x.id === id);
+      switchSource({ type: 'collection', value: id, label: c?.name || 'Collection' });
+    } else if (key.startsWith('f:')) {
+      const path = key.slice(2);
+      const f = folders.find(x => x.path === path);
+      switchSource({ type: 'folder', value: path, label: f?.name || path });
+    }
+  }, [collections, folders, switchSource]);
 
   // On each new image: reset selection, fetch the AI suggestion, pre-fill.
   useEffect(() => {
@@ -257,9 +301,12 @@ export default function RapidTag() {
             <div style={{ fontSize: 34, marginBottom: 8 }}>🎉</div>
             <SectionHeading style={{ margin: '0 0 6px' }}>All caught up</SectionHeading>
             <p style={{ fontSize: 14, color: colors.textSecondary }}>
-              No untagged photos left in the queue{doneCount > 0 ? ` — you tagged ${doneCount} this session.` : '.'}
+              No untagged photos left in <strong>{sourceLabel}</strong>{doneCount > 0 ? ` — you tagged ${doneCount} this session.` : '.'}
             </p>
-            <button onClick={() => { setIdx(0); loadBatch(0); }} style={btnStyle(colors.red, '#fff')}>Refresh queue</button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 12 }}>
+              <SourcePicker collections={collections} folders={folders} value={sourceKey} onPick={pickSource} centered />
+              <button onClick={() => { setIdx(0); loadBatch(0); }} style={btnStyle(colors.red, '#fff')}>Refresh queue</button>
+            </div>
           </div>
         </Card>
       </div>
@@ -274,8 +321,9 @@ export default function RapidTag() {
     <div>
       <PageHeader
         title="Rapid Tag"
-        subtitle={`Tagging "${config?.collection || 'Shade'}" · ✓ ${doneCount} tagged · ⬆ ${imp.done} imported${imp.pending ? ` (${imp.pending} in flight)` : ''}${imp.failed ? ` · ⚠ ${imp.failed} failed` : ''}`}
+        subtitle={`Tagging "${sourceLabel}" · ✓ ${doneCount} tagged · ⬆ ${imp.done} imported${imp.pending ? ` (${imp.pending} in flight)` : ''}${imp.failed ? ` · ⚠ ${imp.failed} failed` : ''}`}
       />
+      <SourcePicker collections={collections} folders={folders} value={sourceKey} onPick={pickSource} />
       {err && (
         <Card style={{ marginBottom: 12, background: '#FEF2F2', border: '1px solid #FECACA' }}>
           <div style={{ padding: 10, fontSize: 12, color: '#991B1B' }}>⚠ {err}</div>
@@ -405,4 +453,53 @@ function btnStyle(bg, fg, border) {
     borderRadius: radius.sm, padding: '9px 16px', cursor: 'pointer',
     fontFamily: fonts.condensed, fontSize: 13, fontWeight: 800, letterSpacing: 0.4,
   };
+}
+
+// Source selector — pick which Shade collection (curated bin) OR raw intake
+// folder (dated drop) the queue pulls from. Option values are prefixed
+// "c:" (collection id) / "f:" (folder path) so one <select> spans both.
+// Hidden until there's more than one source to choose. `centered` lays it
+// out for the empty-state card.
+function SourcePicker({ collections, folders, value, onPick, centered = false }) {
+  const total = (collections?.length || 0) + (folders?.length || 0);
+  if (total < 2) return null;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+      justifyContent: centered ? 'center' : 'flex-start',
+      marginBottom: centered ? 0 : 14,
+    }}>
+      <span style={{
+        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+        letterSpacing: 0.6, color: colors.textMuted, textTransform: 'uppercase',
+      }}>📁 Tagging from</span>
+      <select
+        value={value || ''}
+        onChange={e => onPick(e.target.value)}
+        style={{
+          fontFamily: fonts.body, fontSize: 13, fontWeight: 600,
+          padding: '6px 10px', background: colors.white,
+          border: `1px solid ${colors.border}`, borderRadius: radius.sm,
+          color: colors.text, cursor: 'pointer', maxWidth: 340,
+        }}
+      >
+        {collections?.length > 0 && (
+          <optgroup label="Collections">
+            {collections.map(c => (
+              <option key={c.id} value={`c:${c.id}`}>
+                {c.name}{c.count != null ? ` (${c.count})` : ''}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {folders?.length > 0 && (
+          <optgroup label="Intake folders">
+            {folders.map(f => (
+              <option key={f.path} value={`f:${f.path}`}>{f.name}</option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+    </div>
+  );
 }

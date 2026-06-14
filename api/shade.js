@@ -5,10 +5,13 @@
 // custom metadata (Shade stays the source of truth — we don't import the raws).
 //
 // Actions (GET ?action= / POST {action}):
-//   config   → { connected, collection, fields }           — is SHADE_API_KEY set?
-//   queue    → { assets:[{id,name,previewUrl,width,height}], hasMore, offset }
-//   suggest  → { team, contentType, num, confidence, reasoning }  (Claude vision)
-//   tag      → writes Team/Player/Content Type to a Shade asset
+//   config       → { connected, collection, defaultCollectionId } — key set?
+//   collections  → { collections:[{id,name,description}], source } — curated bins
+//   folders      → { folders:[{path,name}], root }                 — raw intake folders
+//   queue        → { assets:[{id,name,previewUrl,width,height}], hasMore, offset }
+//                  (accepts collectionId OR folderPath to choose the source)
+//   suggest      → { team, contentType, num, confidence, reasoning }  (Claude vision)
+//   tag          → writes Team/Player/Content Type to a Shade asset
 //
 // Env vars (Vercel, server-only):
 //   SHADE_API_KEY     — from Shade → Settings → API Keys (starts with sk_…)
@@ -21,7 +24,18 @@ import { requireUser, requireRole } from './_supabase.js';
 
 const SHADE_BASE = 'https://api.shade.inc';
 const DRIVE_ID = '5a4eeaae-83e7-4ea0-b223-5edafa20909c';        // BLW ONSITE CONTENT DROP
-const COLLECTION_ID = 'b293692d-98bd-45ec-be29-6a72a74b2c0c';   // 📸 BLW WEEK 1 ALL PHOTOS (auto-updating)
+const COLLECTION_ID = 'b293692d-98bd-45ec-be29-6a72a74b2c0c';   // 📸 BLW WEEK 1 ALL PHOTOS (auto-updating) — default queue
+const INTAKE_ROOT = '/BLW ONSITE INTAKE';                       // where dated drop folders live (JUNE 14th DROP, …)
+
+// Known collections in the BLW drive, used as a safety net if the live
+// list endpoint shape differs from what we expect. The live fetch (when it
+// works) supersedes this AND picks up newly-created collections — these are
+// just so the picker never comes up empty. IDs are stable Shade UUIDs.
+const KNOWN_COLLECTIONS = [
+  { id: 'b293692d-98bd-45ec-be29-6a72a74b2c0c', name: '📸 BLW WEEK 1 ALL PHOTOS', description: 'Every Week 1 photo, auto-updating.' },
+  { id: '2f28484d-2da7-4b44-9e8a-adc583bf5a2a', name: '🟢 Social Ready', description: 'Edited, delivery-ready stills.' },
+  { id: 'd97f6abc-53e4-4b45-a637-9863f58e536a', name: 'JAMES LEE WEEK 1 SUPER CUT', description: "James Lee's Week 1 super cut." },
+];
 
 // Shade custom-metadata field ids (created via the Rapid Tag setup).
 const FIELD = {
@@ -95,22 +109,87 @@ function previewUrlOf(asset) {
 
 // ─── Actions ────────────────────────────────────────────────────────────────
 
+// List the drive's collections so the user can pick which folder to tag from.
+// Tries the live endpoint (a couple candidate paths, since the exact shape
+// isn't documented), tolerant-parses, and falls back to the known list so the
+// picker always has options.
+async function doCollections(key) {
+  // Documented endpoint: GET /collections?drive_id=… . The others are kept as
+  // tolerant fallbacks; the hardcoded list guarantees the picker never empties.
+  const candidates = [
+    `${SHADE_BASE}/collections?drive_id=${DRIVE_ID}`,
+    `${SHADE_BASE}/workspaces/drives/${DRIVE_ID}/collections`,
+    `${SHADE_BASE}/drives/${DRIVE_ID}/collections`,
+  ];
+  for (const url of candidates) {
+    try {
+      const r = await fetch(url, { headers: shadeHeaders(key) });
+      if (!r.ok) continue;
+      const text = await r.text();
+      let parsed; try { parsed = JSON.parse(text); } catch { continue; }
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : (parsed.collections || parsed.results || parsed.data || parsed.items || []);
+      const list = (Array.isArray(arr) ? arr : [])
+        .map(c => ({
+          id: c.id || c.collection_id || c.collectionId || c.uuid,
+          name: c.name || c.title || c.label || 'Untitled collection',
+          description: c.description || c.desc || '',
+          count: c.asset_count ?? c.assetCount ?? c.count ?? null,
+        }))
+        .filter(c => c.id);
+      if (list.length) return { collections: list, source: 'live' };
+    } catch { /* try next candidate */ }
+  }
+  return { collections: KNOWN_COLLECTIONS.map(c => ({ ...c, count: null })), source: 'fallback' };
+}
+
+// List the dated drop folders under the intake root. Response is documented
+// as a JSON array of path strings; tolerate an object wrapper or path objects.
+// Template/system folders (leading "_") are hidden.
+async function doFolders(key, body) {
+  const root = body.path || INTAKE_ROOT;
+  const url = `${SHADE_BASE}/search/folders?drive_id=${DRIVE_ID}&path=${encodeURIComponent(root)}`;
+  const r = await fetch(url, { headers: shadeHeaders(key) });
+  if (!r.ok) return { folders: [], root, error: `HTTP ${r.status}` };
+  const text = await r.text();
+  let parsed; try { parsed = JSON.parse(text); } catch { return { folders: [], root }; }
+  const arr = Array.isArray(parsed) ? parsed : (parsed.folders || parsed.results || parsed.data || parsed.paths || []);
+  const folders = (Array.isArray(arr) ? arr : [])
+    .map(f => {
+      const path = typeof f === 'string' ? f : (f.path || f.full_path || f.fullPath || f.name);
+      if (!path) return null;
+      const name = String(path).replace(/\/+$/, '').split('/').filter(Boolean).pop() || String(path);
+      return { path: String(path), name };
+    })
+    .filter(Boolean)
+    .filter(f => !f.name.startsWith('_'));
+  return { folders, root };
+}
+
 async function doQueue(key, body) {
   const limit = Math.min(Number(body.limit) || 24, 60);
   const offset = Number(body.offset) || 0;
-  const search = {
-    drive_id: DRIVE_ID,
-    collection_id: COLLECTION_ID,
-    limit,
-    offset,
-    // Server-side filter: only assets that haven't been categorized yet.
-    // Content Type is the universal "processed" marker — every photo gets one
-    // (a player type, "Team", or "N/A" for non-athletes), so it's a cleaner
-    // queue gate than Player (which is empty for team/crowd/venue shots).
-    filters: [{ id: FIELD.type, options: [], clause: 'is empty' }],
-  };
-  const r = await fetch(`${SHADE_BASE}/search`, {
-    method: 'POST', headers: shadeHeaders(key), body: JSON.stringify(search),
+  // Only assets that haven't been categorized yet. Content Type is the
+  // universal "processed" marker — every photo gets one (a player type,
+  // "Team", or "N/A"), so it's a cleaner gate than Player (empty for team/
+  // crowd/venue shots). Same filter applies to collection AND folder sources.
+  const filters = [{ id: FIELD.type, options: [], clause: 'is empty' }];
+
+  // Folder source → POST /search/files with a path (recursive catches the
+  // per-photographer subfolders inside each dated drop). Collection source →
+  // POST /search with collection_id (default behavior).
+  const folderPath = body.folderPath || null;
+  let url, payload;
+  if (folderPath) {
+    url = `${SHADE_BASE}/search/files`;
+    payload = { drive_id: DRIVE_ID, path: folderPath, recursive: true, limit, offset, filters };
+  } else {
+    url = `${SHADE_BASE}/search`;
+    payload = { drive_id: DRIVE_ID, collection_id: body.collectionId || COLLECTION_ID, limit, offset, filters };
+  }
+  const r = await fetch(url, {
+    method: 'POST', headers: shadeHeaders(key), body: JSON.stringify(payload),
   });
   if (!r.ok) throw new Error(`Shade search HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const raw = await r.json();
@@ -336,7 +415,7 @@ export default async function handler(req, res) {
 
   // Reads (viewing a player's tagged photos) are open to staff; the
   // queue/suggest/tag mutations + diagnostics stay master-only.
-  const READ_ACTIONS = new Set(['player', 'config']);
+  const READ_ACTIONS = new Set(['player', 'config', 'collections', 'folders']);
   const allowed = READ_ACTIONS.has(action) ? ['master_admin', 'admin', 'content'] : ['master_admin'];
   if (requireRole(res, ctx.profile, allowed)) return;
 
@@ -344,7 +423,8 @@ export default async function handler(req, res) {
   if (action === 'config') {
     res.status(200).json({
       connected: !!key,
-      collection: 'BLW WEEK 1 ALL PHOTOS',
+      collection: '📸 BLW WEEK 1 ALL PHOTOS',
+      defaultCollectionId: COLLECTION_ID,
       driveId: DRIVE_ID,
     });
     return;
@@ -364,6 +444,8 @@ export default async function handler(req, res) {
       });
       return;
     }
+    if (action === 'collections') { res.status(200).json(await doCollections(key)); return; }
+    if (action === 'folders') { res.status(200).json(await doFolders(key, body || {})); return; }
     if (action === 'queue')   { res.status(200).json(await doQueue(key, body || {})); return; }
     if (action === 'player')  { res.status(200).json(await doPlayer(key, body || {})); return; }
     if (action === 'download'){ res.status(200).json(await doDownload(key, body || {})); return; }

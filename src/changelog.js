@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '4.18.0',
+    date: '2026-06-11',
+    kind: 'minor',
+    summary: 'Rapid Tag: choose which Shade collection OR drop folder you tag from',
+    items: [
+      'Rapid Tag now has a "📁 Tagging from" picker covering both Shade Collections (📸 BLW WEEK 1 ALL PHOTOS, 🟢 Social Ready, etc.) AND raw intake folders by drop date (e.g. "JUNE 14th DROP"). Defaults to the auto-updating "ALL PHOTOS" feed, exactly like before.',
+      'Folders pull straight from your "BLW ONSITE INTAKE" drops — recursive, so a dated drop catches every photographer\'s subfolder inside it, and still filtered to only the untagged photos so you never re-tag.',
+      'Switching source resets the queue and reloads; the picker also appears on the "all caught up" screen so you can jump to the next drop without leaving the page.',
+      'Collections and folders both load live from Shade (new collections and new drop folders appear automatically), with a built-in fallback for collections so the picker never comes up empty.',
+    ],
+  },
+  {
     version: '4.17.0',
     date: '2026-06-11',
     kind: 'minor',
