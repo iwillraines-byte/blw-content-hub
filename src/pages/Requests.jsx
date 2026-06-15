@@ -9,7 +9,7 @@ import { useAuth } from '../auth';
 import { REQUEST_TYPES, getRequestType, getPriority } from '../request-types';
 import { RequestModal } from '../request-modal';
 import { RequestThread } from '../request-thread';
-import { useUnreadRequests } from '../request-unread-store';
+import { useUnreadRequestsCtx } from '../request-unread-store';
 import { refreshRequestsFromCloud } from '../cloud-reader';
 
 const STATUS_LABELS = {
@@ -72,10 +72,9 @@ export default function Requests() {
   }, []);
 
   // Server-side per-user unread markers — drives the per-card unread dot
-  // and clears the nav badge when a thread is opened.
-  const unread = useUnreadRequests({
-    userId: user?.id, email: user?.email, isAthlete, enabled: !!user?.id,
-  });
+  // and clears the nav badge when a thread is opened. v4.19.0: shared with
+  // the sidebar + dashboard via the provider (one poll, not three).
+  const unread = useUnreadRequestsCtx();
   const [showNew, setShowNew] = useState(false);
   // Detail-panel expansion is independent of the comments thread because
   // the two surfaces are visually different and serve different jobs:

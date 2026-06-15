@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { TEAMS, API_CONFIG } from './data';
 import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './theme';
@@ -6,27 +6,31 @@ import { TeamThemeScope } from './team-theme';
 import { GlobalStyles } from './global-styles';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from './version';
 import ChangelogModal from './changelog-modal';
+// Dashboard + auth pages load eagerly (the landing surfaces — no Suspense
+// flash on first paint). The heavy / less-frequently-first-hit pages are
+// v4.19.0 code-split so the initial bundle is ~250KB lighter: Studio's
+// canvas + stat-card renderer, the Files media layer, Rapid Tag's Shade
+// bridge, AI training, and the secondary pages each load on first visit.
 import ContentStudio from './pages/ContentStudio';
-import Generate from './pages/Generate';
-import Resources from './pages/Resources';
-import TrainAI from './pages/TrainAI';
-import Requests from './pages/Requests';
-import GameCenter from './pages/GameCenter';
-import Files from './pages/Files';
-import RapidTag from './pages/RapidTag';
-import Settings from './pages/Settings';
-import TeamPage from './pages/TeamPage';
-import PlayerPage from './pages/PlayerPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AuthCallback from './pages/AuthCallback';
-import Schedule from './pages/Schedule';
-import MyStats from './pages/MyStats';
+const Generate = lazy(() => import('./pages/Generate'));
+const Resources = lazy(() => import('./pages/Resources'));
+const TrainAI = lazy(() => import('./pages/TrainAI'));
+const Requests = lazy(() => import('./pages/Requests'));
+const GameCenter = lazy(() => import('./pages/GameCenter'));
+const Files = lazy(() => import('./pages/Files'));
+const RapidTag = lazy(() => import('./pages/RapidTag'));
+const Settings = lazy(() => import('./pages/Settings'));
+const TeamPage = lazy(() => import('./pages/TeamPage'));
+const PlayerPage = lazy(() => import('./pages/PlayerPage'));
+const Schedule = lazy(() => import('./pages/Schedule'));
 import { TeamLogo } from './components';
 import { TierBadgeStyles } from './tier-badges';
-import { useUnreadRequests } from './request-unread-store';
+import { UnreadRequestsProvider, useUnreadRequestsCtx } from './request-unread-store';
 import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
 import { hydrateDriveFromCloud } from './drive-api';
 import { supabaseConfigured } from './supabase-client';
@@ -176,16 +180,10 @@ function TeamsDropdown({ location }) {
 }
 
 function Sidebar({ isMobile, open, onClose }) {
-  // v4.15.0: unread thread badge on the Requests nav item. The hook
-  // refreshes on mount + every 60s + window focus; markRead happens on
-  // the Requests page when a thread opens.
-  const { user: navUser, role: navRole } = useAuth();
-  const navUnread = useUnreadRequests({
-    userId: navUser?.id,
-    email: navUser?.email,
-    isAthlete: navRole === 'athlete',
-    enabled: !!navUser?.id && ['master_admin', 'admin', 'content', 'athlete'].includes(navRole),
-  });
+  // v4.19.0: unread thread badge reads the shared UnreadRequestsProvider
+  // instead of spinning up its own 60s poll (the dashboard + Requests page
+  // used to each run their own copy too).
+  const navUnread = useUnreadRequestsCtx();
   const location = useLocation();
   const { role, isConfigured } = useAuth();
   // Changelog popup state. Lives at the Sidebar level (not page-global)
@@ -971,6 +969,16 @@ function ProfileSetupBanner() {
 }
 
 // Inner app — assumes a user is already signed in (or auth isn't configured).
+// Lightweight fallback shown while a code-split page chunk loads on first
+// visit. Deliberately minimal so it reads as an instant flash, not a screen.
+function PageLoading() {
+  return (
+    <div style={{ padding: 48, textAlign: 'center', color: colors.textMuted, fontFamily: fonts.condensed, fontSize: 13, letterSpacing: 0.5 }}>
+      Loading…
+    </div>
+  );
+}
+
 // This is the old App body, now gated behind AuthGate.
 function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1001,6 +1009,7 @@ function AppShell() {
   }, [user?.id]);
 
   return (
+    <UnreadRequestsProvider>
     <div style={{
       fontFamily: fonts.body, color: colors.text,
       display: 'flex', minHeight: '100vh', background: colors.bg,
@@ -1054,6 +1063,7 @@ function AppShell() {
               cut. Cheap perceived-quality win. */}
           <TeamThemeScope team={currentTeam}>
           <RouteAnimator>
+          <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/dashboard" element={
@@ -1104,11 +1114,13 @@ function AppShell() {
             <Route path="/stats" element={<Navigate to="/game-center" replace />} />
             <Route path="/assets" element={<Navigate to="/files" replace />} />
           </Routes>
+          </Suspense>
           </RouteAnimator>
           </TeamThemeScope>
         </main>
       </div>
     </div>
+    </UnreadRequestsProvider>
   );
 }
 

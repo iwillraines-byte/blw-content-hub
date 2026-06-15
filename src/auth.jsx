@@ -26,7 +26,7 @@
 // the override is gated to real master_admin role on the client; this is
 // a UX feature for a trusted user, not a security boundary.
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase, supabaseConfigured } from './supabase-client';
 
 const VIEW_AS_KEY = 'blw_view_as';
@@ -359,7 +359,14 @@ export function AuthProvider({ children }) {
     : null;
   const expiredRole = profile?.expiredRole || null;
 
-  const value = {
+  // v4.19.0: memoize the context value. Pre-fix this object was rebuilt on
+  // every AuthProvider render, so its reference changed every time — which
+  // re-rendered EVERY consumer (the whole app tree below AuthGate) on any
+  // state tick (poll refreshes, route changes, etc.). All the functions
+  // below are useCallback-stable and the derived values come from
+  // session/profile/viewingAs, so a dependency array of those keeps the
+  // reference stable until something real changes.
+  const value = useMemo(() => ({
     user: session?.user || null,
     session,
     profile,
@@ -388,7 +395,11 @@ export function AuthProvider({ children }) {
     signUpWithPassword,
     requestPasswordReset,
     updatePassword,
-  };
+  }), [
+    session, profile, viewingAs, loading, profileLoading, profileError,
+    signOut, setViewAs, refreshProfile,
+    signInWithPassword, signUpWithPassword, requestPasswordReset, updatePassword,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

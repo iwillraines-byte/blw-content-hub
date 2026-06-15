@@ -20,7 +20,7 @@ import { authedFetch } from '../authed-fetch';
 import IdeaCard from '../idea-card';
 import { Pager, useIdeaPagination, IDEAS_PAGE_SIZE } from '../idea-pager';
 import { buildRecentResults, buildUpcomingSlate, buildPhotoInventory, buildPostingCadence } from '../idea-context-builders';
-import { useUnreadRequests } from '../request-unread-store';
+import { useUnreadRequestsCtx } from '../request-unread-store';
 import { QuickStatsTicker } from '../quick-stats-ticker';
 import { useLeagueContext, LeagueContextCard } from '../league-context';
 import { ViewAsPicker } from '../view-as';
@@ -42,11 +42,8 @@ export default function ContentStudio() {
   const [suggestions, setSuggestions] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [requests, setRequests] = useState([]);
-  // v4.15.0: unread thread replies — surfaces "N unread replies" on the
-  // Requests dashboard card so conversations don't silently stall.
-  const requestsUnread = useUnreadRequests({
-    userId: authUser?.id, email: authUser?.email, isAthlete, enabled: !!authUser?.id,
-  });
+  // v4.19.0: unread replies read from the shared provider (was its own poll).
+  const requestsUnread = useUnreadRequestsCtx();
   const [mediaStats, setMediaStats] = useState({ total: 0, untagged: 0 });
   // Live batting + pitching for the Stats Leaders teaser at the bottom of the
   // dashboard. Shares the same fetchAllData() call so nothing hits twice.

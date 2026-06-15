@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '4.19.0',
+    date: '2026-06-15',
+    kind: 'minor',
+    summary: 'Performance: Files page made snappy + faster app boot',
+    items: [
+      'Files page no longer chokes as the library grows. Previously it loaded EVERY photo\'s full-resolution image into memory at once (hundreds of multi-MB files) just to show thumbnails. Now each thumbnail loads only when its tile scrolls near the screen, and its memory is released when you scroll away — so opening Files is fast no matter how many photos you\'ve tagged.',
+      'The photo-quality "needs polish" scan (which decodes each image) now also runs only for on-screen tiles, instead of analyzing all ~800 at once on load.',
+      'Searching, sorting, and filtering the Files grid is now instant — the list is memoized instead of rebuilding + re-sorting every photo on every keystroke.',
+      'Faster first load app-wide: the JavaScript bundle is code-split by page, dropping the initial download ~40% (Studio, Files, Rapid Tag, and other pages now load on first visit instead of all up front).',
+      'Removed redundant background polling: the unread-requests check ran as 2–3 independent copies at once (sidebar + dashboard + Requests page). It\'s now a single shared check.',
+      'Memoized the auth context so routine background refreshes no longer re-render the entire app.',
+    ],
+  },
+  {
     version: '4.18.0',
     date: '2026-06-11',
     kind: 'minor',

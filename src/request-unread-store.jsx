@@ -9,10 +9,11 @@
 // Soft-fails everywhere: no session / table missing / fetch error → zero
 // badges, never an error surface.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authedJson } from './authed-fetch';
 import { refreshRequestsFromCloud } from './cloud-reader';
 import { getRequests, getComments } from './requests-store';
+import { useAuth } from './auth';
 
 const REFRESH_MS = 60 * 1000;
 
@@ -82,4 +83,27 @@ export function useUnreadRequests({ userId, email, isAthlete, enabled = true } =
   }, [userId, recompute]);
 
   return { ...state, refresh, recompute, markRead };
+}
+
+// ─── Shared provider (v4.19.0) ──────────────────────────────────────────────
+// Pre-fix, useUnreadRequests() was called independently in the Sidebar, the
+// dashboard card, AND the Requests page — so 2-3 copies each ran their own
+// 60s poll + cloud refresh, out of phase. Now ONE instance runs at the app
+// shell and every consumer reads it from context. markRead/refresh are shared
+// so a read in one place clears the badge everywhere instantly.
+const UnreadCtx = createContext({ totalUnread: 0, unreadByRequest: {}, markRead: () => {}, refresh: () => {}, recompute: () => {} });
+
+export function UnreadRequestsProvider({ children }) {
+  const { user, role } = useAuth();
+  const value = useUnreadRequests({
+    userId: user?.id,
+    email: user?.email,
+    isAthlete: role === 'athlete',
+    enabled: !!user?.id && ['master_admin', 'admin', 'content', 'athlete'].includes(role),
+  });
+  return <UnreadCtx.Provider value={value}>{children}</UnreadCtx.Provider>;
+}
+
+export function useUnreadRequestsCtx() {
+  return useContext(UnreadCtx);
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { TEAMS, getTeam } from '../data';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
@@ -21,15 +21,62 @@ import BulkImportModal from './BulkImportModal';
 import { PreviewLightbox } from '../preview-lightbox';
 import { analyzeAndCache, getCachedQuality } from '../photo-quality';
 
-// v4.5.65: Photo quality badge — fires the lazy quality analyzer on
-// mount, then renders a small "NEEDS POLISH" chip if the photo is
+// v4.19.0: Lazy thumbnail. Renders the tile's image area but only mints an
+// object URL (and decodes the full-res blob) once the tile scrolls within
+// 400px of the viewport — and revokes it on unmount. Pre-fix, the Files page
+// created an object URL for every one of ~800 tagged photos at load and
+// decoded each full-res image to paint a 100px thumbnail, which is what made
+// the page crawl as the library grew. `children` may be a function of the
+// in-view flag so overlays (and the quality analyzer) can defer too.
+function LazyThumb({ blob, team, icon, children }) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setInView(true); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) { setInView(true); io.disconnect(); }
+    }, { rootMargin: '400px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!inView || !blob) return undefined;
+    const u = URL.createObjectURL(blob);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [inView, blob]);
+
+  return (
+    <div ref={ref} style={{
+      width: '100%', height: 100, borderRadius: radius.base, marginBottom: 8,
+      background: url ? `url(${url}) center/cover` : team ? `linear-gradient(135deg, ${team.color}22, ${team.color}08)` : colors.bg,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+      border: `1px solid ${colors.borderLight}`,
+    }}>
+      {!url && <span style={{ fontSize: 28, opacity: 0.5 }}>{icon || '📄'}</span>}
+      {typeof children === 'function' ? children(inView) : children}
+    </div>
+  );
+}
+
+// v4.5.65: Photo quality badge — fires the lazy quality analyzer when the
+// tile is in view, then renders a small "NEEDS POLISH" chip if the photo is
 // low-res or soft/blurry. Click the chip to download the original
 // blob so the user can run it through their desktop Topaz workflow
 // (or any cleanup tool) and re-upload. Sits in the top-left of the
 // thumbnail so it doesn't fight with the source-label chip on the
 // right.
-function NeedsPolishBadge({ fileId, qualityMap, setQualityMap, record }) {
+function NeedsPolishBadge({ fileId, qualityMap, setQualityMap, record, active = true }) {
   useEffect(() => {
+    // v4.19.0: only analyze when the tile is actually on/near screen.
+    // analyzeAndCache DECODES the image — running it for all ~800 tiles at
+    // mount was a major hidden cost on the Files page. Gated behind `active`
+    // (the LazyThumb in-view signal) so off-screen tiles stay cheap.
+    if (!active) return;
     if (!record || !record.blob) return;
     if (qualityMap[fileId] !== undefined) return;
     // Tag immediately so we don't fire concurrent analyses for the
@@ -41,7 +88,7 @@ function NeedsPolishBadge({ fileId, qualityMap, setQualityMap, record }) {
       setQualityMap(prev => ({ ...prev, [fileId]: null }));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, record?.blob]);
+  }, [fileId, record?.blob, active]);
 
   const q = qualityMap[fileId];
   if (!q || q === 'pending' || !q.needsPolish) return null;
@@ -911,6 +958,10 @@ export default function Files() {
   const [untaggedPreviewId, setUntaggedPreviewId] = useState(null);
   const [showTagger, setShowTagger] = useState(true);
   const [previewFile, setPreviewFile] = useState(null); // open preview modal
+  // v4.19.0: a single object URL for the currently-open preview (full-res),
+  // created on open/navigate and revoked when it changes or closes. Replaces
+  // the per-tile grid URLs the lightbox + download link used to borrow.
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   // Drive folder state
   const [driveApiKey, setDriveApiKey] = useState(getApiKey());
@@ -996,8 +1047,11 @@ export default function Files() {
       // Re-reading is the simplest way to surface any new arrivals.
       const media = await getAllMedia();
       setStoredMedia(media);
+      // v4.19.0: only the (small) untagged set gets eager object URLs — the
+      // tagged grid lazy-loads its thumbnails per-tile (see LazyThumb), so we
+      // no longer mint ~800 object URLs + decode full-res images up front.
       const urls = {};
-      media.forEach(m => { if (m.blob) urls[m.id] = blobToObjectURL(m.blob); });
+      media.forEach(m => { if (m.blob && !isProperlyNamed(m.name)) urls[m.id] = blobToObjectURL(m.blob); });
       setThumbUrls(urls);
     } catch (err) {
       setRefreshReport({ error: err.message });
@@ -1025,14 +1079,28 @@ export default function Files() {
   useEffect(() => {
     getAllMedia().then(media => {
       setStoredMedia(media);
+      // Untagged-only eager URLs (see runRefresh note). The tagged grid is lazy.
       const urls = {};
-      media.forEach(m => { if (m.blob) urls[m.id] = blobToObjectURL(m.blob); });
+      media.forEach(m => { if (m.blob && !isProperlyNamed(m.name)) urls[m.id] = blobToObjectURL(m.blob); });
       setThumbUrls(urls);
     });
   }, []);
 
-  const untagged = storedMedia.filter(m => !isProperlyNamed(m.name));
-  const tagged = storedMedia.filter(m => isProperlyNamed(m.name));
+  // Manage the single full-res preview URL (one alive at a time).
+  useEffect(() => {
+    const blob = previewFile
+      ? (storedMedia.find(m => m.id === previewFile.id)?.blob || previewFile.blob || null)
+      : null;
+    if (!blob) { setPreviewUrl(null); return undefined; }
+    const u = URL.createObjectURL(blob);
+    setPreviewUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [previewFile, storedMedia]);
+
+  // v4.19.0: memoized so the tagged/untagged split + the derived display list
+  // below don't re-run on every render (search keystroke, sort change, etc.).
+  const untagged = useMemo(() => storedMedia.filter(m => !isProperlyNamed(m.name)), [storedMedia]);
+  const tagged = useMemo(() => storedMedia.filter(m => isProperlyNamed(m.name)), [storedMedia]);
 
   // Set of Drive file IDs already imported — so we can show "already in library" badges
   const importedFileIds = useMemo(() => {
@@ -1041,37 +1109,32 @@ export default function Files() {
     return s;
   }, [storedMedia]);
 
-  const allDisplayFiles = tagged.map(m => ({
+  // v4.19.0: memoized on `tagged` so this ~800-item map only rebuilds when
+  // the media actually changes — not on every keystroke / sort / filter.
+  // Carries the raw blob (a reference, cheap) so the grid's LazyThumb can mint
+  // an object URL only when a tile scrolls into view, instead of decoding
+  // every full-res image up front.
+  const allDisplayFiles = useMemo(() => tagged.map(m => ({
     id: m.id, name: m.name, team: m.team, type: m.assetType,
-    // Rich metadata carried through so search matches on player / jersey /
-    // type / variant (not just the filename) and the sort dropdown can order
-    // by size, date, team, or player. Previously these were referenced by the
-    // search haystack + sort but never populated — so search only hit the
-    // filename and the "most recent" sort was a no-op (createdAt was absent).
     player: m.player, firstInitial: m.firstInitial, num: m.num,
     assetType: m.assetType, variant: m.variant,
     source: m.source || 'local',
     sizeBytes: m.blob ? m.blob.size : 0,
     size: m.blob ? `${(m.blob.size / 1024 / 1024).toFixed(1)} MB` : '',
     createdAt: m.createdAt || 0,
-    thumbUrl: thumbUrls[m.id],
-    // Scope inferred at read time so legacy records (no scope field
-    // before this feature shipped) bucket correctly. Reads the team
-    // code so BLW_* records land in 'league' even retroactively.
+    blob: m.blob || null,
+    // Scope inferred at read time so legacy records (no scope field before
+    // this feature shipped) bucket correctly.
     scope: m.scope || (m.team === LEAGUE_TEAM_CODE ? 'league'
       : (TEAM_SCOPE_TYPES.has(m.assetType) ? 'team' : 'player')),
-  }));
+  })), [tagged]);
 
-  const filtered = allDisplayFiles.filter(f => {
+  // v4.19.0: memoized filter + sort — was re-running the full multi-token
+  // search-haystack build AND an O(n log n) sort over every file on each
+  // render. Now only recomputes when the list or a control actually changes.
+  const filtered = useMemo(() => allDisplayFiles.filter(f => {
     if (scopeFilter !== 'all' && f.scope !== scopeFilter) return false;
     if (search) {
-      // v4.5.61: multi-token AND search. Pre-fix it was a single
-      // substring match on f.name, so "jaso headshot" missed every
-      // file (the substring isn't literally present in any filename).
-      // Now we tokenize the query on whitespace and require each
-      // token to appear in name, team, player, or assetType — so
-      // "jaso headshot", "lan hype", "jeter ace" all match the
-      // intuitive results.
       const haystack = [
         f.name, f.team, f.player, f.firstInitial, f.num, f.assetType, f.scope, f.type, f.variant,
       ].filter(Boolean).join(' ').toLowerCase();
@@ -1079,11 +1142,7 @@ export default function Files() {
       if (!tokens.every(t => haystack.includes(t))) return false;
     }
     return true;
-  })
-  // Sort by the active dropdown choice. createdAt is the upload timestamp
-  // (ms epoch); sizeBytes is the raw blob size. Legacy records missing a
-  // field fall back to 0 / '' so they sort to the end / start consistently.
-  .sort((a, b) => {
+  }).sort((a, b) => {
     switch (sortBy) {
       case 'oldest':   return (a.createdAt || 0) - (b.createdAt || 0);
       case 'largest':  return (b.sizeBytes || 0) - (a.sizeBytes || 0);
@@ -1094,14 +1153,14 @@ export default function Files() {
       case 'recent':
       default:         return (b.createdAt || 0) - (a.createdAt || 0);
     }
-  });
+  }), [allDisplayFiles, scopeFilter, search, sortBy]);
 
-  const scopeCounts = {
+  const scopeCounts = useMemo(() => ({
     all:     allDisplayFiles.length,
     player:  allDisplayFiles.filter(f => f.scope === 'player').length,
     team:    allDisplayFiles.filter(f => f.scope === 'team').length,
     league:  allDisplayFiles.filter(f => f.scope === 'league').length,
-  };
+  }), [allDisplayFiles]);
 
   const handleFiles = useCallback(async (fileList) => {
     const compressOn = getCompressPreference();
@@ -1995,11 +2054,11 @@ export default function Files() {
               key={f.id}
               onClick={() => {
                 if (selectMode) { toggleSelection(f.id); return; }
-                if (f.thumbUrl || f.url) setPreviewFile(f);
+                if (f.blob || f.url) setPreviewFile(f);
               }}
               style={{
                 padding: 12, position: 'relative',
-                cursor: selectMode ? 'pointer' : ((f.thumbUrl || f.url) ? 'pointer' : 'default'),
+                cursor: selectMode ? 'pointer' : ((f.blob || f.url) ? 'pointer' : 'default'),
                 outline: isSelected ? `3px solid ${colors.red}` : 'none',
                 boxShadow: isSelected ? '0 0 0 4px rgba(220,38,38,0.15)' : undefined,
                 transition: 'outline 0.15s',
@@ -2018,20 +2077,16 @@ export default function Files() {
                   {isSelected && '✓'}
                 </div>
               )}
-              <div style={{
-                width: '100%', height: 100, borderRadius: radius.base, marginBottom: 8,
-                background: f.thumbUrl ? `url(${f.thumbUrl}) center/cover` : t ? `linear-gradient(135deg, ${t.color}22, ${t.color}08)` : colors.bg,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-                border: `1px solid ${colors.borderLight}`,
-              }}>
-                {!f.thumbUrl && <span style={{ fontSize: 28, opacity: 0.5 }}>{typeIcons[f.type] || '📄'}</span>}
-                <div style={{
-                  position: 'absolute', top: 6, right: 6,
-                  background: `${sourceColors[f.source]}15`, borderRadius: 4, padding: '2px 6px',
-                  fontSize: 9, fontFamily: fonts.condensed, color: sourceColors[f.source], fontWeight: 700,
-                }}>{sourceLabels[f.source]?.toUpperCase() || 'FILE'}</div>
-                <NeedsPolishBadge fileId={f.id} qualityMap={qualityMap} setQualityMap={setQualityMap} record={storedMedia.find(m => m.id === f.id)} />
-              </div>
+              <LazyThumb blob={f.blob} team={t} icon={typeIcons[f.type]}>
+                {(inView) => <>
+                  <div style={{
+                    position: 'absolute', top: 6, right: 6,
+                    background: `${sourceColors[f.source]}15`, borderRadius: 4, padding: '2px 6px',
+                    fontSize: 9, fontFamily: fonts.condensed, color: sourceColors[f.source], fontWeight: 700,
+                  }}>{sourceLabels[f.source]?.toUpperCase() || 'FILE'}</div>
+                  <NeedsPolishBadge active={inView} fileId={f.id} qualityMap={qualityMap} setQualityMap={setQualityMap} record={f.blob ? { id: f.id, blob: f.blob } : null} />
+                </>}
+              </LazyThumb>
               <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{f.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2192,8 +2247,8 @@ export default function Files() {
         return (
           <PreviewLightbox
             open
-            url={item.thumbUrl}
-            blob={!item.thumbUrl ? fallbackBlob : null}
+            url={previewUrl}
+            blob={!previewUrl ? fallbackBlob : null}
             isVideo={isVideo}
             caption={captionMeta}
             position={filtered.length > 1 && idx >= 0 ? `${idx + 1} / ${filtered.length}` : ''}
@@ -2219,9 +2274,9 @@ export default function Files() {
                     textDecoration: 'none', whiteSpace: 'nowrap',
                   }}
                 >✦ Download via Studio</Link>
-                {item.thumbUrl && (
+                {previewUrl && (
                   <a
-                    href={item.thumbUrl}
+                    href={previewUrl}
                     download={item.name}
                     style={{
                       background: colors.red, color: '#fff',
