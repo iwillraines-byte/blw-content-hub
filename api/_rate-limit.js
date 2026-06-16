@@ -47,6 +47,14 @@ const LIMITS = {
     content:      600,
     athlete:      120,
   },
+  'media-usage': {
+    // One increment per download/Studio-export — generous caps just bound a
+    // runaway loop. Cheap RPC, no AI spend.
+    master_admin: 1000,
+    admin:        1000,
+    content:      1000,
+    athlete:       200,
+  },
   'auto-tag': {
     // Auto-tag is staff-only at the auth layer (see api/auto-tag.js).
     // We still set explicit caps so a compromised staff account can't

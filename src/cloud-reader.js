@@ -95,6 +95,8 @@ function rowToMedia(r) {
     source: r.source || 'cloud',
     tags: r.tags || {},
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    // v4.20.0: uploader attribution (master-only "who added this" on Files).
+    ownerId: r.owner_id || null,
     mimeType: r.mime_type || null,
     sizeBytes: r.size_bytes || null,
     // v4.5.53: anything pulled from the cloud is — by definition —

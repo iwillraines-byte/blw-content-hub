@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.20.0',
+    date: '2026-06-15',
+    kind: 'minor',
+    summary: 'Master admin: see who added each photo + a most-used media leaderboard',
+    items: [
+      'Files page now shows WHO added each photo and WHEN (master admin only) — a small "↑ name · date" line on every tile and in the full-size preview, so you can tell at a glance which teammate dropped in new files.',
+      'New "Most-used media" panel in Settings (master admin only): ranks your library photos by how often they\'re downloaded ("saved to a device") and used in Studio (chosen as the background of an exported post), with totals, who last used each, and who originally added it. Sort by saves, Studio uses, or total.',
+      'Studio now records which library photo was the background of each exported post, so the recent-posts restore can reload it and the leaderboard can count it.',
+      'Run db/022_media_usage.sql in Supabase to create the usage table + counter. Until then the panel just shows "no usage tracked yet" — and note the counts start from when this ships, there is no historical backfill.',
+      'Folded into the v5 roadmap: storing real small thumbnails per photo so the Files page never loads full-resolution originals (the proper follow-up to the v4.19.0 speed work).',
+    ],
+  },
+  {
     version: '4.19.0',
     date: '2026-06-15',
     kind: 'minor',

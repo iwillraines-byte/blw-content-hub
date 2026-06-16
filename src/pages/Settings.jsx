@@ -20,6 +20,7 @@ import PlayerBioImportCard from './PlayerBioImportCard';
 import PlayerTradesCard from './PlayerTradesCard';
 import RosterDiagnosticCard from './RosterDiagnosticCard';
 import RawApiInspectorCard from './RawApiInspectorCard';
+import MediaUsageCard from './MediaUsageCard';
 
 export default function Settings() {
   const { role } = useAuth();
@@ -136,6 +137,10 @@ export default function Settings() {
           directly with no caching/normalization to verify what the API
           actually returns for a given player. */}
       {isMaster && <RawApiInspectorCard />}
+
+      {/* Most-used media — master_admin only. Downloads + Studio-use
+          leaderboard so the master can see which photos earn their keep. */}
+      {isMaster && <MediaUsageCard />}
 
       {/* Appearance + Typography — personal preferences, visible to everyone */}
       <ThemeModeCard />

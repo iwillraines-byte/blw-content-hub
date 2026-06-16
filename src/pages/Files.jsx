@@ -20,6 +20,8 @@ import { compressImageBlob, getCompressPreference, setCompressPreference, format
 import BulkImportModal from './BulkImportModal';
 import { PreviewLightbox } from '../preview-lightbox';
 import { analyzeAndCache, getCachedQuality } from '../photo-quality';
+import { useAuth } from '../auth';
+import { recordMediaUsage, fetchMediaUploaders } from '../media-usage';
 
 // v4.19.0: Lazy thumbnail. Renders the tile's image area but only mints an
 // object URL (and decodes the full-res blob) once the tile scrolls within
@@ -932,6 +934,15 @@ function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRenam
 
 export default function Files() {
   const toast = useToast();
+  const { role } = useAuth();
+  const isMaster = role === 'master_admin';
+  // v4.20.0: who/when each file was added — master-only. Keyed by media id,
+  // resolved server-side from media.owner_id → profile name. Fetched once.
+  const [uploaders, setUploaders] = useState({});
+  useEffect(() => {
+    if (!isMaster) return;
+    fetchMediaUploaders().then(setUploaders).catch(() => {});
+  }, [isMaster]);
   const [search, setSearch] = useState('');
   // Scope filter for the tagged file grid. 'all' is the default;
   // 'league' surfaces just BLW-wide assets so league-event content
@@ -2088,6 +2099,12 @@ export default function Files() {
                 </>}
               </LazyThumb>
               <div style={{ fontSize: 11, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{f.name}</div>
+              {isMaster && uploaders[f.id] && (
+                <div title={`Added by ${uploaders[f.id].ownerName || 'Unknown'}${uploaders[f.id].createdAt ? ` on ${new Date(uploaders[f.id].createdAt).toLocaleString()}` : ''}`}
+                  style={{ fontSize: 9.5, color: colors.textMuted, fontFamily: fonts.condensed, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
+                  ↑ {uploaders[f.id].ownerName || 'Unknown'}{uploaders[f.id].createdAt ? ` · ${new Date(uploaders[f.id].createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {f.scope === 'league' ? (
@@ -2237,12 +2254,14 @@ export default function Files() {
           ? () => setPreviewFile(filtered[(idx + 1) % filtered.length])
           : null;
         const t = getTeam(item.team);
+        const up = isMaster ? uploaders[item.id] : null;
         const captionMeta = [
           item.name,
           t ? t.name : item.team,
           item.type,
           item.size,
           sourceLabels[item.source],
+          up?.ownerName ? `added by ${up.ownerName}${up.createdAt ? ` · ${new Date(up.createdAt).toLocaleDateString()}` : ''}` : null,
         ].filter(Boolean).join(' · ');
         return (
           <PreviewLightbox
@@ -2278,6 +2297,7 @@ export default function Files() {
                   <a
                     href={previewUrl}
                     download={item.name}
+                    onClick={() => recordMediaUsage(item.id, 'download')}
                     style={{
                       background: colors.red, color: '#fff',
                       border: '1px solid rgba(255,255,255,0.4)',

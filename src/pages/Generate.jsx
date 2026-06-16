@@ -14,6 +14,7 @@ import { getPresetOverlays, loadPresetImage } from '../preset-overlays';
 import { applyOverrides, setFieldOverride, getOverrides, resetOverrides } from '../field-overrides-store';
 import { useToast } from '../toast';
 import { cloud } from '../cloud-sync';
+import { recordMediaUsage } from '../media-usage';
 import { refreshOverlaysFromCloud } from '../cloud-reader';
 import { readStashedIdea } from '../idea-context-store';
 import { extractIdeaFromNote, getRequests } from '../requests-store';
@@ -686,6 +687,10 @@ export default function Generate() {
   const [overlayImg, setOverlayImg] = useState(null);
   const [bgImg, setBgImg] = useState(null);
   const [bgUrl, setBgUrl] = useState(null);
+  // v4.20.0: the media-library id of the current background, when it came from
+  // a library asset (the picker or a ?bgMediaId deep-link). null for dropped/
+  // uploaded local files. Used to log a "used in Studio" event on export.
+  const [bgMediaId, setBgMediaId] = useState('');
   // Pan/zoom + exposure adjustments — applied to the background image only.
   // Reset whenever a new bgImg loads so each photo starts from identity.
   const [bgTransform, setBgTransform] = useState(DEFAULT_BG_TRANSFORM);
@@ -1235,12 +1240,18 @@ export default function Generate() {
             selectedPlayer,
             overlayId: selectedOverlayId,
             effects: activeEffects.map(e => ({ id: e.id, type: e.type, opacity: e.opacity })),
+            // v4.20.0: record which library photo was the background so the
+            // recent-posts restore can re-load it (and for usage analytics).
+            bgMediaId: bgMediaId || null,
           },
           thumbnailDataUrl,
         });
       } catch (err) {
         console.warn('[generate-log] failed to snapshot', err);
       }
+      // v4.20.0: count this export as a "used in Studio" event for the
+      // background photo, when it came from the media library.
+      if (bgMediaId) recordMediaUsage(bgMediaId, 'studio');
 
       // Restore preview render (with placeholders) right after export
       render();
@@ -1339,6 +1350,7 @@ export default function Generate() {
     if (!file || !file.type.startsWith('image/')) return;
     const url = URL.createObjectURL(file);
     setBgUrl(url);
+    setBgMediaId(''); // local file, not a library asset
     const img = new Image();
     img.onload = () => setBgImg(img);
     img.src = url;
@@ -1350,6 +1362,7 @@ export default function Generate() {
     if (!file || !file.type.startsWith('image/')) return;
     const url = URL.createObjectURL(file);
     setBgUrl(url);
+    setBgMediaId(''); // local file, not a library asset
     const img = new Image();
     img.onload = () => setBgImg(img);
     img.src = url;
@@ -1357,8 +1370,9 @@ export default function Generate() {
     setBgTransform(DEFAULT_BG_TRANSFORM);
   }, []);
 
-  const selectPlayerMediaAsBg = useCallback((mediaUrl) => {
+  const selectPlayerMediaAsBg = useCallback((mediaUrl, mediaId = '') => {
     setBgUrl(mediaUrl);
+    setBgMediaId(mediaId || '');
     const img = new Image();
     img.onload = () => setBgImg(img);
     img.src = mediaUrl;
@@ -1385,6 +1399,7 @@ export default function Generate() {
         img.onload = () => {
           if (cancelled) return;
           setBgUrl(url);
+          setBgMediaId(bgMediaIdParam);
           setBgImg(img);
           setBgTransform(DEFAULT_BG_TRANSFORM);
         };
@@ -2104,7 +2119,7 @@ export default function Generate() {
                           {playerMediaUrls.map(m => (
                             <div
                               key={m.id}
-                              onClick={() => selectPlayerMediaAsBg(m.url)}
+                              onClick={() => selectPlayerMediaAsBg(m.url, m.id)}
                               title={m.name}
                               style={{
                                 width: '100%', aspectRatio: '1 / 1', borderRadius: radius.base, cursor: 'pointer',
@@ -3245,7 +3260,7 @@ export default function Generate() {
                 {playerMediaUrls.map(m => (
                   <button
                     key={m.id}
-                    onClick={() => { selectPlayerMediaAsBg(m.url); setBigPickerOpen(false); }}
+                    onClick={() => { selectPlayerMediaAsBg(m.url, m.id); setBigPickerOpen(false); }}
                     style={{
                       padding: 0, border: bgUrl === m.url ? `3px solid ${colors.accent}` : `1px solid ${colors.border}`,
                       borderRadius: radius.base, overflow: 'hidden', cursor: 'pointer',
