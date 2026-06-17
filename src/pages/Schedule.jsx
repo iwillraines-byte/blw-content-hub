@@ -355,19 +355,18 @@ function BroadcastChip({ text, primary }) {
 
 function fmtOdds(o) {
   if (!o) return '—';
-  if (o.clinched) return 'Clinched';
-  if (o.eliminated) return 'Out';
   const p = o.odds * 100;
-  if (p >= 99.5) return '99%+';   // very likely, but not mathematically clinched
-  if (p < 0.5) return '<1%';      // almost out, but not eliminated
+  if (p >= 99.5) return '99%+';   // a sampled sim can't prove a true clinch
+  if (p < 0.5) return '<1%';      // ...or a true elimination
   return `${Math.round(p)}%`;
 }
 
 function oddsColor(o) {
-  if (!o || o.eliminated) return colors.textMuted;
-  if (o.clinched || o.odds >= 0.66) return colors.successText;
+  if (!o) return colors.textMuted;
+  if (o.odds >= 0.66) return colors.successText;
   if (o.odds >= 0.33) return colors.warningText;
-  return colors.dangerText;
+  if (o.odds >= 0.005) return colors.dangerText;
+  return colors.textMuted;
 }
 
 function StandingsTable({ standings, odds }) {

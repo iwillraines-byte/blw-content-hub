@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '4.23.0',
+    date: '2026-06-16',
+    kind: 'patch',
+    summary: 'Playoff odds: simulate run margins + honest near-lock labels',
+    items: [
+      'Fixed the playoff-odds model so it simulates run margins, not just wins and losses. Run differentials now move during the simulated games, so a team can climb the run-differential tiebreaker the way it could in reality — previously every team\'s run diff was frozen at today\'s value, which made a diff-tiebreak lead look safer than it actually is.',
+      'Because of that, a .500 team like Miami no longer shows a false "Clinched": a low-diff team (e.g. Chicago) winning out by big margins can leapfrog it on the run-differential tiebreaker, and the odds now account for those paths.',
+      'Stopped labeling teams "Clinched" / "Out" as absolutes — a 10,000-run simulation can\'t prove a mathematical lock. Near-certain teams now read "99%+" / "<1%" instead.',
+    ],
+  },
+  {
     version: '4.22.0',
     date: '2026-06-16',
     kind: 'minor',

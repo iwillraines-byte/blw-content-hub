@@ -659,8 +659,10 @@ export const PLAYOFF_SPOTS = 6;
 // sample isn't treated as a lock; per-game odds use Bill James' log5. Teams
 // whose season is already over (no games left — e.g. PHI/MIA after week 2)
 // keep a fixed record across every sim, so their odds reflect only how often
-// the still-playing teams pass them. Returns Map teamId → { odds, clinched,
-// eliminated }.
+// the still-playing teams pass them. Each simulated game also draws a winning
+// margin (bootstrapped from observed results) so run differentials move and the
+// diff tiebreaker is realistic — a team CAN climb the tiebreaker, not just its
+// W-L. Returns Map teamId → { odds }.
 export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 } = {}) {
   const teams = computeStandings(games).ordered;
   const N = teams.length;
@@ -669,8 +671,21 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
   const idx = new Map(teams.map((r, i) => [r.teamId, i]));
   const baseW = teams.map(r => r.w);
   const baseL = teams.map(r => r.l);
-  const diffNum = teams.map(r => r.diffNum);
+  const baseDiff = teams.map(r => r.diffNum);
   const api = teams.map(r => r.apiTeamId || 0);
+
+  // Observed winning margins — bootstrapped into the remaining games so run
+  // differentials actually MOVE during the sim. Without this, every team's diff
+  // is frozen at today's value, so a low-diff team can never climb the
+  // tiebreaker (e.g. a team going from -6 to +5 by winning out with big
+  // margins), which made diff-tiebreak leads look safer than they are.
+  const margins = [];
+  for (const g of (games || [])) {
+    if (g.status !== 'SUBMITTED') continue;
+    const m = Math.abs(Number(g.home?.score) - Number(g.away?.score));
+    if (Number.isFinite(m) && m > 0) margins.push(m);
+  }
+  if (!margins.length) margins.push(1, 2, 3);
 
   // Pythagorean win%, regressed toward .500 with a 3-game prior, then clamped
   // off the rails so no team is a 0%/100% per-game certainty.
@@ -708,27 +723,29 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
 
   const playoffCount = new Array(N).fill(0);
   const order = Array.from({ length: N }, (_, i) => i);
+  const M = margins.length;
   for (let s = 0; s < sims; s++) {
     const w = baseW.slice();
     const l = baseL.slice();
+    const d = baseDiff.slice();
     for (const [a, b] of remaining) {
-      if (Math.random() < log5(strength[a], strength[b])) { w[a]++; l[b]++; }
-      else { w[b]++; l[a]++; }
+      const m = margins[(Math.random() * M) | 0];
+      if (Math.random() < log5(strength[a], strength[b])) { w[a]++; l[b]++; d[a] += m; d[b] -= m; }
+      else { w[b]++; l[a]++; d[b] += m; d[a] -= m; }
     }
     order.sort((i, j) => {
       const pi = (w[i] + l[i]) ? w[i] / (w[i] + l[i]) : 0;
       const pj = (w[j] + l[j]) ? w[j] / (w[j] + l[j]) : 0;
-      return (pj - pi) || (diffNum[j] - diffNum[i]) || (api[i] - api[j]);
+      return (pj - pi) || (d[j] - d[i]) || (api[i] - api[j]);
     });
     for (let k = 0; k < spots && k < N; k++) playoffCount[order[k]]++;
   }
 
+  // A 10k-run sampled sim can't PROVE a mathematical clinch/elimination, so the
+  // UI reports probabilities (capped to "99%+"/"<1%") rather than absolutes.
   const out = new Map();
   teams.forEach((r, i) => {
-    const odds = playoffCount[i] / sims;
-    // "Clinched"/"Out" only when mathematically locked (no simulated counter-
-    // example), so a 99.x% team reads as "99%+" rather than a false lock.
-    out.set(r.teamId, { odds, clinched: playoffCount[i] === sims, eliminated: playoffCount[i] === 0 });
+    out.set(r.teamId, { odds: playoffCount[i] / sims });
   });
   return out;
 }
