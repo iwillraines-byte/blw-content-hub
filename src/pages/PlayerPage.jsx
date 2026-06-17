@@ -7,6 +7,7 @@ import { ContentIdeasSection } from '../content-ideas-section';
 import { getRecentFeedback } from '../idea-feedback-store';
 import { PageDropZone } from '../page-drop-zone';
 import { colors, fonts, radius } from '../theme';
+import { timeAgo } from '../format-time';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
@@ -1665,6 +1666,14 @@ export default function PlayerPage() {
     addAll(allMediaPool);
     return urls;
   }, [media, teamMedia, allMediaPool]);
+  // Free the previous blob URLs when the media pools change or on unmount —
+  // mediaUrls mints a fresh URL per blob each rebuild, so without this they
+  // accumulate on every player-page navigation.
+  useEffect(() => {
+    return () => {
+      for (const u of Object.values(mediaUrls)) { try { URL.revokeObjectURL(u); } catch {} }
+    };
+  }, [mediaUrls]);
 
   // ─── Photo-picker callbacks ────────────────────────────────────────────
   // IMPORTANT: these useCallbacks MUST live above every conditional return
@@ -2851,18 +2860,6 @@ function PlayerRecentPosts({ posts, team, player }) {
   const lightbox = usePhotoLightbox();
   const { role } = useAuth();
   const canEdit = role === 'master_admin' || role === 'admin' || role === 'content';
-  const timeAgo = (d) => {
-    if (!d) return '';
-    const diff = Date.now() - d.getTime();
-    if (diff < 60_000) return 'Just now';
-    const mins = Math.floor(diff / 60_000);
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
   const buildRegenerateLink = (post) => {
     const params = new URLSearchParams();
     if (post.templateType) params.set('template', post.templateType);

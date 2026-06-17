@@ -579,6 +579,19 @@ export default function TeamPage() {
     return () => { cancel = true; };
   }, [team?.id, rebuildRoster]);
 
+  // Revoke roster-avatar object URLs when the set changes or the page
+  // unmounts. The cleanup captures the rosterAvatars value from its own
+  // render, so React frees each generation exactly once — no leak across
+  // team navigations, and no flash (the new map is committed before the old
+  // URLs are revoked).
+  useEffect(() => {
+    return () => {
+      for (const a of Object.values(rosterAvatars)) {
+        if (a?.url) { try { URL.revokeObjectURL(a.url); } catch {} }
+      }
+    };
+  }, [rosterAvatars]);
+
   const handleAddPlayer = async () => {
     if (!newPlayerLast.trim()) return;
     const record = await savePlayer({
@@ -716,6 +729,12 @@ export default function TeamPage() {
     for (const m of media) if (m.blob) urls[m.id] = blobToObjectURL(m.blob);
     return urls;
   }, [media]);
+  // Free the previous thumbnail URLs when `media` changes or on unmount.
+  useEffect(() => {
+    return () => {
+      for (const u of Object.values(thumbUrls)) { try { URL.revokeObjectURL(u); } catch {} }
+    };
+  }, [thumbUrls]);
 
   const teamScopedMedia = useMemo(
     () => media.filter(m => (m.scope || 'player') === 'team'),

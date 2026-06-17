@@ -103,20 +103,6 @@ export const Skeleton = ({ width = '100%', height = 16, radius: r = 6, style }) 
   />
 );
 
-// SkeletonText — multi-line text-shaped skeleton. Convenience for the
-// common "loading some prose" case. Each line gets a slight width
-// variation so it doesn't read as a perfect grid.
-export const SkeletonText = ({ lines = 3, height = 12, gap = 8, style }) => {
-  const widths = ['100%', '92%', '85%', '78%', '95%']; // varied so it doesn't look like a barcode
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap, ...style }}>
-      {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton key={i} width={widths[i % widths.length]} height={height} />
-      ))}
-    </div>
-  );
-};
-
 // CollapsibleCard — Card variant with an expand/collapse chevron and an
 // optional summary line that surfaces when collapsed. Used on Generate
 // to keep the left-column form from growing into a 7-card scroll.
@@ -415,28 +401,6 @@ export const OutlineButton = ({ children, onClick, disabled, style, className, t
   >{children}</button>
 );
 
-// IconButton — square 34px button with an icon glyph. Active state is
-// expressed inline (so it persists between renders). Hover affordance
-// from `.btn-icon` only fires on non-active buttons because they already
-// carry the tint when active.
-export const IconButton = ({ children, onClick, active, style }) => (
-  <button
-    onClick={onClick}
-    className={active ? '' : 'btn-icon'}
-    style={{
-      background: active ? colors.accentSoft : 'transparent',
-      color: active ? colors.accent : colors.textSecondary,
-      border: 'none',
-      borderRadius: radius.sm,
-      width: 34, height: 34,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      cursor: 'pointer',
-      fontSize: 16,
-      ...style
-    }}
-  >{children}</button>
-);
-
 // ─── Form Elements ──────────────────────────────────────────────────────────
 
 export const inputStyle = {
@@ -521,10 +485,6 @@ export const PositionedAvatar = ({
 };
 
 // ─── Utility ────────────────────────────────────────────────────────────────
-
-export const Divider = ({ style }) => (
-  <div style={{ height: 1, background: colors.divider, margin: '16px 0', ...style }} />
-);
 
 export const Badge = ({ children, color = colors.red, style }) => (
   <span style={{

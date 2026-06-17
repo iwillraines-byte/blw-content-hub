@@ -18,11 +18,11 @@
 // click-game-to-open-Studio-with-matchup-prefilled, score columns
 // once games complete.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { TEAMS, getTeam, getTeamAbbr, fetchGames, scoresByDateTime } from '../data';
+import { TEAMS, getTeam, getTeamAbbr, fetchGames, scoresByDateTime, fetchStandings, fetchPlayoffOdds, PLAYOFF_SPOTS } from '../data';
 import {
   SCHEDULE,
   getAllGameDays,
@@ -40,8 +40,13 @@ export default function Schedule() {
   // feed. Completed games render their score + a FINAL tag; upcoming games keep
   // showing their start time. Null until loaded (schedule still renders).
   const [scores, setScores] = useState(null);
+  const [standings, setStandings] = useState(null);
+  const [odds, setOdds] = useState(null);
   useEffect(() => {
+    // All three share fetchGames()' cache, so this is a single network call.
     fetchGames().then(g => setScores(scoresByDateTime(g))).catch(() => {});
+    fetchStandings().then(setStandings).catch(() => {});
+    fetchPlayoffOdds().then(setOdds).catch(() => {});
   }, []);
 
   // Sort all game days ascending. Past/upcoming split is computed below
@@ -130,6 +135,11 @@ export default function Schedule() {
           </div>
         </div>
       )}
+
+      {/* Full standings + playoff odds — beneath the schedule. */}
+      <div style={{ marginTop: 20 }}>
+        <StandingsTable standings={standings} odds={odds} />
+      </div>
     </div>
   );
 }
@@ -338,5 +348,113 @@ function BroadcastChip({ text, primary }) {
       {primary && <span style={{ fontSize: 10 }}>📺</span>}
       {text}
     </span>
+  );
+}
+
+// ─── Full standings table + playoff odds ───────────────────────────────────
+
+function fmtOdds(o) {
+  if (!o) return '—';
+  if (o.clinched) return 'Clinched';
+  if (o.eliminated) return 'Out';
+  const p = o.odds * 100;
+  if (p >= 99.5) return '99%+';   // very likely, but not mathematically clinched
+  if (p < 0.5) return '<1%';      // almost out, but not eliminated
+  return `${Math.round(p)}%`;
+}
+
+function oddsColor(o) {
+  if (!o || o.eliminated) return colors.textMuted;
+  if (o.clinched || o.odds >= 0.66) return colors.successText;
+  if (o.odds >= 0.33) return colors.warningText;
+  return colors.dangerText;
+}
+
+function StandingsTable({ standings, odds }) {
+  if (!standings || !standings.ordered) {
+    return (
+      <Card>
+        <SectionHeading style={{ margin: '0 0 4px' }}>2026 Standings</SectionHeading>
+        <div style={{ padding: '14px 0', textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
+          Standings updating…
+        </div>
+      </Card>
+    );
+  }
+  const rows = standings.ordered;
+  const numCell = { textAlign: 'right', fontFamily: fonts.condensed, fontVariantNumeric: 'tabular-nums' };
+  const th = { ...numCell, fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: colors.textMuted, textTransform: 'uppercase', padding: '0 8px 8px' };
+  const td = { ...numCell, fontSize: 13, fontWeight: 700, color: colors.text, padding: '9px 8px' };
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+        <SectionHeading style={{ margin: 0 }}>2026 Standings</SectionHeading>
+        <span style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: colors.textMuted }}>
+          Top {PLAYOFF_SPOTS} make the playoffs · odds from 10k sims
+        </span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${colors.divider}` }}>
+              <th style={{ ...th, textAlign: 'center', width: 34 }}>#</th>
+              <th style={{ ...th, textAlign: 'left' }}>Team</th>
+              <th style={th}>GP</th>
+              <th style={th}>W</th>
+              <th style={th}>L</th>
+              <th style={th}>PCT</th>
+              <th style={th}>RF</th>
+              <th style={th}>RA</th>
+              <th style={th}>DIFF</th>
+              <th style={{ ...th, minWidth: 76 }}>Playoff</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const o = odds ? odds.get(r.teamId) : null;
+              const t = getTeam(r.teamId);
+              return (
+                <Fragment key={r.teamId}>
+                  {i === PLAYOFF_SPOTS && (
+                    <tr aria-hidden="true">
+                      <td colSpan={10} style={{ padding: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px' }}>
+                          <div style={{ flex: 1, height: 2, background: colors.red, opacity: 0.45, borderRadius: 1 }} />
+                          <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 1, color: colors.red, textTransform: 'uppercase' }}>Playoff line</span>
+                          <div style={{ flex: 1, height: 2, background: colors.red, opacity: 0.45, borderRadius: 1 }} />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  <tr style={{ borderBottom: i < rows.length - 1 ? `1px solid ${colors.divider}` : 'none', background: i % 2 ? colors.bg : colors.white }}>
+                    <td style={{ ...td, textAlign: 'center', color: colors.textMuted }}>{r.rank ?? '—'}</td>
+                    <td style={{ ...td, textAlign: 'left' }}>
+                      {t ? (
+                        <Link to={`/teams/${t.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, textDecoration: 'none', color: colors.text }} title={t.name}>
+                          <TeamLogo teamId={t.id} size={20} rounded="square" />
+                          <span style={{ fontFamily: fonts.body, fontWeight: 700, fontSize: 13 }}>{getTeamAbbr(t)}</span>
+                        </Link>
+                      ) : r.teamId}
+                    </td>
+                    <td style={{ ...td, fontWeight: 600, color: colors.textSecondary }}>{r.gp}</td>
+                    <td style={td}>{r.w}</td>
+                    <td style={td}>{r.l}</td>
+                    <td style={{ ...td, color: colors.red }}>{r.pct}</td>
+                    <td style={{ ...td, fontWeight: 600, color: colors.textSecondary }}>{r.rf}</td>
+                    <td style={{ ...td, fontWeight: 600, color: colors.textSecondary }}>{r.ra}</td>
+                    <td style={{ ...td, color: r.diffNum > 0 ? colors.successText : r.diffNum < 0 ? colors.dangerText : colors.textSecondary }}>{r.diff}</td>
+                    <td style={{ ...td, color: oddsColor(o) }}>{fmtOdds(o)}</td>
+                  </tr>
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 11, color: colors.textMuted, margin: '10px 2px 0', lineHeight: 1.5 }}>
+        Playoff odds simulate every remaining game 10,000 times using each team's run-differential strength. Teams whose season is already complete show their locked-in odds.
+      </p>
+    </Card>
   );
 }

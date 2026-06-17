@@ -51,12 +51,20 @@ export function useUnreadRequests({ userId, email, isAthlete, enabled = true } =
 
   const refresh = useCallback(async () => {
     if (!enabled || !userId) return;
+    // Skip polling while the tab is backgrounded — no point hitting the
+    // network every 60s for a view nobody's looking at. We refresh on
+    // focus / visibilitychange when the user comes back.
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const [readsRes] = await Promise.all([
         authedJson('/api/request-reads').catch(() => null),
         refreshRequestsFromCloud().catch(() => null),
       ]);
-      readsRef.current = readsRes?.reads || [];
+      // Only replace the cache when the fetch actually returned reads. On a
+      // failed call, KEEP the previous markers — clearing them to [] would
+      // make every message read as unread and balloon the badge until the
+      // next good poll.
+      if (readsRes?.reads) readsRef.current = readsRes.reads;
     } catch { /* zero badges beat an error surface */ }
     recompute();
   }, [enabled, userId, recompute]);
@@ -66,8 +74,14 @@ export function useUnreadRequests({ userId, email, isAthlete, enabled = true } =
     refresh();
     const interval = setInterval(refresh, REFRESH_MS);
     const onFocus = () => refresh();
+    const onVisible = () => { if (!document.hidden) refresh(); };
     window.addEventListener('focus', onFocus);
-    return () => { clearInterval(interval); window.removeEventListener('focus', onFocus); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [enabled, userId, refresh]);
 
   // Mark a thread read: optimistic local clear + server stamp.

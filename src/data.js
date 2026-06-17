@@ -1,6 +1,8 @@
 // ─── GRAND SLAM SYSTEMS API ─────────────────────────────────────────────────
 // Live data from app.grandslamsystems.com (prowiffleball.com stats platform)
 
+import { SCHEDULE } from './schedule-data';
+
 // Routes through our Vercel serverless proxy (api/gss/[...path].js) to bypass
 // the upstream CORS whitelist. In dev, Vite proxies /api/gss to the real API.
 const GSS_BASE = '/api/gss';
@@ -156,6 +158,7 @@ export function invalidateLeagueCaches() {
   _rankingsCache = null;
   _rosterCache.clear();
   _lastFetch = 0;
+  _oddsCache = null;
 }
 
 // ─── LIVE API FETCH FUNCTIONS ───────────────────────────────────────────────
@@ -643,6 +646,104 @@ export function scoresByDateTime(games) {
     });
   }
   return map;
+}
+
+// ─── Playoff odds (Monte Carlo) ─────────────────────────────────────────────
+// Top PLAYOFF_SPOTS of the 10 teams reach the postseason. No bracket/format is
+// baked into the league data, so this is the agreed regular-season cut.
+export const PLAYOFF_SPOTS = 6;
+
+// Probability each team finishes in a playoff spot, by simulating the rest of
+// the hardcoded schedule many times. Team strength = Pythagorean win
+// expectation from runs for/against, regressed toward .500 so a 1–2 game
+// sample isn't treated as a lock; per-game odds use Bill James' log5. Teams
+// whose season is already over (no games left — e.g. PHI/MIA after week 2)
+// keep a fixed record across every sim, so their odds reflect only how often
+// the still-playing teams pass them. Returns Map teamId → { odds, clinched,
+// eliminated }.
+export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 } = {}) {
+  const teams = computeStandings(games).ordered;
+  const N = teams.length;
+  if (!N) return new Map();
+
+  const idx = new Map(teams.map((r, i) => [r.teamId, i]));
+  const baseW = teams.map(r => r.w);
+  const baseL = teams.map(r => r.l);
+  const diffNum = teams.map(r => r.diffNum);
+  const api = teams.map(r => r.apiTeamId || 0);
+
+  // Pythagorean win%, regressed toward .500 with a 3-game prior, then clamped
+  // off the rails so no team is a 0%/100% per-game certainty.
+  const PRIOR = 3;
+  const strength = teams.map(r => {
+    const denom = r.rf * r.rf + r.ra * r.ra;
+    const pyth = denom > 0 ? (r.rf * r.rf) / denom : 0.5;
+    const reg = (pyth * r.gp + 0.5 * PRIOR) / (r.gp + PRIOR);
+    return Math.min(0.90, Math.max(0.10, reg));
+  });
+
+  // Remaining games = scheduled slots with no SUBMITTED result yet. Keyed by
+  // date+time, which matches whatever actually happened regardless of the
+  // schedule's listed teams.
+  const playedKeys = new Set();
+  for (const g of (games || [])) {
+    if (g.status === 'SUBMITTED' && g.dateTime) playedKeys.add(g.dateTime.slice(0, 16));
+  }
+  const remaining = [];
+  for (const gd of SCHEDULE) {
+    for (const g of gd.games) {
+      if (playedKeys.has(`${gd.date}T${g.time}`)) continue;
+      const a = idx.get(canonicalTeamId(g.team1));
+      const b = idx.get(canonicalTeamId(g.team2));
+      if (a == null || b == null) continue;
+      remaining.push([a, b]);
+    }
+  }
+
+  // log5: P(A beats B) from each team's win% vs a .500 baseline.
+  const log5 = (pa, pb) => {
+    const d = pa + pb - 2 * pa * pb;
+    return d > 0 ? (pa - pa * pb) / d : 0.5;
+  };
+
+  const playoffCount = new Array(N).fill(0);
+  const order = Array.from({ length: N }, (_, i) => i);
+  for (let s = 0; s < sims; s++) {
+    const w = baseW.slice();
+    const l = baseL.slice();
+    for (const [a, b] of remaining) {
+      if (Math.random() < log5(strength[a], strength[b])) { w[a]++; l[b]++; }
+      else { w[b]++; l[a]++; }
+    }
+    order.sort((i, j) => {
+      const pi = (w[i] + l[i]) ? w[i] / (w[i] + l[i]) : 0;
+      const pj = (w[j] + l[j]) ? w[j] / (w[j] + l[j]) : 0;
+      return (pj - pi) || (diffNum[j] - diffNum[i]) || (api[i] - api[j]);
+    });
+    for (let k = 0; k < spots && k < N; k++) playoffCount[order[k]]++;
+  }
+
+  const out = new Map();
+  teams.forEach((r, i) => {
+    const odds = playoffCount[i] / sims;
+    // "Clinched"/"Out" only when mathematically locked (no simulated counter-
+    // example), so a 99.x% team reads as "99%+" rather than a false lock.
+    out.set(r.teamId, { odds, clinched: playoffCount[i] === sims, eliminated: playoffCount[i] === 0 });
+  });
+  return out;
+}
+
+let _oddsCache = null;
+let _oddsFetchedAt = 0;
+
+// Cached async wrapper, mirrors fetchStandings(). Shares fetchGames()' cache,
+// so it adds no network cost when standings/scores were just fetched.
+export async function fetchPlayoffOdds() {
+  if (_oddsCache && (Date.now() - _oddsFetchedAt) < CACHE_TTL) return _oddsCache;
+  const games = await fetchGames();
+  _oddsCache = computePlayoffOdds(games);
+  _oddsFetchedAt = Date.now();
+  return _oddsCache;
 }
 
 // ─── TEAM ROSTER API ────────────────────────────────────────────────────────

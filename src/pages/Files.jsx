@@ -944,6 +944,14 @@ export default function Files() {
     fetchMediaUploaders().then(setUploaders).catch(() => {});
   }, [isMaster]);
   const [search, setSearch] = useState('');
+  // Debounce the search term so the heavy filter+sort below doesn't re-run on
+  // every keystroke over hundreds of files. The input stays bound to `search`
+  // for instant feedback; `debouncedSearch` lags ~150ms and drives the memo.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 150);
+    return () => clearTimeout(t);
+  }, [search]);
   // Scope filter for the tagged file grid. 'all' is the default;
   // 'league' surfaces just BLW-wide assets so league-event content
   // is one click away regardless of which team's archive you're in.
@@ -1145,11 +1153,11 @@ export default function Files() {
   // render. Now only recomputes when the list or a control actually changes.
   const filtered = useMemo(() => allDisplayFiles.filter(f => {
     if (scopeFilter !== 'all' && f.scope !== scopeFilter) return false;
-    if (search) {
+    if (debouncedSearch) {
       const haystack = [
         f.name, f.team, f.player, f.firstInitial, f.num, f.assetType, f.scope, f.type, f.variant,
       ].filter(Boolean).join(' ').toLowerCase();
-      const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+      const tokens = debouncedSearch.toLowerCase().split(/\s+/).filter(Boolean);
       if (!tokens.every(t => haystack.includes(t))) return false;
     }
     return true;
@@ -1164,7 +1172,7 @@ export default function Files() {
       case 'recent':
       default:         return (b.createdAt || 0) - (a.createdAt || 0);
     }
-  }), [allDisplayFiles, scopeFilter, search, sortBy]);
+  }), [allDisplayFiles, scopeFilter, debouncedSearch, sortBy]);
 
   const scopeCounts = useMemo(() => ({
     all:     allDisplayFiles.length,

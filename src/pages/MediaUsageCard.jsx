@@ -9,20 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, SectionHeading, TeamChip } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { fetchTopMedia } from '../media-usage';
-
-function timeAgo(iso) {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(diff)) return '';
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+import { timeAgo } from '../format-time';
 
 export default function MediaUsageCard() {
   const [rows, setRows] = useState(null); // null = loading

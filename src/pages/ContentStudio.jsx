@@ -5,6 +5,7 @@ import { getAllManualPlayers } from '../player-store';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
+import { timeAgo } from '../format-time';
 import { getRequests, saveRequests, countByStatus, oldestPendingDays, embedIdeaInNote, buildGenerateLinkFromIdea } from '../requests-store';
 import { stashIdeaForGenerate } from '../idea-context-store';
 import { getAllMedia } from '../media-store';
@@ -1047,18 +1048,6 @@ function RecentPostsStrip({ posts, loaded, onHide }) {
   // re-edit reachable via a button inside the lightbox actions
   // slot, so the workflow isn't lost — it's just opt-in.
   const lightbox = usePhotoLightbox();
-  const timeAgo = (d) => {
-    if (!d) return '';
-    const diff = Date.now() - d.getTime();
-    if (diff < 60_000) return 'Just now';
-    const mins = Math.floor(diff / 60_000);
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
 
   // Restore a download by dropping its snapshot back into Generate's URL params.
   const buildRegenerateLink = (post) => {

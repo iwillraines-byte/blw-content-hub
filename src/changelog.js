@@ -18,6 +18,31 @@
 
 export const RELEASES = [
   {
+    version: '4.22.0',
+    date: '2026-06-16',
+    kind: 'minor',
+    summary: 'Schedule: fixed June 14 scores + full standings table with playoff odds',
+    items: [
+      'Fixed the first two June 14 games on the Schedule — Chicago and New York were swapped between the 1:00 and 1:45 slots, so their finals (CHI 3–2 PHI, NYG 3–1 PHI) weren\'t showing. They now display correctly.',
+      'Added a full standings table at the bottom of the Schedule page: rank, games played, W-L, win %, runs for / against, run differential, and live playoff odds for all 10 teams.',
+      'Playoff odds run a 10,000-game Monte Carlo simulation of every remaining matchup, weighting each team by its run-differential strength. Top 6 of 10 make the playoffs (marked with a cut line); teams whose season is already complete show their locked-in odds.',
+    ],
+  },
+  {
+    version: '4.21.0',
+    date: '2026-06-16',
+    kind: 'patch',
+    summary: 'Pre-v5 cleanup: memory fixes, snappier search, small bug fixes',
+    items: [
+      'Fixed a memory build-up when browsing teams and players: roster headshots, photo thumbnails, and the Studio background picker were creating image references that were never released, so a long session of clicking around slowly ate memory. They\'re now freed as you navigate away.',
+      'Fixed the Requests unread badge occasionally over-counting (briefly marking everything unread) after a flaky network moment — a failed check no longer wipes your "already read" markers.',
+      'Background tabs no longer poll for new request replies — the 60-second check pauses when the app isn\'t visible and resumes when you return, saving battery and data.',
+      'Files search is smoother on large libraries: filtering now waits a beat after you stop typing instead of re-scanning every file on each keystroke.',
+      'Fixed a small Studio glitch where the caption-platform tabs could stay on the wrong tab after an idea\'s captions were regenerated.',
+      'Internal tidy-up: removed unused components and a dead diagnostic endpoint, and consolidated duplicated "x minutes ago" timestamp code into one shared helper.',
+    ],
+  },
+  {
     version: '4.20.0',
     date: '2026-06-15',
     kind: 'minor',

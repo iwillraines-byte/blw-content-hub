@@ -993,6 +993,28 @@ export default function Generate() {
     loadContextMedia();
   }, [selectedPlayer, customTeam]);
 
+  // Background URLs in use — kept in refs so the revoke effect below never
+  // frees a picker URL that's currently selected as a background. (The canvas
+  // holds the decoded image either way, but bgUrl is also read in the picker
+  // UI to highlight the active tile.)
+  const bgUrlRef = useRef(null);
+  const bgUrl2Ref = useRef(null);
+  useEffect(() => { bgUrlRef.current = bgUrl; }, [bgUrl]);
+  useEffect(() => { bgUrl2Ref.current = bgUrl2; }, [bgUrl2]);
+
+  // playerMediaUrls mints a fresh object URL per item each time the selected
+  // player / custom team changes. Free the previous batch on replace/unmount
+  // (skipping any URL currently used as a background) so they don't pile up.
+  useEffect(() => {
+    return () => {
+      for (const it of playerMediaUrls) {
+        if (it?.url && it.url !== bgUrlRef.current && it.url !== bgUrl2Ref.current) {
+          try { URL.revokeObjectURL(it.url); } catch {}
+        }
+      }
+    };
+  }, [playerMediaUrls]);
+
   // Auto-fill stats when player selected (jersey sourced from media if available)
   useEffect(() => {
     if (!selectedPlayer) { setRecommendedStatLines([]); return; }
@@ -3305,9 +3327,14 @@ function BriefContextDrawer({ idea, onDismiss }) {
   // Active caption tab. Falls back to the first key with a draft so
   // the panel doesn't open on an empty platform when one was generated.
   const captionKeys = idea?.captions ? Object.keys(idea.captions).filter(k => idea.captions[k]) : [];
+  const captionSig = captionKeys.join(',');
   const [tab, setTab] = useState(captionKeys[0] || 'instagram');
-  // Re-pin the tab when the idea changes (browser back/forward).
-  useEffect(() => { setTab(captionKeys[0] || 'instagram'); /* eslint-disable-next-line */ }, [idea?.id]);
+  // Re-pin the tab when the idea changes (browser back/forward) OR when the
+  // set of available caption platforms changes for the same idea (captions
+  // regenerated). captionSig is a stable string, so this fires only on real
+  // changes — depending on the raw captionKeys array would re-fire every
+  // render and clobber the user's manual tab selection.
+  useEffect(() => { setTab(captionKeys[0] || 'instagram'); }, [idea?.id, captionSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stats = Array.isArray(idea?.dataPoints) ? idea.dataPoints.filter(Boolean) : [];
   const narrative = idea?.narrative || idea?.description || '';

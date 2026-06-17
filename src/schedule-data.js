@@ -49,8 +49,11 @@ export const SCHEDULE = [
     broadcast: 'YouTube',
     firstSlateAlso: 'Fubo + regional sports networks',
     games: [
-      { time: '13:00', team1: 'NYG', team2: 'PHI' },
-      { time: '13:45', team1: 'PHI', team2: 'CHI' },
+      // v4.22.0: 13:00 & 13:45 corrected to match the GSS results — CHI and
+      // NYG were swapped between these two slots, so their finals weren't
+      // attaching on the schedule (CHI 3–2 PHI at 1:00, NYG 3–1 PHI at 1:45).
+      { time: '13:00', team1: 'CHI', team2: 'PHI' },
+      { time: '13:45', team1: 'PHI', team2: 'NYG' },
       { time: '14:30', team1: 'MIA', team2: 'CHI' },
       { time: '15:15', team1: 'MIA', team2: 'NYG' },
       { time: '17:30', team1: 'CHI', team2: 'NYG' },
