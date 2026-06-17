@@ -247,8 +247,14 @@ export function AuthProvider({ children }) {
     return { error: error?.message || null };
   }, []);
 
-  const signUpWithPassword = useCallback(async (email, password) => {
+  const signUpWithPassword = useCallback(async (email, password, claim = null) => {
     if (!supabaseConfigured) return { error: 'Auth is not configured.' };
+    // A registrant can self-identify as a player at signup; the claim rides
+    // along as user metadata, which the db/023 trigger copies onto the profile
+    // as a pending athlete claim for the master to approve. Fans pass nothing.
+    const data = (claim && claim.name)
+      ? { claim_team: claim.team || '', claim_name: claim.name, claim_num: claim.num || '', claim_code: claim.code || '' }
+      : null;
     // emailRedirectTo controls where Supabase's "confirm your email"
     // link lands after the user clicks it. Our /auth/callback handler
     // already handles both magic-link and confirmation tokens.
@@ -257,6 +263,7 @@ export function AuthProvider({ children }) {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        ...(data ? { data } : {}),
       },
     });
     return { error: error?.message || null };

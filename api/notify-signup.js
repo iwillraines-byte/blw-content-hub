@@ -45,11 +45,20 @@ export default async function handler(req, res) {
 
     // Abuse guard: only notify for a signup that actually just happened.
     const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    const { data: rows, error } = await sb.from('profiles')
-      .select('id, email, role, created_at')
+    let { data: rows, error } = await sb.from('profiles')
+      .select('id, email, role, created_at, claim_team, claim_name, claim_num')
       .eq('email', email)
       .gte('created_at', cutoff)
       .limit(1);
+    // Pre-db/023 deploys don't have claim_* columns — fall back so the
+    // signup alert still sends.
+    if (error && /claim_/i.test(error.message || '')) {
+      ({ data: rows, error } = await sb.from('profiles')
+        .select('id, email, role, created_at')
+        .eq('email', email)
+        .gte('created_at', cutoff)
+        .limit(1));
+    }
     if (error || !rows?.length) { done(); return; }
     const profile = rows[0];
 
@@ -67,13 +76,20 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         from,
         to: [to],
-        subject: `New BLW Studio signup: ${email}`,
+        subject: profile.claim_name
+          ? `New BLW player claim: ${profile.claim_name} (${email})`
+          : `New BLW Studio signup: ${email}`,
         text:
           `Someone just created a BLW Studio account.\n\n` +
           `Email: ${email}\n` +
           `Default role: ${profile.role || 'athlete'}\n` +
+          (profile.claim_name
+            ? `Self-claim: ${profile.claim_name}${profile.claim_num ? ` #${profile.claim_num}` : ''} · team ${profile.claim_team || '—'}\n`
+            : '') +
           `Signed up: ${when} ET\n\n` +
-          `Manage their role in People Admin: https://blwstudio.com/settings\n`,
+          (profile.claim_name
+            ? `Review their player claim in People Admin: https://blwstudio.com/settings\n`
+            : `Manage their role in People Admin: https://blwstudio.com/settings\n`),
       }),
     }).catch(() => {});
 

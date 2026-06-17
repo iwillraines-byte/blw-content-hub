@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '4.24.0',
+    date: '2026-06-16',
+    kind: 'minor',
+    summary: 'Self-claim at signup + per-team verification codes — players say who they are, you approve',
+    items: [
+      'New accounts can identify themselves at signup. The register page asks "fan or player?" — a player picks their team, types their name and jersey number, and (optionally) enters their team\'s join code. Everyone still starts as a fan; nothing grants athlete access until you approve.',
+      'Per-team join codes for verification: in Settings → People, generate a secret code per team and share it privately in that team\'s channel. A registrant who enters the right code shows up ✓ Code verified in your queue; anyone else is flagged ⚠ Unverified so you know to confirm them another way. Rotate a code anytime to cut off the old one.',
+      'A "Pending athlete claims" queue at the top of Settings → People shows each self-identified player (email + verified badge + claimed name, team, number). Approve promotes them to athlete, sets their team, and links their roster record in one click (the matching player is auto-selected); deny keeps them as a fan.',
+      'The new-signup email alert now includes the self-claim, so you can see who an email says they are without opening the app. (Still needs RESEND_API_KEY + NOTIFY_EMAIL set in Vercel to send.)',
+      'Run db/023_athlete_claims.sql in Supabase to add the claim fields, the team-codes table, and the updated signup trigger. Until then signups still work and just default to fan with no claim.',
+    ],
+  },
+  {
     version: '4.23.0',
     date: '2026-06-16',
     kind: 'patch',

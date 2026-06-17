@@ -32,17 +32,18 @@ const VALID_ROLES = ['master_admin', 'admin', 'content', 'athlete', 'fan'];
 // fallback pattern from _supabase.js so a deploy-before-migrate doesn't
 // 500 the People list.
 async function selectProfiles(sb) {
-  let { data, error } = await sb
-    .from('profiles')
-    .select('id, email, role, team_id, display_name, created_at, updated_at, pending_invite')
-    .order('created_at', { ascending: false });
+  const FULL = 'id, email, role, team_id, display_name, created_at, updated_at, pending_invite, claim_team, claim_name, claim_num, claim_status, claim_verified';
+  const MID  = 'id, email, role, team_id, display_name, created_at, updated_at, pending_invite';
+  const MIN  = 'id, email, role, team_id, display_name, created_at, updated_at';
+  const ordered = (cols) => sb.from('profiles').select(cols).order('created_at', { ascending: false });
+  // Graceful degradation for deploy-before-migrate: drop claim_* (db/023),
+  // then pending_invite (db/015), so the People list never 500s.
+  let { data, error } = await ordered(FULL);
+  if (error && /(claim_|pending_invite)/i.test(error.message || '')) {
+    ({ data, error } = await ordered(MID));
+  }
   if (error && /pending_invite/i.test(error.message || '')) {
-    const fallback = await sb
-      .from('profiles')
-      .select('id, email, role, team_id, display_name, created_at, updated_at')
-      .order('created_at', { ascending: false });
-    data = fallback.data;
-    error = fallback.error;
+    ({ data, error } = await ordered(MIN));
   }
   if (error) throw error;
   return data || [];
@@ -257,13 +258,13 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
-      const { id, role, team_id, display_name } = req.body || {};
+      const { id, role, team_id, display_name, claim_status, link_manual_player_id } = req.body || {};
       if (!id) return res.status(400).json({ error: 'id is required' });
 
       // Fetch the target so we can check what role they currently have.
       const { data: target, error: getErr } = await sb
         .from('profiles')
-        .select('id, role, email')
+        .select('id, role, email, team_id')
         .eq('id', id)
         .maybeSingle();
       if (getErr) throw getErr;
@@ -288,6 +289,12 @@ export default async function handler(req, res) {
       }
       if (team_id !== undefined) updates.team_id = team_id || null;
       if (typeof display_name === 'string') updates.display_name = display_name || null;
+      if (typeof claim_status === 'string') {
+        if (!['pending', 'approved', 'denied'].includes(claim_status)) {
+          return res.status(400).json({ error: 'invalid claim_status' });
+        }
+        updates.claim_status = claim_status;
+      }
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'No fields to update' });
@@ -300,7 +307,30 @@ export default async function handler(req, res) {
         .select()
         .single();
       if (updErr) throw updErr;
-      return res.status(200).json({ profile: updated });
+
+      // Approving a claim can also bind the account to its roster player in
+      // the same call — reuses the POST link rules (same team + currently
+      // unlinked). Best-effort: surfaces a warning if it couldn't bind, but
+      // the role/team change already succeeded.
+      let linkWarning = null;
+      const effectiveRole = updates.role || target.role;
+      const effectiveTeam = (updates.team_id !== undefined) ? updates.team_id : target.team_id;
+      if (link_manual_player_id && effectiveRole === 'athlete') {
+        const { data: tp, error: lookErr } = await sb
+          .from('manual_players')
+          .select('id, team, user_id')
+          .eq('id', link_manual_player_id)
+          .maybeSingle();
+        if (lookErr || !tp) linkWarning = 'Could not find the selected player record';
+        else if (effectiveTeam && tp.team !== effectiveTeam) linkWarning = `Player record is on team ${tp.team}, not ${effectiveTeam}`;
+        else if (tp.user_id && tp.user_id !== id) linkWarning = 'Player record is already linked to another account';
+        else {
+          const { error: linkErr } = await sb.from('manual_players').update({ user_id: id }).eq('id', link_manual_player_id);
+          if (linkErr) linkWarning = `Approved but link failed: ${linkErr.message}`;
+        }
+      }
+
+      return res.status(200).json({ profile: updated, link_warning: linkWarning });
     }
 
     res.setHeader('Allow', 'GET, POST, PATCH');

@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { TEAMS } from '../data';
+import { TEAMS, getTeam } from '../data';
 import { useAuth, ROLE_LABELS, isAdminRole } from '../auth';
 import { authedJson } from '../authed-fetch';
 import { useToast } from '../toast';
@@ -98,6 +98,42 @@ export default function PeopleAdminCard() {
     }
   }, [toast]);
 
+  // ── Pending athlete claims (v4.24.0) ──────────────────────────────────────
+  // Profiles that self-identified as a player at signup. Master verifies the
+  // name against the roster, then approves (→ athlete + linked) or denies.
+  const pendingClaims = useMemo(
+    () => profiles.filter(p => p.claim_status === 'pending'),
+    [profiles]
+  );
+  const [claimRoster, setClaimRoster] = useState(null); // manual_players, lazy
+  useEffect(() => {
+    if (!pendingClaims.length || claimRoster) return;
+    getAllManualPlayers().then(rows => setClaimRoster(rows || [])).catch(() => setClaimRoster([]));
+  }, [pendingClaims.length, claimRoster]);
+
+  const approveClaim = useCallback(async (p, linkPlayerId) => {
+    try {
+      const res = await authedJson('/api/admin-people', {
+        method: 'PATCH',
+        body: {
+          id: p.id,
+          role: 'athlete',
+          team_id: p.claim_team || null,
+          claim_status: 'approved',
+          link_manual_player_id: linkPlayerId || null,
+        },
+      });
+      setProfiles(prev => prev.map(x => x.id === p.id ? { ...x, ...(res.profile || {}) } : x));
+      if (res?.link_warning) toast.error('Approved — link needs attention', { detail: res.link_warning });
+      else toast.success('Approved — promoted to athlete');
+    } catch (err) {
+      toast.error('Approve failed', { detail: err.message });
+      refresh();
+    }
+  }, [toast, refresh]);
+
+  const denyClaim = useCallback((p) => patchRow(p.id, { claim_status: 'denied' }), [patchRow]);
+
   return (
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -122,6 +158,28 @@ export default function PeopleAdminCard() {
         }}>{error}</div>
       )}
 
+      {pendingClaims.length > 0 && (
+        <div style={{ marginBottom: 16, padding: 12, background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: radius.base }}>
+          <div style={{ fontFamily: fonts.condensed, fontSize: 12, fontWeight: 800, letterSpacing: 0.5, color: '#92400E', textTransform: 'uppercase', marginBottom: 6 }}>
+            Pending athlete claims · {pendingClaims.length}
+          </div>
+          <p style={{ fontSize: 11, color: colors.textSecondary, margin: '0 0 10px', lineHeight: 1.5 }}>
+            These people signed up and said they're players. Check the name against the roster, then approve to promote them to athlete (and link their player record), or deny to keep them as a fan.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pendingClaims.map(p => (
+              <ClaimReviewRow
+                key={p.id}
+                p={p}
+                roster={claimRoster}
+                onApprove={(linkId) => approveClaim(p, linkId)}
+                onDeny={() => denyClaim(p)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ padding: 20, textAlign: 'center', color: colors.textSecondary, fontSize: 13 }}>Loading…</div>
       ) : (
@@ -144,6 +202,8 @@ export default function PeopleAdminCard() {
           ))}
         </div>
       )}
+
+      <TeamJoinCodesPanel />
 
       {inviteOpen && (
         <InviteModal
@@ -276,6 +336,164 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvit
           {p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}
         </div>
       </div>
+    </div>
+  );
+}
+
+// One pending self-claim: shows who the email says they are + a roster picker
+// (auto-matched to the claimed name) so master can approve+link in one click.
+function ClaimReviewRow({ p, roster, onApprove, onDeny }) {
+  const [linkId, setLinkId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const team = p.claim_team ? getTeam(p.claim_team) : null;
+
+  const teamPlayers = useMemo(() => {
+    if (!p.claim_team || !roster) return [];
+    return roster
+      .filter(x => x.team === p.claim_team)
+      .sort((a, b) => (Number(!!a.userId) - Number(!!b.userId)) || String(a.lastName || '').localeCompare(String(b.lastName || '')));
+  }, [roster, p.claim_team]);
+
+  // Best match for the claimed name (exact full name, else surname contained),
+  // preferring still-unlinked records.
+  useEffect(() => {
+    if (linkId || !p.claim_name || !teamPlayers.length) return;
+    const cn = p.claim_name.trim().toLowerCase();
+    const full = (x) => `${x.firstName || ''} ${x.lastName || ''}`.trim().toLowerCase();
+    const pick = teamPlayers.find(x => !x.userId && full(x) === cn)
+      || teamPlayers.find(x => !x.userId && x.lastName && cn.includes(String(x.lastName).toLowerCase()));
+    if (pick) setLinkId(pick.id);
+  }, [teamPlayers, p.claim_name, linkId]);
+
+  const run = async (fn) => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
+
+  return (
+    <div style={{ background: colors.white, border: `1px solid ${colors.borderLight}`, borderRadius: radius.base, padding: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.email}</div>
+        {p.claim_verified ? (
+          <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: '#15803D', background: '#DCFCE7', border: '1px solid #86EFAC', padding: '2px 6px', borderRadius: radius.sm }}>✓ CODE VERIFIED</span>
+        ) : (
+          <span title="They didn't enter a valid team join code — confirm their identity another way before approving." style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: '#92400E', background: '#FEF3C7', border: '1px solid #FCD34D', padding: '2px 6px', borderRadius: radius.sm }}>⚠ UNVERIFIED</span>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+        Claims: <strong>{p.claim_name || '(no name)'}</strong>
+        {p.claim_num ? ` · #${p.claim_num}` : ''}
+        {' · '}{team ? team.name : (p.claim_team || 'no team')}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+        <select
+          value={linkId}
+          onChange={e => setLinkId(e.target.value)}
+          style={{ ...selectStyle, flex: 1, minWidth: 180, padding: '5px 6px', fontSize: 11 }}
+        >
+          <option value="">— Link to player later —</option>
+          {teamPlayers.map(x => {
+            const linked = !!x.userId;
+            const num = x.num != null && x.num !== '' ? `#${x.num} ` : '';
+            const name = `${x.firstName || ''} ${x.lastName || ''}`.trim() || '(unnamed)';
+            return <option key={x.id} value={x.id} disabled={linked}>{num}{name}{linked ? ' · linked' : ''}</option>;
+          })}
+        </select>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => run(() => onApprove(linkId))}
+          style={{ padding: '6px 12px', fontSize: 11, fontFamily: fonts.condensed, fontWeight: 800, letterSpacing: 0.5, color: colors.white, background: colors.success || '#15803D', border: 'none', borderRadius: radius.sm, cursor: busy ? 'wait' : 'pointer' }}
+        >APPROVE</button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => run(onDeny)}
+          style={{ padding: '6px 12px', fontSize: 11, fontFamily: fonts.condensed, fontWeight: 800, letterSpacing: 0.5, color: colors.textSecondary, background: colors.white, border: `1px solid ${colors.border}`, borderRadius: radius.sm, cursor: busy ? 'wait' : 'pointer' }}
+        >DENY</button>
+      </div>
+    </div>
+  );
+}
+
+// Master-only manager for the per-team signup codes. Collapsed by default;
+// fetches current codes on first open and lets master generate/rotate/copy.
+const miniBtn = {
+  padding: '4px 10px', fontSize: 11, fontFamily: fonts.condensed, fontWeight: 800,
+  letterSpacing: 0.5, color: colors.textSecondary, background: colors.white,
+  border: `1px solid ${colors.border}`, borderRadius: radius.sm, cursor: 'pointer',
+};
+
+function TeamJoinCodesPanel() {
+  const toast = useToast();
+  const [codes, setCodes] = useState(null); // null = not loaded; else { teamId: code }
+  const [busyTeam, setBusyTeam] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await authedJson('/api/team-codes');
+      const map = {};
+      (data.codes || []).forEach(c => { map[c.team_id] = c.code; });
+      setCodes(map);
+    } catch { setCodes({}); }
+  }, []);
+  useEffect(() => { if (open && codes === null) load(); }, [open, codes, load]);
+
+  const generate = useCallback(async (teamId) => {
+    setBusyTeam(teamId);
+    try {
+      const res = await authedJson('/api/team-codes', { method: 'POST', body: { team_id: teamId } });
+      setCodes(prev => ({ ...(prev || {}), [teamId]: res.code?.code }));
+      toast.success(`New code for ${teamId}`);
+    } catch (e) {
+      toast.error('Failed to set code', { detail: e.message });
+    } finally {
+      setBusyTeam('');
+    }
+  }, [toast]);
+
+  const copy = useCallback((code) => {
+    try { navigator.clipboard.writeText(code); toast.success('Code copied'); } catch { /* clipboard blocked */ }
+  }, [toast]);
+
+  return (
+    <div style={{ marginTop: 16, borderTop: `1px solid ${colors.borderLight}`, paddingTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+      >
+        <span style={{ fontSize: 10, color: colors.textMuted, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+        <SectionHeading style={{ margin: 0, fontSize: 15 }}>Team join codes</SectionHeading>
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 11, color: colors.textSecondary, margin: '0 0 12px', lineHeight: 1.5 }}>
+            Share each team's code privately with that team (Discord, GroupMe, in person). When a player enters it at signup, their claim shows <strong>✓ Code verified</strong>. Rotate anytime — the old code stops working immediately.
+          </p>
+          {codes === null ? (
+            <div style={{ fontSize: 12, color: colors.textMuted, padding: 8 }}>Loading…</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {TEAMS.map(t => {
+                const code = codes[t.id];
+                return (
+                  <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: 8, alignItems: 'center', padding: '6px 8px', border: `1px solid ${colors.borderLight}`, borderRadius: radius.base }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: colors.text }}>{t.id}</span>
+                    <span style={{ fontFamily: fonts.condensed, fontSize: 14, fontWeight: 800, letterSpacing: 2, color: code ? colors.text : colors.textMuted }}>
+                      {code || '— not set —'}
+                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {code && <button type="button" onClick={() => copy(code)} style={miniBtn}>Copy</button>}
+                      <button type="button" disabled={busyTeam === t.id} onClick={() => generate(t.id)} style={{ ...miniBtn, cursor: busyTeam === t.id ? 'wait' : 'pointer' }}>
+                        {busyTeam === t.id ? '…' : (code ? 'Rotate' : 'Generate')}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
