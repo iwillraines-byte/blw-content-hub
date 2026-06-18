@@ -68,8 +68,8 @@ export function PercentileBubble({
   // (a bubble at 0% or 100% would otherwise clip).
   const targetWidthPct = pct == null ? 0 : pct;
   const animatedWidthPct = mounted ? targetWidthPct : 0;
-  const bubbleSize = 24;
-  const trackHeight = 12;
+  const bubbleSize = 22;
+  const trackHeight = 10;
 
   return (
     <div
@@ -105,7 +105,7 @@ export function PercentileBubble({
         {/* Background track */}
         <div style={{
           width: '100%', height: trackHeight, borderRadius: 999,
-          background: '#E5E7EB',
+          background: colors.muted,
           position: 'relative', overflow: 'visible',
         }}>
           {/* Animated fill */}
@@ -130,8 +130,8 @@ export function PercentileBubble({
                 borderRadius: '50%',
                 background: fill,
                 color: '#fff',
-                border: '2px solid #fff',
-                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.18)',
+                border: `2px solid ${colors.white}`,
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
                 letterSpacing: 0.2,

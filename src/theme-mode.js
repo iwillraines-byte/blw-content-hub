@@ -11,6 +11,8 @@
 // Selection is persisted in localStorage and per-browser, same as the
 // font theme.
 
+import { useState, useEffect } from 'react';
+
 const LS_KEY = 'blw_theme_mode_v1';
 
 // Palettes are written in OKLCH so neutrals can pull a whisper of warmth
@@ -70,50 +72,51 @@ const LIGHT = {
 // the same hue (26.5°) but very low chroma, so the dark world feels
 // related to the brand red instead of generic cool blue-gray. Status
 // colors brighten via lightness so they stay visible on dark surfaces.
-// v5: premium near-black monochrome. Neutrals drop to very low chroma so
-// surfaces read as a clean dark gray-scale (the agency-site look), with the
-// brand red and team accents carrying the only real color. Card surface
-// (white 0.215) sits a step above the page (bg 0.165); borders stay hairline.
+// v5: charcoal monochrome — neutral and faintly cool, NOT warm/brown. The
+// neutrals sit at hue ~265 with near-zero chroma so every surface reads as a
+// clean charcoal gray-scale; the brand red and team accents carry the only
+// real color and are nudged brighter so they pop. Card surface (white 0.205)
+// sits a step above the page (bg 0.165); borders stay hairline.
 const DARK = {
-  'navy':             'oklch(0.150 0.006 26.5)',
-  'navyDeep':         'oklch(0.115 0.005 26.5)',
-  'navyLight':        'oklch(0.215 0.007 26.5)',
+  'navy':             'oklch(0.150 0.003 265)',
+  'navyDeep':         'oklch(0.118 0.003 265)',
+  'navyLight':        'oklch(0.210 0.004 265)',
 
-  'red':              'oklch(0.63 0.205 26.5)',
-  'redHover':         'oklch(0.67 0.215 26.5)',
-  'redLight':         'oklch(0.63 0.205 26.5 / 0.16)',
-  'redBorder':        'oklch(0.63 0.205 26.5 / 0.34)',
+  'red':              'oklch(0.645 0.215 26.5)',
+  'redHover':         'oklch(0.685 0.225 26.5)',
+  'redLight':         'oklch(0.645 0.215 26.5 / 0.18)',
+  'redBorder':        'oklch(0.645 0.215 26.5 / 0.36)',
 
-  'white':            'oklch(0.215 0.006 26.5)',        // card surface
-  'bg':               'oklch(0.165 0.005 26.5)',        // page background
-  'muted':            'oklch(0.255 0.007 26.5)',
-  'cardHover':        'oklch(0.245 0.007 26.5)',
+  'white':            'oklch(0.205 0.004 265)',        // card surface
+  'bg':               'oklch(0.165 0.003 265)',        // page background
+  'muted':            'oklch(0.250 0.004 265)',
+  'cardHover':        'oklch(0.240 0.004 265)',
 
   // Bright primary text; secondary/muted stepped down for a premium,
-  // restrained hierarchy (still legible on the 0.215 card surface).
-  'text':             'oklch(0.965 0.004 26.5)',
-  'textSecondary':    'oklch(0.780 0.008 26.5)',
-  'textMuted':        'oklch(0.600 0.009 26.5)',
-  'textOnDark':       'oklch(0.980 0.004 26.5)',
-  'textOnDarkMuted':  'oklch(0.980 0.004 26.5 / 0.62)',
+  // restrained hierarchy (still legible on the 0.205 card surface).
+  'text':             'oklch(0.965 0.003 265)',
+  'textSecondary':    'oklch(0.770 0.005 265)',
+  'textMuted':        'oklch(0.585 0.006 265)',
+  'textOnDark':       'oklch(0.980 0.003 265)',
+  'textOnDarkMuted':  'oklch(0.980 0.003 265 / 0.62)',
 
-  'border':           'oklch(0.300 0.006 26.5)',
-  'borderLight':      'oklch(0.260 0.005 26.5)',
-  'divider':          'oklch(0.235 0.005 26.5)',
+  'border':           'oklch(0.305 0.005 265)',
+  'borderLight':      'oklch(0.260 0.004 265)',
+  'divider':          'oklch(0.235 0.004 265)',
 
-  'success':          'oklch(0.74 0.17 150)',
-  'successBg':        'oklch(0.74 0.17 150 / 0.16)',
-  'successBorder':    'oklch(0.74 0.17 150 / 0.34)',
-  'successText':      'oklch(0.82 0.16 150)',
-  'warning':          'oklch(0.80 0.16 70)',
-  'warningBg':        'oklch(0.80 0.16 70 / 0.16)',
-  'warningBorder':    'oklch(0.80 0.16 70 / 0.34)',
-  'warningText':      'oklch(0.86 0.14 70)',
-  'info':             'oklch(0.70 0.16 245)',
-  'infoBg':           'oklch(0.70 0.16 245 / 0.16)',
-  'infoBorder':       'oklch(0.70 0.16 245 / 0.36)',
-  'infoText':         'oklch(0.82 0.15 245)',
-  'dangerText':       'oklch(0.72 0.19 26.5)',
+  'success':          'oklch(0.76 0.17 150)',
+  'successBg':        'oklch(0.76 0.17 150 / 0.16)',
+  'successBorder':    'oklch(0.76 0.17 150 / 0.34)',
+  'successText':      'oklch(0.84 0.16 150)',
+  'warning':          'oklch(0.82 0.16 75)',
+  'warningBg':        'oklch(0.82 0.16 75 / 0.16)',
+  'warningBorder':    'oklch(0.82 0.16 75 / 0.34)',
+  'warningText':      'oklch(0.87 0.14 75)',
+  'info':             'oklch(0.72 0.16 245)',
+  'infoBg':           'oklch(0.72 0.16 245 / 0.16)',
+  'infoBorder':       'oklch(0.72 0.16 245 / 0.36)',
+  'infoText':         'oklch(0.84 0.15 245)',
+  'dangerText':       'oklch(0.74 0.19 26.5)',
 };
 
 // Build a CSS string that declares both palettes keyed to the
@@ -187,6 +190,32 @@ export function applyMode(mode) {
 
 export function bootstrapMode() {
   applyMode(getStoredMode());
+}
+
+// Is the active theme dark? Reactive to runtime toggles + the OS preference
+// (for 'system'). Used by TeamThemeScope + pages to pick a surface-readable
+// team accent — team primaries (Atlanta navy, Vegas black) vanish on the dark
+// charcoal, so accent chrome swaps to the lighter team.accent on dark.
+export function resolveDark() {
+  if (typeof document === 'undefined') return true;
+  const t = document.documentElement.getAttribute('data-theme');
+  if (t === 'dark') return true;
+  if (t === 'light') return false;
+  return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+}
+export function useIsDark() {
+  const [dark, setDark] = useState(resolveDark);
+  useEffect(() => {
+    const update = () => setDark(resolveDark());
+    window.addEventListener('blw-theme-mode-changed', update);
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    mq?.addEventListener?.('change', update);
+    return () => {
+      window.removeEventListener('blw-theme-mode-changed', update);
+      mq?.removeEventListener?.('change', update);
+    };
+  }, []);
+  return dark;
 }
 
 export const THEME_MODES = [

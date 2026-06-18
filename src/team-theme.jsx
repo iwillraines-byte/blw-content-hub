@@ -28,6 +28,8 @@
 // Heuristic for picking a readable text color on top of an arbitrary
 // hex background. A dark team color (Boston navy, Vegas black) gets
 // white text; a light team color gets near-black.
+import { useIsDark } from './theme-mode';
+
 export function bestTextOn(hex) {
   if (!hex) return '#FFFFFF';
   const m = /^#?([a-f\d]{6})$/i.exec(String(hex).trim());
@@ -52,6 +54,10 @@ function hexToRgba(hex, alpha) {
 // Pass `team` (a TEAMS entry with `color` + `dark`) to drift, or omit
 // to keep the brand red baseline.
 export function TeamThemeScope({ team, children, style, as: Tag = 'div' }) {
+  // On dark charcoal, team primaries (Atlanta navy, Vegas black) vanish into
+  // the surface, so drift --accent to the lighter team.accent; on light, keep
+  // the primary. Hook runs before the early return to keep call order stable.
+  const isDark = useIsDark();
   // No team → render children without an extra wrapper so we don't
   // pollute the DOM with inert divs on non-team routes. The fallback
   // values inside theme.js's var(--accent, #DD3C3C) handle the case
@@ -59,8 +65,8 @@ export function TeamThemeScope({ team, children, style, as: Tag = 'div' }) {
   if (!team || !team.color) {
     return <>{children}</>;
   }
-  const accent = team.color;
-  const accentHover = team.dark || team.color;
+  const accent = isDark ? (team.accent || team.color) : (team.color || team.accent);
+  const accentHover = isDark ? (team.themeBgDark || team.dark || accent) : (team.dark || team.color);
   const accentText = bestTextOn(accent);
   return (
     <Tag style={{

@@ -24,6 +24,14 @@ import { useLeagueContext } from '../league-context';
 import IdeaCard from '../idea-card';
 import { buildGenerateLinkFromIdea } from '../requests-store';
 import { stashIdeaForGenerate } from '../idea-context-store';
+import { useIsDark } from '../theme-mode';
+
+// Team primaries (e.g. Atlanta navy #021E42) are tuned for light surfaces and
+// vanish on dark charcoal, so accent-bearing chrome swaps to the lighter
+// team.accent on dark.
+function readableAccent(team, isDark) {
+  return isDark ? (team.accent || team.color) : (team.color || team.accent);
+}
 
 // Shared style for the teammate prev/next chips on the breadcrumb row.
 // Disabled state (no neighbor in that direction) renders as a muted chip
@@ -347,26 +355,28 @@ function VitalRow({ label, value, dot }) {
 // in the same hero column. Each card is self-contained: its own header,
 // its own tile grid, its own percentile bars.
 function SeasonStatsSubCard({ team, label, tiles }) {
+  const isDark = useIsDark();
+  const accent = readableAccent(team, isDark);
   return (
     <div style={{
       background: colors.white,
       border: `1px solid ${colors.borderLight}`,
       borderRadius: radius.base,
       overflow: 'hidden',
-      boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
     }}>
       <div style={{
-        background: `linear-gradient(135deg, ${team.color}, ${team.dark})`,
-        color: '#fff',
-        padding: '10px 14px',
-        fontFamily: fonts.condensed, fontSize: 12, fontWeight: 700,
-        letterSpacing: 1.4, textAlign: 'center', textTransform: 'uppercase',
+        background: `${accent}1E`,
+        borderBottom: `1px solid ${accent}40`,
+        color: colors.text,
+        padding: '8px 14px',
+        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+        letterSpacing: 1.2, textAlign: 'center', textTransform: 'uppercase',
       }}>
         {label}
       </div>
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        padding: '16px 8px', gap: 4,
+        padding: '12px 8px', gap: 4,
       }}>
         {tiles.map(t => {
           const pct = (t.rank && t.total && t.total > 0)
@@ -375,7 +385,7 @@ function SeasonStatsSubCard({ team, label, tiles }) {
           const fill = pct == null
             ? colors.borderLight
             : t.highlight
-              ? team.color
+              ? accent
               : (pct >= 0.85 ? '#22C55E' : pct >= 0.5 ? '#3B82F6' : pct >= 0.25 ? '#F59E0B' : '#94A3B8');
           return (
             <div key={t.label} style={{
@@ -401,7 +411,7 @@ function SeasonStatsSubCard({ team, label, tiles }) {
                 return (
                   <div style={{
                     fontFamily: fonts.heading, fontSize,
-                    color: t.highlight ? colors.accent : colors.text,
+                    color: t.highlight ? accent : colors.text,
                     lineHeight: 1, letterSpacing,
                     whiteSpace: 'nowrap',
                     maxWidth: '100%',
@@ -424,7 +434,7 @@ function SeasonStatsSubCard({ team, label, tiles }) {
                   style={{
                     marginTop: 2, width: '78%',
                     height: 3, borderRadius: 999,
-                    background: 'rgba(0,0,0,0.06)',
+                    background: colors.muted,
                     position: 'relative', overflow: 'hidden',
                   }}
                 >
@@ -1004,10 +1014,11 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
   const status = v.status || 'active';
   const statusColor = status === 'active' ? colors.success : status === 'injured' ? colors.warning : colors.textMuted;
   const statusLabel = status === 'active' ? 'Active' : status === 'injured' ? 'Injured' : 'Inactive';
-  // Dark-safe team accent: many team primaries (e.g. Atlanta navy #021E42)
-  // vanish on the dark hero surface, so prefer the lighter secondary for
-  // the visible chrome (border, wash, avatar ring, chips, links).
-  const heroAccent = team.accent || team.color;
+  // Mode-aware team accent: team primaries (e.g. Atlanta navy #021E42) are
+  // tuned for light surfaces and vanish on dark charcoal, so swap to the
+  // lighter team.accent on dark. Drives border, wash, avatar ring, chips, links.
+  const isDark = useIsDark();
+  const heroAccent = readableAccent(team, isDark);
 
   const position = player.batting && player.pitching
     ? 'Two-Way Player'
@@ -1271,7 +1282,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                 color: colors.textSecondary, lineHeight: 1.55,
                 whiteSpace: 'pre-wrap',
                 maxWidth: '60ch',
-                paddingLeft: 10, borderLeft: `2px solid ${team.color}40`,
+                paddingLeft: 10, borderLeft: `2px solid ${heroAccent}55`,
               }}>
                 {player.funFacts}
               </div>
@@ -1288,7 +1299,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                 disabled={generating}
                 style={{ padding: '8px 16px', fontSize: 12 }}
               >
-                {generating ? '…GENERATING' : '✦ Generate content'}
+                {generating ? '…GENERATING' : <><Icon name="studio" size={14} style={{ verticalAlign: '-2px', marginRight: 5 }} />Generate content</>}
               </RedButton>
               {/* v4.5.37: master-admin only inline player-info editor.
                   Drops a modal to update nickname, jersey #, position,
