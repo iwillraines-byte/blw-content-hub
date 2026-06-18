@@ -29,6 +29,7 @@ const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PlayerPage = lazy(() => import('./pages/PlayerPage'));
 const Schedule = lazy(() => import('./pages/Schedule'));
 import { TeamLogo } from './components';
+import { Icon } from './icon';
 import { TierBadgeStyles } from './tier-badges';
 import { UnreadRequestsProvider, useUnreadRequestsCtx } from './request-unread-store';
 import { refreshFromCloud, lastHydratedAt } from './cloud-reader';
@@ -54,20 +55,20 @@ const navItems = [
   // page was redundant with team pages; athletes now land on /dashboard
   // and navigate to their team via the top-bar Teams dropdown like
   // everyone else.
-  { path: "/dashboard",   label: "Dashboard",        icon: "⚡", roles: ['master_admin', 'admin', 'content', 'athlete'] },
-  { path: "/generate",    label: "Studio",           icon: "✦", iconClass: 'nav-icon-studio', roles: ['master_admin', 'admin', 'content', 'athlete'] },
-  { path: "/resources",   label: "Resources",        icon: "📚", roles: ['master_admin', 'admin', 'content'] },
-  { path: "/requests",    label: "Requests",         icon: "📥", roles: ['master_admin', 'admin', 'content', 'athlete'] },
-  { path: "/game-center", label: "ProWiffle Stats",  icon: "📊", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
+  { path: "/dashboard",   label: "Dashboard",        icon: "dashboard", roles: ['master_admin', 'admin', 'content', 'athlete'] },
+  { path: "/generate",    label: "Studio",           icon: "studio", iconClass: 'nav-icon-studio', roles: ['master_admin', 'admin', 'content', 'athlete'] },
+  { path: "/resources",   label: "Resources",        icon: "resources", roles: ['master_admin', 'admin', 'content'] },
+  { path: "/requests",    label: "Requests",         icon: "requests", roles: ['master_admin', 'admin', 'content', 'athlete'] },
+  { path: "/game-center", label: "ProWiffle Stats",  icon: "stats", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
   // v4.8.6: full 2026 BLW schedule. Visible to everyone signed in so
   // athletes can see their team's upcoming games + fans can see the
   // full league slate. Phase 2 will add a season switcher once the
   // first season ends and archive data exists.
-  { path: "/schedule",    label: "Schedule",         icon: "📅", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
-  { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
-  { path: "/rapid-tag",   label: "Rapid Tag",        icon: "🏷️", roles: ['master_admin'] },
-  { path: "/train-ai",    label: "Train AI",         icon: "🧠", roles: ['master_admin', 'admin'] },
-  { path: "/settings",    label: "Settings",         icon: "⚙️", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
+  { path: "/schedule",    label: "Schedule",         icon: "schedule", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
+  { path: "/files",       label: "Files",            icon: "files", roles: ['master_admin', 'admin', 'content'] },
+  { path: "/rapid-tag",   label: "Rapid Tag",        icon: "rapid-tag", roles: ['master_admin'] },
+  { path: "/train-ai",    label: "Train AI",         icon: "train-ai", roles: ['master_admin', 'admin'] },
+  { path: "/settings",    label: "Settings",         icon: "settings", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
 ];
 
 const pageTitles = {
@@ -245,17 +246,10 @@ function Sidebar({ isMobile, open, onClose }) {
               width: 48, height: 48, objectFit: 'contain',
             }}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{
-              fontFamily: fonts.heading, fontSize: 18, color: '#fff',
-              letterSpacing: 1.5, lineHeight: 1,
-            }}>BLW Studio</div>
-            <div style={{
-              fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700,
-              color: 'rgba(255,255,255,0.55)', letterSpacing: 1.4,
-              textTransform: 'uppercase', marginTop: 4,
-            }}>Big League Wiffle Ball</div>
-          </div>
+          <div style={{
+            fontFamily: fonts.heading, fontSize: 19, fontWeight: 700,
+            color: '#fff', letterSpacing: 0, lineHeight: 1, minWidth: 0,
+          }}>BLW Studio</div>
         </Link>
 
         {/* Nav */}
@@ -269,16 +263,18 @@ function Sidebar({ isMobile, open, onClose }) {
                 className={['nav-link', active ? 'is-active' : ''].filter(Boolean).join(' ')}
                 style={{
                   textDecoration: 'none', display: 'flex', alignItems: 'center',
-                  gap: 12, padding: '12px 14px', borderRadius: radius.base,
-                  background: active ? 'rgba(221, 60, 60, 0.12)' : 'transparent',
+                  gap: 11, padding: '10px 12px', borderRadius: radius.base,
+                  background: active ? colors.redLight : 'transparent',
                   color: active ? '#fff' : colors.textOnDarkMuted,
-                  fontFamily: fonts.body, fontSize: 16,
+                  fontFamily: fonts.body, fontSize: 15,
                   fontWeight: active ? 700 : 500,
                 }}>
-                <span
-                  className={n.iconClass || ''}
-                  style={{ fontSize: 20, width: 24, textAlign: 'center', opacity: active ? 1 : 0.6, display: 'inline-block', transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
-                >{n.icon}</span>
+                <Icon
+                  name={n.icon}
+                  size={19}
+                  className={n.iconClass || undefined}
+                  style={{ color: active ? colors.red : undefined, opacity: active ? 1 : 0.75, transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
+                />
                 {n.label}
                 {n.path === '/requests' && navUnread.totalUnread > 0 && (
                   <span style={{
@@ -452,7 +448,7 @@ function TopBar({ isMobile, onMenuToggle }) {
             background: 'none', border: 'none', cursor: 'pointer',
             fontSize: 22, color: colors.text, padding: '2px 4px',
             display: 'flex', alignItems: 'center',
-          }}>☰</button>
+          }}><Icon name="menu" size={22} /></button>
         )}
         {/* v4.5.24: BLW logo next to the title so the brand reads on
             mobile (sidebar is hidden by default on mobile, so the
@@ -470,8 +466,8 @@ function TopBar({ isMobile, onMenuToggle }) {
           }}
         />
         <h2 style={{
-          fontFamily: fonts.heading, fontSize: isMobile ? 18 : 24,
-          fontWeight: 400, color: colors.text, margin: 0, letterSpacing: 1.2,
+          fontFamily: fonts.heading, fontSize: isMobile ? 18 : 23,
+          fontWeight: 700, color: colors.text, margin: 0, letterSpacing: 0,
           whiteSpace: 'nowrap',
         }}>{title}</h2>
       </div>

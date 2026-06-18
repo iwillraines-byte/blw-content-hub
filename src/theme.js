@@ -87,9 +87,11 @@ export const fonts = {
   // Pre-bootstrap renders and any static SSR path read these directly;
   // applyFont() overrides via --font-* once the runtime theme picker
   // bootstraps. Old "blw-classic" stack still selectable from Settings.
-  heading:   'var(--font-heading, "Space Grotesk", system-ui, sans-serif)',
+  heading:   'var(--font-heading, "Hanken Grotesk", system-ui, sans-serif)',
   body:      'var(--font-body, "Inter", system-ui, sans-serif)',
   condensed: 'var(--font-condensed, "Inter", system-ui, sans-serif)',
+  // v5: fixed monospace for tabular numerals / stat figures (not swappable).
+  mono:      'var(--font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, monospace)',
 };
 
 export const radius = {

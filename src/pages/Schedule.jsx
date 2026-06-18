@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
+import { Icon } from '../icon';
 import { TEAMS, getTeam, getTeamAbbr, fetchGames, scoresByDateTime, fetchStandings, fetchPlayoffOdds, PLAYOFF_SPOTS } from '../data';
 import {
   SCHEDULE,
@@ -72,7 +73,7 @@ export default function Schedule() {
     <div>
       <PageHeader
         title="Schedule"
-        subtitle={`${CURRENT_SEASON} BLW regular season · ${SCHEDULE.length} game days · all at Assembly Studios, Atlanta GA`}
+        subtitle={`${CURRENT_SEASON} regular season · ${SCHEDULE.length} game days`}
       />
 
       {/* Team filter strip — chip per team, "All teams" first. */}
@@ -234,8 +235,8 @@ function GameDayCard({ gameDay, teamFilter, scores, dimmed = false }) {
         flexWrap: 'wrap', marginBottom: 12,
       }}>
         <div style={{
-          fontFamily: fonts.heading, fontSize: 18,
-          letterSpacing: 1, color: colors.text,
+          fontFamily: fonts.heading, fontSize: 18, fontWeight: 700,
+          letterSpacing: 0, color: colors.text,
         }}>
           {formatGameDayDate(gameDay.date)}
         </div>
@@ -290,10 +291,10 @@ function GameRow({ game }) {
       </div>
       <TeamSlot teamId={game.team1} winner={final && sc.s1 > sc.s2} loser={final && sc.s1 < sc.s2} />
       <div style={{
-        fontFamily: final ? fonts.heading : fonts.condensed,
-        fontSize: final ? 14 : 10, fontWeight: 800,
+        fontFamily: final ? fonts.mono : fonts.condensed,
+        fontSize: final ? 15 : 10, fontWeight: 800,
         color: final ? colors.text : colors.textMuted,
-        letterSpacing: final ? 0.5 : 1, padding: '0 2px',
+        letterSpacing: final ? 0 : 1, padding: '0 2px',
         fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
       }}>{final ? `${sc.s1}–${sc.s2}` : 'VS'}</div>
       <TeamSlot teamId={game.team2} winner={final && sc.s2 > sc.s1} loser={final && sc.s2 < sc.s1} />
@@ -345,7 +346,7 @@ function BroadcastChip({ text, primary }) {
       fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
       letterSpacing: 0.5,
     }}>
-      {primary && <span style={{ fontSize: 10 }}>📺</span>}
+      {primary && <Icon name="broadcast" size={12} />}
       {text}
     </span>
   );
@@ -373,7 +374,7 @@ function StandingsTable({ standings, odds }) {
   if (!standings || !standings.ordered) {
     return (
       <Card>
-        <SectionHeading style={{ margin: '0 0 4px' }}>2026 Standings</SectionHeading>
+        <SectionHeading style={{ margin: '0 0 4px' }}>Standings</SectionHeading>
         <div style={{ padding: '14px 0', textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
           Standings updating…
         </div>
@@ -381,18 +382,13 @@ function StandingsTable({ standings, odds }) {
     );
   }
   const rows = standings.ordered;
-  const numCell = { textAlign: 'right', fontFamily: fonts.condensed, fontVariantNumeric: 'tabular-nums' };
-  const th = { ...numCell, fontSize: 10, fontWeight: 800, letterSpacing: 0.5, color: colors.textMuted, textTransform: 'uppercase', padding: '0 8px 8px' };
-  const td = { ...numCell, fontSize: 13, fontWeight: 700, color: colors.text, padding: '9px 8px' };
+  const numCell = { textAlign: 'right', fontFamily: fonts.mono, fontVariantNumeric: 'tabular-nums' };
+  const th = { ...numCell, fontSize: 10, fontWeight: 600, letterSpacing: 0.4, color: colors.textMuted, textTransform: 'uppercase', padding: '0 8px 7px' };
+  const td = { ...numCell, fontSize: 14, fontWeight: 700, color: colors.text, padding: '7px 8px' };
 
   return (
     <Card>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
-        <SectionHeading style={{ margin: 0 }}>2026 Standings</SectionHeading>
-        <span style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: colors.textMuted }}>
-          Top {PLAYOFF_SPOTS} make the playoffs · odds from 10k sims
-        </span>
-      </div>
+      <SectionHeading style={{ margin: '0 0 8px' }}>Standings</SectionHeading>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead>
@@ -426,7 +422,7 @@ function StandingsTable({ standings, odds }) {
                       </td>
                     </tr>
                   )}
-                  <tr style={{ borderBottom: i < rows.length - 1 ? `1px solid ${colors.divider}` : 'none', background: i % 2 ? colors.bg : colors.white }}>
+                  <tr style={{ borderBottom: i < rows.length - 1 ? `1px solid ${colors.divider}` : 'none' }}>
                     <td style={{ ...td, textAlign: 'center', color: colors.textMuted }}>{r.rank ?? '—'}</td>
                     <td style={{ ...td, textAlign: 'left' }}>
                       {t ? (

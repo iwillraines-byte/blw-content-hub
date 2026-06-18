@@ -70,55 +70,50 @@ const LIGHT = {
 // the same hue (26.5°) but very low chroma, so the dark world feels
 // related to the brand red instead of generic cool blue-gray. Status
 // colors brighten via lightness so they stay visible on dark surfaces.
+// v5: premium near-black monochrome. Neutrals drop to very low chroma so
+// surfaces read as a clean dark gray-scale (the agency-site look), with the
+// brand red and team accents carrying the only real color. Card surface
+// (white 0.215) sits a step above the page (bg 0.165); borders stay hairline.
 const DARK = {
-  'navy':             'oklch(0.13 0.008 26.5)',
-  'navyDeep':         'oklch(0.09 0.006 26.5)',
-  'navyLight':        'oklch(0.20 0.012 26.5)',
+  'navy':             'oklch(0.150 0.006 26.5)',
+  'navyDeep':         'oklch(0.115 0.005 26.5)',
+  'navyLight':        'oklch(0.215 0.007 26.5)',
 
-  'red':              'oklch(0.62 0.21 26.5)',
-  'redHover':         'oklch(0.66 0.22 26.5)',
-  'redLight':         'oklch(0.62 0.21 26.5 / 0.16)',
-  'redBorder':        'oklch(0.62 0.21 26.5 / 0.36)',
+  'red':              'oklch(0.63 0.205 26.5)',
+  'redHover':         'oklch(0.67 0.215 26.5)',
+  'redLight':         'oklch(0.63 0.205 26.5 / 0.16)',
+  'redBorder':        'oklch(0.63 0.205 26.5 / 0.34)',
 
-  'white':            'oklch(0.22 0.012 26.5)',        // card surface
-  'bg':               'oklch(0.16 0.010 26.5)',        // page background
-  'muted':            'oklch(0.26 0.012 26.5)',
-  'cardHover':        'oklch(0.26 0.012 26.5)',
+  'white':            'oklch(0.215 0.006 26.5)',        // card surface
+  'bg':               'oklch(0.165 0.005 26.5)',        // page background
+  'muted':            'oklch(0.255 0.007 26.5)',
+  'cardHover':        'oklch(0.245 0.007 26.5)',
 
-  // v4.5.15: contrast pass for dark mode. The previous values
-  // (textSecondary 0.74, textMuted 0.55, textOnDarkMuted 0.55 alpha)
-  // were materially dim — secondary copy and labels disappeared into
-  // the navy. Bumped lightness across the muted text scale and border
-  // tokens so on-card body / labels / hints pop without becoming the
-  // same brightness as primary text.
-  'text':             'oklch(0.97 0.005 26.5)',
-  'textSecondary':    'oklch(0.88 0.010 26.5)',         // 0.74 → 0.88
-  'textMuted':        'oklch(0.74 0.012 26.5)',         // 0.55 → 0.74
-  'textOnDark':       'oklch(0.99 0.003 26.5)',
-  'textOnDarkMuted':  'oklch(0.99 0.003 26.5 / 0.78)',   // 0.55α → 0.78α
+  // Bright primary text; secondary/muted stepped down for a premium,
+  // restrained hierarchy (still legible on the 0.215 card surface).
+  'text':             'oklch(0.965 0.004 26.5)',
+  'textSecondary':    'oklch(0.780 0.008 26.5)',
+  'textMuted':        'oklch(0.600 0.009 26.5)',
+  'textOnDark':       'oklch(0.980 0.004 26.5)',
+  'textOnDarkMuted':  'oklch(0.980 0.004 26.5 / 0.62)',
 
-  'border':           'oklch(0.40 0.012 26.5)',         // 0.32 → 0.40
-  'borderLight':      'oklch(0.32 0.012 26.5)',         // 0.26 → 0.32
-  'divider':          'oklch(0.28 0.010 26.5)',         // 0.22 → 0.28
+  'border':           'oklch(0.300 0.006 26.5)',
+  'borderLight':      'oklch(0.260 0.005 26.5)',
+  'divider':          'oklch(0.235 0.005 26.5)',
 
-  'success':          'oklch(0.78 0.18 150)',
-  'successBg':        'oklch(0.78 0.18 150 / 0.16)',
-  'successBorder':    'oklch(0.78 0.18 150 / 0.36)',
-  // v4.5.15: bright *Text variants for dark mode. The light palette's
-  // dark-on-light values (#065F46 etc.) become invisible against the
-  // dark status backgrounds — these brighter chromatic tones land
-  // legibly inside the *Bg surfaces while still reading as the right
-  // semantic color (forest-green text on green bg, amber on amber, etc).
-  'successText':      'oklch(0.86 0.16 150)',
-  'warning':          'oklch(0.82 0.17 70)',
-  'warningBg':        'oklch(0.82 0.17 70 / 0.16)',
-  'warningBorder':    'oklch(0.82 0.17 70 / 0.36)',
-  'warningText':      'oklch(0.88 0.15 70)',
-  'info':             'oklch(0.72 0.17 245)',
-  'infoBg':           'oklch(0.72 0.17 245 / 0.16)',
-  'infoBorder':       'oklch(0.72 0.17 245 / 0.36)',
-  'infoText':         'oklch(0.84 0.15 245)',
-  'dangerText':       'oklch(0.84 0.18 26.5)',
+  'success':          'oklch(0.74 0.17 150)',
+  'successBg':        'oklch(0.74 0.17 150 / 0.16)',
+  'successBorder':    'oklch(0.74 0.17 150 / 0.34)',
+  'successText':      'oklch(0.82 0.16 150)',
+  'warning':          'oklch(0.80 0.16 70)',
+  'warningBg':        'oklch(0.80 0.16 70 / 0.16)',
+  'warningBorder':    'oklch(0.80 0.16 70 / 0.34)',
+  'warningText':      'oklch(0.86 0.14 70)',
+  'info':             'oklch(0.70 0.16 245)',
+  'infoBg':           'oklch(0.70 0.16 245 / 0.16)',
+  'infoBorder':       'oklch(0.70 0.16 245 / 0.36)',
+  'infoText':         'oklch(0.82 0.15 245)',
+  'dangerText':       'oklch(0.72 0.19 26.5)',
 };
 
 // Build a CSS string that declares both palettes keyed to the
@@ -177,8 +172,8 @@ export function getStoredMode() {
   try {
     const v = localStorage.getItem(LS_KEY);
     if (v === 'light' || v === 'dark' || v === 'system') return v;
-    return 'light';   // default — matches pre-dark-mode behavior
-  } catch { return 'light'; }
+    return 'dark';   // v5: dark-premium is the default identity
+  } catch { return 'dark'; }
 }
 
 export function applyMode(mode) {

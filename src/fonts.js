@@ -16,16 +16,15 @@
 
 export const FONT_OPTIONS = [
   {
-    // Default — Space Grotesk display + Inter body. Reads modern and
-    // editorial without leaning sports-cliche or SaaS-bland. Inter
-    // brings tabular figures and outstanding small-size legibility for
-    // the dense stats tables; Space Grotesk's geometric grotesque shape
-    // gives display titles real character. Drops the structural pressure
-    // to ALL-CAPS everything (which Bebas was forcing).
+    // v5 default — Hanken Grotesk display + Inter body. Clean modern
+    // grotesque that reads premium and sports-data, not SaaS-bland or
+    // jumbotron. Inter brings tabular figures + small-size legibility for
+    // the dense stat tables; JetBrains Mono (loaded globally) carries the
+    // numerals. No ALL-CAPS pressure, minimal tracking.
     id: 'mvp',
-    name: 'BLW MVP',
-    description: 'Space Grotesk display over Inter body — modern, editorial, readable',
-    heading:   { stack: '"Space Grotesk", sans-serif',    googleFamily: 'Space+Grotesk:wght@400;500;600;700',     tracking: 0.2 },
+    name: 'BLW v5',
+    description: 'Hanken Grotesk over Inter: clean, premium, sports-data',
+    heading:   { stack: '"Hanken Grotesk", sans-serif',   googleFamily: 'Hanken+Grotesk:wght@400;500;600;700;800', tracking: 0 },
     body:      { stack: '"Inter", sans-serif',            googleFamily: 'Inter:wght@400;500;600;700;800' },
     condensed: { stack: '"Inter", sans-serif',            googleFamily: 'Inter:wght@400;500;600;700;800' },
   },

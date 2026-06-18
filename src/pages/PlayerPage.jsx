@@ -7,6 +7,7 @@ import { ContentIdeasSection } from '../content-ideas-section';
 import { getRecentFeedback } from '../idea-feedback-store';
 import { PageDropZone } from '../page-drop-zone';
 import { colors, fonts, radius } from '../theme';
+import { Icon } from '../icon';
 import { timeAgo } from '../format-time';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
@@ -32,9 +33,9 @@ function teammateNavBtnStyle(enabled) {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     padding: '4px 10px', borderRadius: 999,
-    background: enabled ? 'transparent' : 'transparent',
-    color: enabled ? '#475569' : '#94A3B8',
-    border: '1px solid #E5E7EB',
+    background: 'transparent',
+    color: enabled ? colors.textSecondary : colors.textMuted,
+    border: `1px solid ${colors.border}`,
     fontFamily: 'var(--font-condensed, system-ui)',
     fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
     textDecoration: 'none', cursor: enabled ? 'pointer' : 'default',
@@ -1003,6 +1004,10 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
   const status = v.status || 'active';
   const statusColor = status === 'active' ? colors.success : status === 'injured' ? colors.warning : colors.textMuted;
   const statusLabel = status === 'active' ? 'Active' : status === 'injured' ? 'Injured' : 'Inactive';
+  // Dark-safe team accent: many team primaries (e.g. Atlanta navy #021E42)
+  // vanish on the dark hero surface, so prefer the lighter secondary for
+  // the visible chrome (border, wash, avatar ring, chips, links).
+  const heroAccent = team.accent || team.color;
 
   const position = player.batting && player.pitching
     ? 'Two-Way Player'
@@ -1022,7 +1027,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
       // Full-bleed hairline tinted with the team color replaces the prior
       // 4px left side-stripe. Avatar border, team chip, and the team-color
       // gradient wash already brand the hero.
-      border: `1px solid ${team.color}33`,
+      border: `1px solid ${heroAccent}40`,
       borderRadius: radius.lg,
       // Subtle two-layer drop shadow — gives the hero card a bit of lift
       // off the page without going full Material-raised. The wider, softer
@@ -1043,15 +1048,15 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
           abruptly at the 240px mark. */}
       <div style={{
         position: 'absolute', inset: 0,
-        background: `linear-gradient(110deg, ${team.color}22 0%, ${team.color}14 22%, ${team.color}08 45%, ${team.color}03 72%, transparent 100%)`,
+        background: `linear-gradient(110deg, ${heroAccent}22 0%, ${heroAccent}12 26%, ${heroAccent}06 52%, transparent 100%)`,
         borderRadius: radius.lg,
         pointerEvents: 'none',
       }} />
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: 24,
-        padding: 22,
+        gap: 20,
+        padding: 16,
         alignItems: 'center',
         position: 'relative',
       }}>
@@ -1077,7 +1082,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               offsetY={profileOffsetY}
               zoom={profileZoom}
               size={128}
-              borderColor={team.color}
+              borderColor={heroAccent}
               borderWidth={3}
               fallbackBg={`linear-gradient(135deg, ${team.color}, ${team.dark})`}
               fallback={
@@ -1154,40 +1159,14 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               </div>
             )}
           </div>
-          {/* IG chip — sits below the avatar (and clears the tier badge
-              via the column gap). One click → opens the player's
-              profile in a new tab. Hidden when the handle is unset. */}
-          {player.instagramHandle && (
-            <a
-              href={`https://instagram.com/${player.instagramHandle}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`@${player.instagramHandle} on Instagram`}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                letterSpacing: 0.4,
-                padding: '3px 10px', borderRadius: radius.full,
-                background: 'rgba(228, 64, 95, 0.10)',
-                color: '#E4405F',
-                border: '1px solid rgba(228, 64, 95, 0.30)',
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-                maxWidth: 140,
-                overflow: 'hidden', textOverflow: 'ellipsis',
-              }}
-            >
-              @{player.instagramHandle}
-            </a>
-          )}
+          {/* Instagram handle moved into the identity block under the name. */}
           </div>
           <div style={{ minWidth: 0 }}>
             {firstName && (
               <div style={{
                 fontFamily: fonts.heading,
-                fontSize: 30, lineHeight: 0.9,
-                color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
-                textTransform: 'uppercase',
+                fontSize: 24, lineHeight: 1, fontWeight: 700,
+                color: colors.textSecondary, letterSpacing: 0,
               }}>{firstName}</div>
             )}
             <div style={{
@@ -1196,9 +1175,8 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
             }}>
               <div style={{
                 fontFamily: fonts.heading,
-                fontSize: 38, lineHeight: 0.9,
-                color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
-                textTransform: 'uppercase',
+                fontSize: 34, lineHeight: 1, fontWeight: 800,
+                color: colors.text, letterSpacing: 0,
               }}>{lastNameDisplay}</div>
               {/* Rookie chip — only renders when player.isRookie. Sits
                   inline with the lastName so it's the first thing the
@@ -1233,48 +1211,53 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               </div>
             )}
 
-            {/* Team + jersey + position row */}
+            {/* Identity meta — team + jersey + Instagram. Wiffle has no
+                positions, so the team name and IG handle carry identity. */}
             <div style={{
-              marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6,
             }}>
-              <TeamLogo teamId={team.id} size={18} rounded="square" />
-              <span style={{
-                fontFamily: fonts.body, fontSize: 12, color: colors.text, fontWeight: 700,
-              }}>{team.name}</span>
-              <span style={{ color: colors.textMuted, fontSize: 11 }}>·</span>
-              <span style={{
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                color: colors.textSecondary, letterSpacing: 0.5,
-              }}>
-                {player.num ? `#${player.num}` : 'NO #'}
-              </span>
-              <span style={{ color: colors.textMuted, fontSize: 11 }}>·</span>
-              <span style={{
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                color: colors.textSecondary, letterSpacing: 0.5,
-              }}>{position}</span>
-              {/* Composite rank chip — pulls from the league-wide composite
-                  rankings feed. Surfaces the number right next to the tier
-                  badge's visual tier so a scanner can read "OH, they're
-                  #19 league-wide, that's the real context." */}
-              {playerRank && (
-                <>
-                  <span style={{ color: colors.textMuted, fontSize: 11 }}>·</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <TeamLogo teamId={team.id} size={18} rounded="square" />
+                <span style={{ fontFamily: fonts.body, fontSize: 14, color: colors.text, fontWeight: 700 }}>{team.name}</span>
+                {player.num != null && player.num !== '' && (
+                  <span style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.textSecondary }}>#{player.num}</span>
+                )}
+                {playerRank && (
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
+                    fontFamily: fonts.mono, fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
                     padding: '2px 8px', borderRadius: radius.full,
-                    background: `${team.color}18`, color: team.color,
-                    border: `1px solid ${team.color}40`,
-                    textTransform: 'uppercase',
-                  }}>
-                    <span style={{ fontFamily: fonts.heading, fontSize: 12, lineHeight: 1 }}>
-                      #{playerRank}
-                    </span>
-                    <span>Composite</span>
-                  </span>
-                </>
-              )}
+                    background: `${heroAccent}1F`, color: heroAccent,
+                    border: `1px solid ${heroAccent}40`,
+                  }}>#{playerRank} composite</span>
+                )}
+              </div>
+              {player.instagramHandle ? (
+                <a
+                  href={`https://instagram.com/${player.instagramHandle}`}
+                  target="_blank" rel="noopener noreferrer"
+                  title={`@${player.instagramHandle} on Instagram`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5, width: 'fit-content',
+                    fontFamily: fonts.body, fontSize: 13, fontWeight: 600,
+                    color: heroAccent, textDecoration: 'none',
+                  }}
+                >
+                  <Icon name="instagram" size={14} />@{player.instagramHandle}
+                </a>
+              ) : (isMaster && onEditInfo && (
+                <button
+                  onClick={onEditInfo}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5, width: 'fit-content',
+                    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                    fontFamily: fonts.body, fontSize: 12, fontWeight: 500,
+                    color: colors.textMuted, fontStyle: 'italic',
+                  }}
+                >
+                  <Icon name="instagram" size={13} />Add Instagram handle
+                </button>
+              ))}
             </div>
 
             {/* Fun-facts strip — quiet italic blurb directly under the
