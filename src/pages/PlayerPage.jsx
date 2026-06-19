@@ -368,15 +368,15 @@ function SeasonStatsSubCard({ team, label, tiles }) {
         background: `${accent}1E`,
         borderBottom: `1px solid ${accent}40`,
         color: colors.text,
-        padding: '8px 14px',
-        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-        letterSpacing: 1.2, textAlign: 'center', textTransform: 'uppercase',
+        padding: '6px 12px',
+        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+        letterSpacing: 1, textAlign: 'center', textTransform: 'uppercase',
       }}>
         {label}
       </div>
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        padding: '12px 8px', gap: 4,
+        padding: '10px 6px', gap: 4,
       }}>
         {tiles.map(t => {
           const pct = (t.rank && t.total && t.total > 0)
@@ -389,12 +389,12 @@ function SeasonStatsSubCard({ team, label, tiles }) {
               : (pct >= 0.85 ? '#22C55E' : pct >= 0.5 ? '#3B82F6' : pct >= 0.25 ? '#F59E0B' : '#94A3B8');
           return (
             <div key={t.label} style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
               padding: '2px 4px',
             }}>
               <div style={{
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase',
               }}>{t.label}</div>
               {/* Stat value font size auto-shrinks for longer numbers
                   (3.50 fits at 34, 12.45 needs to drop) so pitching
@@ -406,7 +406,7 @@ function SeasonStatsSubCard({ team, label, tiles }) {
               {(() => {
                 const raw = t.value == null ? '—' : String(t.value);
                 const len = raw.length;
-                const fontSize = len >= 6 ? 22 : len === 5 ? 26 : len === 4 ? 30 : 34;
+                const fontSize = len >= 6 ? 19 : len === 5 ? 23 : len === 4 ? 27 : 30;
                 const letterSpacing = len >= 5 ? 0 : 0.5;
                 return (
                   <div style={{
@@ -1066,8 +1066,8 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: 20,
-        padding: 16,
+        gap: 18,
+        padding: 14,
         alignItems: 'center',
         position: 'relative',
       }}>
@@ -2143,11 +2143,12 @@ export default function PlayerPage() {
       }}>
         <Link to={`/teams/${team.slug}`} style={{
           color: colors.accent, textDecoration: 'none', fontWeight: 700,
-          display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontSize: 13, letterSpacing: 0,
+          display: 'inline-flex', alignItems: 'center', gap: 7,
         }}>
-          <span>←</span>
-          <TeamLogo teamId={team.id} size={20} rounded="square" />
-          {team.name.toUpperCase()}
+          <Icon name="arrow-left" size={16} />
+          <TeamLogo teamId={team.id} size={18} rounded="square" />
+          {team.name}
         </Link>
         {(teammateNav.prev || teammateNav.next) && (() => {
           // v4.5.4: pills used to show only lastName. On rosters with

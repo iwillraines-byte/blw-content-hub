@@ -68,8 +68,8 @@ export function PercentileBubble({
   // (a bubble at 0% or 100% would otherwise clip).
   const targetWidthPct = pct == null ? 0 : pct;
   const animatedWidthPct = mounted ? targetWidthPct : 0;
-  const bubbleSize = 22;
-  const trackHeight = 10;
+  const bubbleSize = 18;
+  const trackHeight = 7;
 
   return (
     <div
@@ -77,19 +77,19 @@ export function PercentileBubble({
       aria-label={ariaLabel || `${label}: ${value}${pct != null ? `, ${pct}th percentile` : ''}`}
       style={{
         display: 'grid',
-        gridTemplateColumns: '70px 1fr 56px',
+        gridTemplateColumns: '50px 1fr 48px',
         alignItems: 'center',
-        gap: 12,
-        padding: '3px 0',
+        gap: 10,
+        padding: '1px 0',
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
       {/* Label */}
       <div style={{
         fontFamily: fonts.condensed,
-        fontSize: 12, fontWeight: 700,
+        fontSize: 11, fontWeight: 700,
         color: colors.text,
-        letterSpacing: 0.5,
+        letterSpacing: 0.3,
         textAlign: 'right',
         whiteSpace: 'nowrap',
       }}>{label}</div>
@@ -99,7 +99,7 @@ export function PercentileBubble({
           on the bar" feel with a chunkier, more readable track. */}
       <div style={{
         position: 'relative',
-        height: bubbleSize + 4,                // breathing room for the bubble
+        height: bubbleSize + 2,                // breathing room for the bubble
         display: 'flex', alignItems: 'center',
       }}>
         {/* Background track */}
@@ -130,11 +130,11 @@ export function PercentileBubble({
                 borderRadius: '50%',
                 background: fill,
                 color: '#fff',
-                border: `2px solid ${colors.white}`,
+                border: `1.5px solid ${colors.white}`,
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
-                letterSpacing: 0.2,
+                fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 800,
+                letterSpacing: 0,
                 transition: 'left 700ms cubic-bezier(0.22, 1, 0.36, 1), background 300ms ease',
                 pointerEvents: 'none',
               }}
@@ -147,10 +147,10 @@ export function PercentileBubble({
 
       {/* Player's stat value */}
       <div className="tnum" style={{
-        fontFamily: fonts.body,
-        fontSize: 13, fontWeight: 700,
+        fontFamily: fonts.mono,
+        fontSize: 12, fontWeight: 700,
         color: colors.text,
-        letterSpacing: 0.2,
+        letterSpacing: 0,
         textAlign: 'left',
         whiteSpace: 'nowrap',
         fontVariantNumeric: 'tabular-nums',
