@@ -9,7 +9,7 @@ import {
   FolderOpen, Tag, Brain, Settings, Search, Tv, Trophy, Users, User,
   ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   AtSign, ExternalLink, Check, X, Plus, Minus, Camera,
-  Sun, Moon, Monitor, Circle, Star, Filter, Image as ImageIcon, Menu,
+  Sun, Moon, Monitor, Circle, Star, Filter, Image as ImageIcon, Menu, RefreshCw,
 } from 'lucide-react';
 
 // Semantic name -> component. Names are app-domain ("schedule"), not the
@@ -51,6 +51,7 @@ const MAP = {
   filter: Filter,
   image: ImageIcon,
   menu: Menu,
+  refresh: RefreshCw,
 };
 
 export function Icon({ name, size = 18, strokeWidth = 1.75, style, ...rest }) {

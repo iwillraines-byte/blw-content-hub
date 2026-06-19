@@ -2402,13 +2402,12 @@ export default function PlayerPage() {
               <SectionHeading style={{
                 margin: 0,
                 fontFamily: fonts.heading,
-                fontSize: 20,
-                fontWeight: 600,
-                letterSpacing: 0.6,
-                textTransform: 'uppercase',
-              }}>BLW Batting Percentile Rankings</SectionHeading>
-              <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
-                Across {bTotal} BLW batters
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: 0,
+              }}>Batting percentiles</SectionHeading>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted, letterSpacing: 0.3 }}>
+                vs {bTotal} batters
               </span>
             </div>
             <PercentileList
@@ -2449,13 +2448,12 @@ export default function PlayerPage() {
               <SectionHeading style={{
                 margin: 0,
                 fontFamily: fonts.heading,
-                fontSize: 20,
-                fontWeight: 600,
-                letterSpacing: 0.6,
-                textTransform: 'uppercase',
-              }}>BLW Pitching Percentile Rankings</SectionHeading>
-              <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.5 }}>
-                Across {pTotal} BLW pitchers
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: 0,
+              }}>Pitching percentiles</SectionHeading>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted, letterSpacing: 0.3 }}>
+                vs {pTotal} pitchers
               </span>
             </div>
             <PercentileList

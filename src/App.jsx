@@ -519,60 +519,25 @@ function TopBar({ isMobile, onMenuToggle }) {
             </>
           )}
         </button>
-        {/* Cloud sync chip — only rendered when Supabase is configured.
-            Clicking forces a re-hydrate from the cloud. */}
+        {/* Cloud sync — minimal icon button (no colored badge). Click forces
+            a fresh pull; the last-synced time lives in the tooltip. */}
         {syncedAgo !== null && (
           <button
             onClick={forceResync}
             disabled={resyncing}
-            title={resyncing ? 'Pulling fresh data from the cloud…' : 'Click to force a fresh pull from Supabase'}
+            title={resyncing ? 'Pulling fresh data…' : `Synced ${syncedAgo} · click to refresh`}
             style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '4px 10px', borderRadius: radius.full,
-              background: resyncing ? 'rgba(14,165,233,0.18)' : 'rgba(14,165,233,0.10)',
-              border: `1px solid rgba(14,165,233,0.35)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, borderRadius: radius.base,
+              background: 'transparent', border: 'none',
               cursor: resyncing ? 'wait' : 'pointer',
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-              color: '#075985', letterSpacing: 0.5,
+              color: colors.textMuted,
             }}
           >
-            <span style={{
-              display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
-              background: resyncing ? '#0EA5E9' : '#075985',
-              animation: resyncing ? 'syncpulse 1.2s ease-in-out infinite' : 'none',
-            }} />
-            {!isMobile && (resyncing ? 'SYNCING…' : `SYNCED ${syncedAgo.toUpperCase()}`)}
+            <Icon name="refresh" size={17} className={resyncing ? 'blw-spin' : undefined} />
           </button>
         )}
-        <style>{`@keyframes syncpulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }`}</style>
-        {/* v4.8.7: BETA chip replaces the previous LIVE API / CACHED
-            DATA status indicator. The app is in pre-launch beta — a
-            stable "BETA" chip sets correct expectations for fans and
-            athletes seeing this for the first time. The underlying
-            API live/cached state is no longer surfaced here (still
-            available via /api/health for debugging). */}
-        <div
-          title="BLW Studio is in beta — surfaces and data may change"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '4px 10px', borderRadius: radius.full,
-            background: '#FEF3C7',
-            border: '1px solid #FCD34D',
-          }}
-        >
-          <div style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: '#F59E0B',
-          }} />
-          {!isMobile && (
-            <span style={{
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
-              color: '#92400E', letterSpacing: 0.8,
-            }}>
-              BETA
-            </span>
-          )}
-        </div>
+        <style>{`@keyframes blw-spin { to { transform: rotate(360deg) } } .blw-spin { animation: blw-spin 0.9s linear infinite }`}</style>
 
         {/* Team navigator — picking a team takes you to that team's page */}
         <select
