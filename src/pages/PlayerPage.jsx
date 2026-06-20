@@ -1164,25 +1164,22 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
           {/* Instagram handle moved into the identity block under the name. */}
           </div>
           <div style={{ minWidth: 0 }}>
-            {firstName && (
-              <div style={{
-                fontFamily: fonts.heading,
-                fontSize: 24, lineHeight: 1, fontWeight: 700,
-                color: colors.textSecondary, letterSpacing: 0,
-              }}>{firstName}</div>
-            )}
+            {/* Name — single line, one color. Size + weight carry the
+                hierarchy (first name lighter, last name bold), never color. */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-              marginTop: firstName ? 2 : 0,
+              display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap',
             }}>
-              <div style={{
-                fontFamily: fonts.heading,
-                fontSize: 34, lineHeight: 1, fontWeight: 800,
-                color: colors.text, letterSpacing: 0,
-              }}>{lastNameDisplay}</div>
-              {/* Rookie chip — only renders when player.isRookie. Sits
-                  inline with the lastName so it's the first thing the
-                  eye lands on after the player's identity. */}
+              {firstName && (
+                <span style={{
+                  fontFamily: fonts.heading, fontSize: 31, lineHeight: 1.04,
+                  fontWeight: 600, color: colors.text, letterSpacing: 0,
+                }}>{firstName}</span>
+              )}
+              <span style={{
+                fontFamily: fonts.heading, fontSize: 31, lineHeight: 1.04,
+                fontWeight: 800, color: colors.text, letterSpacing: 0,
+              }}>{lastNameDisplay}</span>
+              {/* Rookie chip — inline after the full name. */}
               {player.isRookie && (
                 <span title="Rookie season" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -1206,7 +1203,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               <div style={{
                 marginTop: 6,
                 fontFamily: fonts.body, fontStyle: 'italic',
-                fontSize: 13, color: colors.textSecondary,
+                fontSize: 13, color: colors.text,
                 letterSpacing: 0.2,
               }}>
                 "{nickname}"
@@ -1222,7 +1219,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                 <TeamLogo teamId={team.id} size={18} rounded="square" />
                 <span style={{ fontFamily: fonts.body, fontSize: 14, color: colors.text, fontWeight: 700 }}>{team.name}</span>
                 {player.num != null && player.num !== '' && (
-                  <span style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.textSecondary }}>#{player.num}</span>
+                  <span style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.text }}>#{player.num}</span>
                 )}
               </div>
               {player.instagramHandle ? (
@@ -1236,7 +1233,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                     color: heroAccent, textDecoration: 'none',
                   }}
                 >
-                  <Icon name="instagram" size={14} />@{player.instagramHandle}
+                  @{player.instagramHandle}
                 </a>
               ) : (isMaster && onEditInfo && (
                 <button
@@ -1260,8 +1257,8 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
             {player.funFacts && (
               <div style={{
                 marginTop: 8,
-                fontFamily: fonts.body, fontSize: 12,
-                color: colors.textSecondary, lineHeight: 1.55,
+                fontFamily: fonts.body, fontSize: 12.5,
+                color: colors.text, lineHeight: 1.55,
                 whiteSpace: 'pre-wrap',
                 maxWidth: '60ch',
                 paddingLeft: 10, borderLeft: `2px solid ${heroAccent}55`,
@@ -1277,7 +1274,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
               {(htWt || batThrow || birth || birthplace) && (
                 <div style={{
-                  fontFamily: fonts.body, fontSize: 11.5, color: colors.textMuted,
+                  fontFamily: fonts.body, fontSize: 12, color: colors.text,
                   lineHeight: 1.5,
                 }}>
                   {[htWt, batThrow ? `B/T ${batThrow}` : null, birth ? `Born ${birth}` : null, birthplace]
@@ -1286,9 +1283,9 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               )}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-                fontFamily: fonts.body, fontSize: 11.5,
+                fontFamily: fonts.body, fontSize: 12, color: colors.text,
               }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: colors.textSecondary }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
                   {statusLabel}
                 </span>
@@ -1296,12 +1293,10 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                   const change = typeof player.ranking?.rankChange === 'number' ? player.ranking.rankChange : 0;
                   const arrow = change > 0 ? '▲' : change < 0 ? '▼' : null;
                   const arrowColor = change > 0 ? colors.success : change < 0 ? colors.red : colors.textMuted;
-                  const pts = typeof player.ranking?.compositePoints === 'number'
-                    ? player.ranking.compositePoints.toLocaleString() : null;
                   return (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: colors.textSecondary }}>
-                      <span style={{ color: colors.textMuted }}>League rank</span>
-                      <span style={{ fontFamily: fonts.mono, fontWeight: 700, color: colors.text }}>#{player.ranking.currentRank}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span>OPWR Rank</span>
+                      <span style={{ fontFamily: fonts.mono, fontWeight: 700 }}>#{player.ranking.currentRank}</span>
                       {arrow && (
                         <span title={change > 0 ? `Up ${change} from last week` : `Down ${Math.abs(change)} from last week`} style={{
                           display: 'inline-flex', alignItems: 'center', gap: 2, color: arrowColor,
@@ -1309,9 +1304,6 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                         }}>
                           <span style={{ fontSize: 9 }}>{arrow}</span>{Math.abs(change)}
                         </span>
-                      )}
-                      {pts && (
-                        <span style={{ color: colors.textMuted, fontFamily: fonts.condensed, fontSize: 10 }}>{pts} PTS</span>
                       )}
                     </span>
                   );
