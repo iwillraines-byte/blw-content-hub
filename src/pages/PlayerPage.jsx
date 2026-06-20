@@ -33,23 +33,89 @@ function readableAccent(team, isDark) {
   return isDark ? (team.accent || team.color) : (team.color || team.accent);
 }
 
-// Shared style for the teammate prev/next chips on the breadcrumb row.
-// Disabled state (no neighbor in that direction) renders as a muted chip
-// without hover affordances, so the layout stays balanced even at the
-// ends of the roster.
-function teammateNavBtnStyle(enabled) {
-  return {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    padding: '4px 10px', borderRadius: 999,
-    background: 'transparent',
-    color: enabled ? colors.textSecondary : colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    fontFamily: 'var(--font-condensed, system-ui)',
-    fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
-    textDecoration: 'none', cursor: enabled ? 'pointer' : 'default',
-    textTransform: 'uppercase',
-    transition: 'background 120ms ease, border-color 120ms ease',
+// ── Teammate roster nav ─────────────────────────────────────────────────────
+// One unified control on the breadcrumb row: prev / count / next, with
+// hairline-divided segments, small initial bubbles and sentence-case names.
+// Replaces the old pair of uppercase condensed pills (felt dated). Patterned
+// on the DesignCode "Inspector Menu" row vocabulary, in our charcoal tokens.
+function teammateLabel(t) {
+  const raw = String(t.lastName || t.name || '').trim();
+  const last = raw ? raw.split(/\s+/).pop() : '';
+  const name = last ? last.charAt(0).toUpperCase() + last.slice(1).toLowerCase() : raw;
+  // Initials for the bubble: first-name initial (any available signal) + last.
+  const fi = (
+    t.firstInitial ||
+    (t.firstName || '').charAt(0) ||
+    (t.name ? String(t.name).trim().charAt(0) : '') ||
+    ''
+  ).toUpperCase();
+  const li = (last.charAt(0) || '').toUpperCase();
+  return { name, initials: (fi + li) || li || '?' };
+}
+
+function TeammateNav({ prev, next, idx, total }) {
+  const seg = (t, dir) => {
+    const { name, initials } = teammateLabel(t);
+    const bubble = (
+      <span style={{
+        width: 20, height: 20, borderRadius: '50%', background: colors.muted,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: fonts.body, fontSize: 9, fontWeight: 700,
+        color: colors.textSecondary, flexShrink: 0,
+      }}>{initials}</span>
+    );
+    const label = (
+      <span style={{
+        fontFamily: fonts.body, fontSize: 13, fontWeight: 600, color: colors.text,
+        maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{name}</span>
+    );
+    return (
+      <Link
+        to={t.href}
+        title={`${dir === 'prev' ? 'Previous' : 'Next'} teammate: ${t.name} (${dir === 'prev' ? '←' : '→'} key)`}
+        onMouseEnter={(e) => { e.currentTarget.style.background = colors.muted; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '7px 12px', textDecoration: 'none', background: 'transparent',
+          transition: 'background 120ms ease',
+        }}
+      >
+        {dir === 'prev' && <Icon name="chevron-left" size={16} style={{ color: colors.textMuted }} />}
+        {dir === 'prev' && bubble}
+        {label}
+        {dir === 'next' && bubble}
+        {dir === 'next' && <Icon name="chevron-right" size={16} style={{ color: colors.textMuted }} />}
+      </Link>
+    );
   };
+  const divider = <span aria-hidden="true" style={{ width: 1, alignSelf: 'stretch', background: colors.border }} />;
+  const disabled = (dir) => (
+    <span aria-hidden="true" style={{
+      display: 'inline-flex', alignItems: 'center', padding: '7px 12px',
+      color: colors.textMuted, opacity: 0.4,
+    }}>
+      <Icon name={dir === 'prev' ? 'chevron-left' : 'chevron-right'} size={16} />
+    </span>
+  );
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'stretch',
+      border: `1px solid ${colors.border}`, borderRadius: 11, overflow: 'hidden',
+      background: colors.white,
+    }}>
+      {prev ? seg(prev, 'prev') : disabled('prev')}
+      {divider}
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', padding: '0 12px',
+        fontFamily: fonts.mono, fontSize: 11, fontWeight: 600,
+        color: colors.textMuted, letterSpacing: 0.5, whiteSpace: 'nowrap',
+      }}>{idx + 1} / {total}</span>
+      {divider}
+      {next ? seg(next, 'next') : disabled('next')}
+    </div>
+  );
 }
 
 // ─── Small format helpers used by the percentile bubble lists ──────────────
@@ -270,84 +336,9 @@ function formatBirthdate(iso) {
   } catch { return null; }
 }
 
-// League-rank row — uses the same VitalRow layout but injects a movement
-// indicator (▲3 / ▼2 / —) when we know the rank delta. rankChange > 0
-// means the player MOVED UP (lower rank number = better), so a green
-// up-arrow. < 0 = moved down = red down-arrow. 0 = steady (gray dash).
-function LeagueRankRow({ ranking }) {
-  const rank = ranking?.currentRank || null;
-  const change = typeof ranking?.rankChange === 'number' ? ranking.rankChange : 0;
-  if (!rank) {
-    return <VitalRow label="League Rank" value={null} />;
-  }
-  const arrow = change > 0 ? '▲' : change < 0 ? '▼' : '—';
-  const arrowColor = change > 0 ? '#15803D' : change < 0 ? '#991B1B' : colors.textMuted;
-  const compositePts = typeof ranking?.compositePoints === 'number'
-    ? ranking.compositePoints.toLocaleString()
-    : null;
-  return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', borderBottom: `1px solid ${colors.divider}` }}>
-      <div style={{
-        fontFamily: fonts.body, fontSize: 11, fontWeight: 600,
-        color: colors.textMuted, letterSpacing: 0.2,
-        width: 76, flexShrink: 0,
-      }}>League rank</div>
-      <div style={{
-        fontFamily: fonts.body, fontSize: 13, color: colors.text, fontWeight: 600,
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <span style={{ fontFamily: fonts.heading, fontSize: 18, lineHeight: 1, letterSpacing: 0.5 }}>
-          #{rank}
-        </span>
-        {change !== 0 && (
-          <span title={change > 0 ? `Up ${change} from last week` : `Down ${Math.abs(change)} from last week`} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3,
-            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-            color: arrowColor,
-          }}>
-            <span style={{ fontSize: 10 }}>{arrow}</span>
-            {Math.abs(change)}
-          </span>
-        )}
-        {compositePts && (
-          <span style={{
-            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
-            color: colors.textMuted, letterSpacing: 0.3,
-          }}>
-            {compositePts} PTS
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Compact "HT/WT" style stat row with bold value on the right.
-function VitalRow({ label, value, dot }) {
-  return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', borderBottom: `1px solid ${colors.divider}` }}>
-      <div style={{
-        // Sentence-case for vital labels — "Height" reads cleaner than
-        // "HEIGHT" at this size, especially in Inter where lowercase is
-        // a first-class citizen rather than an afterthought (which is
-        // why the codebase had to ALL CAPS everything when it was set
-        // in Bebas).
-        fontFamily: fonts.body, fontSize: 11, fontWeight: 600,
-        color: colors.textMuted, letterSpacing: 0.2,
-        width: 76, flexShrink: 0,
-      }}>{label}</div>
-      <div style={{
-        fontFamily: fonts.body, fontSize: 13, color: colors.text, fontWeight: 600,
-        display: 'flex', alignItems: 'center', gap: 6,
-      }}>
-        {dot && <span style={{
-          width: 8, height: 8, borderRadius: '50%', background: dot,
-        }} />}
-        {value || <span style={{ color: colors.textMuted, fontWeight: 400 }}>—</span>}
-      </div>
-    </div>
-  );
-}
+// (LeagueRankRow + VitalRow were removed in v5 — the five-row vitals column
+// they fed was collapsed into the player hero's inline meta line. See the
+// inline vitals + league-rank block inside PlayerHero.)
 
 // Season stats compact card — 4 KPIs with tiny league-rank labels.
 // Renders one stat sub-card (gradient header + 4-tile grid). Reused by
@@ -368,15 +359,15 @@ function SeasonStatsSubCard({ team, label, tiles }) {
         background: `${accent}1E`,
         borderBottom: `1px solid ${accent}40`,
         color: colors.text,
-        padding: '6px 12px',
-        fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-        letterSpacing: 1, textAlign: 'center', textTransform: 'uppercase',
+        padding: '4px 10px',
+        fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 700,
+        letterSpacing: 0.8, textAlign: 'center', textTransform: 'uppercase',
       }}>
         {label}
       </div>
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        padding: '10px 6px', gap: 4,
+        padding: '8px 6px', gap: 4,
       }}>
         {tiles.map(t => {
           const pct = (t.rank && t.total && t.total > 0)
@@ -406,7 +397,7 @@ function SeasonStatsSubCard({ team, label, tiles }) {
               {(() => {
                 const raw = t.value == null ? '—' : String(t.value);
                 const len = raw.length;
-                const fontSize = len >= 6 ? 19 : len === 5 ? 23 : len === 4 ? 27 : 30;
+                const fontSize = len >= 6 ? 17 : len === 5 ? 20 : len === 4 ? 23 : 26;
                 const letterSpacing = len >= 5 ? 0 : 0.5;
                 return (
                   <div style={{
@@ -493,7 +484,7 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
       flex: '1 1 280px',
       display: 'flex',
       flexDirection: 'column',
-      gap: 10,
+      gap: 8,
     }}>
       {hasBatting && (
         <SeasonStatsSubCard team={team} label={battingLabel} tiles={battingTiles} />
@@ -1068,11 +1059,11 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
         flexWrap: 'wrap',
         gap: 18,
         padding: 14,
-        alignItems: 'center',
+        alignItems: 'flex-start',
         position: 'relative',
       }}>
         {/* Col 1 — Profile + name + team chip. flex:1 so name breathes if there's space. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: '2 1 300px', minWidth: 260 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flex: '2 1 320px', minWidth: 260 }}>
           {/* Avatar column — circle plus the Instagram chip stacked
               below. Vertical flex so the IG handle reads as part of the
               player's identity, not their stat row. Gap leaves enough
@@ -1233,15 +1224,6 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                 {player.num != null && player.num !== '' && (
                   <span style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.textSecondary }}>#{player.num}</span>
                 )}
-                {playerRank && (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontFamily: fonts.mono, fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
-                    padding: '2px 8px', borderRadius: radius.full,
-                    background: `${heroAccent}1F`, color: heroAccent,
-                    border: `1px solid ${heroAccent}40`,
-                  }}>#{playerRank} composite</span>
-                )}
               </div>
               {player.instagramHandle ? (
                 <a
@@ -1288,6 +1270,55 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               </div>
             )}
 
+            {/* Vitals — collapsed from the old five-row middle column into
+                one quiet meta line (height/weight, bats/throws, born,
+                birthplace) plus a status + league-rank line. Keeps the hero
+                to two zones (identity + stats) instead of three. */}
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {(htWt || batThrow || birth || birthplace) && (
+                <div style={{
+                  fontFamily: fonts.body, fontSize: 11.5, color: colors.textMuted,
+                  lineHeight: 1.5,
+                }}>
+                  {[htWt, batThrow ? `B/T ${batThrow}` : null, birth ? `Born ${birth}` : null, birthplace]
+                    .filter(Boolean).join('  ·  ')}
+                </div>
+              )}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+                fontFamily: fonts.body, fontSize: 11.5,
+              }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: colors.textSecondary }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+                  {statusLabel}
+                </span>
+                {player.ranking?.currentRank && (() => {
+                  const change = typeof player.ranking?.rankChange === 'number' ? player.ranking.rankChange : 0;
+                  const arrow = change > 0 ? '▲' : change < 0 ? '▼' : null;
+                  const arrowColor = change > 0 ? colors.success : change < 0 ? colors.red : colors.textMuted;
+                  const pts = typeof player.ranking?.compositePoints === 'number'
+                    ? player.ranking.compositePoints.toLocaleString() : null;
+                  return (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: colors.textSecondary }}>
+                      <span style={{ color: colors.textMuted }}>League rank</span>
+                      <span style={{ fontFamily: fonts.mono, fontWeight: 700, color: colors.text }}>#{player.ranking.currentRank}</span>
+                      {arrow && (
+                        <span title={change > 0 ? `Up ${change} from last week` : `Down ${Math.abs(change)} from last week`} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 2, color: arrowColor,
+                          fontFamily: fonts.condensed, fontWeight: 700, fontSize: 10.5,
+                        }}>
+                          <span style={{ fontSize: 9 }}>{arrow}</span>{Math.abs(change)}
+                        </span>
+                      )}
+                      {pts && (
+                        <span style={{ color: colors.textMuted, fontFamily: fonts.condensed, fontSize: 10 }}>{pts} PTS</span>
+                      )}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+
             {/* Generate Content — single CTA. Click triggers an AI idea
                 generation scoped to this player; the resulting card pops
                 up in a modal with the IdeaCard's existing "Open in
@@ -1324,45 +1355,8 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
           </div>
         </div>
 
-        {/* Col 2 — Vital stats. v4.5.15: when every CSV-driven vital is
-            empty, render a single clear empty-state instead of 5 rows
-            of em-dashes. The em-dash row farm read as "broken UI" —
-            the empty-state reads as "no data yet, here's what to do."
-            League rank still renders so viewers see composite standing
-            even without a manual_players row. */}
-        <div style={{ flex: '1 1 200px', minWidth: 200 }}>
-          {(htWt || birth || batThrow || birthplace) ? (
-            <>
-              <VitalRow label="HT/WT" value={htWt} />
-              <VitalRow label="Birthdate" value={birth} />
-              <VitalRow label="Bat/Thr" value={batThrow} />
-              <VitalRow label="Birthplace" value={birthplace} />
-              <VitalRow label="Status" value={statusLabel} dot={statusColor} />
-            </>
-          ) : (
-            <div style={{
-              padding: '8px 10px', marginBottom: 6,
-              background: colors.bg, borderRadius: radius.base,
-              fontSize: 11, color: colors.textSecondary, lineHeight: 1.5,
-            }}>
-              <div style={{
-                fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800,
-                letterSpacing: 0.6, color: colors.textMuted,
-                textTransform: 'uppercase', marginBottom: 3,
-              }}>NO PROFILE DATA YET</div>
-              <div>
-                Vitals (height, weight, bats, birthdate, birthplace) come from the
-                bio CSV import in <strong>Settings → Player bio import</strong>.
-              </div>
-            </div>
-          )}
-          {/* League rank — shown prominently in vitals so a viewer
-              sees composite standing alongside physical profile.
-              Renders arrow + delta when rank changed this week. */}
-          <LeagueRankRow ranking={player.ranking} />
-        </div>
-
-        {/* Col 3 — Season stats */}
+        {/* Season stats — now sits directly beside the identity block; the
+            former vitals column folded into the identity meta line above. */}
         <SeasonStatsCard
           player={player} team={team}
           battingRanks={battingRanks} pitchingRanks={pitchingRanks}
@@ -2150,74 +2144,14 @@ export default function PlayerPage() {
           <TeamLogo teamId={team.id} size={18} rounded="square" />
           {team.name}
         </Link>
-        {(teammateNav.prev || teammateNav.next) && (() => {
-          // v4.5.4: pills used to show only lastName. On rosters with
-          // multiple players sharing a lastName (Ledets on AZS,
-          // Marshalls on AZS, Roses on DAL, Lees on LV) the user would
-          // see "LEDET ›" while standing on Ledet's page — looking like
-          // the next pill pointed at themselves.
-          //
-          // v4.5.5: harden the label resolver. Some teammates come from
-          // the live API with only a lastName (no firstName / initial).
-          // The fix tries firstInitial → firstName.charAt(0) → jersey
-          // (#34) → first letter of name field. Only if EVERY signal is
-          // empty does it fall back to lastName-only — a true legacy
-          // edge case.
-          const pillLabel = (t) => {
-            if (!t) return '';
-            const ln = String(t.lastName || '').toUpperCase();
-            // Try every available signal in order: explicit firstInitial,
-            // firstName initial, first word of name field, jersey. Only
-            // returns lastName-only when EVERY identity signal is empty.
-            const fi = (
-              t.firstInitial ||
-              (t.firstName || '').charAt(0) ||
-              (t.name && !t.firstName ? String(t.name).trim().split(/\s+/)[0]?.charAt(0) : '') ||
-              ''
-            ).toUpperCase();
-            if (fi) return `${fi}. ${ln}`;
-            const num = String(t.num || '').replace(/^0+/, '').trim();
-            if (num) return `#${num} ${ln}`;
-            return ln;
-          };
-          return (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontFamily: fonts.condensed,
-          }}>
-            {teammateNav.prev ? (
-              <Link
-                to={teammateNav.prev.href}
-                title={`Previous teammate: ${teammateNav.prev.name} (← key)`}
-                style={teammateNavBtnStyle(true)}
-              >
-                <span aria-hidden="true">‹</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
-                  {pillLabel(teammateNav.prev)}
-                </span>
-              </Link>
-            ) : null /* v4.5.16: dropped "Start of roster" placeholder pill */}
-            <span style={{
-              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-              color: colors.textMuted, letterSpacing: 0.4,
-            }}>
-              {teammateNav.idx + 1} / {teammateNav.total}
-            </span>
-            {teammateNav.next ? (
-              <Link
-                to={teammateNav.next.href}
-                title={`Next teammate: ${teammateNav.next.name} (→ key)`}
-                style={teammateNavBtnStyle(true)}
-              >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
-                  {pillLabel(teammateNav.next)}
-                </span>
-                <span aria-hidden="true">›</span>
-              </Link>
-            ) : null /* v4.5.16: dropped "End of roster" placeholder pill */}
-          </div>
-          );
-        })()}
+        {(teammateNav.prev || teammateNav.next) && (
+          <TeammateNav
+            prev={teammateNav.prev}
+            next={teammateNav.next}
+            idx={teammateNav.idx}
+            total={teammateNav.total}
+          />
+        )}
       </div>
 
       {/* Player Header — ESPN-style 4-column layout.
