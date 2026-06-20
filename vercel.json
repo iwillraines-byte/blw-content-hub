@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/api/gss/:path*", "destination": "/api/gss?path=:path*" },
+    { "source": "/command-center", "destination": "/command-center.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
