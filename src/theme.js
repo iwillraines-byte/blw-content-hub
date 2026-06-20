@@ -97,8 +97,11 @@ export const fonts = {
 export const radius = {
   sm: 4,
   base: 8,
-  lg: 12,
-  xl: 16,
+  // v5 polish: panels tightened toward an 8-10px corner. lg (cards/heroes)
+  // and xl (largest panels) both pulled in from 12/16 so surfaces read
+  // crisper and less bubbly across team + player pages.
+  lg: 10,
+  xl: 12,
   full: 9999,
 };
 

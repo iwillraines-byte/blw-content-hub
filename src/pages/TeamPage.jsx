@@ -845,8 +845,11 @@ export default function TeamPage() {
             </div>
           </div>
 
-          {/* Col 2 — Record / PCT / Diff mini stats */}
-          <div style={{ display: 'flex', gap: 20, flex: '1 1 240px', minWidth: 240, justifyContent: 'space-around' }}>
+          {/* Col 2 — Scoreboard cluster: RECORD | PCT | DIFF with XL bold
+              numbers, thin vertical dividers, and a green/red DIFF signal
+              (mode-aware tokens — the old hardcoded greens/reds went dark
+              on charcoal). Green/red are reserved for this good/bad signal. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '1 1 260px', minWidth: 260 }}>
             {[
               { label: 'RECORD', value: liveTeam.record, color: colors.text },
               { label: 'PCT',    value: liveTeam.pct,    color: colors.text },
@@ -854,18 +857,21 @@ export default function TeamPage() {
                 label: 'DIFF',
                 value: liveTeam.diff,
                 color: liveTeam.diff?.startsWith('+') && liveTeam.diff !== '0'
-                  ? '#15803D'
-                  : (liveTeam.diff === '0' || liveTeam.diff === '—') ? colors.textSecondary : '#991B1B',
+                  ? colors.success
+                  : (liveTeam.diff === '0' || liveTeam.diff === '—') ? colors.textSecondary : colors.red,
               },
-            ].map(s => (
-              <div key={s.label} style={{ textAlign: 'center' }}>
+            ].map((s, i) => (
+              <div key={s.label} style={{
+                textAlign: 'center', padding: '2px 22px',
+                borderLeft: i > 0 ? `1px solid ${colors.border}` : 'none',
+              }}>
                 <div style={{
                   fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                  color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase',
+                  color: colors.textMuted, letterSpacing: 1.2, textTransform: 'uppercase',
                 }}>{s.label}</div>
                 <div style={{
-                  fontFamily: fonts.heading, fontSize: 28, lineHeight: 1,
-                  color: s.color, letterSpacing: 0.4, marginTop: 2,
+                  fontFamily: fonts.heading, fontSize: 38, fontWeight: 800, lineHeight: 1,
+                  color: s.color, letterSpacing: 0.4, marginTop: 4,
                 }}>{s.value || '—'}</div>
               </div>
             ))}
