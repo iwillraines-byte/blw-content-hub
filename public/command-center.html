@@ -303,7 +303,15 @@ function destroyCharts(){ Object.values(STATE.charts).forEach(c=>{try{c.destroy(
 function destroyModalCharts(){ STATE.modalCharts.forEach(c=>{try{c.destroy()}catch(e){}}); STATE.modalCharts=[]; }
 
 function getToken(){
-  try{ for(const k of Object.keys(localStorage)){ if(/^sb-.*-auth-token$/.test(k)){ const o=JSON.parse(localStorage.getItem(k)||"{}"); return o.access_token || (o.currentSession&&o.currentSession.access_token) || null; } } }catch(e){} return null;
+  try{
+    const cands=["blw-auth-v1"].concat(Object.keys(localStorage));
+    for(const k of cands){
+      const raw=localStorage.getItem(k); if(!raw || raw[0]!=="{") continue;
+      let o; try{o=JSON.parse(raw)}catch(e){continue}
+      const tok=o.access_token || (o.currentSession&&o.currentSession.access_token);
+      if(tok) return tok;
+    }
+  }catch(e){} return null;
 }
 function showGate(expired){
   $("#overlay").classList.remove("on");

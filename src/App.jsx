@@ -67,6 +67,7 @@ const navItems = [
   { path: "/files",       label: "Files",            icon: "📁", roles: ['master_admin', 'admin', 'content'] },
   { path: "/rapid-tag",   label: "Rapid Tag",        icon: "🏷️", roles: ['master_admin'] },
   { path: "/train-ai",    label: "Train AI",         icon: "🧠", roles: ['master_admin', 'admin'] },
+  { path: "/command-center", label: "CS DATA", icon: "📊", roles: ['master_admin', 'admin'], external: true },
   { path: "/settings",    label: "Settings",         icon: "⚙️", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
 ];
 
@@ -262,10 +263,12 @@ function Sidebar({ isMobile, open, onClose }) {
         <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {visibleNavItems.map(n => {
             const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/dashboard');
+            const LinkEl = n.external ? 'a' : Link;
+            const linkProps = n.external ? { href: n.path } : { to: n.path };
             return (
-              <Link
+              <LinkEl
                 key={n.path}
-                to={n.path}
+                {...linkProps}
                 className={['nav-link', active ? 'is-active' : ''].filter(Boolean).join(' ')}
                 style={{
                   textDecoration: 'none', display: 'flex', alignItems: 'center',
@@ -289,7 +292,7 @@ function Sidebar({ isMobile, open, onClose }) {
                     letterSpacing: 0.4, lineHeight: 1.6,
                   }}>{navUnread.totalUnread > 99 ? '99+' : navUnread.totalUnread}</span>
                 )}
-              </Link>
+              </LinkEl>
             );
           })}
 
