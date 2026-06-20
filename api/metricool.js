@@ -197,8 +197,8 @@ async function buildTeam(t, from, to, profiles, api, tl) {
       followers: { ig: slist(ig_f), tt: slist(tt_f), fb: slist(fb_f) },
       views: { ig: slist(ig_views), tt: slist(tt_views), fb: slist(fb_views) },
       engagement: { ig: slist(ig_eng, 2), tt: slist(tt_eng, 2), fb: slist(fb_eng, 2) },
+      posts: { ig: slist(posts_daily.ig), tt: slist(posts_daily.tt), fb: slist(posts_daily.fb) },
     },
-    _postsDaily: posts_daily,
     topPosts: ranked.slice(0, 3),
   };
 }
@@ -257,9 +257,8 @@ export async function compute(days, rng, token, userId) {
   const posts_by_platform = { ig: {}, tt: {}, fb: {} };
   const totals_platform = { followers: { ig: 0, tt: 0, fb: 0 }, views: { ig: 0, tt: 0, fb: 0 }, interactions: { ig: 0, tt: 0, fb: 0 }, posts: { ig: 0, tt: 0, fb: 0 } };
   for (const tm of teams) {
-    const pd = tm._postsDaily || {}; delete tm._postsDaily;
     for (const net of ["ig", "tt", "fb"]) {
-      for (const [k, v] of Object.entries(pd[net] || {})) posts_by_platform[net][k] = (posts_by_platform[net][k] || 0) + v;
+      for (const p of tm.seriesByPlatform.posts[net]) posts_by_platform[net][p.d] = (posts_by_platform[net][p.d] || 0) + p.v;
       for (const m of ["followers", "views", "interactions", "posts"]) totals_platform[m][net] += tm.byPlatform[m][net];
     }
   }

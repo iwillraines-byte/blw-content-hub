@@ -11,7 +11,7 @@
 <style>
   :root{
     --bg:#0A0B0D; --panel:rgba(20,21,25,0.66); --line:rgba(255,255,255,0.07); --line-2:rgba(255,255,255,0.12);
-    --ink:#EDEDE7; --ink-2:#9A9DA4; --ink-3:#62656C; --pos:#7CF1A8; --neg:#FF7D7D;
+    --ink:#EDEDE7; --ink-2:#9A9DA4; --ink-3:#62656C; --pos:#7CF1A8; --neg:#FF7D7D; --warn:#FFC04C;
     --display:"Helvetica Neue","Helvetica","Arial",sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -50,6 +50,7 @@
   .delta{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
   .delta.up{color:var(--pos)} .delta.down{color:var(--neg)} .delta.flat{color:var(--ink-3)}
   .kpi .sub{font-size:10.5px;color:var(--ink-3)}
+  .kpi .kalert{font-size:11px;font-weight:600;color:var(--warn);display:inline-flex;align-items:center;gap:4px}
   .kpi .hint{position:absolute;top:11px;right:13px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);opacity:0;transition:.2s}
   .kpi:hover .hint{opacity:1}
   .kpi .sparkwrap{position:relative;height:34px;margin:11px -15px -12px 0}
@@ -105,20 +106,40 @@
   .errbox.on{display:block}
   .modal{position:fixed;inset:0;z-index:60;background:rgba(8,9,11,.74);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:24px}
   .modal.on{display:flex}
-  .modal-card{position:relative;background:#121317;border:1px solid var(--line-2);border-radius:16px;width:min(860px,96vw);max-height:90vh;overflow:auto;padding:20px 22px;animation:pop .26s cubic-bezier(.2,.8,.2,1)}
+  .modal-card{position:relative;background:#121317;border:1px solid var(--line-2);border-radius:16px;width:min(880px,96vw);max-height:90vh;overflow:auto;padding:20px 22px;animation:pop .26s cubic-bezier(.2,.8,.2,1)}
   @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
   .modal-x{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.06);border:1px solid var(--line-2);color:var(--ink);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:15px;line-height:1}
   .modal-x:hover{background:rgba(255,255,255,.12)}
   .modal-title{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.01em;display:flex;align-items:center;gap:10px}
   .modal-sub{font-size:11.5px;color:var(--ink-3);margin-top:4px;letter-spacing:.02em}
-  .mtoggle{display:inline-flex;gap:3px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;padding:3px;margin-top:10px}
+  .mtoggle{display:inline-flex;gap:3px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;padding:3px;margin-top:10px;flex-wrap:wrap}
   .mtoggle .mt{font-size:11.5px;color:var(--ink-2);padding:6px 12px;border-radius:7px;cursor:pointer}
   .mtoggle .mt.active{background:rgba(255,255,255,.10);color:var(--ink)}
   .platlegend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
   .platlegend span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2)}
   .platlegend i{width:9px;height:9px;border-radius:3px}
+  .drill-list{margin-top:14px;display:flex;flex-direction:column;gap:1px}
+  .drow{display:flex;align-items:center;gap:11px;padding:8px;border-radius:10px;cursor:pointer;transition:.15s}
+  .drow:hover{background:rgba(255,255,255,.045)}
+  .drow .logowrap{width:30px;height:30px;border-radius:9px;padding:2px}
+  .drow .badge{font-size:11px}
+  .dname{font-size:12.5px;font-weight:600;min-width:148px;flex:none}
+  .dname .dtot{font-size:10.5px;color:var(--ink-3);font-weight:500;margin-top:1px}
+  .dbar{flex:1;height:8px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden}
+  .dbar > span{display:block;height:100%;width:0;border-radius:5px;transition:width .85s cubic-bezier(.2,.7,.2,1)}
+  .dval{font-size:13px;font-weight:600;min-width:62px;text-align:right}
+  .pcounts{display:flex;gap:13px;margin-left:auto}
+  .pcounts .pc{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;min-width:40px}
+  .pcounts .pc i{width:8px;height:8px;border-radius:2px}
+  .pchip{font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:7px;white-space:nowrap;min-width:74px;text-align:center;margin-left:4px}
+  .pchip.ok{background:rgba(124,241,168,.12);color:var(--pos)}
+  .pchip.warn{background:rgba(255,192,76,.15);color:var(--warn)}
+  .parity{margin-top:14px;padding:11px 14px;border-radius:11px;font-size:12px;line-height:1.55}
+  .parity b{font-weight:700}
+  .parity.ok{background:rgba(124,241,168,.08);border:1px solid rgba(124,241,168,.25);color:#bdf5d3}
+  .parity.warn{background:rgba(255,192,76,.09);border:1px solid rgba(255,192,76,.3);color:#ffdca0}
   @media(max-width:1080px){.hero{grid-template-columns:repeat(2,1fr)}.g-2{grid-template-columns:1fr}.roster{grid-template-columns:repeat(2,1fr)}.recs{grid-template-columns:1fr 1fr}}
-  @media(max-width:620px){.hero{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.recs{grid-template-columns:1fr}.wrap{padding:14px 14px 48px}}
+  @media(max-width:620px){.hero{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.recs{grid-template-columns:1fr}.wrap{padding:14px 14px 48px}.pcounts{gap:8px}.dname{min-width:110px}}
 </style>
 </head>
 <body>
@@ -187,6 +208,7 @@ const STATE = { q: "days=30", data: null, fcTeam: null, charts: {}, modalCharts:
 const logoCache = {};
 const PCOL = { ig:"#FF6FCF", tt:"#5CE0E0", fb:"#5B8DEF" };
 const PNAME = { ig:"Instagram", tt:"TikTok", fb:"Facebook" };
+const PSHORT = { ig:"IG", tt:"TikTok", fb:"FB" };
 const ICONS = {
   "Double down":'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>',
   "Amplify":'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="20" x2="5" y2="13"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="19" y1="20" x2="19" y2="4"/></svg>',
@@ -214,6 +236,24 @@ function teamLogo(url){
   im.onload = ()=>{ ["folTop","folRest"].forEach(k=>{ if(STATE.charts[k]) STATE.charts[k].update("none"); }); };
   im.src = url; logoCache[url] = im; return im;
 }
+function logoHTML(t){
+  const initials=esc(t.name.split(" ").slice(0,2).map(w=>w[0]).join(""));
+  const inner=t.picture?`<img class="badge" src="${esc(t.picture)}" alt="" onerror="this.outerHTML='<div class=\\'badge\\' style=\\'background:${t.accent}\\'>${initials}</div>'">`:`<div class="badge" style="background:${t.accent}">${initials}</div>`;
+  return `<div class="logowrap" style="box-shadow:inset 0 0 0 2px ${t.accent}">${inner}</div>`;
+}
+function parity(t){
+  const b=t.byPlatform.posts; const target=Math.max(b.ig,b.tt,b.fb);
+  const def={ig:target-b.ig,tt:target-b.tt,fb:target-b.fb};
+  return { counts:b, target, def, gap:def.ig+def.tt+def.fb };
+}
+function leagueParity(d){
+  const p=d.totalsByPlatform.posts; const target=Math.max(p.ig,p.tt,p.fb);
+  const def={ig:target-p.ig,tt:target-p.tt,fb:target-p.fb};
+  return { counts:p, target, def, gap:def.ig+def.tt+def.fb };
+}
+function defText(def){ return Object.entries(def).filter(([k,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${PSHORT[k]} -${v}`).join(", "); }
+function defLong(def){ return Object.entries(def).filter(([k,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${PNAME[k]} ${v}`).join(", "); }
+
 Chart.register({
   id:"endpointLogos",
   afterDatasetsDraw(chart){
@@ -275,7 +315,7 @@ async function load(q,fresh){
   }catch(e){
     $("#dot").classList.add("err"); $("#synced").textContent="connection issue";
     $("#errbox").classList.add("on");
-    $("#errbox").innerHTML="<b>Couldn't load data.</b> "+esc(e.message)+". Make sure the local server is running (double-click the launcher), then hit Refresh.";
+    $("#errbox").innerHTML="<b>Couldn't load data.</b> "+esc(e.message)+". If you just added the env vars in Vercel, redeploy this branch so they take effect, then Refresh.";
   }finally{ $("#overlay").classList.remove("on"); }
 }
 
@@ -293,11 +333,14 @@ function renderHero(){
   const d=STATE.data, t=d.totals;
   const base=t.followers - d.network.netNew.reduce((a,b)=>a+b.v,0);
   const folDelta=base>0?(t.followers-base)/base*100:0;
+  const lp=leagueParity(d);
+  let postsAlert=null;
+  if(lp.gap>0){ const w=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; postsAlert=`${PNAME[w[0]]} ${w[1]} behind`; }
   const cards=[
     {key:"followers",label:"Total followers",val:t.followers,accent:"#7CF1A8",spark:d.network.followers.map(p=>p.v),delta:folDelta,deltaLabel:"vs start of window"},
     {key:"views",label:"Views ("+d.label+")",val:t.views,accent:"#5B8DEF",spark:d.network.views.map(p=>p.v),sub:"IG + TikTok + FB"},
     {key:"interactions",label:"Interactions ("+d.label+")",val:t.interactions,accent:"#FFB13C",spark:d.network.engagement.map(p=>p.v),sub:"likes, comments, shares"},
-    {key:"posts",label:"Posts ("+d.label+")",val:t.content,accent:"#FF6FCF",sub:"shipped across teams"}
+    {key:"posts",label:"Posts ("+d.label+")",val:t.content,accent:"#FF6FCF",sub:"shipped across teams",alert:postsAlert}
   ];
   $("#hero").innerHTML=cards.map((k,i)=>`
     <div class="kpi" data-metric="${k.key}" style="animation-delay:${i*.06}s">
@@ -305,7 +348,7 @@ function renderHero(){
       <div class="hint">Click to drill in</div>
       <div class="label">${k.label}</div>
       <div class="val" id="kpi${i}" data-v="0">0</div>
-      <div class="row">${k.delta!==undefined?`<span class="delta ${k.delta>0?'up':k.delta<0?'down':'flat'}">${k.delta>0?'▲':k.delta<0?'▼':'•'} ${Math.abs(k.delta).toFixed(1)}%</span><span class="sub">${k.deltaLabel}</span>`:`<span class="sub">${k.sub||''}</span>`}</div>
+      <div class="row">${k.alert?`<span class="kalert">&#9888; ${k.alert}</span>`:(k.delta!==undefined?`<span class="delta ${k.delta>0?'up':k.delta<0?'down':'flat'}">${k.delta>0?'▲':k.delta<0?'▼':'•'} ${Math.abs(k.delta).toFixed(1)}%</span><span class="sub">${k.deltaLabel}</span>`:`<span class="sub">${k.sub||''}</span>`)}</div>
       <div class="sparkwrap"><canvas id="spark${i}"></canvas></div>
     </div>`).join("");
   cards.forEach((k,i)=>{ countUp($("#kpi"+i),k.val,950); if(k.spark&&k.spark.length) miniSpark("spark"+i,k.spark,k.accent); });
@@ -333,10 +376,9 @@ function lineChart(canvas, teams, labels, key, opts){
 
 function renderFollowersSplit(){
   const order=[...STATE.data.teams].sort((a,b)=>b.followersNow-a.followersNow);
-  const top=order.slice(0,3), rest=order.slice(3);
   const labels=alignedAxis("followers");
-  STATE.charts.folTop=lineChart($("#folTop"),top,labels,"followers",{logo:true});
-  STATE.charts.folRest=lineChart($("#folRest"),rest,labels,"followers",{logo:true});
+  STATE.charts.folTop=lineChart($("#folTop"),order.slice(0,3),labels,"followers",{logo:true});
+  STATE.charts.folRest=lineChart($("#folRest"),order.slice(3),labels,"followers",{logo:true});
 }
 function renderVelocity(){ STATE.charts.vel=lineChart($("#velChart"),STATE.data.teams,alignedAxis("netNew"),"netNew",{}); }
 function renderViews(){ STATE.charts.views=lineChart($("#viewsChart"),STATE.data.teams,alignedAxis("views"),"views",{fill:true,bw:1.3,stacked:true,zero:true}); }
@@ -354,13 +396,11 @@ function renderLegend(){
 function renderRoster(){
   const host=$("#roster");
   host.innerHTML=STATE.data.teams.map((t,i)=>{
-    const up=t.netNew>=0; const initials=esc(t.name.split(" ").slice(0,2).map(w=>w[0]).join(""));
-    const inner=t.picture?`<img class="badge" src="${esc(t.picture)}" alt="" onerror="this.outerHTML='<div class=\\'badge\\' style=\\'background:${t.accent}\\'>${initials}</div>'">`:`<div class="badge" style="background:${t.accent}">${initials}</div>`;
+    const up=t.netNew>=0;
     const handle=t.handles.instagram?"@"+esc(t.handles.instagram):(t.handles.tiktok?"@"+esc(t.handles.tiktok):"");
     const plats=["instagram","tiktok","facebook"].filter(n=>t.handles[n]).map(n=>`<span class="plat">${n==='tiktok'?'TT':n==='instagram'?'IG':'FB'}</span>`).join("");
     return `<div class="team" data-id="${t.blogId}" style="animation:rise .55s ${i*.04}s backwards">
-      <div class="top">
-        <div class="logowrap" style="box-shadow:inset 0 0 0 2px ${t.accent}">${inner}</div>
+      <div class="top">${logoHTML(t)}
         <div class="who"><div class="name">${esc(t.name)}</div><div class="handle">${handle}</div><div class="plats">${plats}</div></div>
         <div class="mom" style="background:${up?'rgba(124,241,168,.12)':'rgba(255,125,125,.12)'};color:${up?'var(--pos)':'var(--neg)'}">${up?'▲':'▼'} ${Math.abs(t.mom).toFixed(1)}%</div>
       </div>
@@ -457,51 +497,96 @@ $("#modalX").onclick=closeModal;
 $("#modal").onclick=e=>{ if(e.target===$("#modal")) closeModal(); };
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
 
+function postsLineChart(canvasId, pb){
+  const labs=new Set(); ["ig","tt","fb"].forEach(k=>pb[k].forEach(p=>labs.add(p.d))); const labels=[...labs].sort();
+  const mk=k=>{const m=Object.fromEntries(pb[k].map(p=>[p.d,p.v])); return labels.map(x=>x in m?m[x]:0);};
+  STATE.modalCharts.push(new Chart($("#"+canvasId),{type:"line",data:{labels:labels.map(mmdd),datasets:[
+    {label:"Instagram",data:mk("ig"),borderColor:PCOL.ig,backgroundColor:PCOL.ig,borderWidth:2,pointRadius:0,tension:.3},
+    {label:"TikTok",data:mk("tt"),borderColor:PCOL.tt,backgroundColor:PCOL.tt,borderWidth:2,pointRadius:0,tension:.3},
+    {label:"Facebook",data:mk("fb"),borderColor:PCOL.fb,backgroundColor:PCOL.fb,borderWidth:2,pointRadius:0,tension:.3}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:true,labels:{boxWidth:9,boxHeight:9,font:{size:11}}},tooltip:TT},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{precision:0}}}}}));
+}
+
 function openDrill(metric){
   const d=STATE.data;
   const titleMap={followers:"Total followers",views:"Views",interactions:"Interactions",posts:"Posts"};
   const teams=[...d.teams].sort((a,b)=>val(metric,b)-val(metric,a));
-  const plat=d.totalsByPlatform[metric];
-  const hasTime = metric==="posts";
-  openModal(`
-    <div class="modal-title">${titleMap[metric]} · contribution by team</div>
-    <div class="modal-sub">${esc(d.label)} · total ${fmtFull(metric==='posts'?d.totals.content:d.totals[metric])}</div>
-    <div class="chart-box" style="height:300px;margin-top:14px"><canvas id="drillTeams"></canvas></div>
-    <div class="modal-sub" style="margin-top:14px">By platform</div>
-    <div class="chart-box" style="height:120px;margin-top:6px"><canvas id="drillPlat"></canvas></div>
-    ${hasTime?`<div class="modal-sub" style="margin-top:14px">Posts per day by platform (spot cross-posting gaps)</div><div class="chart-box" style="height:170px;margin-top:6px"><canvas id="drillTime"></canvas></div>`:""}
-  `);
-  STATE.modalCharts.push(new Chart($("#drillTeams"),{type:"bar",data:{labels:teams.map(t=>t.name),datasets:[{data:teams.map(t=>val(metric,t)),backgroundColor:teams.map(t=>t.accent),borderRadius:5}]},
-    options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},animation:{duration:900},scales:{x:{grid:GRID,ticks:{callback:v=>fmt(v)}},y:{grid:{display:false}}}}}));
-  STATE.modalCharts.push(new Chart($("#drillPlat"),{type:"bar",data:{labels:["Instagram","TikTok","Facebook"],datasets:[{data:[plat.ig,plat.tt,plat.fb],backgroundColor:[PCOL.ig,PCOL.tt,PCOL.fb],borderRadius:5}]},
-    options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},animation:{duration:900},scales:{x:{grid:GRID,ticks:{callback:v=>fmt(v)}},y:{grid:{display:false}}}}}));
-  if(hasTime){
-    const pb=d.network.postsByPlatform; const labs=new Set();
-    ["ig","tt","fb"].forEach(k=>pb[k].forEach(p=>labs.add(p.d))); const labels=Array.from(labs).sort();
-    const mk=k=>{const m=Object.fromEntries(pb[k].map(p=>[p.d,p.v])); return labels.map(x=>x in m?m[x]:0);};
-    STATE.modalCharts.push(new Chart($("#drillTime"),{type:"line",data:{labels:labels.map(mmdd),datasets:[
-      {label:"Instagram",data:mk("ig"),borderColor:PCOL.ig,backgroundColor:PCOL.ig,borderWidth:2,pointRadius:0,tension:.3},
-      {label:"TikTok",data:mk("tt"),borderColor:PCOL.tt,backgroundColor:PCOL.tt,borderWidth:2,pointRadius:0,tension:.3},
-      {label:"Facebook",data:mk("fb"),borderColor:PCOL.fb,backgroundColor:PCOL.fb,borderWidth:2,pointRadius:0,tension:.3}
-    ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:true,labels:{boxWidth:9,boxHeight:9,font:{size:11}}},tooltip:TT},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{stepSize:1,precision:0}}}}}));
+  const totalVal = metric==='posts'?d.totals.content:d.totals[metric];
+  let body=`<div class="modal-title">${titleMap[metric]} · by team</div>
+    <div class="modal-sub">${esc(d.label)} · total ${fmtFull(totalVal)} · click a team to drill in</div>`;
+
+  if(metric==='posts'){
+    const lp=leagueParity(d);
+    const counts=`Instagram ${lp.counts.ig} · TikTok ${lp.counts.tt} · Facebook ${lp.counts.fb}`;
+    if(lp.gap>0) body+=`<div class="parity warn">&#9888; <b>Platform parity off.</b> ${defLong(lp.def)} behind across the league. Every post should run on all 3 platforms; these are posts that still need cross-posting. <span style="opacity:.8">(${counts})</span></div>`;
+    else body+=`<div class="parity ok">&#10003; <b>Platforms are balanced.</b> Every team posted evenly across Instagram, TikTok and Facebook. (${counts})</div>`;
+    body+=`<div class="drill-list">`+teams.map(t=>{
+      const par=parity(t);
+      const chip = par.gap===0?`<span class="pchip ok">&#10003; all 3</span>`:`<span class="pchip warn">&#9888; ${defText(par.def)}</span>`;
+      return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}
+        <div class="dname">${esc(t.name)}<div class="dtot">${t.contentCount} posts</div></div>
+        <div class="pcounts">
+          <span class="pc"><i style="background:${PCOL.ig}"></i>${par.counts.ig}</span>
+          <span class="pc"><i style="background:${PCOL.tt}"></i>${par.counts.tt}</span>
+          <span class="pc"><i style="background:${PCOL.fb}"></i>${par.counts.fb}</span>
+        </div>${chip}</div>`;
+    }).join("")+`</div>`;
+    body+=`<div class="platlegend" style="margin-top:12px"><span><i style="background:${PCOL.ig}"></i>Instagram</span><span><i style="background:${PCOL.tt}"></i>TikTok</span><span><i style="background:${PCOL.fb}"></i>Facebook</span></div>`;
+    body+=`<div class="modal-sub" style="margin-top:16px">Posts per day by platform (spot cross-posting gaps over time)</div><div class="chart-box" style="height:170px;margin-top:6px"><canvas id="drillTime"></canvas></div>`;
+  } else {
+    const top=teams[0]; const maxV=val(metric,top)||1;
+    body+=`<div class="drill-list">`+teams.map(t=>{
+      const v=val(metric,t); const pct=Math.max(2,Math.round(v/maxV*100));
+      return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}
+        <div class="dname">${esc(t.name)}</div>
+        <div class="dbar"><span data-w="${pct}%" style="background:${t.accent}"></span></div>
+        <div class="dval">${fmtFull(v)}</div></div>`;
+    }).join("")+`</div>`;
+    body+=`<div class="modal-sub" style="margin-top:16px">By platform</div><div class="chart-box" style="height:120px;margin-top:6px"><canvas id="drillPlat"></canvas></div>`;
   }
+  openModal(body);
+
+  if(metric==='posts'){ postsLineChart("drillTime", d.network.postsByPlatform); }
+  else {
+    const plat=d.totalsByPlatform[metric];
+    STATE.modalCharts.push(new Chart($("#drillPlat"),{type:"bar",data:{labels:["Instagram","TikTok","Facebook"],datasets:[{data:[plat.ig,plat.tt,plat.fb],backgroundColor:[PCOL.ig,PCOL.tt,PCOL.fb],borderRadius:5}]},
+      options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},animation:{duration:900},scales:{x:{grid:GRID,ticks:{callback:v=>fmt(v)}},y:{grid:{display:false}}}}}));
+    requestAnimationFrame(()=>document.querySelectorAll("#modalBody .dbar > span").forEach(el=>{ el.style.width=el.dataset.w; }));
+  }
+  document.querySelectorAll("#modalBody .drow").forEach(r=>r.onclick=()=>openTeamModal(+r.dataset.id, metric==='posts'?'posts':'followers'));
 }
 
-function openTeamModal(id){
+function openTeamModal(id, initial){
   const t=STATE.data.teams.find(x=>x.blogId===id); if(!t) return;
-  const initials=esc(t.name.split(" ").slice(0,2).map(w=>w[0]).join(""));
-  const logo=t.picture?`<div class="logowrap" style="width:34px;height:34px;box-shadow:inset 0 0 0 2px ${t.accent}"><img class="badge" src="${esc(t.picture)}" onerror="this.outerHTML='<div class=\\'badge\\' style=\\'background:${t.accent}\\'>${initials}</div>'"></div>`:`<div class="logowrap" style="width:34px;height:34px"><div class="badge" style="background:${t.accent}">${initials}</div></div>`;
+  initial = initial || "followers";
   openModal(`
-    <div class="modal-title">${logo}${esc(t.name)}</div>
+    <div class="modal-title">${logoHTML(t)}${esc(t.name)}</div>
     <div class="modal-sub">${esc(t.handles.instagram?'@'+t.handles.instagram:'')} · ${fmtFull(t.followersNow)} followers · ${t.engagementRate}% eng · ${t.contentCount} posts (${esc(STATE.data.label)})</div>
-    <div class="mtoggle" id="tmToggle"><div class="mt active" data-m="followers">Followers</div><div class="mt" data-m="views">Views</div><div class="mt" data-m="engagement">Eng rate</div></div>
+    <div class="mtoggle" id="tmToggle">
+      <div class="mt" data-m="followers">Followers</div>
+      <div class="mt" data-m="views">Views</div>
+      <div class="mt" data-m="engagement">Eng rate</div>
+      <div class="mt" data-m="posts">Posts</div>
+    </div>
+    <div class="parity" id="teamParity" style="display:none"></div>
     <div class="platlegend"><span><i style="background:${PCOL.ig}"></i>Instagram</span><span><i style="background:${PCOL.tt}"></i>TikTok</span><span><i style="background:${PCOL.fb}"></i>Facebook</span></div>
-    <div class="chart-box" style="height:340px;margin-top:8px"><canvas id="teamChart"></canvas></div>
+    <div class="chart-box" style="height:330px;margin-top:8px"><canvas id="teamChart"></canvas></div>
   `);
+  const tp=$("#teamParity");
   const draw=(metric)=>{
     destroyModalCharts();
+    if(metric==='posts'){
+      const par=parity(t);
+      tp.style.display='block'; tp.className='parity '+(par.gap===0?'ok':'warn');
+      tp.innerHTML = par.gap===0
+        ? `&#10003; <b>${esc(t.name)} is balanced.</b> IG ${par.counts.ig} · TikTok ${par.counts.tt} · FB ${par.counts.fb}. Every post made it to all 3 platforms.`
+        : `&#9888; <b>${esc(t.name)} is uneven.</b> IG ${par.counts.ig} · TikTok ${par.counts.tt} · FB ${par.counts.fb}. Still to cross-post: <b>${defLong(par.def)}</b>. Push the missing posts to equalize.`;
+      postsLineChart("teamChart", t.seriesByPlatform.posts);
+      return;
+    }
+    tp.style.display='none';
     const sp=t.seriesByPlatform[metric]; const labs=new Set();
-    ["ig","tt","fb"].forEach(k=>(sp[k]||[]).forEach(p=>labs.add(p.d))); const labels=Array.from(labs).sort();
+    ["ig","tt","fb"].forEach(k=>(sp[k]||[]).forEach(p=>labs.add(p.d))); const labels=[...labs].sort();
     const stacked = metric!=="engagement";
     const mk=k=>{const m=Object.fromEntries((sp[k]||[]).map(p=>[p.d,p.v])); return labels.map(x=>x in m?m[x]:(stacked?0:null));};
     STATE.modalCharts.push(new Chart($("#teamChart"),{type:"line",data:{labels:labels.map(mmdd),datasets:[
@@ -511,8 +596,8 @@ function openTeamModal(id){
     ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{...TT,itemSort:(a,b)=>b.parsed.y-a.parsed.y}},
       scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{stacked,grid:GRID,ticks:{callback:v=>metric==='engagement'?v+'%':fmt(v)}}},animation:{duration:600}}}));
   };
-  draw("followers");
-  $("#tmToggle").querySelectorAll(".mt").forEach(b=>b.onclick=()=>{ $("#tmToggle").querySelectorAll(".mt").forEach(x=>x.classList.remove("active")); b.classList.add("active"); draw(b.dataset.m); });
+  $("#tmToggle").querySelectorAll(".mt").forEach(b=>{ if(b.dataset.m===initial) b.classList.add("active"); b.onclick=()=>{ $("#tmToggle").querySelectorAll(".mt").forEach(x=>x.classList.remove("active")); b.classList.add("active"); draw(b.dataset.m); }; });
+  draw(initial);
 }
 
 $("#tfTabs").querySelectorAll(".tab").forEach(tab=>tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); load(tab.dataset.q,false); });
