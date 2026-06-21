@@ -176,13 +176,19 @@ export default function TeamPage() {
   // key="monthly-post-targets" as { [teamId]: number }. Defaults to
   // 12 when no override exists. Master admin owns writes.
   const [monthlyTargets, setMonthlyTargets] = useState(null);
+  // v5: per-team hero header photo. Stored under app_settings
+  // key="team-header-photos" as { [teamId]: mediaId }. Master writes,
+  // everyone reads. Falls back to the team-color gradient when unset.
+  const [headerPhotos, setHeaderPhotos] = useState(null);
+  const [headerPickerOpen, setHeaderPickerOpen] = useState(false);
   useEffect(() => {
     let cancel = false;
     (async () => {
       try {
-        const [socialsRes, targetsRes] = await Promise.all([
+        const [socialsRes, targetsRes, headerRes] = await Promise.all([
           authedFetch('/api/app-settings?key=team-socials').catch(() => null),
           authedFetch('/api/app-settings?key=monthly-post-targets').catch(() => null),
+          authedFetch('/api/app-settings?key=team-header-photos').catch(() => null),
         ]);
         if (cancel) return;
         if (socialsRes?.ok) {
@@ -193,10 +199,26 @@ export default function TeamPage() {
           const d = await targetsRes.json();
           setMonthlyTargets(d?.value || {});
         }
+        if (headerRes?.ok) {
+          const d = await headerRes.json();
+          setHeaderPhotos(d?.value || {});
+        }
       } catch { /* silent */ }
     })();
     return () => { cancel = true; };
   }, []);
+  const saveHeaderPhoto = useCallback(async (mediaId) => {
+    const all = { ...(headerPhotos || {}) };
+    if (mediaId) all[team.id] = mediaId; else delete all[team.id];
+    const res = await authedFetch('/api/app-settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'team-header-photos', value: all }),
+    });
+    if (!res.ok) return false;
+    setHeaderPhotos(all);
+    return true;
+  }, [team?.id, headerPhotos]);
   const teamMonthlyTarget = (monthlyTargets?.[team?.id]) || 12;
   const saveMonthlyTarget = useCallback(async (next) => {
     const all = { ...(monthlyTargets || {}), [team.id]: Math.max(1, Math.min(40, Number(next) || 12)) };
@@ -745,6 +767,23 @@ export default function TeamPage() {
     [media]
   );
 
+  // v5: resolve the chosen hero header photo to a displayable URL. Prefer
+  // the local blob object URL (thumbUrls), fall back to any remote URL on
+  // the media record. When set, the hero renders the photo + a dark scrim
+  // and switches its text to light ink.
+  const headerPhotoId = headerPhotos?.[team?.id] || null;
+  const headerPhotoUrl = useMemo(() => {
+    if (!headerPhotoId) return null;
+    if (thumbUrls[headerPhotoId]) return thumbUrls[headerPhotoId];
+    const m = media.find(x => x.id === headerPhotoId);
+    return m?.url || m?.publicUrl || m?.src || null;
+  }, [headerPhotoId, thumbUrls, media]);
+  const onPhoto = !!headerPhotoUrl;
+  const heroInk      = onPhoto ? '#FFFFFF'                : colors.text;
+  const heroInkDim   = onPhoto ? 'rgba(255,255,255,0.72)' : colors.textSecondary;
+  const heroInkMuted = onPhoto ? 'rgba(255,255,255,0.58)' : colors.textMuted;
+  const heroDivider  = onPhoto ? 'rgba(255,255,255,0.24)' : colors.border;
+
   return (
     <PageDropZone ref={dropZoneRef} team={team} onUploaded={handleDropUploaded}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -754,11 +793,7 @@ export default function TeamPage() {
           [logo + identity + owner] [record/pct/diff + rank] [aggregates card] */}
       <div style={{
         background: colors.white,
-        // Full-bleed border tinted toward the team color replaces the prior
-        // 4px left side-stripe. The team logo at left, the soft team-color
-        // gradient wash behind the logo column, and the team-color rank
-        // pill carry the brand signal — the side-stripe was redundant.
-        border: `1px solid ${team.color}33`,
+        border: onPhoto ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${team.color}33`,
         borderRadius: radius.lg,
         // Subtle two-layer drop shadow — matches PlayerHero so the two
         // pages share a visual weight. Outer layer is ambient, inner is
@@ -767,15 +802,47 @@ export default function TeamPage() {
         overflow: 'hidden',
         position: 'relative',
       }}>
-        {/* Soft team wash. v4.5.20: stretched to full card width with
-            a long multi-stop fade so the gradient fades cleanly into
-            the card edge instead of stopping abruptly at the 260px
-            mark. */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: `linear-gradient(110deg, ${team.color}22 0%, ${team.color}14 22%, ${team.color}08 45%, ${team.color}03 72%, transparent 100%)`,
-          pointerEvents: 'none',
-        }} />
+        {/* Background — a chosen full-bleed team action photo with a
+            left→right dark scrim for legibility (admin sets it via the
+            picker), or the soft team-color wash when none is set. */}
+        {onPhoto ? (
+          <>
+            <div aria-hidden="true" style={{
+              position: 'absolute', inset: 0,
+              backgroundImage: `url(${headerPhotoUrl})`,
+              backgroundSize: 'cover', backgroundPosition: 'center',
+              pointerEvents: 'none',
+            }} />
+            <div aria-hidden="true" style={{
+              position: 'absolute', inset: 0,
+              background: `linear-gradient(90deg, rgba(10,12,16,0.92) 0%, rgba(10,12,16,0.80) 42%, rgba(10,12,16,0.52) 72%, rgba(10,12,16,0.34) 100%), linear-gradient(120deg, ${team.color}40 0%, transparent 55%)`,
+              pointerEvents: 'none',
+            }} />
+          </>
+        ) : (
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(110deg, ${team.color}22 0%, ${team.color}14 22%, ${team.color}08 45%, ${team.color}03 72%, transparent 100%)`,
+            pointerEvents: 'none',
+          }} />
+        )}
+        {/* Master-only: set / change the hero photo. */}
+        {isMaster && (
+          <button
+            onClick={() => setHeaderPickerOpen(true)}
+            title={onPhoto ? 'Change header photo' : 'Set a header photo'}
+            style={{
+              position: 'absolute', top: 10, right: 10, zIndex: 2, cursor: 'pointer',
+              padding: '5px 11px', borderRadius: radius.base,
+              background: onPhoto ? 'rgba(0,0,0,0.45)' : colors.white,
+              border: `1px solid ${onPhoto ? 'rgba(255,255,255,0.28)' : colors.border}`,
+              color: onPhoto ? '#fff' : colors.textSecondary,
+              fontFamily: fonts.body, fontSize: 11, fontWeight: 600,
+            }}
+          >
+            {onPhoto ? 'Change photo' : 'Set header photo'}
+          </button>
+        )}
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 24,
           padding: 22, alignItems: 'center', position: 'relative',
@@ -796,13 +863,13 @@ export default function TeamPage() {
             <div style={{ minWidth: 0 }}>
               <div style={{
                 fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                color: colors.textSecondary, letterSpacing: 1.5, textTransform: 'uppercase',
+                color: heroInkDim, letterSpacing: 1.5, textTransform: 'uppercase',
               }}>
                 {team.city}
               </div>
               <div style={{
                 fontFamily: fonts.heading, fontSize: 40, lineHeight: 0.95,
-                color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
+                color: heroInk, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
                 margin: '3px 0 8px', textTransform: 'uppercase',
               }}>
                 {team.name}
@@ -811,8 +878,9 @@ export default function TeamPage() {
                 {liveTeam.rank != null && (
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
-                    background: `${team.color}15`, color: team.color,
-                    border: `1px solid ${team.color}40`,
+                    background: onPhoto ? 'rgba(255,255,255,0.16)' : `${team.color}15`,
+                    color: onPhoto ? '#fff' : team.color,
+                    border: `1px solid ${onPhoto ? 'rgba(255,255,255,0.32)' : `${team.color}40`}`,
                     padding: '3px 10px', borderRadius: 999,
                     fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
                   }}>
@@ -827,7 +895,7 @@ export default function TeamPage() {
                     every admin sees the latest handles. */}
                 <TeamSocials
                   socials={mergedSocials}
-                  accent={team.color}
+                  accent={onPhoto ? '#fff' : team.color}
                   canEdit={isMaster}
                   onEdit={() => setSocialsEditorOpen(true)}
                 />
@@ -851,23 +919,23 @@ export default function TeamPage() {
               on charcoal). Green/red are reserved for this good/bad signal. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '1 1 260px', minWidth: 260 }}>
             {[
-              { label: 'RECORD', value: liveTeam.record, color: colors.text },
-              { label: 'PCT',    value: liveTeam.pct,    color: colors.text },
+              { label: 'RECORD', value: liveTeam.record, color: heroInk },
+              { label: 'PCT',    value: liveTeam.pct,    color: heroInk },
               {
                 label: 'DIFF',
                 value: liveTeam.diff,
                 color: liveTeam.diff?.startsWith('+') && liveTeam.diff !== '0'
                   ? colors.success
-                  : (liveTeam.diff === '0' || liveTeam.diff === '—') ? colors.textSecondary : colors.red,
+                  : (liveTeam.diff === '0' || liveTeam.diff === '—') ? heroInkDim : colors.red,
               },
             ].map((s, i) => (
               <div key={s.label} style={{
                 textAlign: 'center', padding: '2px 22px',
-                borderLeft: i > 0 ? `1px solid ${colors.border}` : 'none',
+                borderLeft: i > 0 ? `1px solid ${heroDivider}` : 'none',
               }}>
                 <div style={{
                   fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                  color: colors.textMuted, letterSpacing: 1.2, textTransform: 'uppercase',
+                  color: heroInkMuted, letterSpacing: 1.2, textTransform: 'uppercase',
                 }}>{s.label}</div>
                 <div style={{
                   fontFamily: fonts.heading, fontSize: 38, fontWeight: 800, lineHeight: 1,
@@ -881,11 +949,11 @@ export default function TeamPage() {
           {teamAggregates && (
             <div style={{
               minWidth: 240, flex: '1 1 240px',
-              background: colors.white,
-              border: `1px solid ${colors.borderLight}`,
+              background: onPhoto ? 'rgba(12,14,18,0.72)' : colors.white,
+              border: `1px solid ${onPhoto ? 'rgba(255,255,255,0.16)' : colors.borderLight}`,
               borderRadius: radius.base,
               overflow: 'hidden',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              boxShadow: onPhoto ? 'none' : '0 1px 3px rgba(0,0,0,0.04)',
             }}>
               <div style={{
                 // v4.8.5: prefer themeBg/themeBgDark when set (ATL's
@@ -915,11 +983,11 @@ export default function TeamPage() {
                   }}>
                     <div style={{
                       fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                      color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase',
+                      color: onPhoto ? 'rgba(255,255,255,0.62)' : colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase',
                     }}>{t.label}</div>
                     <div style={{
                       fontFamily: fonts.heading, fontSize: 22,
-                      color: t.highlight ? team.color : colors.text,
+                      color: t.highlight ? (onPhoto ? '#fff' : team.color) : (onPhoto ? '#fff' : colors.text),
                       lineHeight: 1, letterSpacing: 0.5,
                     }}>{t.value ?? '—'}</div>
                   </div>
@@ -929,6 +997,64 @@ export default function TeamPage() {
           )}
         </div>
       </div>
+
+      {/* Master-only header-photo picker — pulls from this team's media
+          (team-scoped first, all team media as fallback). */}
+      {headerPickerOpen && isMaster && (
+        <div
+          onClick={() => setHeaderPickerOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: colors.white, borderRadius: radius.lg,
+            border: `1px solid ${colors.border}`,
+            width: 'min(720px, 100%)', maxHeight: '80vh', overflow: 'auto', padding: 18,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontFamily: fonts.heading, fontSize: 18, fontWeight: 700, color: colors.text }}>Set header photo</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {headerPhotoId && (
+                  <OutlineButton onClick={async () => { await saveHeaderPhoto(null); setHeaderPickerOpen(false); }} style={{ padding: '6px 12px', fontSize: 12 }}>Remove</OutlineButton>
+                )}
+                <OutlineButton onClick={() => setHeaderPickerOpen(false)} style={{ padding: '6px 12px', fontSize: 12 }}>Close</OutlineButton>
+              </div>
+            </div>
+            {(() => {
+              const pickable = (teamScopedMedia.length ? teamScopedMedia : media).filter(m => thumbUrls[m.id] || m.url);
+              if (!pickable.length) {
+                return <div style={{ color: colors.textSecondary, fontSize: 13, padding: '18px 2px', lineHeight: 1.5 }}>No team photos to choose from yet. Add team-scoped photos in Files, then pick one here.</div>;
+              }
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+                  {pickable.map(m => {
+                    const url = thumbUrls[m.id] || m.url;
+                    const active = m.id === headerPhotoId;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={async () => { await saveHeaderPhoto(m.id); setHeaderPickerOpen(false); }}
+                        title={active ? 'Current header photo' : 'Use as header photo'}
+                        style={{
+                          padding: 0, cursor: 'pointer', overflow: 'hidden',
+                          borderRadius: radius.base, background: colors.bg,
+                          border: `2px solid ${active ? team.color : colors.border}`,
+                          aspectRatio: '16 / 10',
+                        }}
+                      >
+                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* v4.5.20: Replaced the three big leader cards (TOP BATTER /
           TOP PITCHER / HR LEADER) with a full-width "Stat leaders"
