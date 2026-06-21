@@ -6,7 +6,7 @@ import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, Positi
 import { ContentIdeasSection } from '../content-ideas-section';
 import { getRecentFeedback } from '../idea-feedback-store';
 import { PageDropZone } from '../page-drop-zone';
-import { colors, fonts, radius } from '../theme';
+import { colors, fonts, radius, shadows } from '../theme';
 import { Icon } from '../icon';
 import { timeAgo } from '../format-time';
 import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
@@ -20,6 +20,7 @@ import { refreshManualPlayersFromCloud } from '../cloud-reader';
 import { formatPostName } from '../template-config';
 import { authedJson, authedFetch } from '../authed-fetch';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
+import { PercentileRadar, OpwrTrend } from '../league-standing';
 import { useLeagueContext } from '../league-context';
 import IdeaCard from '../idea-card';
 import { buildGenerateLinkFromIdea } from '../requests-store';
@@ -30,7 +31,20 @@ import { useIsDark } from '../theme-mode';
 // vanish on dark charcoal, so accent-bearing chrome swaps to the lighter
 // team.accent on dark.
 function readableAccent(team, isDark) {
-  return isDark ? (team.accent || team.color) : (team.color || team.accent);
+  const a = isDark ? (team.accent || team.color) : (team.color || team.accent);
+  // On the charcoal dark surface a near-white / cream team accent (Chicago
+  // #FFFFFF, Boston #F9F2D8) reads as neutral chrome and competes with the
+  // bright card text instead of identifying the team. Floor it to the brand
+  // red so the team still gets a real colored pop. Light mode is unaffected.
+  if (isDark) {
+    const hex = String(a || '').replace('#', '');
+    if (hex.length === 6) {
+      const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+      const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      if (lum > 0.85) return colors.red;
+    }
+  }
+  return a;
 }
 
 // Ordinal rank label — 1 → "1st", 14 → "14th". Replaces the "#6 / 45" form
@@ -481,6 +495,184 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
         <SeasonStatsSubCard team={team} label={pitchingLabel} tiles={pitchingTiles} />
       )}
     </div>
+  );
+}
+
+// ─── League Standing card ────────────────────────────────────────────────────
+// Unified "where this player ranks" panel: condensed Savant-style percentile
+// bars on the left (batting + pitching groups), and a companion on the right
+// that toggles between a percentile RADAR (the player's shape, one discipline
+// at a time) and the OPWR rank TREND. The trend is seeded from the two ranks
+// the GSS feed carries (last period → now) via opwrTrendPoints(); when a real
+// rank history source lands, only that helper changes.
+function opwrTrendPoints(player) {
+  const cur = player?.ranking?.currentRank;
+  const prev = player?.ranking?.previousRank;
+  const pts = [];
+  if (Number.isFinite(prev) && prev > 0) pts.push({ label: 'Prev', rank: prev });
+  if (Number.isFinite(cur) && cur > 0) pts.push({ label: 'Now', rank: cur });
+  return pts;
+}
+
+function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTotal, pTotal }) {
+  const isDark = useIsDark();
+  const accent = team ? readableAccent(team, isDark) : colors.accent;
+  const pn = player.name;
+  const hasBat = !!player.batting;
+  const hasPit = !!player.pitching;
+  const trendPoints = opwrTrendPoints(player);
+  const hasTrend = trendPoints.length >= 2;
+
+  const [view, setView] = useState('radar');          // 'radar' | 'trend'
+  const [disc, setDisc] = useState(hasBat ? 'bat' : 'pit');
+
+  if (!hasBat && !hasPit) return null;
+
+  const batRows = hasBat ? [
+    { label: 'AVG',    value: player.batting.avg,  percentile: percentileFor(battingLeaders, pn, 'avg', 'desc', parseFloat) },
+    { label: 'OBP',    value: player.batting.obp,  percentile: percentileFor(battingLeaders, pn, 'obp', 'desc', parseFloat) },
+    { label: 'SLG',    value: player.batting.slg,  percentile: percentileFor(battingLeaders, pn, 'slg', 'desc', parseFloat) },
+    { label: 'OPS',    value: player.batting.ops,  percentile: percentileFor(battingLeaders, pn, 'ops', 'desc', parseFloat) },
+    { label: 'BB%',    value: formatPct(player.batting.bbPct), percentile: percentileFor(battingLeaders, pn, 'bbPct', 'desc', Number) },
+    { label: 'K%',     value: formatPct(player.batting.kPct),  percentile: percentileFor(battingLeaders, pn, 'kPct', 'asc', Number) },
+    { label: 'HR/PA',  value: formatRate(player.batting.hr, player.batting.pa),   percentile: derivedPercentileFor(battingLeaders, pn, (r) => safeRate(r.hr, r.pa), 'desc') },
+    { label: 'RBI/PA', value: formatRate(player.batting.rbi, player.batting.pa),  percentile: derivedPercentileFor(battingLeaders, pn, (r) => safeRate(r.rbi, r.pa), 'desc') },
+    { label: 'R/PA',   value: formatRate(player.batting.runs, player.batting.pa), percentile: derivedPercentileFor(battingLeaders, pn, (r) => safeRate(r.runs, r.pa), 'desc') },
+  ] : null;
+
+  const pitRows = hasPit ? [
+    { label: 'ERA',  value: player.pitching.era,  percentile: percentileFor(pitchingLeaders, pn, 'era',  'asc', parseFloat) },
+    { label: 'WHIP', value: player.pitching.whip, percentile: percentileFor(pitchingLeaders, pn, 'whip', 'asc', parseFloat) },
+    { label: 'IP',   value: player.pitching.ip,   percentile: percentileFor(pitchingLeaders, pn, 'ip',   'desc', parseFloat) },
+    { label: 'K',    value: player.pitching.k,    percentile: percentileFor(pitchingLeaders, pn, 'k',    'desc', Number) },
+    { label: 'K/4',  value: player.pitching.k4,   percentile: percentileFor(pitchingLeaders, pn, 'k4',   'desc', parseFloat) },
+    { label: 'BB',   value: player.pitching.bb,   percentile: percentileFor(pitchingLeaders, pn, 'bb',   'asc', Number) },
+    { label: 'BB/4', value: player.pitching.bb4,  percentile: percentileFor(pitchingLeaders, pn, 'bb4',  'asc', parseFloat) },
+    { label: 'FIP',  value: typeof player.pitching.fip === 'number' ? player.pitching.fip.toFixed(2) : player.pitching.fip, percentile: percentileFor(pitchingLeaders, pn, 'fip', 'asc', parseFloat) },
+    { label: 'K:BB', value: player.pitching.kbb || formatRatio(player.pitching.k, player.pitching.bb), percentile: derivedPercentileFor(pitchingLeaders, pn, (r) => safeRatio(r.k, r.bb), 'desc') },
+  ] : null;
+
+  const batAxes = hasBat ? [
+    { label: 'AVG', percentile: percentileFor(battingLeaders, pn, 'avg', 'desc', parseFloat) },
+    { label: 'OBP', percentile: percentileFor(battingLeaders, pn, 'obp', 'desc', parseFloat) },
+    { label: 'SLG', percentile: percentileFor(battingLeaders, pn, 'slg', 'desc', parseFloat) },
+    { label: 'BB%', percentile: percentileFor(battingLeaders, pn, 'bbPct', 'desc', Number) },
+    { label: 'K%',  percentile: percentileFor(battingLeaders, pn, 'kPct', 'asc', Number) },
+    { label: 'HR/PA', percentile: derivedPercentileFor(battingLeaders, pn, (r) => safeRate(r.hr, r.pa), 'desc') },
+  ] : null;
+
+  const pitAxes = hasPit ? [
+    { label: 'ERA',  percentile: percentileFor(pitchingLeaders, pn, 'era', 'asc', parseFloat) },
+    { label: 'WHIP', percentile: percentileFor(pitchingLeaders, pn, 'whip', 'asc', parseFloat) },
+    { label: 'K',    percentile: percentileFor(pitchingLeaders, pn, 'k', 'desc', Number) },
+    { label: 'K/4',  percentile: percentileFor(pitchingLeaders, pn, 'k4', 'desc', parseFloat) },
+    { label: 'BB',   percentile: percentileFor(pitchingLeaders, pn, 'bb', 'asc', Number) },
+    { label: 'FIP',  percentile: percentileFor(pitchingLeaders, pn, 'fip', 'asc', parseFloat) },
+  ] : null;
+
+  const radarDisc = disc === 'pit' && hasPit ? 'pit' : (hasBat ? 'bat' : 'pit');
+  const radarAxes = radarDisc === 'pit' ? pitAxes : batAxes;
+  const playerRank = player.ranking?.currentRank;
+
+  const groupHead = (text, vs) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+      <span style={{ fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: colors.textSecondary }}>{text}</span>
+      <span style={{ fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 600, color: colors.textMuted, letterSpacing: 0.2 }}>· vs {vs}</span>
+    </div>
+  );
+
+  const segBtn = (key, label, active, onClick) => (
+    <button key={key} onClick={onClick} aria-pressed={active} style={{
+      flex: 1, border: 'none', cursor: 'pointer',
+      background: active ? colors.white : 'transparent',
+      color: active ? colors.text : colors.textMuted,
+      boxShadow: active ? shadows.sm : 'none',
+      fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.2,
+      padding: '5px 0', borderRadius: radius.sm,
+    }}>{label}</button>
+  );
+
+  const subPill = (key, label, active, onClick) => (
+    <button key={key} onClick={onClick} aria-pressed={active} style={{
+      cursor: 'pointer', background: 'transparent',
+      border: `1px solid ${active ? accent : colors.borderLight}`,
+      color: active ? accent : colors.textMuted,
+      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.2,
+      padding: '3px 10px', borderRadius: radius.sm,
+    }}>{label}</button>
+  );
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 6 }}>
+        <SectionHeading style={{ margin: 0, fontFamily: fonts.heading, fontSize: 16, fontWeight: 700, letterSpacing: 0 }}>League Standing</SectionHeading>
+        {Number.isFinite(playerRank) && playerRank > 0 && (
+          <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textSecondary, letterSpacing: 0.3 }}>
+            OPWR {ordinal(playerRank)}
+          </span>
+        )}
+      </div>
+
+      {/* Flex-wrap (not a fixed grid) so the bars keep ~1.45x the width on a
+          wide card but the companion drops below them once the card is too
+          narrow (phones) to give each side a legible width. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'flex-start' }}>
+        {/* Bars */}
+        <div style={{ flex: '2 1 320px', minWidth: 0 }}>
+          {hasBat && (
+            <div style={{ marginBottom: hasPit ? 12 : 0 }}>
+              {groupHead('Batting', bTotal)}
+              <PercentileList compact rows={batRows} ariaLabel={`${pn} batting percentiles`} />
+            </div>
+          )}
+          {hasPit && (
+            <div>
+              {groupHead('Pitching', pTotal)}
+              <PercentileList compact rows={pitRows} ariaLabel={`${pn} pitching percentiles`} />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 14, marginTop: 11, paddingTop: 9, borderTop: `1px solid ${colors.borderLight}`, fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, letterSpacing: 0.4, color: colors.textMuted }}>
+            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#C8302B', marginRight: 4 }} />ELITE</span>
+            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#B5BFC9', marginRight: 4 }} />AVG</span>
+            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#3F5A7A', marginRight: 4 }} />POOR</span>
+          </div>
+        </div>
+
+        {/* Companion */}
+        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+          {hasTrend && (
+            <div style={{ display: 'flex', gap: 0, background: colors.muted, border: `1px solid ${colors.borderLight}`, borderRadius: radius.base, padding: 3, marginBottom: 12 }}>
+              {segBtn('radar', 'Radar', view === 'radar', () => setView('radar'))}
+              {segBtn('trend', 'OPWR Trend', view === 'trend', () => setView('trend'))}
+            </div>
+          )}
+
+          {(!hasTrend || view === 'radar') ? (
+            <div>
+              {hasBat && hasPit && (
+                <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
+                  {subPill('bat', 'Batting', radarDisc === 'bat', () => setDisc('bat'))}
+                  {subPill('pit', 'Pitching', radarDisc === 'pit', () => setDisc('pit'))}
+                </div>
+              )}
+              <PercentileRadar
+                key={radarDisc}
+                axes={radarAxes}
+                accent={accent}
+                ariaLabel={`${pn} ${radarDisc === 'pit' ? 'pitching' : 'batting'} percentile radar`}
+              />
+            </div>
+          ) : (
+            <div>
+              <OpwrTrend points={trendPoints} accent={accent} ariaLabel={`${pn} OPWR rank trend`} />
+              <div style={{ fontFamily: fonts.condensed, fontSize: 9.5, color: colors.textMuted, letterSpacing: 0.2, marginTop: 4, textAlign: 'center' }}>
+                Overall Player Worth Ranking · lower is better
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -2295,104 +2487,19 @@ export default function PlayerPage() {
         />
       )}
 
-      {/* Percentile bubble cards — Savant-style horizontal bars showing
-          where this player ranks across the league for each stat. The
-          bubble carries the percentile, the value sits on the right.
-          Direct stats use percentileFor(); rate stats (HR/PA, RBI/PA,
-          K:BB) use derivedPercentileFor() with an inline value getter
-          so we don't have to materialise them into the leaderboard
-          rows. Bars animate in with a 30ms-per-row stagger on mount. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 12 }}>
-        {player.batting && (
-          <Card>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-              <SectionHeading style={{
-                margin: 0,
-                fontFamily: fonts.heading,
-                fontSize: 16,
-                fontWeight: 700,
-                letterSpacing: 0,
-              }}>Batting percentiles</SectionHeading>
-              <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted, letterSpacing: 0.3 }}>
-                vs {bTotal} batters
-              </span>
-            </div>
-            <PercentileList
-              ariaLabel={`${player.name} batting percentiles`}
-              rows={[
-                { label: 'AVG',    value: player.batting.avg,
-                  percentile: percentileFor(battingLeaders, player.name, 'avg', 'desc', parseFloat) },
-                { label: 'OBP',    value: player.batting.obp,
-                  percentile: percentileFor(battingLeaders, player.name, 'obp', 'desc', parseFloat) },
-                { label: 'SLG',    value: player.batting.slg,
-                  percentile: percentileFor(battingLeaders, player.name, 'slg', 'desc', parseFloat) },
-                { label: 'OPS',    value: player.batting.ops,
-                  percentile: percentileFor(battingLeaders, player.name, 'ops', 'desc', parseFloat) },
-                { label: 'BB%',    value: formatPct(player.batting.bbPct),
-                  percentile: percentileFor(battingLeaders, player.name, 'bbPct', 'desc', Number) },
-                // K% is "lower is better" for hitters — fewer strikeouts is good.
-                { label: 'K%',     value: formatPct(player.batting.kPct),
-                  percentile: percentileFor(battingLeaders, player.name, 'kPct', 'asc', Number) },
-                { label: 'HR/PA',  value: formatRate(player.batting.hr, player.batting.pa),
-                  percentile: derivedPercentileFor(battingLeaders, player.name,
-                    (r) => safeRate(r.hr, r.pa), 'desc') },
-                { label: 'RBI/PA', value: formatRate(player.batting.rbi, player.batting.pa),
-                  percentile: derivedPercentileFor(battingLeaders, player.name,
-                    (r) => safeRate(r.rbi, r.pa), 'desc') },
-                // R/PA — runs scored per plate appearance. Tracks how often
-                // the player crosses the plate when they come up; pairs
-                // nicely with RBI/PA above (driving in vs scoring runs).
-                { label: 'R/PA',   value: formatRate(player.batting.runs, player.batting.pa),
-                  percentile: derivedPercentileFor(battingLeaders, player.name,
-                    (r) => safeRate(r.runs, r.pa), 'desc') },
-              ]}
-            />
-          </Card>
-        )}
-        {player.pitching && (
-          <Card>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-              <SectionHeading style={{
-                margin: 0,
-                fontFamily: fonts.heading,
-                fontSize: 16,
-                fontWeight: 700,
-                letterSpacing: 0,
-              }}>Pitching percentiles</SectionHeading>
-              <span style={{ fontFamily: fonts.condensed, fontSize: 11, color: colors.textMuted, letterSpacing: 0.3 }}>
-                vs {pTotal} pitchers
-              </span>
-            </div>
-            <PercentileList
-              ariaLabel={`${player.name} pitching percentiles`}
-              rows={[
-                // Lower-is-better stats use 'asc' direction so the percentile
-                // points at "good" the same way it does for hitter-friendly
-                // metrics — bubble at 95 means "elite," not "worst ERA in BLW".
-                { label: 'ERA',  value: player.pitching.era,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'era',  'asc', parseFloat) },
-                { label: 'WHIP', value: player.pitching.whip,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'whip', 'asc', parseFloat) },
-                { label: 'IP',   value: player.pitching.ip,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'ip',   'desc', parseFloat) },
-                { label: 'K',    value: player.pitching.k,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'k',    'desc', Number) },
-                { label: 'K/4',  value: player.pitching.k4,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'k4',   'desc', parseFloat) },
-                { label: 'BB',   value: player.pitching.bb,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'bb',   'asc', Number) },
-                { label: 'BB/4', value: player.pitching.bb4,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'bb4',  'asc', parseFloat) },
-                { label: 'FIP',  value: typeof player.pitching.fip === 'number' ? player.pitching.fip.toFixed(2) : player.pitching.fip,
-                  percentile: percentileFor(pitchingLeaders, player.name, 'fip',  'asc', parseFloat) },
-                { label: 'K:BB', value: player.pitching.kbb || formatRatio(player.pitching.k, player.pitching.bb),
-                  percentile: derivedPercentileFor(pitchingLeaders, player.name,
-                    (r) => safeRatio(r.k, r.bb), 'desc') },
-              ]}
-            />
-          </Card>
-        )}
-      </div>
+      {/* League Standing — unified percentile + companion card. Condensed
+          Savant-style bars (batting + pitching groups) on the left; a
+          companion on the right that toggles between the percentile radar
+          and the OPWR rank trend. See LeagueStandingCard above. */}
+      <LeagueStandingCard
+        key={player.name}
+        player={player}
+        team={team}
+        battingLeaders={battingLeaders}
+        pitchingLeaders={pitchingLeaders}
+        bTotal={bTotal}
+        pTotal={pTotal}
+      />
 
       {/* Recent posts featuring this player — pulled from the global
           generate-log so users can see at a glance what content has

@@ -46,6 +46,7 @@ export function PercentileBubble({
   delayMs = 0,                 // stagger from the parent list
   onClick = null,              // optional; passes through to the row
   ariaLabel = null,
+  compact = false,             // tighter sizing for the League Standing card
 }) {
   // Animate the bar from 0 → target percentile on mount. Two-step state:
   // `mounted` flips true after the initial paint so the CSS transition
@@ -68,8 +69,13 @@ export function PercentileBubble({
   // (a bubble at 0% or 100% would otherwise clip).
   const targetWidthPct = pct == null ? 0 : pct;
   const animatedWidthPct = mounted ? targetWidthPct : 0;
-  const bubbleSize = 18;
-  const trackHeight = 7;
+  const bubbleSize = compact ? 14 : 18;
+  const trackHeight = compact ? 5 : 7;
+  const colTemplate = compact ? '38px 1fr 40px' : '50px 1fr 48px';
+  const colGap = compact ? 8 : 10;
+  const labelFs = compact ? 10 : 11;
+  const valueFs = compact ? 10.5 : 12;
+  const bubbleFs = compact ? 8 : 9.5;
 
   return (
     <div
@@ -77,9 +83,9 @@ export function PercentileBubble({
       aria-label={ariaLabel || `${label}: ${value}${pct != null ? `, ${pct}th percentile` : ''}`}
       style={{
         display: 'grid',
-        gridTemplateColumns: '50px 1fr 48px',
+        gridTemplateColumns: colTemplate,
         alignItems: 'center',
-        gap: 10,
+        gap: colGap,
         padding: '1px 0',
         cursor: onClick ? 'pointer' : 'default',
       }}
@@ -87,7 +93,7 @@ export function PercentileBubble({
       {/* Label */}
       <div style={{
         fontFamily: fonts.condensed,
-        fontSize: 11, fontWeight: 700,
+        fontSize: labelFs, fontWeight: 700,
         color: colors.text,
         letterSpacing: 0.3,
         textAlign: 'right',
@@ -133,7 +139,7 @@ export function PercentileBubble({
                 border: `1.5px solid ${colors.white}`,
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 800,
+                fontFamily: fonts.condensed, fontSize: bubbleFs, fontWeight: 800,
                 letterSpacing: 0,
                 transition: 'left 700ms cubic-bezier(0.22, 1, 0.36, 1), background 300ms ease',
                 pointerEvents: 'none',
@@ -148,7 +154,7 @@ export function PercentileBubble({
       {/* Player's stat value */}
       <div className="tnum" style={{
         fontFamily: fonts.mono,
-        fontSize: 12, fontWeight: 700,
+        fontSize: valueFs, fontWeight: 700,
         color: colors.text,
         letterSpacing: 0,
         textAlign: 'left',
@@ -161,7 +167,7 @@ export function PercentileBubble({
 
 // ─── List wrapper with stagger animation ────────────────────────────────────
 
-export function PercentileList({ rows, headerLabel = null, ariaLabel = null }) {
+export function PercentileList({ rows, headerLabel = null, ariaLabel = null, compact = false }) {
   // 30ms per row produces a smooth cascade without feeling laggy. The
   // upper bound of ~12 rows × 30ms = 360ms total stagger keeps the page
   // feeling snappy at the bottom of long lists too.
@@ -194,6 +200,7 @@ export function PercentileList({ rows, headerLabel = null, ariaLabel = null }) {
           value={row.value}
           percentile={row.percentile}
           delayMs={i * stagger}
+          compact={compact}
         />
       ))}
     </div>
