@@ -25,6 +25,144 @@ function ordinal(n) {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
+// v5: per-team header-banner config is { mediaId, height, focusY }. Legacy
+// rows (from the first cut of the feature) stored just the mediaId string —
+// normalize upgrades them in place so old + new data both read cleanly.
+function normalizeHeaderCfg(v) {
+  if (!v) return { mediaId: null, height: 160, focusY: 50 };
+  if (typeof v === 'string') return { mediaId: v, height: 160, focusY: 50 };
+  return {
+    mediaId: v.mediaId ?? null,
+    height: typeof v.height === 'number' ? v.height : 160,
+    focusY: typeof v.focusY === 'number' ? v.focusY : 50,
+  };
+}
+
+// v5: team header banner — a full-width photo strip above the identity card.
+// Master admins drag the bottom handle to resize its height and drag the photo
+// itself to reposition the vertical crop; both persist per team via onSaveConfig.
+// Falls back to a team-color gradient when no photo is set. Read-only for
+// everyone else (they still see the admin-set height + crop).
+function TeamBanner({ team, photoUrl, height: hProp, focusY: fProp, isMaster, onChangePhoto, onSaveConfig }) {
+  const [height, setHeight] = useState(hProp ?? 160);
+  const [focusY, setFocusY] = useState(fProp ?? 50);
+  const [dragMode, setDragMode] = useState(null);
+  const drag = useRef(null);
+  // Sync from props when they change, but never mid-drag (local state is the
+  // source of truth during a gesture; on a failed save the parent reverts the
+  // prop, which re-syncs here once the drag is over).
+  useEffect(() => { if (!drag.current) setHeight(hProp ?? 160); }, [hProp]);
+  useEffect(() => { if (!drag.current) setFocusY(fProp ?? 50); }, [fProp]);
+
+  const begin = (mode) => (e) => {
+    if (!isMaster) return;
+    if (mode === 'pan' && !photoUrl) return;
+    e.preventDefault();
+    drag.current = { mode, y: e.clientY, h: height, f: focusY, curH: height, curF: focusY };
+    setDragMode(mode);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* older browsers */ }
+  };
+  const move = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    const dy = e.clientY - d.y;
+    if (d.mode === 'resize') {
+      d.curH = Math.max(110, Math.min(420, Math.round(d.h + dy)));
+      setHeight(d.curH);
+    } else {
+      // Drag down reveals the upper part of the photo → focusY decreases.
+      d.curF = Math.max(0, Math.min(100, Math.round(d.f - dy * 0.35)));
+      setFocusY(d.curF);
+    }
+  };
+  const end = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    setDragMode(null);
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    // Only persist when the value actually changed — a plain click (pointer
+    // down/up with no movement) must not re-POST the unchanged config.
+    if (d.mode === 'resize') { if (d.curH !== d.h) onSaveConfig?.({ height: d.curH }); }
+    else { if (d.curF !== d.f) onSaveConfig?.({ focusY: d.curF }); }
+  };
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', height,
+      borderRadius: radius.lg, overflow: 'hidden',
+      border: `1px solid ${colors.borderLight}`,
+      background: `linear-gradient(120deg, ${team.color}, ${team.dark})`,
+      userSelect: 'none',
+    }}>
+      {photoUrl && (
+        <div
+          aria-hidden="true"
+          onPointerDown={begin('pan')}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerCancel={end}
+          style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: `url(${photoUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: `center ${focusY}%`,
+            cursor: isMaster ? (dragMode === 'pan' ? 'grabbing' : 'grab') : 'default',
+            // Only block native touch-scroll for masters who can actually pan;
+            // read-only users must be able to flick-scroll over the banner.
+            touchAction: isMaster ? 'none' : 'auto',
+            pointerEvents: isMaster ? 'auto' : 'none',
+          }}
+        />
+      )}
+      <div aria-hidden="true" style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, height: 44,
+        background: 'linear-gradient(to top, rgba(0,0,0,0.28), transparent)',
+        pointerEvents: 'none',
+      }} />
+      {isMaster && !photoUrl && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'rgba(255,255,255,0.9)', fontFamily: fonts.body, fontSize: 12, fontWeight: 500,
+          pointerEvents: 'none',
+        }}>
+          Set a banner photo →
+        </div>
+      )}
+      {isMaster && (
+        <button
+          onClick={onChangePhoto}
+          title={photoUrl ? 'Change banner photo' : 'Set a banner photo'}
+          style={{
+            position: 'absolute', top: 10, right: 10, zIndex: 2, cursor: 'pointer',
+            padding: '5px 11px', borderRadius: radius.base,
+            background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.28)',
+            color: '#fff', fontFamily: fonts.body, fontSize: 11, fontWeight: 600,
+          }}
+        >
+          {photoUrl ? 'Change photo' : 'Set banner photo'}
+        </button>
+      )}
+      {isMaster && (
+        <div
+          onPointerDown={begin('resize')}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerCancel={end}
+          title="Drag to resize banner height"
+          style={{
+            position: 'absolute', left: 0, right: 0, bottom: 0, height: 16, zIndex: 2,
+            cursor: 'ns-resize', touchAction: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.75)', boxShadow: '0 0 0 1px rgba(0,0,0,0.2)' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // v4.5.20: Team media grid with a 2-row default cap and "Show all"
 // expand. Used on the Recent player media section so 60-photo
 // teams don't dominate the page on first paint.
@@ -207,18 +345,34 @@ export default function TeamPage() {
     })();
     return () => { cancel = true; };
   }, []);
-  const saveHeaderPhoto = useCallback(async (mediaId) => {
-    const all = { ...(headerPhotos || {}) };
-    if (mediaId) all[team.id] = mediaId; else delete all[team.id];
+  // Keep a ref of the latest committed map so rapid back-to-back saves (e.g.
+  // drag-resize then drag-reposition) merge off fresh state, not a stale
+  // closure. Each saver passes a mutate(prev) so the merge keys off `prev`.
+  const headerPhotosRef = useRef(null);
+  useEffect(() => { headerPhotosRef.current = headerPhotos; }, [headerPhotos]);
+  const persistHeader = useCallback(async (mutate) => {
+    const base = headerPhotosRef.current || {};
+    const next = mutate(base);
+    headerPhotosRef.current = next;
+    setHeaderPhotos(next); // optimistic
     const res = await authedFetch('/api/app-settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key: 'team-header-photos', value: all }),
+      body: JSON.stringify({ key: 'team-header-photos', value: next }),
     });
-    if (!res.ok) return false;
-    setHeaderPhotos(all);
+    if (!res.ok) { // roll back to the pre-save map on failure
+      headerPhotosRef.current = base;
+      setHeaderPhotos(base);
+      return false;
+    }
     return true;
-  }, [team?.id, headerPhotos]);
+  }, []);
+  const saveHeaderPhoto = useCallback((mediaId) =>
+    persistHeader(prev => ({ ...prev, [team.id]: { ...normalizeHeaderCfg(prev?.[team.id]), mediaId: mediaId || null } })),
+    [team?.id, persistHeader]);
+  const saveHeaderConfig = useCallback((patch) =>
+    persistHeader(prev => ({ ...prev, [team.id]: { ...normalizeHeaderCfg(prev?.[team.id]), ...patch } })),
+    [team?.id, persistHeader]);
   const teamMonthlyTarget = (monthlyTargets?.[team?.id]) || 12;
   const saveMonthlyTarget = useCallback(async (next) => {
     const all = { ...(monthlyTargets || {}), [team.id]: Math.max(1, Math.min(40, Number(next) || 12)) };
@@ -767,230 +921,149 @@ export default function TeamPage() {
     [media]
   );
 
-  // v5: resolve the chosen hero header photo to a displayable URL. Prefer
-  // the local blob object URL (thumbUrls), fall back to any remote URL on
-  // the media record. When set, the hero renders the photo + a dark scrim
-  // and switches its text to light ink.
-  const headerPhotoId = headerPhotos?.[team?.id] || null;
+  // v5: resolve the team's banner config + the chosen photo to a displayable
+  // URL. Prefer the local blob object URL (thumbUrls), fall back to any remote
+  // URL on the media record. The banner strip handles its own dark overlay.
+  const headerCfg = normalizeHeaderCfg(headerPhotos?.[team?.id]);
+  const headerPhotoId = headerCfg.mediaId;
   const headerPhotoUrl = useMemo(() => {
     if (!headerPhotoId) return null;
     if (thumbUrls[headerPhotoId]) return thumbUrls[headerPhotoId];
     const m = media.find(x => x.id === headerPhotoId);
     return m?.url || m?.publicUrl || m?.src || null;
   }, [headerPhotoId, thumbUrls, media]);
-  const onPhoto = !!headerPhotoUrl;
-  const heroInk      = onPhoto ? '#FFFFFF'                : colors.text;
-  const heroInkDim   = onPhoto ? 'rgba(255,255,255,0.72)' : colors.textSecondary;
-  const heroInkMuted = onPhoto ? 'rgba(255,255,255,0.58)' : colors.textMuted;
-  const heroDivider  = onPhoto ? 'rgba(255,255,255,0.24)' : colors.border;
 
   return (
     <PageDropZone ref={dropZoneRef} team={team} onUploaded={handleDropUploaded}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Team Header — matches the PlayerPage hero treatment.
-          White card with a team-colored left-accent border + a soft team-
-          colored wash behind the logo pane. Info is split across columns:
-          [logo + identity + owner] [record/pct/diff + rank] [aggregates card] */}
+      {/* Team header — Option B: a full-width photo BANNER strip the admin can
+          resize + reposition by dragging, then an identity card (logo + name +
+          an inline record line) below it. Aggregates get their own card under
+          that. Replaces the earlier full-bleed-photo hero. */}
+      <TeamBanner
+        team={team}
+        photoUrl={headerPhotoUrl}
+        height={headerCfg.height}
+        focusY={headerCfg.focusY}
+        isMaster={isMaster}
+        onChangePhoto={() => setHeaderPickerOpen(true)}
+        onSaveConfig={saveHeaderConfig}
+      />
+
       <div style={{
         background: colors.white,
-        border: onPhoto ? '1px solid rgba(255,255,255,0.10)' : `1px solid ${team.color}33`,
+        border: `1px solid ${colors.borderLight}`,
         borderRadius: radius.lg,
-        // Subtle two-layer drop shadow — matches PlayerHero so the two
-        // pages share a visual weight. Outer layer is ambient, inner is
-        // an edge sharpener.
-        boxShadow: '0 8px 24px rgba(17,24,39,0.08), 0 2px 6px rgba(17,24,39,0.05)',
-        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        padding: 18,
+        display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
         position: 'relative',
       }}>
-        {/* Background — a chosen full-bleed team action photo with a
-            left→right dark scrim for legibility (admin sets it via the
-            picker), or the soft team-color wash when none is set. */}
-        {onPhoto ? (
-          <>
-            <div aria-hidden="true" style={{
-              position: 'absolute', inset: 0,
-              backgroundImage: `url(${headerPhotoUrl})`,
-              backgroundSize: 'cover', backgroundPosition: 'center',
-              pointerEvents: 'none',
-            }} />
-            <div aria-hidden="true" style={{
-              position: 'absolute', inset: 0,
-              background: `linear-gradient(90deg, rgba(10,12,16,0.92) 0%, rgba(10,12,16,0.80) 42%, rgba(10,12,16,0.52) 72%, rgba(10,12,16,0.34) 100%), linear-gradient(120deg, ${team.color}40 0%, transparent 55%)`,
-              pointerEvents: 'none',
-            }} />
-          </>
-        ) : (
-          <div aria-hidden="true" style={{
-            position: 'absolute', inset: 0,
-            background: `linear-gradient(110deg, ${team.color}22 0%, ${team.color}14 22%, ${team.color}08 45%, ${team.color}03 72%, transparent 100%)`,
-            pointerEvents: 'none',
-          }} />
-        )}
-        {/* Master-only: set / change the hero photo. */}
-        {isMaster && (
-          <button
-            onClick={() => setHeaderPickerOpen(true)}
-            title={onPhoto ? 'Change header photo' : 'Set a header photo'}
-            style={{
-              position: 'absolute', top: 10, right: 10, zIndex: 2, cursor: 'pointer',
-              padding: '5px 11px', borderRadius: radius.base,
-              background: onPhoto ? 'rgba(0,0,0,0.45)' : colors.white,
-              border: `1px solid ${onPhoto ? 'rgba(255,255,255,0.28)' : colors.border}`,
-              color: onPhoto ? '#fff' : colors.textSecondary,
-              fontFamily: fonts.body, fontSize: 11, fontWeight: 600,
-            }}
-          >
-            {onPhoto ? 'Change photo' : 'Set header photo'}
-          </button>
-        )}
         <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 24,
-          padding: 22, alignItems: 'center', position: 'relative',
+          background: colors.white, borderRadius: radius.base, padding: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.12)', border: `2px solid ${team.color}`,
+          flexShrink: 0,
         }}>
-          {/* Col 1 — Logo + identity */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '2 1 320px', minWidth: 280 }}>
-            <div style={{
-              background: colors.white,
-              borderRadius: radius.base,
-              padding: 10,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
-              border: `2px solid ${team.color}`,
-              flexShrink: 0,
-            }}>
-              <TeamLogo teamId={team.id} size={88} rounded="square" />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{
-                fontFamily: fonts.heading, fontSize: 40, lineHeight: 0.95,
-                color: heroInk, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
-                margin: '3px 0 8px', textTransform: 'uppercase',
-              }}>
-                {team.name}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {liveTeam.rank != null && (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    background: onPhoto ? 'rgba(255,255,255,0.16)' : `${team.color}15`,
-                    color: onPhoto ? '#fff' : team.color,
-                    border: `1px solid ${onPhoto ? 'rgba(255,255,255,0.32)' : `${team.color}40`}`,
-                    padding: '3px 10px', borderRadius: 999,
-                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
-                  }}>
-                    <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>{ordinal(liveTeam.rank)}</span>
-                    <span>IN BLW</span>
-                  </span>
-                )}
-                {/* v4.5.20: Always render the IG / FB / TikTok chips —
-                    desaturated when no handle is set. Master admins
-                    get an inline "✎ EDIT" affordance that opens an
-                    editor below; writes go to /api/app-settings so
-                    every admin sees the latest handles. */}
-                <TeamSocials
-                  socials={mergedSocials}
-                  accent={onPhoto ? '#fff' : team.color}
-                  canEdit={isMaster}
-                  onEdit={() => setSocialsEditorOpen(true)}
-                />
-                {socialsEditorOpen && isMaster && (
-                  <TeamSocialsEditor
-                    teamId={team.id}
-                    current={mergedSocials}
-                    allSocials={allTeamSocials}
-                    onSave={saveSocials}
-                    onClose={() => setSocialsEditorOpen(false)}
-                    accent={team.color}
-                  />
-                )}
-              </div>
-            </div>
+          <TeamLogo teamId={team.id} size={64} rounded="square" />
+        </div>
+        <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+          <div style={{
+            fontFamily: fonts.heading, fontSize: 34, lineHeight: 0.98,
+            color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1px)',
+            textTransform: 'uppercase',
+          }}>
+            {team.name}
           </div>
-
-          {/* Col 2 — Scoreboard cluster: RECORD | PCT | DIFF with XL bold
-              numbers, thin vertical dividers, and a green/red DIFF signal
-              (mode-aware tokens — the old hardcoded greens/reds went dark
-              on charcoal). Green/red are reserved for this good/bad signal. */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '1 1 260px', minWidth: 260 }}>
-            {[
-              { label: 'RECORD', value: liveTeam.record, color: heroInk },
-              { label: 'PCT',    value: liveTeam.pct,    color: heroInk },
-              {
-                label: 'DIFF',
-                value: liveTeam.diff,
-                color: liveTeam.diff?.startsWith('+') && liveTeam.diff !== '0'
-                  ? colors.success
-                  : (liveTeam.diff === '0' || liveTeam.diff === '—') ? heroInkDim : colors.red,
-              },
-            ].map((s, i) => (
-              <div key={s.label} style={{
-                textAlign: 'center', padding: '2px 22px',
-                borderLeft: i > 0 ? `1px solid ${heroDivider}` : 'none',
+          {/* Inline record — record · PCT · DIFF beside the rank chip (replaces
+              the old stacked scoreboard). DIFF keeps its green/red signal. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 9 }}>
+            {liveTeam.rank != null && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: `${team.color}15`, color: team.color,
+                border: `1px solid ${team.color}40`,
+                padding: '3px 10px', borderRadius: 999,
+                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
               }}>
-                <div style={{
-                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                  color: heroInkMuted, letterSpacing: 1.2, textTransform: 'uppercase',
-                }}>{s.label}</div>
-                <div style={{
-                  fontFamily: fonts.heading, fontSize: 38, fontWeight: 800, lineHeight: 1,
-                  color: s.color, letterSpacing: 0.4, marginTop: 4,
-                }}>{s.value || '—'}</div>
+                <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>{ordinal(liveTeam.rank)}</span>
+                <span>IN BLW</span>
+              </span>
+            )}
+            <span aria-hidden="true" style={{ width: 1, height: 20, background: colors.border }} />
+            <span style={{ fontFamily: fonts.heading, fontSize: 22, fontWeight: 800, color: colors.text, lineHeight: 1 }}>{liveTeam.record || '—'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+              <span style={{ fontFamily: fonts.mono, fontSize: 14, fontWeight: 700, color: colors.text }}>{liveTeam.pct || '—'}</span>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.6 }}>PCT</span>
+            </span>
+            {(() => {
+              const d = liveTeam.diff;
+              const c = (d && d.startsWith('+') && d !== '0') ? colors.success
+                : (!d || d === '0' || d === '—') ? colors.textSecondary : colors.red;
+              return (
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontFamily: fonts.heading, fontSize: 18, fontWeight: 800, color: c, lineHeight: 1 }}>{d || '—'}</span>
+                  <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.6 }}>DIFF</span>
+                </span>
+              );
+            })()}
+            <span aria-hidden="true" style={{ width: 1, height: 20, background: colors.border }} />
+            <TeamSocials
+              socials={mergedSocials}
+              accent={team.color}
+              canEdit={isMaster}
+              onEdit={() => setSocialsEditorOpen(true)}
+            />
+          </div>
+        </div>
+      </div>
+      {socialsEditorOpen && isMaster && (
+        <TeamSocialsEditor
+          teamId={team.id}
+          current={mergedSocials}
+          allSocials={allTeamSocials}
+          onSave={saveSocials}
+          onClose={() => setSocialsEditorOpen(false)}
+          accent={team.color}
+        />
+      )}
+
+      {/* Team aggregates — interim card (current AVG/HR/ERA/K4 quick-glance).
+          The two-column AVG/OBP/OPS | ERA/K/WHIP redesign with league ranks
+          lands in the next stage. */}
+      {teamAggregates && (
+        <div style={{
+          background: colors.white,
+          border: `1px solid ${colors.borderLight}`,
+          borderRadius: radius.lg,
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        }}>
+          <div style={{
+            background: `${team.color}1E`,
+            borderBottom: `1px solid ${team.color}33`,
+            color: colors.text,
+            padding: '7px 14px',
+            fontFamily: fonts.condensed, fontSize: 10.5, fontWeight: 700,
+            letterSpacing: 1, textTransform: 'uppercase',
+          }}>
+            Team Aggregates
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', padding: '12px 6px', gap: 4 }}>
+            {[
+              { label: 'AVG', value: teamAggregates.avg },
+              { label: 'HR',  value: teamAggregates.hr, highlight: true },
+              { label: 'ERA', value: teamAggregates.era },
+              { label: 'K/4', value: teamAggregates.k4 },
+            ].map(t => (
+              <div key={t.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 2px' }}>
+                <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>{t.label}</div>
+                <div style={{ fontFamily: fonts.heading, fontSize: 24, color: t.highlight ? team.color : colors.text, lineHeight: 1, letterSpacing: 0.5 }}>{t.value ?? '—'}</div>
               </div>
             ))}
           </div>
-
-          {/* Col 3 — Combined team aggregates card */}
-          {teamAggregates && (
-            <div style={{
-              minWidth: 240, flex: '1 1 240px',
-              background: onPhoto ? 'rgba(12,14,18,0.72)' : colors.white,
-              border: `1px solid ${onPhoto ? 'rgba(255,255,255,0.16)' : colors.borderLight}`,
-              borderRadius: radius.base,
-              overflow: 'hidden',
-              boxShadow: onPhoto ? 'none' : '0 1px 3px rgba(0,0,0,0.04)',
-            }}>
-              <div style={{
-                // v4.8.5: prefer themeBg/themeBgDark when set (ATL's
-                // light-blue treatment), fall back to brand color/dark
-                // for every other team — no behavior change for them.
-                background: `linear-gradient(135deg, ${team.themeBg || team.color}, ${team.themeBgDark || team.dark})`,
-                color: team.themeText || '#fff',
-                padding: '8px 12px',
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                letterSpacing: 1.2, textAlign: 'center', textTransform: 'uppercase',
-              }}>
-                Team Aggregates
-              </div>
-              <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-                padding: '10px 4px', gap: 2,
-              }}>
-                {[
-                  { label: 'AVG',  value: teamAggregates.avg },
-                  { label: 'HR',   value: teamAggregates.hr,  highlight: true },
-                  { label: 'ERA',  value: teamAggregates.era },
-                  { label: 'K/4',  value: teamAggregates.k4  },
-                ].map(t => (
-                  <div key={t.label} style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                    padding: '4px 2px',
-                  }}>
-                    <div style={{
-                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                      color: onPhoto ? 'rgba(255,255,255,0.62)' : colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase',
-                    }}>{t.label}</div>
-                    <div style={{
-                      fontFamily: fonts.heading, fontSize: 22,
-                      color: t.highlight ? (onPhoto ? '#fff' : team.color) : (onPhoto ? '#fff' : colors.text),
-                      lineHeight: 1, letterSpacing: 0.5,
-                    }}>{t.value ?? '—'}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Master-only header-photo picker — pulls from this team's media
           (team-scoped first, all team media as fallback). */}
