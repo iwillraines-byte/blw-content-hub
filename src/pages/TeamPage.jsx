@@ -9,6 +9,7 @@ import { fetchTeamMonthlyPostCount, fetchTeamMonthlyPosts, setGenerateLogPosted 
 import { useAuth } from '../auth';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, Skeleton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
+import { useIsDark } from '../theme-mode';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { getManualPlayersByTeam, getAllManualPlayers, savePlayer, deletePlayer, upsertManualPlayer } from '../player-store';
@@ -23,6 +24,15 @@ function ordinal(n) {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+// Relative luminance (0..1) of a #rrggbb hex — used to decide when a team's
+// brand color is too dark to read as text/tint on the charcoal dark surface.
+function hexLuma(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length < 6) return 1;
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
 // v5: per-team header-banner config is { mediaId, height, focusY }. Legacy
@@ -163,6 +173,108 @@ function TeamBanner({ team, photoUrl, height: hProp, focusY: fProp, isMaster, on
   );
 }
 
+// Team short name (mascot) — "Los Angeles Naturals" → "Naturals".
+function teamNickname(team) {
+  if (!team) return '';
+  const n = (team.name || '').trim();
+  const c = (team.city || '').trim();
+  const short = c && n.startsWith(c) ? n.slice(c.length).trim() : n;
+  return short || n;
+}
+
+// String-based game date/time formatters (the feed's dateTime has no tz, so we
+// parse the parts directly to avoid Date() timezone drift). "2026-06-07T18:00:00".
+const GAME_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtGameDate(dt) {
+  if (!dt || dt.length < 10) return '';
+  const [, m, d] = dt.slice(0, 10).split('-').map(Number);
+  if (!GAME_MONTHS[(m || 1) - 1] || Number.isNaN(d)) return '';
+  return `${GAME_MONTHS[(m || 1) - 1]} ${d}`;
+}
+function fmtGameTime(dt) {
+  if (!dt || dt.length < 16) return '';
+  let [h, min] = dt.slice(11, 16).split(':').map(Number);
+  if (Number.isNaN(h)) return '';
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${String(min || 0).padStart(2, '0')} ${ap}`;
+}
+
+// v5: compact recent-results + next-game strip for the team identity card.
+// Last two SUBMITTED games as mini scorecards + the next scheduled matchup
+// with its time. Renders nothing when the team has no games either way.
+function TeamGamesStrip({ team, games, accent }) {
+  const { last2, next } = useMemo(() => {
+    const mine = (games || []).filter(g => g.home?.teamId === team.id || g.away?.teamId === team.id);
+    const done = mine
+      .filter(g => g.status === 'SUBMITTED' && g.home?.score != null && g.away?.score != null)
+      .sort((a, b) => String(a.dateTime || '').localeCompare(String(b.dateTime || '')));
+    // "Next" = the soonest genuinely future SCHEDULED game. The raw feed
+    // (showAll=true) also carries Feb–Mar preseason exhibitions and stale
+    // pre-season SCHEDULED games, so gate on a today date-floor + status to
+    // avoid labeling a months-old game "NEXT".
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const upcoming = mine
+      .filter(g => g.status === 'SCHEDULED' && String(g.dateTime || '').slice(0, 10) >= todayKey)
+      .sort((a, b) => String(a.dateTime || '').localeCompare(String(b.dateTime || '')));
+    return { last2: done.slice(-2), next: upcoming[0] || null };
+  }, [games, team.id]);
+
+  if (!last2.length && !next) return null;
+
+  const sideOf = (g) => {
+    const home = g.home?.teamId === team.id;
+    const me = home ? g.home : g.away;
+    const opp = home ? g.away : g.home;
+    const oppTeam = opp?.teamId ? getTeam(opp.teamId) : null;
+    return { me, opp, oppTeam, oppLabel: (oppTeam && oppTeam.id) || opp?.apiAbbr || opp?.name || '—', home };
+  };
+
+  const miniStyle = {
+    minWidth: 90, flex: '0 0 auto',
+    background: colors.bg, border: `1px solid ${colors.borderLight}`,
+    borderRadius: radius.base, padding: '7px 10px',
+    display: 'flex', flexDirection: 'column', gap: 4,
+  };
+  const oppRow = (oppTeam, oppLabel, home) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      {oppTeam ? <TeamLogo teamId={oppTeam.id} size={16} rounded="square" /> : null}
+      <span style={{ fontFamily: fonts.body, fontSize: 11, fontWeight: 600, color: colors.text, whiteSpace: 'nowrap' }}>{home ? 'vs' : '@'} {oppLabel}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch', flexShrink: 0 }}>
+      {last2.map(g => {
+        const { me, opp, oppTeam, oppLabel, home } = sideOf(g);
+        const ms = me?.score ?? 0, os = opp?.score ?? 0;
+        const res = ms > os ? 'W' : ms < os ? 'L' : 'T';
+        const resColor = res === 'W' ? colors.success : res === 'L' ? colors.red : colors.textSecondary;
+        return (
+          <div key={g.id} style={miniStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, color: resColor }}>{res}</span>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 600, color: colors.textMuted }}>{fmtGameDate(g.dateTime)}</span>
+            </div>
+            {oppRow(oppTeam, oppLabel, home)}
+            <div style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.text }}>{me?.score}–{opp?.score}</div>
+          </div>
+        );
+      })}
+      {next && (() => {
+        const { oppTeam, oppLabel, home } = sideOf(next);
+        return (
+          <div key={next.id} style={miniStyle}>
+            <div style={{ fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, color: accent || team.color }}>NEXT · {fmtGameDate(next.dateTime)}</div>
+            {oppRow(oppTeam, oppLabel, home)}
+            <div style={{ fontFamily: fonts.mono, fontSize: 12, fontWeight: 700, color: colors.textSecondary }}>{fmtGameTime(next.dateTime) || 'TBD'}</div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 // v4.5.20: Team media grid with a 2-row default cap and "Show all"
 // expand. Used on the Recent player media section so 60-photo
 // teams don't dominate the page on first paint.
@@ -298,6 +410,13 @@ export default function TeamPage() {
   // bar reflects immediately.
   const { role: authRole } = useAuth();
   const isMaster = authRole === 'master_admin';
+  // Mode-aware team accent: several teams have near-black brand colors (LV/DAL
+  // #1A1A1A, ATL/PHI/BOS navies) that vanish as text/tint on the charcoal dark
+  // surface — fall back to the team's lighter accent when the brand color is
+  // too dark in dark mode. Light mode (and readable colors like LAN's blue)
+  // keep the brand color.
+  const isDark = useIsDark();
+  const accent = (isDark && hexLuma(team?.color) < 0.35) ? (team?.accent || colors.textSecondary) : (team?.color || colors.text);
   // v4.7.7: athletes don't see the monthly content target / carousel.
   // The cadence dashboard is a content-ops tool — actionable for staff
   // tracking their own throughput, but for an athlete on their team's
@@ -854,39 +973,57 @@ export default function TeamPage() {
   // Combined team aggregates — computed from live batting + pitching so they
   // update as the season progresses. Weighted where it matters (AVG by AB,
   // ERA / K-rates by innings pitched) so they reflect real team performance.
-  const teamAggregates = useMemo(() => {
-    // Apply canonical-team overlay before filtering so traded players
-    // count toward the right team's aggregates (Jaso → LV, Brody → PHI).
-    const teamBat = applyCanonicalToStats(batting).filter(p => p.team === team.id);
-    const teamPit = applyCanonicalToStats(pitching).filter(p => p.team === team.id);
-    if (teamBat.length === 0 && teamPit.length === 0) return null;
-
-    const sumAb = teamBat.reduce((s, p) => s + (p.ab || 0), 0);
-    const sumHits = teamBat.reduce((s, p) => s + (p.hits || 0), 0);
-    const sumHr = teamBat.reduce((s, p) => s + (p.hr || 0), 0);
-    const sumRbi = teamBat.reduce((s, p) => s + (p.rbi || 0), 0);
-    const avgOpsPlus = teamBat.length
-      ? teamBat.reduce((s, p) => s + (p.ops_plus || 0), 0) / teamBat.length
-      : 0;
-
-    // Weighted ERA: (sum of ER) / IP * 9 — but we don't have ER cleanly.
-    // Use avg of player ERAs weighted by IP as a good approximation.
-    const sumIp = teamPit.reduce((s, p) => s + parseFloat(p.ip || 0), 0);
-    const weightedEra = sumIp > 0
-      ? teamPit.reduce((s, p) => s + parseFloat(p.era || 0) * parseFloat(p.ip || 0), 0) / sumIp
-      : 0;
-    const weightedK4 = sumIp > 0
-      ? teamPit.reduce((s, p) => s + parseFloat(p.k4 || 0) * parseFloat(p.ip || 0), 0) / sumIp
-      : 0;
-
+  // v5: team stat aggregates for the two-column "<Team> Team Stats" card.
+  // Computed for EVERY team (canonical overlay applied so traded players count
+  // for the right team) so each metric can carry this team's league rank.
+  // Weighted where it matters — AVG/OBP/SLG by AB/PA, ERA by IP. HBP/SF aren't
+  // in the feed, so OBP ≈ (H+BB)/PA, a fine approximation for wiffle.
+  const teamStats = useMemo(() => {
+    const bat = applyCanonicalToStats(batting);
+    const pit = applyCanonicalToStats(pitching);
+    const aggOne = (id) => {
+      const tb = bat.filter(p => p.team === id);
+      const tp = pit.filter(p => p.team === id);
+      if (tb.length === 0 && tp.length === 0) return null;
+      const sumAb = tb.reduce((s, p) => s + (p.ab || 0), 0);
+      const sumPa = tb.reduce((s, p) => s + (p.pa || 0), 0);
+      const sumHits = tb.reduce((s, p) => s + (p.hits || 0), 0);
+      const sumBB = tb.reduce((s, p) => s + (p.bb || 0), 0);
+      // Prefer the raw total-bases counting field; fall back to slg*ab only
+      // when tb is absent (avoids reintroducing per-player rounding error).
+      const sumTB = tb.reduce((s, p) => s + (p.tb != null ? p.tb : parseFloat(p.slg || 0) * (p.ab || 0)), 0);
+      const avg = sumAb > 0 ? sumHits / sumAb : null;
+      const obp = sumPa > 0 ? (sumHits + sumBB) / sumPa : null;
+      const slg = sumAb > 0 ? sumTB / sumAb : null;
+      const ops = (obp != null && slg != null) ? obp + slg : null;
+      const sumIp = tp.reduce((s, p) => s + parseFloat(p.ip || 0), 0);
+      const sumPH = tp.reduce((s, p) => s + (p.hits || 0), 0);
+      const sumPBB = tp.reduce((s, p) => s + (p.bb || 0), 0);
+      const sumK = tp.reduce((s, p) => s + (p.k || 0), 0);
+      const era = sumIp > 0 ? tp.reduce((s, p) => s + parseFloat(p.era || 0) * parseFloat(p.ip || 0), 0) / sumIp : null;
+      const whip = sumIp > 0 ? (sumPBB + sumPH) / sumIp : null;
+      return { avg, obp, ops, era, whip, k: tp.length ? sumK : null };
+    };
+    const byTeam = {};
+    for (const t of TEAMS) { const a = aggOne(t.id); if (a) byTeam[t.id] = a; }
+    const me = byTeam[team.id];
+    if (!me) return null;
+    const rankOf = (key, dir) => {
+      const v = me[key];
+      if (v == null) return null;
+      const vals = Object.values(byTeam).map(x => x[key]).filter(x => x != null);
+      const better = vals.filter(x => dir === 'asc' ? x < v : x > v).length;
+      return { rank: better + 1, total: vals.length };
+    };
+    const f3 = v => v == null ? '—' : v.toFixed(3).replace(/^0(?=\.)/, '');
+    const f2 = v => v == null ? '—' : v.toFixed(2);
+    const row = (label, key, dir, fmt) => {
+      const r = rankOf(key, dir);
+      return { label, value: fmt(me[key]), rank: r ? r.rank : null, total: r ? r.total : null };
+    };
     return {
-      avg: sumAb > 0 ? (sumHits / sumAb).toFixed(3) : '.000',
-      hr: sumHr,
-      rbi: sumRbi,
-      opsPlus: Math.round(avgOpsPlus),
-      era: weightedEra.toFixed(2),
-      k4: weightedK4.toFixed(2),
-      ip: sumIp.toFixed(1),
+      batting: [row('AVG', 'avg', 'desc', f3), row('OBP', 'obp', 'desc', f3), row('OPS', 'ops', 'desc', f3)],
+      pitching: [row('ERA', 'era', 'asc', f2), row('K', 'k', 'desc', v => v == null ? '—' : String(v)), row('WHIP', 'whip', 'asc', f2)],
     };
   }, [batting, pitching, team?.id]);
 
@@ -962,60 +1099,64 @@ export default function TeamPage() {
         <div style={{
           background: colors.white, borderRadius: radius.base, padding: 8,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.12)', border: `2px solid ${team.color}`,
+          boxShadow: '0 4px 14px rgba(0,0,0,0.12)', border: `2px solid ${accent}`,
           flexShrink: 0,
         }}>
           <TeamLogo teamId={team.id} size={64} rounded="square" />
         </div>
-        <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+        <div style={{ minWidth: 0, flex: '1 1 240px' }}>
           <div style={{
-            fontFamily: fonts.heading, fontSize: 34, lineHeight: 0.98,
+            fontFamily: fonts.heading, fontSize: 32, fontWeight: 800, lineHeight: 0.98,
             color: colors.text, letterSpacing: 'var(--font-heading-tracking, 1px)',
             textTransform: 'uppercase',
           }}>
             {team.name}
           </div>
-          {/* Inline record — record · PCT · DIFF beside the rank chip (replaces
-              the old stacked scoreboard). DIFF keeps its green/red signal. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 9 }}>
+          {/* Standing + record · PCT · DIFF (compact). Socials sit on their own
+              line below. DIFF keeps its green/red signal. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
             {liveTeam.rank != null && (
               <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                background: `${team.color}15`, color: team.color,
-                border: `1px solid ${team.color}40`,
-                padding: '3px 10px', borderRadius: 999,
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                background: `${accent}15`, color: accent,
+                border: `1px solid ${accent}40`,
+                padding: '2px 9px', borderRadius: 999,
                 fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
               }}>
-                <span style={{ fontFamily: fonts.heading, fontSize: 13, lineHeight: 1 }}>{ordinal(liveTeam.rank)}</span>
+                <span style={{ fontFamily: fonts.heading, fontSize: 12, lineHeight: 1 }}>{ordinal(liveTeam.rank)}</span>
                 <span>IN BLW</span>
               </span>
             )}
-            <span aria-hidden="true" style={{ width: 1, height: 20, background: colors.border }} />
-            <span style={{ fontFamily: fonts.heading, fontSize: 22, fontWeight: 800, color: colors.text, lineHeight: 1 }}>{liveTeam.record || '—'}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-              <span style={{ fontFamily: fonts.mono, fontSize: 14, fontWeight: 700, color: colors.text }}>{liveTeam.pct || '—'}</span>
-              <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.6 }}>PCT</span>
+            <span aria-hidden="true" style={{ width: 1, height: 16, background: colors.border }} />
+            <span style={{ fontFamily: fonts.heading, fontSize: 16, fontWeight: 800, color: colors.text, lineHeight: 1 }}>{liveTeam.record || '—'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
+              <span style={{ fontFamily: fonts.mono, fontSize: 12, fontWeight: 700, color: colors.text }}>{liveTeam.pct || '—'}</span>
+              <span style={{ fontFamily: fonts.condensed, fontSize: 8.5, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.6 }}>PCT</span>
             </span>
             {(() => {
               const d = liveTeam.diff;
               const c = (d && d.startsWith('+') && d !== '0') ? colors.success
                 : (!d || d === '0' || d === '—') ? colors.textSecondary : colors.red;
               return (
-                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-                  <span style={{ fontFamily: fonts.heading, fontSize: 18, fontWeight: 800, color: c, lineHeight: 1 }}>{d || '—'}</span>
-                  <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.6 }}>DIFF</span>
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
+                  <span style={{ fontFamily: fonts.heading, fontSize: 14, fontWeight: 800, color: c, lineHeight: 1 }}>{d || '—'}</span>
+                  <span style={{ fontFamily: fonts.condensed, fontSize: 8.5, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.6 }}>DIFF</span>
                 </span>
               );
             })()}
-            <span aria-hidden="true" style={{ width: 1, height: 20, background: colors.border }} />
+          </div>
+          {/* Social handles — own line under the record. */}
+          <div style={{ marginTop: 9 }}>
             <TeamSocials
               socials={mergedSocials}
-              accent={team.color}
+              accent={accent}
               canEdit={isMaster}
               onEdit={() => setSocialsEditorOpen(true)}
             />
           </div>
         </div>
+        {/* Right — recent results + next game, filling the space. */}
+        <TeamGamesStrip team={team} games={games} accent={accent} />
       </div>
       {socialsEditorOpen && isMaster && (
         <TeamSocialsEditor
@@ -1028,10 +1169,9 @@ export default function TeamPage() {
         />
       )}
 
-      {/* Team aggregates — interim card (current AVG/HR/ERA/K4 quick-glance).
-          The two-column AVG/OBP/OPS | ERA/K/WHIP redesign with league ranks
-          lands in the next stage. */}
-      {teamAggregates && (
+      {/* Team stats — two-column Batting | Pitching, each metric with its
+          league rank as an ordinal. Named "<Mascot> Team Stats". */}
+      {teamStats && (
         <div style={{
           background: colors.white,
           border: `1px solid ${colors.borderLight}`,
@@ -1040,25 +1180,41 @@ export default function TeamPage() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
         }}>
           <div style={{
-            background: `${team.color}1E`,
-            borderBottom: `1px solid ${team.color}33`,
+            background: `${accent}1E`,
+            borderBottom: `1px solid ${accent}33`,
             color: colors.text,
-            padding: '7px 14px',
-            fontFamily: fonts.condensed, fontSize: 10.5, fontWeight: 700,
+            padding: '8px 14px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
             letterSpacing: 1, textTransform: 'uppercase',
           }}>
-            Team Aggregates
+            {teamNickname(team)} Team Stats
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', padding: '12px 6px', gap: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
             {[
-              { label: 'AVG', value: teamAggregates.avg },
-              { label: 'HR',  value: teamAggregates.hr, highlight: true },
-              { label: 'ERA', value: teamAggregates.era },
-              { label: 'K/4', value: teamAggregates.k4 },
-            ].map(t => (
-              <div key={t.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 2px' }}>
-                <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>{t.label}</div>
-                <div style={{ fontFamily: fonts.heading, fontSize: 24, color: t.highlight ? team.color : colors.text, lineHeight: 1, letterSpacing: 0.5 }}>{t.value ?? '—'}</div>
+              { title: 'Batting', rows: teamStats.batting },
+              { title: 'Pitching', rows: teamStats.pitching },
+            ].map((col, ci) => (
+              <div key={col.title} style={{
+                padding: '12px 16px',
+                borderLeft: ci > 0 ? `1px solid ${colors.borderLight}` : 'none',
+              }}>
+                <div style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+                  letterSpacing: 0.8, textTransform: 'uppercase', color: accent,
+                  marginBottom: 8,
+                }}>{col.title}</div>
+                {col.rows.map(r => (
+                  <div key={r.label} style={{
+                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                    gap: 10, padding: '5px 0', borderBottom: `1px solid ${colors.divider}`,
+                  }}>
+                    <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: colors.textMuted, textTransform: 'uppercase' }}>{r.label}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 9 }}>
+                      <span style={{ fontFamily: fonts.heading, fontSize: 20, fontWeight: 800, color: colors.text, lineHeight: 1 }}>{r.value}</span>
+                      <span style={{ fontFamily: fonts.mono, fontSize: 11, fontWeight: 600, color: colors.textSecondary, minWidth: 30, textAlign: 'right' }}>{r.rank ? ordinal(r.rank) : '—'}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
