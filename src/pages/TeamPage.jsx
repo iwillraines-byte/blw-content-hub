@@ -862,12 +862,6 @@ export default function TeamPage() {
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{
-                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-                color: heroInkDim, letterSpacing: 1.5, textTransform: 'uppercase',
-              }}>
-                {team.city}
-              </div>
-              <div style={{
                 fontFamily: fonts.heading, fontSize: 40, lineHeight: 0.95,
                 color: heroInk, letterSpacing: 'var(--font-heading-tracking, 1.5px)',
                 margin: '3px 0 8px', textTransform: 'uppercase',
@@ -1056,115 +1050,9 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* v4.5.20: Replaced the three big leader cards (TOP BATTER /
-          TOP PITCHER / HR LEADER) with a full-width "Stat leaders"
-          strip. Each leader is one row that uses the page's full
-          horizontal real estate; the player's headline number anchors
-          the right edge, support stats fan to the left, and a
-          percentile chip surfaces how that headline number ranks
-          across the entire BLW population. The leaders + percentile
-          give the same information density as the old cards in
-          roughly half the vertical space. */}
-      {(topBatter || topPitcher) && (
-        <Card style={{ border: `1px solid ${team.color}33`, padding: 0, overflow: 'hidden' }}>
-          {[
-            topBatter && {
-              kind: 'TOP BATTER',
-              statKey: 'ops_plus',
-              player: topBatter,
-              metric: topBatter.ops_plus,
-              metricLabel: 'OPS+',
-              support: `${topBatter.avg} AVG · ${topBatter.hr} HR · ${topBatter.obp} OBP`,
-              percentile: percentileFor(applyCanonicalToStats(liveBatting), topBatter.name, 'ops_plus', 'desc'),
-            },
-            topPitcher && {
-              kind: 'TOP PITCHER',
-              statKey: 'fip',
-              player: topPitcher,
-              metric: typeof topPitcher.fip === 'number' ? topPitcher.fip.toFixed(2) : topPitcher.fip,
-              metricLabel: 'FIP',
-              support: `${topPitcher.era} ERA · ${topPitcher.w}-${topPitcher.l} · ${topPitcher.ip} IP`,
-              percentile: percentileFor(applyCanonicalToStats(livePitching), topPitcher.name, 'fip', 'asc'),
-            },
-            (hrLeader && hrLeader.hr > 0 && hrLeader !== topBatter) && {
-              kind: 'HR LEADER',
-              statKey: 'hr',
-              player: hrLeader,
-              metric: hrLeader.hr,
-              metricLabel: 'HR',
-              support: `${hrLeader.avg} AVG · ${hrLeader.slg} SLG`,
-              percentile: percentileFor(applyCanonicalToStats(liveBatting), hrLeader.name, 'hr', 'desc'),
-            },
-          ].filter(Boolean).map((row, idx, arr) => {
-            const pct = row.percentile == null ? null : Math.round(row.percentile);
-            const pctColor = pct == null ? colors.border
-              : pct >= 90 ? '#C8302B'
-              : pct >= 75 ? '#DA453A'
-              : pct >= 60 ? '#E07368'
-              : pct >= 40 ? colors.textSecondary
-              : '#5C7A99';
-            return (
-              <Link
-                key={row.kind}
-                to={`/teams/${team.slug}/players/${playerSlug({
-                  name: row.player.name,
-                  firstName: row.player.firstName,
-                  lastName: row.player.lastName,
-                  firstInitial: row.player.firstInitial,
-                })}`}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 16,
-                  padding: '14px 18px',
-                  borderBottom: idx < arr.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
-                  textDecoration: 'none', color: 'inherit',
-                  transition: 'background 160ms ease',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = `${team.color}06`}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <div style={{
-                  fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 1.2,
-                  color: team.color, minWidth: 88,
-                }}>
-                  {row.kind}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontFamily: fonts.heading, fontSize: 18, color: colors.text,
-                    letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{row.player.name}</div>
-                  <div style={{
-                    fontSize: 11, color: colors.textSecondary, marginTop: 2,
-                    fontFamily: fonts.body, fontWeight: 500,
-                  }}>{row.support}</div>
-                </div>
-                {pct != null && (
-                  <div title={`${pct}th percentile across the league`} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    background: `${pctColor}14`, color: pctColor,
-                    border: `1px solid ${pctColor}33`,
-                    padding: '4px 10px', borderRadius: 999,
-                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {pct}<span style={{ fontSize: 8, marginLeft: 1, opacity: 0.7 }}>%ile</span>
-                  </div>
-                )}
-                <div style={{ textAlign: 'right', minWidth: 96 }}>
-                  <div style={{
-                    fontFamily: fonts.heading, fontSize: 28, color: colors.accent,
-                    letterSpacing: 0.5, lineHeight: 1,
-                  }}>{row.metric}</div>
-                  <div style={{
-                    fontFamily: fonts.condensed, fontSize: 9, color: colors.textMuted,
-                    fontWeight: 700, letterSpacing: 0.8, marginTop: 4,
-                  }}>{row.metricLabel}</div>
-                </div>
-              </Link>
-            );
-          })}
-        </Card>
-      )}
+      {/* TOP BATTER / TOP PITCHER / HR LEADER strip removed in v5 (per user
+          feedback). Team-level standouts will live in the redesigned
+          two-column aggregate stats card. */}
 
       {/* Roster */}
       <Card>

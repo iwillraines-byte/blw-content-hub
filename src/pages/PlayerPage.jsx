@@ -33,6 +33,15 @@ function readableAccent(team, isDark) {
   return isDark ? (team.accent || team.color) : (team.color || team.accent);
 }
 
+// Ordinal rank label — 1 → "1st", 14 → "14th". Replaces the "#6 / 45" form
+// on the season-stat tiles (user wants a plain ordinal rank).
+function ordinal(n) {
+  if (n == null) return '';
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 // ── Teammate roster nav ─────────────────────────────────────────────────────
 // One unified control on the breadcrumb row: prev / count / next, with
 // hairline-divided segments, small initial bubbles and sentence-case names.
@@ -411,32 +420,11 @@ function SeasonStatsSubCard({ team, label, tiles }) {
                 );
               })()}
               <div style={{
-                fontFamily: fonts.condensed, fontSize: 10, fontWeight: 600,
-                color: colors.textMuted, letterSpacing: 0.4,
+                fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+                color: colors.textSecondary, letterSpacing: 0.3,
               }}>
-                {t.rank ? `#${t.rank} / ${t.total}` : '—'}
+                {t.rank ? ordinal(t.rank) : '—'}
               </div>
-              {/* Percentile bar — visible only when rank/total available.
-                  Tinted with team color for the marquee stat in each row. */}
-              {pct != null && (
-                <div
-                  aria-hidden="true"
-                  title={`${Math.round(pct * 100)}th percentile`}
-                  style={{
-                    marginTop: 2, width: '78%',
-                    height: 3, borderRadius: 999,
-                    background: colors.muted,
-                    position: 'relative', overflow: 'hidden',
-                  }}
-                >
-                  <div style={{
-                    position: 'absolute', top: 0, left: 0, bottom: 0,
-                    width: `${pct * 100}%`,
-                    background: fill,
-                    borderRadius: 999,
-                  }} />
-                </div>
-              )}
             </div>
           );
         })}
@@ -1161,6 +1149,17 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               </div>
             )}
           </div>
+          {/* Edit player info — relocated under the avatar to compress the
+              identity block (was beside Generate). Editors only. */}
+          {canEditInfo && onEditInfo && (
+            <OutlineButton
+              onClick={onEditInfo}
+              style={{ padding: '6px 10px', fontSize: 11, width: 128, justifyContent: 'center', textAlign: 'center' }}
+              title={isMaster
+                ? 'Edit nickname, vitals, jersey #, status'
+                : 'Edit your own player info — nickname, vitals, jersey #'}
+            >✎ Edit info</OutlineButton>
+          )}
           {/* Instagram handle moved into the identity block under the name. */}
           </div>
           <div style={{ minWidth: 0 }}>
@@ -1324,25 +1323,6 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
               >
                 {generating ? '…GENERATING' : <><Icon name="studio" size={14} style={{ verticalAlign: '-2px', marginRight: 5 }} />Generate content</>}
               </RedButton>
-              {/* v4.5.37: master-admin only inline player-info editor.
-                  Drops a modal to update nickname, jersey #, position,
-                  height/weight, birthdate, bats/throws, birthplace,
-                  status without leaving the page. Saves through the
-                  same upsertManualPlayer pipeline used by the photo
-                  picker — vitals re-render in place after save. */}
-              {/* v4.7.10: widened from master-only to canEditInfo —
-                  athletes can edit their OWN player record too. The
-                  tooltip flips based on role context so the button
-                  reads correctly in both cases. */}
-              {canEditInfo && onEditInfo && (
-                <OutlineButton
-                  onClick={onEditInfo}
-                  style={{ padding: '8px 14px', fontSize: 12 }}
-                  title={isMaster
-                    ? 'Edit nickname, vitals, jersey #, status'
-                    : 'Edit your own player info — nickname, vitals, jersey #'}
-                >✎ Edit player info</OutlineButton>
-              )}
             </div>
           </div>
         </div>
