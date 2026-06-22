@@ -7,7 +7,7 @@ import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
 import { fetchTeamMonthlyPostCount, fetchTeamMonthlyPosts, setGenerateLogPosted } from '../cloud-sync';
 import { useAuth } from '../auth';
-import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, PositionedAvatar, Skeleton, inputStyle } from '../components';
+import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, Skeleton, inputStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { useIsDark } from '../theme-mode';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
@@ -1037,6 +1037,28 @@ export default function TeamPage() {
     return m;
   }, [rankings]);
 
+  // v5 roster cards: per-player handedness (from rankings) + a compact stat
+  // trio. Batters show AVG / HR / OPS+; pitchers show ERA / W-L / K. Looked
+  // up by canonical name so traded players resolve to their current line.
+  const handByName = useMemo(() => {
+    const m = new Map();
+    for (const r of rankings) if (r.name) m.set(r.name.toLowerCase(), { bats: r.bats, throws: r.throws });
+    return m;
+  }, [rankings]);
+  const rosterStatByName = useMemo(() => {
+    const batBy = new Map(applyCanonicalToStats(batting).map(r => [(r.name || '').toLowerCase(), r]));
+    const pitBy = new Map(applyCanonicalToStats(pitching).map(r => [(r.name || '').toLowerCase(), r]));
+    const m = new Map();
+    for (const n of new Set([...batBy.keys(), ...pitBy.keys()])) {
+      const b = batBy.get(n), p = pitBy.get(n);
+      m.set(n, {
+        batting: b ? [{ label: 'AVG', value: b.avg }, { label: 'HR', value: b.hr }, { label: 'OPS+', value: b.ops_plus }] : null,
+        pitching: p ? [{ label: 'ERA', value: p.era }, { label: 'W-L', value: `${p.w ?? 0}-${p.l ?? 0}` }, { label: 'K', value: p.k }] : null,
+      });
+    }
+    return m;
+  }, [batting, pitching]);
+
   const thumbUrls = useMemo(() => {
     const urls = {};
     for (const m of media) if (m.blob) urls[m.id] = blobToObjectURL(m.blob);
@@ -1413,18 +1435,19 @@ export default function TeamPage() {
           // Roster grid skeleton — 8 placeholder cards arranged the same way
           // the real roster will render, so the page doesn't reflow when
           // data lands.
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} style={{
-                background: colors.bg,
+                background: colors.white,
                 border: `1px solid ${colors.borderLight}`,
-                borderRadius: radius.base,
-                padding: 12,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                borderRadius: radius.lg,
+                overflow: 'hidden',
               }}>
-                <Skeleton width={64} height={64} radius={999} />
-                <Skeleton width="80%" height={12} />
-                <Skeleton width="60%" height={10} />
+                <Skeleton width="100%" height={235} radius={0} />
+                <div style={{ padding: '9px 10px 11px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  <Skeleton width="75%" height={13} />
+                  <Skeleton width="50%" height={9} />
+                </div>
               </div>
             ))}
           </div>
@@ -1435,7 +1458,7 @@ export default function TeamPage() {
           </div>
         )}
         {loaded && roster.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
             {roster.map((p, idx) => {
               const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
               // v4.5.57: keyed by playerSlug so cousin pairs sharing FI
@@ -1451,60 +1474,91 @@ export default function TeamPage() {
               const rowKey = `${p.playerId || p.manualId || p.source || 'row'}-${FI}-${p.lastName}-${idx}`;
               // Disambiguated slug: "c-rose" beats "rose".
               const slug = playerSlug(p);
-              // Composite rank for this player — powers the tier badge on the
-              // right edge of the tile. Null for players not yet ranked.
+              // Composite rank for this player — powers the tier badge
+              // overlaid on the card image. Null for players not yet ranked.
               const playerRank = rankByName.get((p.name || '').toLowerCase());
+              const nameKey = (p.name || '').toLowerCase();
+              const hand = handByName.get(nameKey);
+              const handStr = hand && (hand.bats || hand.throws) ? `${hand.bats || '–'}/${hand.throws || '–'}` : '';
+              const stats = rosterStatByName.get(nameKey);
+              const statTrio = stats
+                ? ((p.isBatter && stats.batting) ? stats.batting
+                  : (p.isPitcher && stats.pitching) ? stats.pitching
+                  : (stats.batting || stats.pitching))
+                : null;
               return (
                 <div key={rowKey} style={{ position: 'relative' }}>
                   <Link
                     to={`/teams/${team.slug}/players/${slug}`}
+                    className="card-clickable"
                     style={{
                       textDecoration: 'none', color: colors.text,
-                      padding: 12, borderRadius: radius.base,
+                      display: 'block', borderRadius: radius.lg, overflow: 'hidden',
                       background: colors.white, border: `1px solid ${colors.border}`,
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      transition: 'all 0.15s',
                     }}
                   >
-                    <PositionedAvatar
-                      src={avatar?.url}
-                      offsetX={avatar?.offsetX}
-                      offsetY={avatar?.offsetY}
-                      zoom={avatar?.zoom}
-                      size={48}
-                      borderColor={team.color}
-                      fallbackBg={`linear-gradient(135deg, ${team.color}, ${team.dark})`}
-                      fallback={
-                        <span style={{
-                          color: team.accent,
-                          fontFamily: fonts.heading, fontSize: 16, letterSpacing: 0.5,
+                    {/* Image / initials — fills the card top in a portrait crop. */}
+                    <div style={{
+                      position: 'relative', width: '100%', aspectRatio: '4 / 5',
+                      background: `linear-gradient(150deg, ${team.color}, ${team.dark})`,
+                      overflow: 'hidden',
+                    }}>
+                      {avatar?.url ? (
+                        <div style={{ position: 'absolute', inset: 0, background: `url(${avatar.url}) center / cover no-repeat` }} />
+                      ) : (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: team.accent, fontFamily: fonts.heading, fontSize: 42, fontWeight: 800,
+                          letterSpacing: 1, opacity: 0.92,
                         }}>
-                          {p.lastName.slice(0, 2).toUpperCase()}
-                        </span>
-                      }
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(FI + (p.lastName?.[0] || '')).toUpperCase()}
+                        </div>
+                      )}
+                      {/* bottom scrim so the jersey number stays legible on any photo */}
+                      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 46, background: 'linear-gradient(to top, rgba(0,0,0,0.55), transparent)', pointerEvents: 'none' }} />
+                      {p.num && (
+                        <span style={{
+                          position: 'absolute', left: 9, bottom: 8,
+                          fontFamily: fonts.mono, fontSize: 13, fontWeight: 800,
+                          color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)',
+                        }}>#{p.num}</span>
+                      )}
+                      {playerRank != null && (
+                        <div style={{ position: 'absolute', top: 7, right: 7 }}>
+                          <TierBadge rank={playerRank} size={30} />
+                        </div>
+                      )}
+                    </div>
+                    {/* Body — full name (wraps, never truncates), role + handedness, stat trio. */}
+                    <div style={{ padding: '9px 10px 11px' }}>
+                      <div style={{ fontFamily: fonts.heading, fontSize: 14, fontWeight: 800, lineHeight: 1.15, color: colors.text }}>
                         {p.name}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        {p.num && (
-                          <span style={{
-                            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-                            padding: '1px 6px', borderRadius: 3,
-                            background: team.color, color: team.accent,
-                          }}>#{p.num}</span>
-                        )}
-                        <span style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted }}>
-                          {statLabel}{p.manual ? ' · Manual' : ''}
-                        </span>
+                      <div style={{
+                        fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                        color: colors.textMuted, textTransform: 'uppercase', marginTop: 3,
+                      }}>
+                        {statLabel}{handStr ? ` · ${handStr}` : ''}{p.manual ? ' · Manual' : ''}
                       </div>
+                      {statTrio && (
+                        <div style={{
+                          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4,
+                          marginTop: 9, paddingTop: 8, borderTop: `1px solid ${colors.borderLight}`,
+                        }}>
+                          {statTrio.map(s => (
+                            <div key={s.label} style={{ textAlign: 'center' }}>
+                              <div className="tnum" style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.text, lineHeight: 1 }}>
+                                {s.value == null || s.value === '' ? '—' : s.value}
+                              </div>
+                              <div style={{ fontFamily: fonts.condensed, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.5, color: colors.textMuted, textTransform: 'uppercase', marginTop: 3 }}>
+                                {s.label}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    {playerRank != null && (
-                      <div style={{ flexShrink: 0, marginLeft: 4 }}>
-                        <TierBadge rank={playerRank} size={36} />
-                      </div>
-                    )}
                   </Link>
                   {p.manual && p.manualId && (
                     <button

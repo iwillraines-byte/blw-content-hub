@@ -66,6 +66,12 @@ function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
         textTransform: 'uppercase', letterSpacing: 0.2,
         cursor: sortKey ? 'pointer' : 'default',
         userSelect: 'none', whiteSpace: 'nowrap',
+        // Sticky header — sticks to the top of the table's own scroll
+        // container (see the maxHeight wrapper). border-collapse drops the
+        // th border when stuck, so the bottom divider is a box-shadow.
+        position: 'sticky', top: 0, zIndex: 2,
+        background: colors.bg,
+        boxShadow: `inset 0 -1px 0 ${colors.border}`,
       }}
       onClick={() => {
         if (!sortKey) return;
@@ -341,8 +347,8 @@ export function BattingTable({
           <PercentileLegend />
         </div>
       )}
-      <div style={{ overflowX: 'auto' }}>
-        <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+        <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: colors.bg }}>
               <SortHeader label="#"      sortKey={null}        currentSort={sort} setSort={setSort} align="center" />
@@ -456,8 +462,8 @@ export function PitchingTable({
           <PercentileLegend />
         </div>
       )}
-      <div style={{ overflowX: 'auto' }}>
-        <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+        <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: colors.bg }}>
               <SortHeader label="#"      sortKey={null}        currentSort={sort} setSort={setSort} align="center" />

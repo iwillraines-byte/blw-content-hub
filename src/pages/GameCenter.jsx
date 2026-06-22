@@ -20,6 +20,12 @@ function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
     cursor: sortKey ? 'pointer' : 'default',
     userSelect: 'none',
     whiteSpace: 'nowrap',
+    // Sticky header inside the table's own scroll container (maxHeight
+    // wrapper). border-collapse drops the th border when stuck, so the
+    // bottom divider is a box-shadow.
+    position: 'sticky', top: 0, zIndex: 2,
+    background: colors.bg,
+    boxShadow: `inset 0 -1px 0 ${colors.border}`,
   };
   const arrow = active ? (currentSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
   return (
@@ -619,8 +625,8 @@ export default function GameCenter() {
           <div style={{ padding: '12px 18px', borderBottom: `1px solid ${colors.borderLight}` }}>
             <PercentileLegend />
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+            <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#"      sortKey={null}        currentSort={battingSort} setSort={setBattingSort} align="center" />
@@ -710,8 +716,8 @@ export default function GameCenter() {
           <div style={{ padding: '12px 18px', borderBottom: `1px solid ${colors.borderLight}` }}>
             <PercentileLegend />
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+            <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#"      sortKey={null}        currentSort={pitchingSort} setSort={setPitchingSort} align="center" />
@@ -792,8 +798,8 @@ export default function GameCenter() {
               />
             </div>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+            <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#"         sortKey="currentRank"     currentSort={rankingsSort} setSort={setRankingsSort} align="center" />
@@ -882,8 +888,8 @@ export default function GameCenter() {
                 placeholder="Search name…" style={{ ...inputStyle, maxWidth: 200 }} />
             </div>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+            <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="Player" sortKey="name" currentSort={playersSort} setSort={setPlayersSort} align="left" />
@@ -967,8 +973,8 @@ export default function GameCenter() {
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}` }}>
             <SectionHeading style={{ margin: 0 }}>2026 BLW standings</SectionHeading>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+            <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: colors.bg }}>
                   <SortHeader label="#" sortKey={null} currentSort={{}} setSort={() => {}} align="center" />

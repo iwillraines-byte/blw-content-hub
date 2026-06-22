@@ -211,6 +211,16 @@ input[type="range"]:active::-webkit-slider-thumb {
   font-feature-settings: 'tnum' 1;
 }
 
+/* ─── ESPN-grade stat tables (v5) ─────────────────────────────────────── */
+/* Row hover uses an inset box-shadow overlay (not a background) so it tints
+   the whole row — including the percentile-heatmap cells whose background is
+   set inline — without the inline color winning. Tint = the active team
+   accent (brand red outside a team scope). */
+.stat-table tbody tr td { transition: box-shadow 0.1s ease; }
+.stat-table tbody tr:hover td {
+  box-shadow: inset 0 0 0 9999px var(--accent-soft, rgba(221, 60, 60, 0.10));
+}
+
 /* ─── Reduced motion ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .btn-primary,
