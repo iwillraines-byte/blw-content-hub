@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats, fetchStandings, teamWithStanding } from '../data';
 import { getAllManualPlayers } from '../player-store';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
+import { Icon } from '../icon';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
 import { timeAgo } from '../format-time';
@@ -434,7 +435,7 @@ export default function ContentStudio() {
       {/* Live-state cards — each reflects current state, not just a nav shortcut */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <LiveCard
-          icon="✦"
+          icon="studio"
           label="Generate"
           primary={dataLoaded ? `${suggestions.length} idea${suggestions.length === 1 ? '' : 's'} ready` : 'Loading ideas…'}
           secondary={topSuggestion ? `Top: ${truncate(topSuggestion.headline, 40)}` : 'No suggestions yet'}
@@ -447,7 +448,7 @@ export default function ContentStudio() {
             was misleading. Master/admin/content keep the global view
             with the original "Requests" label and total counts. */}
         <LiveCard
-          icon="☰"
+          icon="requests"
           label={isAthlete ? "My Requests" : "Requests"}
           primary={pendingCount === 0
             ? (isAthlete ? 'No open requests' : 'No open requests')
@@ -474,7 +475,7 @@ export default function ContentStudio() {
             with a dead-link CTA is bad UX. */}
         {!isAthlete && (
           <LiveCard
-            icon="◫"
+            icon="files"
             label="Files"
             primary={`${mediaStats.total} file${mediaStats.total === 1 ? '' : 's'} in library`}
             secondary={mediaStats.untagged === 0
@@ -1234,25 +1235,35 @@ function RecentPostsStrip({ posts, loaded, onHide }) {
   );
 }
 
+// v5 metric card — Lucide icon chip in a tinted square, uppercase label,
+// a bold primary stat, supporting line, and an accent CTA. `icon` is a
+// semantic Icon name (e.g. 'studio'); `warn` flips the chip + CTA to the
+// warning hue. The whole card is a clickable link with the shared lift.
 function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
+  const accent = warn ? colors.warning : colors.accent;
+  const chipBg = warn ? colors.warningBg : colors.accentSoft;
   return (
-    <Link to={to} style={{ textDecoration: 'none' }}>
+    <Link to={to} className="card-clickable" style={{ textDecoration: 'none', display: 'block', borderRadius: radius.lg }}>
       <Card style={{
-        padding: 20, cursor: 'pointer',
-        // Severity / brand cue handled by the leading icon + the colored CTA
-        // label at the bottom; the side-stripe is redundant.
-        display: 'flex', flexDirection: 'column', gap: 4,
+        padding: 18, cursor: 'pointer',
+        display: 'flex', flexDirection: 'column', gap: 5,
         height: '100%', boxSizing: 'border-box',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-          <span style={{ fontSize: 18 }}>{icon}</span>
-          <span style={{ fontFamily: fonts.body, fontSize: 13, fontWeight: 600, color: colors.textSecondary }}>{label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textMuted }}>{label}</span>
+          <span style={{
+            width: 30, height: 30, borderRadius: radius.base, flexShrink: 0,
+            background: chipBg, color: accent,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon name={icon} size={16} />
+          </span>
         </div>
-        <div style={{ fontFamily: fonts.body, fontSize: 18, fontWeight: 700, color: colors.text, lineHeight: 1.2 }}>
+        <div style={{ fontFamily: fonts.heading, fontSize: 21, fontWeight: 800, color: colors.text, lineHeight: 1.15, marginTop: 2 }}>
           {primary}
         </div>
-        <div style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 6 }}>{secondary}</div>
-        <div style={{ fontFamily: fonts.body, fontSize: 12, fontWeight: 700, color: colors.red }}>
+        <div style={{ fontSize: 12.5, color: colors.textSecondary, lineHeight: 1.35, flex: 1 }}>{secondary}</div>
+        <div style={{ fontFamily: fonts.condensed, fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: accent, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
           {cta}
         </div>
       </Card>
