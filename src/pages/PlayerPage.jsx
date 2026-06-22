@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
+import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchOpwrHistory, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
 import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
 import { ContentIdeasSection } from '../content-ideas-section';
 import { getRecentFeedback } from '../idea-feedback-store';
@@ -292,6 +292,42 @@ function rankOf(list, playerName, statKey, direction = 'desc', toNumber = parseF
   return idx === -1 ? null : idx + 1;
 }
 
+// Like rankOf but returns STANDARD COMPETITION rank ("1224") + a tie flag:
+// players sharing a value get the same (best) rank, and `tied` is true when
+// at least one other player matches the value. Used by the season-stat tiles
+// to render "T-13th" when a stat is tied (e.g. several pitchers at 3.0 IP).
+function rankWithTie(list, playerName, statKey, direction = 'desc', toNumber = parseFloat) {
+  if (!Array.isArray(list) || list.length === 0 || !playerName) return null;
+  const cleaned = list
+    .map(p => ({ name: p.name, v: toNumber(p[statKey]) }))
+    .filter(x => x.name && !isNaN(x.v));
+  const me = cleaned.find(x => x.name === playerName);
+  if (!me) return null;
+  const better = cleaned.filter(x => direction === 'asc' ? x.v < me.v : x.v > me.v).length;
+  const sameCount = cleaned.filter(x => x.v === me.v).length;
+  return { rank: better + 1, tied: sameCount > 1 };
+}
+
+// Innings-pitched string ("4.2" = 4⅔, i.e. 4 innings + 2 outs) → decimal
+// innings. The /3 constant matches the app's IP convention; it's only used
+// for monotonic rate ranking (HR/4 etc.), so the exact divisor never affects
+// the resulting percentile.
+function ipToInnings(ip) {
+  const s = String(ip ?? '').trim();
+  if (!s) return NaN;
+  const [whole, frac] = s.split('.');
+  const w = parseInt(whole, 10);
+  if (isNaN(w)) return NaN;
+  const outs = frac ? parseInt(frac[0], 10) : 0;
+  return w + (isNaN(outs) ? 0 : outs) / 3;
+}
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function monthLabel(iso) {
+  const mm = parseInt(String(iso || '').slice(5, 7), 10);
+  return (mm >= 1 && mm <= 12) ? MONTH_ABBR[mm - 1] : '';
+}
+
 // Colored pill showing a rank across BLW for a given stat.
 function RankChip({ rank, total }) {
   if (!rank) {
@@ -437,7 +473,7 @@ function SeasonStatsSubCard({ team, label, tiles }) {
                 fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
                 color: colors.textSecondary, letterSpacing: 0.3,
               }}>
-                {t.rank ? ordinal(t.rank) : '—'}
+                {t.rank ? `${t.tied ? 'T-' : ''}${ordinal(t.rank)}` : '—'}
               </div>
             </div>
           );
@@ -456,17 +492,17 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
   const hasPitching = !!player.pitching;
 
   const battingTiles = [
-    { label: 'AVG',  value: player.batting?.avg,      rank: battingRanks?.avg,      total: bTotal },
-    { label: 'HR',   value: player.batting?.hr,       rank: battingRanks?.hr,       total: bTotal },
-    { label: 'RBI',  value: player.batting?.rbi,      rank: battingRanks?.rbi,      total: bTotal },
-    { label: 'OPS+', value: player.batting?.ops_plus, rank: battingRanks?.ops_plus, total: bTotal, highlight: true },
+    { label: 'AVG',  value: player.batting?.avg,      rank: battingRanks?.avg?.rank,      tied: battingRanks?.avg?.tied,      total: bTotal },
+    { label: 'HR',   value: player.batting?.hr,       rank: battingRanks?.hr?.rank,       tied: battingRanks?.hr?.tied,       total: bTotal },
+    { label: 'RBI',  value: player.batting?.rbi,      rank: battingRanks?.rbi?.rank,      tied: battingRanks?.rbi?.tied,      total: bTotal },
+    { label: 'OPS+', value: player.batting?.ops_plus, rank: battingRanks?.ops_plus?.rank, tied: battingRanks?.ops_plus?.tied, total: bTotal, highlight: true },
   ];
 
   const pitchingTiles = [
-    { label: 'ERA',  value: player.pitching?.era,  rank: pitchingRanks?.era,  total: pTotal },
-    { label: 'IP',   value: player.pitching?.ip,   rank: pitchingRanks?.ip,   total: pTotal },
-    { label: 'K/4',  value: player.pitching?.k4,   rank: pitchingRanks?.k4,   total: pTotal, highlight: true },
-    { label: 'WHIP', value: player.pitching?.whip, rank: pitchingRanks?.whip, total: pTotal },
+    { label: 'ERA',  value: player.pitching?.era,  rank: pitchingRanks?.era?.rank,  tied: pitchingRanks?.era?.tied,  total: pTotal },
+    { label: 'IP',   value: player.pitching?.ip,   rank: pitchingRanks?.ip?.rank,   tied: pitchingRanks?.ip?.tied,   total: pTotal },
+    { label: 'K/4',  value: player.pitching?.k4,   rank: pitchingRanks?.k4?.rank,   tied: pitchingRanks?.k4?.tied,   total: pTotal, highlight: true },
+    { label: 'WHIP', value: player.pitching?.whip, rank: pitchingRanks?.whip?.rank, tied: pitchingRanks?.whip?.tied, total: pTotal },
   ];
 
   // Single-role: original visual carries over with the original label.
@@ -526,6 +562,22 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
   const [view, setView] = useState('radar');          // 'radar' | 'trend'
   const [disc, setDisc] = useState(hasBat ? 'bat' : 'pit');
 
+  // Real monthly OPWR rank history from GSS (/rankings/0/player/{id}),
+  // lazy-loaded the first time the trend is opened. Until it lands (or if
+  // it's empty), the trend falls back to the prev→now seed so it's never
+  // blank. Card is keyed per player, so this state is per-player.
+  const playerId = player.ranking?.playerId;
+  const [historyPts, setHistoryPts] = useState(null);
+  useEffect(() => {
+    if (view !== 'trend' || historyPts !== null || playerId == null) return undefined;
+    let alive = true;
+    fetchOpwrHistory(playerId).then(h => {
+      if (!alive) return;
+      setHistoryPts((h || []).slice(-6).map(m => ({ label: monthLabel(m.from), rank: m.rank })));
+    });
+    return () => { alive = false; };
+  }, [view, playerId, historyPts]);
+
   if (!hasBat && !hasPit) return null;
 
   const batRows = hasBat ? [
@@ -561,12 +613,18 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
     { label: 'HR/PA', percentile: derivedPercentileFor(battingLeaders, pn, (r) => safeRate(r.hr, r.pa), 'desc') },
   ] : null;
 
+  // Pitching radar — clockwise from the top: ERA, WHIP, K/4, BB/4, HR/4, FIP
+  // (per-4-innings rate axes so the shape reads as rate quality, not volume).
+  // HR/4 has no leaderboard field, so it's derived from HR allowed / innings.
   const pitAxes = hasPit ? [
     { label: 'ERA',  percentile: percentileFor(pitchingLeaders, pn, 'era', 'asc', parseFloat) },
     { label: 'WHIP', percentile: percentileFor(pitchingLeaders, pn, 'whip', 'asc', parseFloat) },
-    { label: 'K',    percentile: percentileFor(pitchingLeaders, pn, 'k', 'desc', Number) },
     { label: 'K/4',  percentile: percentileFor(pitchingLeaders, pn, 'k4', 'desc', parseFloat) },
-    { label: 'BB',   percentile: percentileFor(pitchingLeaders, pn, 'bb', 'asc', Number) },
+    { label: 'BB/4', percentile: percentileFor(pitchingLeaders, pn, 'bb4', 'asc', parseFloat) },
+    { label: 'HR/4', percentile: derivedPercentileFor(pitchingLeaders, pn, (r) => {
+        const inn = ipToInnings(r.ip);
+        return inn > 0 ? (Number(r.hrAllowed) || 0) / inn : NaN;
+      }, 'asc') },
     { label: 'FIP',  percentile: percentileFor(pitchingLeaders, pn, 'fip', 'asc', parseFloat) },
   ] : null;
 
@@ -664,9 +722,15 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
             </div>
           ) : (
             <div>
-              <OpwrTrend points={trendPoints} accent={accent} ariaLabel={`${pn} OPWR rank trend`} />
+              <OpwrTrend
+                points={(historyPts && historyPts.length >= 2) ? historyPts : trendPoints}
+                accent={accent}
+                ariaLabel={`${pn} OPWR rank trend`}
+              />
               <div style={{ fontFamily: fonts.condensed, fontSize: 9.5, color: colors.textMuted, letterSpacing: 0.2, marginTop: 4, textAlign: 'center' }}>
-                Overall Player Worth Ranking · lower is better
+                {(historyPts && historyPts.length >= 2)
+                  ? 'Overall Player Worth Ranking · monthly, lower is better'
+                  : 'Overall Player Worth Ranking · lower is better'}
               </div>
             </div>
           )}
@@ -1489,7 +1553,7 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                       <span>OPWR Rank</span>
                       <span style={{ fontFamily: fonts.mono, fontWeight: 700 }}>#{player.ranking.currentRank}</span>
                       {arrow && (
-                        <span title={change > 0 ? `Up ${change} from last week` : `Down ${Math.abs(change)} from last week`} style={{
+                        <span title={change > 0 ? `Up ${change} from last month` : `Down ${Math.abs(change)} from last month`} style={{
                           display: 'inline-flex', alignItems: 'center', gap: 2, color: arrowColor,
                           fontFamily: fonts.condensed, fontWeight: 700, fontSize: 10.5,
                         }}>
@@ -2264,23 +2328,23 @@ export default function PlayerPage() {
   const pTotal = pitchingLeaders.length;
   const pn = player.name;
   const battingRanks = player.batting ? {
-    avg:      rankOf(battingLeaders, pn, 'avg',      'desc', parseFloat),
-    hits:     rankOf(battingLeaders, pn, 'hits',     'desc', Number),
-    hr:       rankOf(battingLeaders, pn, 'hr',       'desc', Number),
-    rbi:      rankOf(battingLeaders, pn, 'rbi',      'desc', Number),
-    obp:      rankOf(battingLeaders, pn, 'obp',      'desc', parseFloat),
-    ops_plus: rankOf(battingLeaders, pn, 'ops_plus', 'desc', Number),
+    avg:      rankWithTie(battingLeaders, pn, 'avg',      'desc', parseFloat),
+    hits:     rankWithTie(battingLeaders, pn, 'hits',     'desc', Number),
+    hr:       rankWithTie(battingLeaders, pn, 'hr',       'desc', Number),
+    rbi:      rankWithTie(battingLeaders, pn, 'rbi',      'desc', Number),
+    obp:      rankWithTie(battingLeaders, pn, 'obp',      'desc', parseFloat),
+    ops_plus: rankWithTie(battingLeaders, pn, 'ops_plus', 'desc', Number),
   } : null;
   const pitchingRanks = player.pitching ? {
-    era:  rankOf(pitchingLeaders, pn, 'era',  'asc',  parseFloat),
-    whip: rankOf(pitchingLeaders, pn, 'whip', 'asc',  parseFloat),
-    k4:   rankOf(pitchingLeaders, pn, 'k4',   'desc', parseFloat),
-    bb4:  rankOf(pitchingLeaders, pn, 'bb4',  'asc',  parseFloat),
+    era:  rankWithTie(pitchingLeaders, pn, 'era',  'asc',  parseFloat),
+    whip: rankWithTie(pitchingLeaders, pn, 'whip', 'asc',  parseFloat),
+    k4:   rankWithTie(pitchingLeaders, pn, 'k4',   'desc', parseFloat),
+    bb4:  rankWithTie(pitchingLeaders, pn, 'bb4',  'asc',  parseFloat),
     // IP — descending (more is better, durability signal). Powers the
     // hero strip's percentile bar; the field-level rank chip already
     // renders only when this is non-null, so a missing rank just hides
     // the bar without breaking layout.
-    ip:   rankOf(pitchingLeaders, pn, 'ip',   'desc', parseFloat),
+    ip:   rankWithTie(pitchingLeaders, pn, 'ip',   'desc', parseFloat),
   } : null;
 
   const playerRank = player.ranking?.currentRank || null;

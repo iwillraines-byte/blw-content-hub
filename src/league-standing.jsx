@@ -35,6 +35,7 @@ function usePrefersReducedMotion() {
 export function PercentileRadar({ axes, accent, size = 200, ariaLabel = null }) {
   const reduce = usePrefersReducedMotion();
   const [mounted, setMounted] = useState(reduce);
+  const [hover, setHover] = useState(null);   // index of the hovered vertex
   useEffect(() => {
     if (reduce) { setMounted(true); return undefined; }
     const t = setTimeout(() => setMounted(true), 20);
@@ -87,10 +88,34 @@ export function PercentileRadar({ axes, accent, size = 200, ariaLabel = null }) 
           transition: 'transform 520ms cubic-bezier(0.22,1,0.36,1), opacity 360ms ease',
         }}
       />
-      {dataPts.map((q, i) => (
-        <circle key={i} cx={q[0]} cy={q[1]} r={2.6} fill={accent}
-          style={{ opacity: mounted ? 1 : 0, transition: 'opacity 360ms ease 120ms' }} />
-      ))}
+      {/* data vertices — hover scales the dot up and fades in a percentile
+          badge (card-surface fill + accent ring so it stays legible over any
+          accent). The transparent hit circle is drawn last so it catches the
+          pointer; the badge is pointer-transparent. */}
+      {dataPts.map((q, i) => {
+        const isHover = hover === i;
+        const pctVal = Math.round(clampPct(list[i].percentile));
+        const badge = ptAt(i, Math.max(9, (R * clampPct(list[i].percentile)) / 100 - 17));
+        return (
+          <g key={i}>
+            <circle cx={q[0]} cy={q[1]} r={2.6} fill={accent}
+              style={{
+                transformBox: 'fill-box', transformOrigin: 'center',
+                transform: isHover ? 'scale(2.1)' : 'scale(1)',
+                transition: 'transform 180ms cubic-bezier(0.22,1,0.36,1)',
+                opacity: mounted ? 1 : 0,
+              }} />
+            <g style={{ opacity: isHover ? 1 : 0, transition: 'opacity 150ms ease', pointerEvents: 'none' }}>
+              <circle cx={badge[0]} cy={badge[1]} r={9.5} fill={colors.white} stroke={accent} strokeWidth={1.2} />
+              <text x={badge[0]} y={badge[1]} textAnchor="middle" dominantBaseline="central"
+                fill={colors.text} fontFamily={fonts.mono} fontSize={9} fontWeight={800}>{pctVal}</text>
+            </g>
+            <circle cx={q[0]} cy={q[1]} r={11} fill="transparent"
+              onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
+              style={{ cursor: 'pointer' }} />
+          </g>
+        );
+      })}
       {/* axis labels */}
       {list.map((ax, i) => {
         const q = ptAt(i, R + 14);

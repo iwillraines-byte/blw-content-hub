@@ -469,6 +469,33 @@ export async function fetchRankings() {
   }
 }
 
+// Per-player MONTHLY OPWR rank history. GSS serves this at
+// /rankings/0/player/{id} → an array of monthly snapshots, each
+// { monthNumber, fromDate, toDate, currentRank, previousRank,
+//   totalPoints, averagePoints, compositePoints, averageCompositePoints }.
+// (Same data behind GSS's own "Overall Rank" month table.)
+// Months before the player was active come back as rank 1 with zero
+// points — placeholders we drop so the trend shows only real ranked
+// months. Returns oldest → newest as { monthNumber, from, rank }.
+export async function fetchOpwrHistory(playerId) {
+  if (playerId == null) return [];
+  try {
+    const res = await fetch(`${GSS_BASE}/rankings/0/player/${playerId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter(m =>
+        Number.isFinite(m.currentRank) && m.currentRank > 0 &&
+        !(Number(m.averagePoints) === 0 && Number(m.compositePoints) === 0))
+      .map(m => ({ monthNumber: m.monthNumber, from: m.fromDate, rank: m.currentRank }))
+      .sort((a, b) => a.monthNumber - b.monthNumber);
+  } catch (e) {
+    console.warn('OPWR history fetch failed:', e);
+    return [];
+  }
+}
+
 // Fetch all data in parallel
 export async function fetchAllData() {
   const [batting, pitching, rankings] = await Promise.all([
