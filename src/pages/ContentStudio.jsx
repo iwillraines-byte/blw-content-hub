@@ -1240,7 +1240,10 @@ function RecentPostsStrip({ posts, loaded, onHide }) {
 // semantic Icon name (e.g. 'studio'); `warn` flips the chip + CTA to the
 // warning hue. The whole card is a clickable link with the shared lift.
 function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
-  const accent = warn ? colors.warning : colors.accent;
+  // Foreground (chip icon + CTA text) must stay legible ON the light card.
+  // colors.warning (amber) fails AA there, so the warn state uses the dark
+  // warningText token for text/icon while keeping the soft amber chip fill.
+  const fg = warn ? colors.warningText : colors.accent;
   const chipBg = warn ? colors.warningBg : colors.accentSoft;
   return (
     <Link to={to} className="card-clickable" style={{ textDecoration: 'none', display: 'block', borderRadius: radius.lg }}>
@@ -1253,7 +1256,7 @@ function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
           <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textMuted }}>{label}</span>
           <span style={{
             width: 30, height: 30, borderRadius: radius.base, flexShrink: 0,
-            background: chipBg, color: accent,
+            background: chipBg, color: fg,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Icon name={icon} size={16} />
@@ -1263,7 +1266,7 @@ function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
           {primary}
         </div>
         <div style={{ fontSize: 12.5, color: colors.textSecondary, lineHeight: 1.35, flex: 1 }}>{secondary}</div>
-        <div style={{ fontFamily: fonts.condensed, fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: accent, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+        <div style={{ fontFamily: fonts.condensed, fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: fg, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
           {cta}
         </div>
       </Card>

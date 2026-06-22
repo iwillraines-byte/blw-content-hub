@@ -1443,7 +1443,7 @@ export default function TeamPage() {
                 borderRadius: radius.lg,
                 overflow: 'hidden',
               }}>
-                <Skeleton width="100%" height={235} radius={0} />
+                <Skeleton width="100%" radius={0} style={{ aspectRatio: '4 / 5' }} />
                 <div style={{ padding: '9px 10px 11px', display: 'flex', flexDirection: 'column', gap: 7 }}>
                   <Skeleton width="75%" height={13} />
                   <Skeleton width="50%" height={9} />
@@ -1532,7 +1532,7 @@ export default function TeamPage() {
                     </div>
                     {/* Body — full name (wraps, never truncates), role + handedness, stat trio. */}
                     <div style={{ padding: '9px 10px 11px' }}>
-                      <div style={{ fontFamily: fonts.heading, fontSize: 14, fontWeight: 800, lineHeight: 1.15, color: colors.text }}>
+                      <div style={{ fontFamily: fonts.heading, fontSize: 14, fontWeight: 800, lineHeight: 1.15, color: colors.text, overflowWrap: 'anywhere' }}>
                         {p.name}
                       </div>
                       <div style={{

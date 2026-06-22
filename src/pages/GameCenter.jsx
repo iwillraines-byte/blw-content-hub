@@ -981,7 +981,7 @@ export default function GameCenter() {
                   <SortHeader label="Team" sortKey={null} currentSort={{}} setSort={() => {}} align="left" />
                   <SortHeader label="W" sortKey={null} currentSort={{}} setSort={() => {}} />
                   <SortHeader label="L" sortKey={null} currentSort={{}} setSort={() => {}} />
-                  <SortHeader label="PCT" sortKey={null} currentSort={{}} setSort={() => {}} highlight />
+                  <SortHeader label="PCT" sortKey={null} currentSort={{}} setSort={() => {}} />
                   <SortHeader label="DIFF" sortKey={null} currentSort={{}} setSort={() => {}} />
                   <SortHeader label="AVG COMP" sortKey={null} currentSort={{}} setSort={() => {}} />
                 </tr>
