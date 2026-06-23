@@ -8,16 +8,18 @@
 // refresh the wall; the column logic adapts to the count.
 import { colors, fonts, radius, shadows } from './theme';
 
-// Bundled montage tiles. Add/remove files and bump COUNT to match.
-const COUNT = 12;
+// Bundled montage tiles (mix of output graphics + action photos). Add/remove
+// files and bump COUNT to match.
+const COUNT = 36;
 const MONTAGE = Array.from({ length: COUNT }, (_, i) => `/login/montage-${String(i + 1).padStart(2, '0')}.jpg`);
 
-// Four columns. Each takes the full set rotated to a different start (so no two
-// columns line up) and duplicated, so a -50% translate loops seamlessly.
+// Distribute the tiles across 4 columns (every 4th image → one column), so each
+// unique image lives in a single column; then duplicate that column's list so a
+// -50% translate loops seamlessly. Distributing (vs. repeating all 36 per
+// column) keeps the DOM light as the library grows.
 const COLUMNS = [0, 1, 2, 3].map(c => {
-  const start = (c * 3) % COUNT;
-  const rot = [...MONTAGE.slice(start), ...MONTAGE.slice(0, start)];
-  return [...rot, ...rot];
+  const own = MONTAGE.filter((_, i) => i % 4 === c);
+  return [...own, ...own];
 });
 // Alternating direction + varied duration → unhurried parallax drift.
 const COL_ANIM = [
