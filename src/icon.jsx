@@ -10,7 +10,7 @@ import {
   ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   AtSign, ExternalLink, Check, X, Plus, Minus, Camera,
   Sun, Moon, Monitor, Circle, Star, Filter, Image as ImageIcon, Menu, RefreshCw,
-  Download, Copy, Maximize2, LineChart,
+  Download, Copy, Maximize2, LineChart, Mail,
 } from 'lucide-react';
 
 // Semantic name -> component. Names are app-domain ("schedule"), not the
@@ -57,6 +57,7 @@ const MAP = {
   copy: Copy,
   expand: Maximize2,
   'command-center': LineChart,
+  mail: Mail,
 };
 
 export function Icon({ name, size = 18, strokeWidth = 1.75, style, ...rest }) {

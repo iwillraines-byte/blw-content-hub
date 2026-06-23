@@ -212,6 +212,13 @@ input[type="range"]:active::-webkit-slider-thumb {
   animation: blw-icon-pulse 1.1s ease-in-out infinite;
 }
 
+/* ─── Auth montage scroll ────────────────────────────────────────────── */
+/* Slow-scrolling image wall behind the login/register form. Each column
+   holds its tiles duplicated, so translating by exactly -50% loops
+   seamlessly. Direction + duration are set per column inline. */
+@keyframes blw-auth-up   { from { transform: translateY(0); }     to { transform: translateY(-50%); } }
+@keyframes blw-auth-down { from { transform: translateY(-50%); }  to { transform: translateY(0); } }
+
 /* ─── Tabular figures on stats data ──────────────────────────────────── */
 /* Numbers in stats columns align rigidly so .341 / .298 / .287 read as
    a column instead of a smear. Applied at the table level so cells with
@@ -255,7 +262,8 @@ input[type="range"]:active::-webkit-slider-thumb {
   }
   .skeleton,
   .route-enter,
-  .icon-pulse {
+  .icon-pulse,
+  .auth-col {
     animation: none !important;
   }
 }

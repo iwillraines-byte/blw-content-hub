@@ -15,8 +15,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { colors, fonts, radius, shadows } from '../theme';
+import { colors, radius } from '../theme';
 import { TEAMS } from '../data';
+import { Icon } from '../icon';
+import { AuthShell, authStyles as styles } from '../auth-shell';
 
 // Minimum password length. Supabase's own default is 6, which is too
 // weak — Pro plans enforce ≥8. We mirror that on the client for clear
@@ -105,7 +107,7 @@ export default function Register() {
   if (sent) {
     return (
       <Shell>
-        <div style={{ fontSize: 42, marginBottom: 10 }}>✉️</div>
+        <Icon name="mail" size={38} style={{ color: colors.red, marginBottom: 10 }} />
         <h1 style={styles.title}>Check your email</h1>
         <p style={styles.muted}>
           We sent a confirmation link to <strong>{email}</strong>. Click it to
@@ -266,21 +268,9 @@ export default function Register() {
 
 function Shell({ children }) {
   return (
-    <div style={{
-      minHeight: '100vh', background: colors.navy,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20, fontFamily: fonts.body,
-    }}>
-      <div style={{
-        width: '100%', maxWidth: 400,
-        background: colors.white, borderRadius: radius.lg,
-        padding: 32, boxShadow: shadows.lg,
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        textAlign: 'center',
-      }}>
-        {children}
-      </div>
-    </div>
+    <AuthShell>
+      <div style={styles.card}>{children}</div>
+    </AuthShell>
   );
 }
 
@@ -294,7 +284,7 @@ function TypeButton({ active, onClick, label, sub }) {
         flex: 1, textAlign: 'left', cursor: 'pointer',
         padding: '10px 12px', borderRadius: radius.base,
         border: `1.5px solid ${active ? colors.red : colors.border}`,
-        background: active ? 'rgba(221,60,60,0.06)' : colors.white,
+        background: active ? colors.redLight : colors.white,
         transition: 'border-color 0.15s, background 0.15s',
       }}
     >
@@ -304,53 +294,3 @@ function TypeButton({ active, onClick, label, sub }) {
   );
 }
 
-const styles = {
-  logo: {
-    display: 'block', width: 96, height: 96,
-    objectFit: 'contain', marginBottom: 14,
-  },
-  title: {
-    fontFamily: fonts.heading, fontSize: 28, color: colors.text,
-    margin: 0, letterSpacing: 1.5, fontWeight: 400,
-  },
-  muted: {
-    fontFamily: fonts.body, fontSize: 13, color: colors.textSecondary,
-    margin: '8px 0 0', lineHeight: 1.5,
-  },
-  label: {
-    display: 'block', textAlign: 'left',
-    fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-    color: colors.textSecondary, letterSpacing: 1,
-    marginBottom: 6, textTransform: 'uppercase',
-  },
-  hint: {
-    fontWeight: 400, letterSpacing: 0, color: colors.textMuted,
-    textTransform: 'none',
-  },
-  input: {
-    width: '100%', boxSizing: 'border-box',
-    padding: '10px 12px', fontSize: 14, fontFamily: fonts.body,
-    border: `1px solid ${colors.border}`, borderRadius: radius.base,
-    background: colors.white, color: colors.text,
-    outline: 'none', transition: 'border-color 0.15s',
-  },
-  errorBox: {
-    marginTop: 10, padding: '8px 12px',
-    background: 'rgba(221,60,60,0.08)', color: '#991B1B',
-    border: `1px solid rgba(221,60,60,0.3)`, borderRadius: radius.base,
-    fontSize: 12, textAlign: 'left',
-  },
-  submitBtn: {
-    width: '100%', marginTop: 18,
-    padding: '11px 14px',
-    background: colors.red, color: '#fff',
-    border: 'none', borderRadius: radius.base,
-    fontFamily: fonts.condensed, fontSize: 14, fontWeight: 700,
-    letterSpacing: 1, textTransform: 'uppercase',
-  },
-  linkButton: {
-    marginTop: 16, background: 'none', border: 'none',
-    color: colors.textSecondary, cursor: 'pointer',
-    fontFamily: fonts.body, fontSize: 13,
-  },
-};
