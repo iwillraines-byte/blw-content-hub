@@ -8,6 +8,7 @@ import { ContentCalendar } from '../content-calendar';
 import { fetchTeamMonthlyPostCount, fetchTeamMonthlyPosts, setGenerateLogPosted } from '../cloud-sync';
 import { useAuth } from '../auth';
 import { Card, PageHeader, SectionHeading, RedButton, OutlineButton, TeamLogo, Skeleton, inputStyle } from '../components';
+import { Icon } from '../icon';
 import { colors, fonts, radius } from '../theme';
 import { useIsDark } from '../theme-mode';
 import { findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
@@ -278,68 +279,167 @@ function TeamGamesStrip({ team, games, accent }) {
 // v4.5.20: Team media grid with a 2-row default cap and "Show all"
 // expand. Used on the Recent player media section so 60-photo
 // teams don't dominate the page on first paint.
+// ─── Media-library helpers ──────────────────────────────────────────────────
+function formatBytes(n) {
+  if (!n || n <= 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+function extOf(name) {
+  const parts = String(name || '').split('.');
+  return parts.length > 1 ? parts.pop().toUpperCase() : '';
+}
+function mediaCategory(assetType) {
+  const t = String(assetType || '').toUpperCase();
+  if (/HEADSHOT|PORTRAIT/.test(t)) return 'headshots';
+  if (/ACTION|HITTING|PITCHING|FIELDING|BATTING|DUGOUT|CELEBRAT/.test(t)) return 'action';
+  return 'other';
+}
+
+// Team media library — a masonry of downloadable assets. Each tile reveals
+// download / copy / open actions on hover, carries filetype + size badges,
+// and the collection filters by category (headshots / action / other).
 function ExpandableTeamMediaGrid({ items, team, thumbUrls, onTileClick }) {
   const [expanded, setExpanded] = useState(false);
-  const DEFAULT_CAP = 10;
-  const visible = expanded ? items : items.slice(0, DEFAULT_CAP);
-  const hidden = items.length - visible.length;
+  const [filter, setFilter] = useState('all');
+  const [hoverId, setHoverId] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const filtered = filter === 'all' ? items : items.filter(m => mediaCategory(m.assetType) === filter);
+  const DEFAULT_CAP = 12;
+  const visible = expanded ? filtered : filtered.slice(0, DEFAULT_CAP);
+  const hidden = filtered.length - visible.length;
+
+  const chips = [
+    { key: 'all', label: 'All', n: items.length },
+    { key: 'headshots', label: 'Headshots', n: items.filter(m => mediaCategory(m.assetType) === 'headshots').length },
+    { key: 'action', label: 'Action', n: items.filter(m => mediaCategory(m.assetType) === 'action').length },
+    { key: 'other', label: 'Other', n: items.filter(m => mediaCategory(m.assetType) === 'other').length },
+  ].filter(c => c.key === 'all' || c.n > 0);
+
+  const doDownload = (m, e) => {
+    e?.preventDefault?.(); e?.stopPropagation?.();
+    const url = thumbUrls[m.id];
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url; a.download = m.name || 'asset';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  const doCopy = async (m, e) => {
+    e?.preventDefault?.(); e?.stopPropagation?.();
+    try {
+      if (m.blob && navigator.clipboard?.write && window.ClipboardItem) {
+        await navigator.clipboard.write([new window.ClipboardItem({ [m.blob.type || 'image/png']: m.blob })]);
+        setCopiedId(m.id);
+        setTimeout(() => setCopiedId(c => (c === m.id ? null : c)), 1400);
+      }
+    } catch { /* clipboard can reject by type/permission — silent */ }
+  };
+
+  const actionBtn = (icon, title, onClick, active) => (
+    <button onClick={onClick} title={title} aria-label={title} style={{
+      width: 30, height: 30, borderRadius: radius.base,
+      background: active ? colors.accent : 'rgba(18,20,26,0.74)',
+      border: '1px solid rgba(255,255,255,0.20)',
+      color: '#fff', cursor: 'pointer',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    }}><Icon name={icon} size={15} /></button>
+  );
+  const badge = (text) => (
+    <span style={{
+      fontFamily: fonts.mono, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.2,
+      color: '#fff', background: 'rgba(18,20,26,0.68)',
+      padding: '1px 5px', borderRadius: 3,
+    }}>{text}</span>
+  );
+
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-        {visible.map((m, i) => (
-          <div
-            key={m.id}
-            onClick={onTileClick ? () => onTileClick(visible, i) : undefined}
-            style={{
-              borderRadius: radius.base, overflow: 'hidden',
-              border: `1px solid ${colors.borderLight}`,
-              cursor: onTileClick ? 'zoom-in' : 'default',
-              transition: 'transform 0.12s ease, box-shadow 0.12s ease',
-            }}
-            onMouseEnter={onTileClick ? (e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; } : undefined}
-            onMouseLeave={onTileClick ? (e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
-          >
-            <div style={{
-              width: '100%', height: 100,
-              background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
-            }} />
-            <div style={{ padding: 8 }}>
-              <div style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {m.name}
+      {/* Category filter chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+        {chips.map(c => {
+          const on = filter === c.key;
+          return (
+            <button key={c.key} onClick={() => { setFilter(c.key); setExpanded(false); }} style={{
+              cursor: 'pointer',
+              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+              padding: '4px 11px', borderRadius: radius.full,
+              background: on ? colors.accentSoft : colors.bg,
+              border: `1px solid ${on ? colors.accentBorder : colors.borderLight}`,
+              color: on ? colors.accent : colors.textSecondary,
+            }}>{c.label} <span style={{ opacity: 0.65 }}>{c.n}</span></button>
+          );
+        })}
+      </div>
+
+      {/* Masonry — natural-aspect tiles flow into columns */}
+      <div style={{ columnWidth: 158, columnGap: 10 }}>
+        {visible.map((m, i) => {
+          const url = thumbUrls[m.id];
+          const hovered = hoverId === m.id;
+          const copied = copiedId === m.id;
+          return (
+            <div key={m.id}
+              onMouseEnter={() => setHoverId(m.id)}
+              onMouseLeave={() => setHoverId(h => (h === m.id ? null : h))}
+              style={{
+                breakInside: 'avoid', marginBottom: 10,
+                borderRadius: radius.base, overflow: 'hidden',
+                border: `1px solid ${colors.borderLight}`, background: colors.white,
+              }}>
+              <div
+                onClick={onTileClick ? () => onTileClick(visible, i) : undefined}
+                style={{ position: 'relative', cursor: onTileClick ? 'zoom-in' : 'default', lineHeight: 0 }}>
+                {url ? (
+                  <img src={url} alt={m.name || 'asset'} loading="lazy" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                ) : (
+                  <div style={{ width: '100%', height: 120, background: `linear-gradient(135deg, ${team.color}22, ${team.color}08)` }} />
+                )}
+                {/* filetype + size badges */}
+                <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', gap: 4 }}>
+                  {extOf(m.name) && badge(extOf(m.name))}
+                  {m.blob?.size ? badge(formatBytes(m.blob.size)) : null}
+                </div>
+                {/* hover action overlay — scrim is click-through (opens the
+                    lightbox via the parent); the button row catches its own
+                    clicks (each action stops propagation). */}
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'linear-gradient(to top, rgba(10,11,15,0.55), rgba(10,11,15,0.10))',
+                  opacity: hovered ? 1 : 0, transition: 'opacity 0.14s ease',
+                  pointerEvents: 'none',
+                }}>
+                  <div style={{ display: 'flex', gap: 8, pointerEvents: hovered ? 'auto' : 'none' }}>
+                    {actionBtn('download', 'Download', (e) => doDownload(m, e))}
+                    {actionBtn('copy', copied ? 'Copied' : 'Copy image', (e) => doCopy(m, e), copied)}
+                    {onTileClick && actionBtn('expand', 'Open', (e) => { e.stopPropagation(); onTileClick(visible, i); })}
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: 9, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
-                {m.assetType || 'FILE'}
+              {/* footer */}
+              <div style={{ padding: '7px 9px' }}>
+                <div style={{ fontSize: 10.5, fontFamily: fonts.condensed, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {m.name}
+                </div>
+                <div style={{ fontSize: 9, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2, letterSpacing: 0.3 }}>
+                  {(m.assetType || 'FILE')}{m.variant ? ` · ${m.variant}` : ''}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      {hidden > 0 && !expanded && (
-        <div style={{ marginTop: 8 }}>
-          <button
-            onClick={() => setExpanded(true)}
-            style={{
-              background: colors.bg, border: `1px solid ${colors.border}`,
-              color: colors.textSecondary, cursor: 'pointer',
-              borderRadius: radius.sm, padding: '6px 14px',
-              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-              letterSpacing: 0.4,
-            }}
-          >Show all {items.length} · +{hidden} more</button>
-        </div>
-      )}
-      {expanded && items.length > DEFAULT_CAP && (
-        <div style={{ marginTop: 8 }}>
-          <button
-            onClick={() => setExpanded(false)}
-            style={{
-              background: 'none', border: `1px solid ${colors.border}`,
-              color: colors.textMuted, cursor: 'pointer',
-              borderRadius: radius.sm, padding: '6px 14px',
-              fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-              letterSpacing: 0.4,
-            }}
-          >Collapse</button>
+
+      {(hidden > 0 || (expanded && filtered.length > DEFAULT_CAP)) && (
+        <div style={{ marginTop: 4 }}>
+          <button onClick={() => setExpanded(e => !e)} style={{
+            background: colors.bg, border: `1px solid ${colors.border}`,
+            color: colors.textSecondary, cursor: 'pointer',
+            borderRadius: radius.sm, padding: '6px 14px',
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+          }}>{expanded ? 'Collapse' : `Show all ${filtered.length} · +${hidden} more`}</button>
         </div>
       )}
     </>
@@ -1458,7 +1558,12 @@ export default function TeamPage() {
           </div>
         )}
         {loaded && roster.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
+          // One row, every player in line (per user). Columns = roster size so
+          // a 7-player roster never wraps to a stray row of 2; minmax(0,1fr)
+          // lets the portrait cards shrink to share the width. overflowX:auto
+          // keeps it a single row that scrolls on a narrow viewport instead
+          // of collapsing the cards to nothing.
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${roster.length}, minmax(0, 1fr))`, gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
             {roster.map((p, idx) => {
               const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
               // v4.5.57: keyed by playerSlug so cousin pairs sharing FI
