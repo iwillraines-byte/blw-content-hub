@@ -296,6 +296,9 @@ function mediaCategory(assetType) {
   if (/ACTION|HITTING|PITCHING|FIELDING|BATTING|DUGOUT|CELEBRAT/.test(t)) return 'action';
   return 'other';
 }
+function isVideoMedia(m) {
+  return /\.(mp4|mov|webm|m4v)$/i.test(String(m?.name || '')) || String(m?.blob?.type || '').startsWith('video/');
+}
 
 // Team media library — a masonry of downloadable assets. Each tile reveals
 // download / copy / open actions on hover, carries filetype + size badges,
@@ -392,9 +395,13 @@ function ExpandableTeamMediaGrid({ items, team, thumbUrls, onTileClick }) {
                 onClick={onTileClick ? () => onTileClick(visible, i) : undefined}
                 style={{ position: 'relative', cursor: onTileClick ? 'zoom-in' : 'default', lineHeight: 0 }}>
                 {url ? (
-                  <img src={url} alt={m.name || 'asset'} loading="lazy" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                  isVideoMedia(m) ? (
+                    <video src={url} muted playsInline preload="metadata" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                  ) : (
+                    <img src={url} alt={m.name || 'asset'} loading="lazy" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                  )
                 ) : (
-                  <div style={{ width: '100%', height: 120, background: `linear-gradient(135deg, ${team.color}22, ${team.color}08)` }} />
+                  <div style={{ width: '100%', aspectRatio: '4 / 5', background: `linear-gradient(135deg, ${team.color}22, ${team.color}08)` }} />
                 )}
                 {/* filetype + size badges */}
                 <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', gap: 4 }}>
@@ -1558,12 +1565,12 @@ export default function TeamPage() {
           </div>
         )}
         {loaded && roster.length > 0 && (
-          // One row, every player in line (per user). Columns = roster size so
-          // a 7-player roster never wraps to a stray row of 2; minmax(0,1fr)
-          // lets the portrait cards shrink to share the width. overflowX:auto
-          // keeps it a single row that scrolls on a narrow viewport instead
-          // of collapsing the cards to nothing.
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${roster.length}, minmax(0, 1fr))`, gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
+          // One row, every player in line (per user). Columns = roster size,
+          // with a 120px FLOOR so the cards stay readable: on a desktop they
+          // fit and stretch to 1fr (a 7-player roster lands ~140px+), and on a
+          // narrow/mobile viewport the row overflows and overflowX:auto gives a
+          // single horizontal scroll instead of collapsing the cards to slivers.
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${roster.length}, minmax(120px, 1fr))`, gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
             {roster.map((p, idx) => {
               const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
               // v4.5.57: keyed by playerSlug so cousin pairs sharing FI
@@ -1881,7 +1888,24 @@ export default function TeamPage() {
       {/* v4.5.60: shared photo lightbox for the Team Photos + Recent
           Player Media grids. PreviewLightbox portals to body so the
           .route-enter transform wrapper doesn't trap it. */}
-      <PreviewLightbox {...photoLightbox.lightboxProps} />
+      <PreviewLightbox
+        {...photoLightbox.lightboxProps}
+        actions={photoLightbox.current ? (
+          // Download lives in the lightbox too, so it's reachable on touch
+          // (where the tile's hover overlay never appears).
+          <a
+            href={thumbUrls[photoLightbox.current.id] || photoLightbox.current.url || '#'}
+            download={photoLightbox.current.name || 'asset'}
+            title="Download" aria-label="Download"
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, borderRadius: radius.base,
+              background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)',
+              color: '#fff', textDecoration: 'none',
+            }}
+          ><Icon name="download" size={18} /></a>
+        ) : null}
+      />
     </div>
     </PageDropZone>
   );
