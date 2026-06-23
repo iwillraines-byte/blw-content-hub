@@ -50,7 +50,7 @@ function Item({ tag, tagColor, children, to }) {
   );
 }
 
-export function QuickStatsTicker({ batting = [], pitching = [], standings = null, rankings = [] }) {
+export function QuickStatsTicker({ batting = [], pitching = [], standings = null, rankings = [], sticky = false }) {
   const [recentResults, setRecentResults] = useState(null);
   const [slate] = useState(() => buildUpcomingSlate());
   useEffect(() => {
@@ -108,7 +108,7 @@ export function QuickStatsTicker({ batting = [], pitching = [], standings = null
     </span>
   );
 
-  return (
+  const card = (
     <div
       className="blw-ticker"
       style={{
@@ -131,6 +131,22 @@ export function QuickStatsTicker({ batting = [], pitching = [], standings = null
         {half}
         {half}
       </div>
+    </div>
+  );
+
+  if (!sticky) return card;
+  // Sticky variant — pins flush beneath the global top bar (offset by the live
+  // --topbar-h; the negative margin cancels <main>'s top padding so there's no
+  // gap). The wrapper lives INSIDE the component so it disappears together with
+  // the card on the null/early-load return above (no phantom strip or shift).
+  return (
+    <div style={{
+      position: 'sticky', top: 'var(--topbar-h, 60px)', zIndex: 25,
+      background: colors.bg,
+      marginTop: 'calc(-1 * var(--main-pad, 24px))',
+      paddingTop: 4,
+    }}>
+      {card}
     </div>
   );
 }

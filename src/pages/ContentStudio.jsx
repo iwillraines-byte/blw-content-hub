@@ -448,17 +448,10 @@ export default function ContentStudio() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* v5: quick-stats ticker — the first thing on the dashboard, pinned
-          STICKY flush beneath the global top bar (offset by the live
-          --topbar-h; the negative margin cancels <main>'s top padding so it
-          sits directly under the header with no gap). */}
-      <div style={{
-        position: 'sticky', top: 'var(--topbar-h, 60px)', zIndex: 25,
-        background: colors.bg,
-        marginTop: 'calc(-1 * var(--main-pad, 24px))',
-        paddingTop: 4,
-      }}>
-        <QuickStatsTicker batting={batting} pitching={pitching} standings={standings} rankings={rankings} />
-      </div>
+          STICKY flush beneath the global top bar. `sticky` makes the ticker
+          render its own sticky wrapper, so it (and its compensating margin)
+          disappear cleanly when there isn't enough data yet. */}
+      <QuickStatsTicker batting={batting} pitching={pitching} standings={standings} rankings={rankings} sticky />
 
       <PageHeader
         title="Dashboard"
