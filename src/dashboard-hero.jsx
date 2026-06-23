@@ -46,17 +46,24 @@ function MontageBackdrop({ images = HERO_IMAGES, opacity = 0.26 }) {
 // Rotates idea headlines, each fading/sliding in and out.
 function RotatingHeadline({ ideas = [] }) {
   const headlines = ideas.map(i => i?.headline).filter(Boolean).slice(0, 24);
+  // Key the effect on the headline CONTENT (not just length) so a same-length
+  // swap (deterministic suggestions → AI ideas) still resyncs the rotation.
+  const sig = headlines.join('|');
   const [idx, setIdx] = useState(0);
   const [shown, setShown] = useState(true);
   useEffect(() => {
     setIdx(0);
+    setShown(true);
     if (prefersReducedMotion() || headlines.length < 2) return;
+    let inner;
     const t = setInterval(() => {
       setShown(false);
-      setTimeout(() => { setIdx(i => (i + 1) % headlines.length); setShown(true); }, 420);
+      inner = setTimeout(() => { setIdx(i => (i + 1) % headlines.length); setShown(true); }, 420);
     }, 4200);
-    return () => clearInterval(t);
-  }, [headlines.length]);
+    // Clear BOTH timers so a pending fade-swap can't fire after unmount or a swap.
+    return () => { clearInterval(t); clearTimeout(inner); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig]);
   const current = headlines[idx] || 'Turn league moments into on-brand content for every team.';
   return (
     <div style={{ minHeight: 48, display: 'flex', alignItems: 'center' }}>
