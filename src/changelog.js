@@ -18,6 +18,23 @@
 
 export const RELEASES = [
   {
+    version: '5.0.0',
+    date: '2026-06-23',
+    kind: 'major',
+    summary: 'BLW Studio v5 — a full redesign into a premium sports-data product',
+    items: [
+      'A committed new look across the whole app: a charcoal dark theme by default, one clean type system (Hanken Grotesk for headings, Inter for body, tabular numerals on every stat), and thin line icons in place of emoji. Team color is the only pop of color on an otherwise monochrome base. The old multi-theme font picker is retired in favor of this single, deliberate identity.',
+      'Redesigned home dashboard: each tile is now a proper metric card — label, big number, and an accent call-to-action — instead of the old flat list.',
+      'Player pages gain a percentile companion: condensed percentile bars, a batting/pitching radar that fades in the exact percentile and scales the dot up on hover, and an Overall Player Worth ranking trend pulled from the real monthly OPWR history. Stat tiles now mark ties (e.g. "T-13th").',
+      'Team pages reorganized and rebuilt: the full roster shows as portrait cards in a single row, team photos sit beneath team stats, and content ideas sit beneath the content calendar.',
+      'Team media library overhaul: filter by type with live counts, a masonry grid of image and video tiles, per-tile download / copy / expand, and a touch-reachable download in the lightbox.',
+      'ESPN-grade stat tables: sticky headers that stay put while you scroll a long table, plus full-row hover highlighting that composites cleanly over the stat heatmap.',
+      'Schedule and Game Center restyled to the v5 dark-premium language.',
+      'The BLW Brand Command Center (cross-property social reporting) is now reachable from the sidebar for the content team and up, and keeps the BLW Studio chrome present via a slim nav rail so it feels native instead of a detached page.',
+      'Dark-mode logos: teams whose marks were navy-on-navy (and disappeared on the charcoal surfaces) now use a light variant in dark mode.',
+    ],
+  },
+  {
     version: '4.24.0',
     date: '2026-06-16',
     kind: 'minor',
