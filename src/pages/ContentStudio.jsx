@@ -442,16 +442,17 @@ export default function ContentStudio() {
           : 'Draft, design, and track BLW content across every team'}
       />
 
+      {/* v5: quick-stats ticker sits directly beneath the page header — live
+          league numbers in one glance, before any other dashboard chrome.
+          Hides itself until enough data has loaded to be worth the chrome. */}
+      <QuickStatsTicker batting={batting} pitching={pitching} standings={standings} rankings={rankings} />
+
       {/* v4.5.42: First-run welcome card. Renders once per user, scoped
           to the staff tier ('admin' / 'content' — not master-admin who
           built the place, not athletes who land on /my-stats). Dismiss
           stamp lives in localStorage keyed by user.id so the card
           stays gone after the first visit. */}
       <FirstRunWelcomeCard />
-
-      {/* v4.16.0: quick-stats ticker — live league numbers in one glance.
-          Hides itself until enough data has loaded to be worth the chrome. */}
-      <QuickStatsTicker batting={batting} pitching={pitching} standings={standings} rankings={rankings} />
 
       {/* Live-state cards — each reflects current state, not just a nav shortcut */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>

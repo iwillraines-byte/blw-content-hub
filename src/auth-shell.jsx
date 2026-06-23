@@ -29,6 +29,15 @@ const COL_ANIM = [
   'blw-auth-down 105s linear infinite',
 ];
 
+// The montage keyframes live here (not only in global-styles) because the
+// login/register pages render OUTSIDE the authenticated app body where
+// <GlobalStyles> mounts — without this local copy the wall sits static.
+const MONTAGE_CSS = `
+@keyframes blw-auth-up { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes blw-auth-down { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .auth-col { animation: none !important; } }
+`;
+
 export function AuthShell({ children }) {
   return (
     <div style={{
@@ -36,6 +45,7 @@ export function AuthShell({ children }) {
       background: colors.bg, fontFamily: fonts.body,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
     }}>
+      <style dangerouslySetInnerHTML={{ __html: MONTAGE_CSS }} />
       {/* Scrolling image wall */}
       <div aria-hidden="true" style={{
         position: 'absolute', inset: '-6% 0', zIndex: 0,

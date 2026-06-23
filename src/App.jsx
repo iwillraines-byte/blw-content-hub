@@ -4,6 +4,7 @@ import { TEAMS, API_CONFIG } from './data';
 import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './theme';
 import { TeamThemeScope } from './team-theme';
 import { GlobalStyles } from './global-styles';
+import { useIsDark, applyMode } from './theme-mode';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from './version';
 import ChangelogModal from './changelog-modal';
 // Dashboard + auth pages load eagerly (the landing surfaces — no Suspense
@@ -398,6 +399,27 @@ function useSyncedAgoLabel() {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// v5: light/dark toggle in the top bar. Cycles the two primary modes (System
+// stays available in Settings). Icon shows the mode you'll switch TO.
+function ThemeToggle() {
+  const isDark = useIsDark();
+  return (
+    <button
+      onClick={() => applyMode(isDark ? 'light' : 'dark')}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 32, height: 32, borderRadius: radius.base,
+        background: 'transparent', border: 'none',
+        cursor: 'pointer', color: colors.textMuted,
+      }}
+    >
+      <Icon name={isDark ? 'sun' : 'moon'} size={17} />
+    </button>
+  );
+}
+
 function TopBar({ isMobile, onMenuToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -547,6 +569,8 @@ function TopBar({ isMobile, onMenuToggle }) {
           </button>
         )}
         <style>{`@keyframes blw-spin { to { transform: rotate(360deg) } } .blw-spin { animation: blw-spin 0.9s linear infinite }`}</style>
+
+        <ThemeToggle />
 
         {/* Team navigator — picking a team takes you to that team's page */}
         <select

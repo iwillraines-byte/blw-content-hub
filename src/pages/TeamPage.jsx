@@ -1408,84 +1408,6 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* Team Photos — moved directly beneath Team Stats (per user). Team-scoped
-          assets (TEAMPHOTO, VENUE, LOGO_*, WORDMARK). */}
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <SectionHeading style={{ margin: 0 }}>Team photos</SectionHeading>
-          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
-            Go to Files →
-          </Link>
-        </div>
-        {teamScopedMedia.length === 0 && (
-          /* Empty state — instead of one dense paragraph, surface the four
-             accepted asset types as a small visual ladder so the user can
-             scan the taxonomy in 2 seconds. */
-          <div style={{
-            padding: 28, textAlign: 'center',
-            background: colors.bg, borderRadius: radius.base,
-            border: `1px dashed ${colors.borderLight}`,
-          }}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>📷</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
-              No team photos yet
-            </div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
-              Upload a group shot, venue pic, or logo in Files. Tag with one of:
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-              {['TEAMPHOTO', 'VENUE', 'LOGO', 'WORDMARK'].map(tag => (
-                <span key={tag} style={{
-                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
-                  padding: '3px 10px', borderRadius: radius.sm,
-                  background: colors.white, border: `1px solid ${colors.borderLight}`,
-                  color: colors.textSecondary,
-                }}>{tag}</span>
-              ))}
-            </div>
-            <Link to="/files" style={{
-              display: 'inline-block',
-              fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
-              color: colors.accent, textDecoration: 'none',
-              padding: '6px 14px', borderRadius: radius.base,
-              border: `1px solid ${colors.accentBorder}`,
-              background: colors.accentSoft,
-            }}>Open Files →</Link>
-          </div>
-        )}
-        {teamScopedMedia.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
-            {teamScopedMedia.slice(0, 12).map((m, i) => (
-              <div
-                key={m.id}
-                onClick={() => photoLightbox.openAt(teamScopedMedia.slice(0, 12), i)}
-                style={{
-                  borderRadius: radius.base, overflow: 'hidden',
-                  border: `1px solid ${colors.borderLight}`,
-                  cursor: 'zoom-in',
-                  transition: 'transform 0.12s ease, box-shadow 0.12s ease',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
-              >
-                <div style={{
-                  width: '100%', height: 110,
-                  background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
-                }} />
-                <div style={{ padding: 8 }}>
-                  <div style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.name}
-                  </div>
-                  <div style={{ fontSize: 9, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
-                    {m.assetType}{m.variant ? ` · ${m.variant}` : ''}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
       {/* TOP BATTER / TOP PITCHER / HR LEADER strip removed in v5 (per user
           feedback). Team-level standouts will live in the redesigned
           two-column aggregate stats card. */}
@@ -1824,6 +1746,84 @@ export default function TeamPage() {
             thumbUrls={thumbUrls}
             onTileClick={(visibleItems, i) => photoLightbox.openAt(visibleItems, i)}
           />
+        )}
+      </Card>
+
+      {/* Team photos — moved beneath Recent player media (per user). Team-scoped
+          assets (TEAMPHOTO, VENUE, LOGO_*, WORDMARK). */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <SectionHeading style={{ margin: 0 }}>Team photos</SectionHeading>
+          <Link to="/files" style={{ fontSize: 11, fontFamily: fonts.condensed, fontWeight: 600, color: colors.accent, textDecoration: 'none' }}>
+            Go to Files →
+          </Link>
+        </div>
+        {teamScopedMedia.length === 0 && (
+          /* Empty state — instead of one dense paragraph, surface the four
+             accepted asset types as a small visual ladder so the user can
+             scan the taxonomy in 2 seconds. */
+          <div style={{
+            padding: 28, textAlign: 'center',
+            background: colors.bg, borderRadius: radius.base,
+            border: `1px dashed ${colors.borderLight}`,
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>📷</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+              No team photos yet
+            </div>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+              Upload a group shot, venue pic, or logo in Files. Tag with one of:
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+              {['TEAMPHOTO', 'VENUE', 'LOGO', 'WORDMARK'].map(tag => (
+                <span key={tag} style={{
+                  fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+                  padding: '3px 10px', borderRadius: radius.sm,
+                  background: colors.white, border: `1px solid ${colors.borderLight}`,
+                  color: colors.textSecondary,
+                }}>{tag}</span>
+              ))}
+            </div>
+            <Link to="/files" style={{
+              display: 'inline-block',
+              fontSize: 12, fontFamily: fonts.body, fontWeight: 700,
+              color: colors.accent, textDecoration: 'none',
+              padding: '6px 14px', borderRadius: radius.base,
+              border: `1px solid ${colors.accentBorder}`,
+              background: colors.accentSoft,
+            }}>Open Files →</Link>
+          </div>
+        )}
+        {teamScopedMedia.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+            {teamScopedMedia.slice(0, 12).map((m, i) => (
+              <div
+                key={m.id}
+                onClick={() => photoLightbox.openAt(teamScopedMedia.slice(0, 12), i)}
+                style={{
+                  borderRadius: radius.base, overflow: 'hidden',
+                  border: `1px solid ${colors.borderLight}`,
+                  cursor: 'zoom-in',
+                  transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <div style={{
+                  width: '100%', height: 110,
+                  background: thumbUrls[m.id] ? `url(${thumbUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
+                }} />
+                <div style={{ padding: 8 }}>
+                  <div style={{ fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {m.name}
+                  </div>
+                  <div style={{ fontSize: 9, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 2 }}>
+                    {m.assetType}{m.variant ? ` · ${m.variant}` : ''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
 

@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { TEAMS, getTeam } from '../data';
+import { useIsDark } from '../theme-mode';
+import { readableAccent } from '../team-colors';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
@@ -2330,6 +2332,7 @@ export default function Files() {
 // to whichever team is using the most space. Helps spot which team's
 // archive is bloated (oversized originals, duplicates) at a glance.
 function PerTeamBreakdown({ byTeam }) {
+  const isDark = useIsDark();
   const fmt = (n) => n < 1024 ? `${n} B`
     : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB`
     : n < 1024 ** 3 ? `${(n / (1024 ** 2)).toFixed(1)} MB`
@@ -2350,7 +2353,7 @@ function PerTeamBreakdown({ byTeam }) {
       marginTop: 12, padding: 10,
       background: 'rgba(14,165,233,0.06)',
       border: '1px solid rgba(14,165,233,0.18)',
-      borderRadius: radius.sm, fontSize: 11, fontFamily: fonts.condensed, color: '#075985',
+      borderRadius: radius.sm, fontSize: 11, fontFamily: fonts.condensed, color: colors.textSecondary,
     }}>
       <div style={{ fontWeight: 700, letterSpacing: 0.5, marginBottom: 6 }}>
         BREAKDOWN BY TEAM · MEDIA BUCKET
@@ -2364,7 +2367,7 @@ function PerTeamBreakdown({ byTeam }) {
             : t ? t.name
             : (team === 'OTHER' ? 'Unparsed / legacy' : team);
           const barColor = isLeague ? colors.red
-            : t?.color || '#0EA5E9';
+            : t ? readableAccent(t, isDark) : '#0EA5E9';
           return (
             <div key={team} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px 60px', gap: 8, alignItems: 'center' }} title={label}>
               <span style={{ fontWeight: 700, color: barColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
