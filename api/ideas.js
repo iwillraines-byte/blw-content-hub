@@ -36,7 +36,10 @@ import { persistIdeas } from './content-ideas.js';
 import { fetchMemoryBlock } from './_ai-memory.js';
 import { clampVoice } from './_brand-voice.js';
 
-const DEFAULT_MODEL = 'claude-haiku-4-5';
+// v5: upgraded Haiku -> Sonnet 4.6. The owner opted into the higher cost for
+// stronger voice/nuance (Haiku is the weakest tier exactly where brand voice
+// matters). ANTHROPIC_MODEL still overrides this default.
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 // Bumped from 1200 — each idea now ships a narrative paragraph, stat pills,
 // and three caption variants. Six ideas at the new shape lands around
 // 2.4k–2.8k output tokens.

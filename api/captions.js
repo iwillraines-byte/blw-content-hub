@@ -32,7 +32,9 @@ import { checkRateLimit } from './_rate-limit.js';
 import { fetchMemoryBlock } from './_ai-memory.js';
 import { clampVoice } from './_brand-voice.js';
 
-const DEFAULT_MODEL = 'claude-haiku-4-5';
+// v5: upgraded Haiku -> Sonnet 4.6 (owner opted into the cost for better
+// voice). ANTHROPIC_MODEL still overrides.
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const MAX_OUTPUT_TOKENS = 800;
 
 const VALID_PLATFORMS = new Set(['instagram', 'twitter', 'story']);
