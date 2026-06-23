@@ -22,6 +22,92 @@ import RosterDiagnosticCard from './RosterDiagnosticCard';
 import RawApiInspectorCard from './RawApiInspectorCard';
 import MediaUsageCard from './MediaUsageCard';
 
+// Hero headlines — master_admin only. Custom lines (optionally tagged with a
+// team + player) that rotate in the dashboard hero alongside the live content
+// ideas. Stored cloud-wide in app_settings key "hero-headlines" (everyone
+// reads, master writes). Consumed by dashboard-hero.jsx HeroBand.
+function HeroHeadlinesCard() {
+  const toast = useToast();
+  const [items, setItems] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await authedFetch('/api/app-settings?key=hero-headlines');
+        if (res.ok && !cancel) {
+          const j = await res.json();
+          if (Array.isArray(j?.value?.items)) setItems(j.value.items);
+        }
+      } catch { /* ignore — defaults to empty */ }
+      finally { if (!cancel) setLoaded(true); }
+    })();
+    return () => { cancel = true; };
+  }, []);
+
+  const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `h-${Date.now()}-${Math.round(Math.random() * 1e6)}`);
+  const update = (id, patch) => setItems(list => list.map(it => (it.id === id ? { ...it, ...patch } : it)));
+  const remove = (id) => setItems(list => list.filter(it => it.id !== id));
+  const add = () => setItems(list => [...list, { id: newId(), text: '', team: '', player: '' }]);
+
+  const save = async () => {
+    setSaving(true);
+    const clean = items
+      .map(it => ({ id: it.id || newId(), text: (it.text || '').trim(), team: it.team || '', player: (it.player || '').trim() }))
+      .filter(it => it.text);
+    try {
+      const res = await authedFetch('/api/app-settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'hero-headlines', value: { items: clean } }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setItems(clean);
+      toast.success(`Saved ${clean.length} hero headline${clean.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      toast.error('Couldn\'t save headlines', { detail: String(e?.message || e).slice(0, 80) });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Card>
+      <SectionHeading>Hero headlines</SectionHeading>
+      <p style={{ fontSize: 12.5, color: colors.textSecondary, margin: '6px 0 14px', lineHeight: 1.5 }}>
+        Custom lines that rotate in the dashboard hero alongside the live content ideas. Tag a team and player to show them under the headline.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map(it => (
+          <div key={it.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input value={it.text} onChange={e => update(it.id, { text: e.target.value })} placeholder="Headline…" style={{ ...inputStyle, flex: '3 1 220px' }} />
+            <select value={it.team || ''} onChange={e => update(it.id, { team: e.target.value })} style={{ ...inputStyle, flex: '1 1 120px' }}>
+              <option value="">No team</option>
+              {TEAMS.map(t => <option key={t.id} value={t.id}>{t.id} · {t.name}</option>)}
+            </select>
+            <input value={it.player || ''} onChange={e => update(it.id, { player: e.target.value })} placeholder="Player (optional)" style={{ ...inputStyle, flex: '1 1 120px' }} />
+            <button onClick={() => remove(it.id)} title="Remove headline" aria-label="Remove headline" style={{
+              background: 'none', border: `1px solid ${colors.border}`, color: colors.textMuted,
+              borderRadius: radius.base, width: 32, height: 32, cursor: 'pointer', flexShrink: 0, lineHeight: 1, fontSize: 16,
+            }}>×</button>
+          </div>
+        ))}
+        {loaded && items.length === 0 && (
+          <div style={{ fontSize: 12, color: colors.textMuted, padding: '6px 0' }}>
+            No custom headlines yet — add one to rotate it in the hero.
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+        <OutlineButton onClick={add}>+ Add headline</OutlineButton>
+        <RedButton onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save headlines'}</RedButton>
+      </div>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { role } = useAuth();
   const [driveKey, setDriveKey] = useState('');
@@ -141,6 +227,10 @@ export default function Settings() {
       {/* Most-used media — master_admin only. Downloads + Studio-use
           leaderboard so the master can see which photos earn their keep. */}
       {isMaster && <MediaUsageCard />}
+
+      {/* Hero headlines — master_admin only. Custom rotating lines for the
+          dashboard hero. */}
+      {isMaster && <HeroHeadlinesCard />}
 
       {/* Appearance + Typography — personal preferences, visible to everyone */}
       <ThemeModeCard />

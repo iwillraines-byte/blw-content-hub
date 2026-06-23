@@ -438,6 +438,19 @@ function TopBar({ isMobile, onMenuToggle }) {
   }, [pageTitle]);
   const syncedAgo = useSyncedAgoLabel();
   const [resyncing, setResyncing] = useState(false);
+  // Publish the top bar's live height as --topbar-h so sticky elements below
+  // it (the dashboard ticker) can pin flush underneath at any breakpoint.
+  const topbarRef = useRef(null);
+  useEffect(() => {
+    const el = topbarRef.current;
+    if (!el) return;
+    const setH = () => document.documentElement.style.setProperty('--topbar-h', `${el.offsetHeight}px`);
+    setH();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(setH) : null;
+    ro?.observe(el);
+    window.addEventListener('resize', setH);
+    return () => { ro?.disconnect(); window.removeEventListener('resize', setH); };
+  }, []);
   const forceResync = async () => {
     if (resyncing) return;
     setResyncing(true);
@@ -460,7 +473,7 @@ function TopBar({ isMobile, onMenuToggle }) {
   };
 
   return (
-    <header style={{
+    <header ref={topbarRef} style={{
       background: colors.white,
       // Team context shows as a full-width bottom underline tinted with the
       // team color (not a side-stripe). When no team is in context, falls
@@ -1039,6 +1052,7 @@ function AppShell() {
         <main style={{
           flex: 1,
           padding: isMobile ? 12 : 24,
+          '--main-pad': isMobile ? '12px' : '24px',
           maxWidth: 1200,
           width: '100%',
           boxSizing: 'border-box',

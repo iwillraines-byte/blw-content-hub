@@ -81,6 +81,17 @@ export default function ContentStudio() {
   const aiIdeas = ideasStore.ideas;
   const [ideasLoading, setIdeasLoading] = useState(false);
   const [ideasError, setIdeasError] = useState(null);
+  // v5: master-authored custom hero headlines (app_settings 'hero-headlines'),
+  // merged into the hero's rotation. Cross-user; read-only here.
+  const [heroHeadlines, setHeroHeadlines] = useState([]);
+  useEffect(() => {
+    let cancel = false;
+    authedFetch('/api/app-settings?key=hero-headlines')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (!cancel && Array.isArray(j?.value?.items)) setHeroHeadlines(j.value.items); })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
   // Most recently queued idea id → request id. Flashes a "✓ Queued" state
   // on that card's button for a few seconds and surfaces a "View request →"
   // link so the user can jump straight to the newly-created request.
@@ -436,17 +447,25 @@ export default function ContentStudio() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* v5: quick-stats ticker — the first thing on the dashboard, pinned
+          STICKY flush beneath the global top bar (offset by the live
+          --topbar-h; the negative margin cancels <main>'s top padding so it
+          sits directly under the header with no gap). */}
+      <div style={{
+        position: 'sticky', top: 'var(--topbar-h, 60px)', zIndex: 25,
+        background: colors.bg,
+        marginTop: 'calc(-1 * var(--main-pad, 24px))',
+        paddingTop: 4,
+      }}>
+        <QuickStatsTicker batting={batting} pitching={pitching} standings={standings} rankings={rankings} />
+      </div>
+
       <PageHeader
         title="Dashboard"
         subtitle={isAthlete
           ? 'Your team\'s content ideas, recent posts, and open requests'
           : 'Draft, design, and track BLW content across every team'}
       />
-
-      {/* v5: quick-stats ticker sits directly beneath the page header — live
-          league numbers in one glance, before any other dashboard chrome.
-          Hides itself until enough data has loaded to be worth the chrome. */}
-      <QuickStatsTicker batting={batting} pitching={pitching} standings={standings} rankings={rankings} />
 
       {/* v4.5.42: First-run welcome card. Renders once per user, scoped
           to the staff tier ('admin' / 'content' — not master-admin who
@@ -458,7 +477,7 @@ export default function ContentStudio() {
       {/* v5 hero — the same login-wall imagery crossfading (faded) behind the
           three live action cards, with a rotating headline cycling the
           cross-user stored content ideas. */}
-      <HeroBand ideas={ideasListBase}>
+      <HeroBand ideas={ideasListBase} customHeadlines={heroHeadlines}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <LiveCard
           icon="studio"
