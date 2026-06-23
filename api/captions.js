@@ -30,6 +30,7 @@
 import { requireUser, getServiceClient } from './_supabase.js';
 import { checkRateLimit } from './_rate-limit.js';
 import { fetchMemoryBlock } from './_ai-memory.js';
+import { clampVoice } from './_brand-voice.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 800;
@@ -145,28 +146,46 @@ ${briefs}
   // benefit MORE than ideas from memory because tone + voice rules
   // are exactly what the memory store is designed to encode.
   let memoryBlock = '';
+  let brandVoiceBlock = '';
   try {
+    const sbCap = getServiceClient();
     const playerNameParts = (idea?.prefill?.playerName || '').trim().split(/\s+/).filter(Boolean);
-    memoryBlock = await fetchMemoryBlock(getServiceClient(), {
-      scopeTeam: idea?.team && idea.team !== 'BLW' ? idea.team : null,
-      scopePlayer: playerNameParts.length ? {
-        name: idea.prefill.playerName,
-        firstName: playerNameParts[0],
-        lastName: playerNameParts[playerNameParts.length - 1],
-        team: idea?.team || null,
-      } : null,
-      sampledPlayers: [],
-    });
-  } catch { /* silent — degrades to no memory block */ }
+    // v5: ground the caption in the team's authored BRAND VOICE (the same
+    // app_settings the Team page writes). Fetched in parallel with memory.
+    const bvKey = idea?.team && idea.team !== 'BLW' ? `brand-voice-${String(idea.team).toUpperCase()}` : null;
+    const [mem, bvRes] = await Promise.all([
+      fetchMemoryBlock(sbCap, {
+        scopeTeam: idea?.team && idea.team !== 'BLW' ? idea.team : null,
+        scopePlayer: playerNameParts.length ? {
+          name: idea.prefill.playerName,
+          firstName: playerNameParts[0],
+          lastName: playerNameParts[playerNameParts.length - 1],
+          team: idea?.team || null,
+        } : null,
+        sampledPlayers: [],
+      }),
+      (sbCap && bvKey)
+        ? sbCap.from('app_settings').select('value').eq('key', bvKey).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    memoryBlock = mem || '';
+    const bvText = clampVoice(bvRes?.data?.value?.text);
+    if (bvText) {
+      brandVoiceBlock = `\n\nBRAND VOICE — voice guideline for ${idea.team}, authored by the BLW content team. Match this team's tone and vocabulary; it overrides the generic tone rules above:\n${bvText}`;
+    }
+  } catch { /* silent — degrades to no memory / no brand voice */ }
   const memoryPrefix = memoryBlock ? `${memoryBlock}\n` : '';
 
   const userInstruction = `Write the requested caption${platformsToWrite.length === 1 ? '' : 's'} for this idea:
 
-${memoryPrefix}${ideaSummary}${narrativeBlock}${athleteVoiceBlock}`;
+${memoryPrefix}${ideaSummary}${narrativeBlock}${athleteVoiceBlock}${brandVoiceBlock}`;
 
   const anthropicBody = {
     model,
     max_tokens: MAX_OUTPUT_TOKENS,
+    // v5: slightly below default 1.0 so a re-rolled caption stays on the
+    // team's brand voice instead of wandering.
+    temperature: 0.85,
     system: [{ type: 'text', text: systemPrompt }],
     messages: [{ role: 'user', content: userInstruction }],
   };
@@ -227,6 +246,11 @@ ${memoryPrefix}${ideaSummary}${narrativeBlock}${athleteVoiceBlock}`;
     res.status(502).json({ error: 'Upstream fetch failed', detail: err.message });
   }
 }
+
+// v5: headroom for a cold Supabase auth handshake + the generation, so a slow
+// caption rewrite times out gracefully instead of 504-ing. Bare Node
+// serverless functions read this from the TOP-LEVEL export, not from `config`.
+export const maxDuration = 60;
 
 export const config = {
   api: {

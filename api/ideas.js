@@ -34,6 +34,7 @@ import { getServiceClient, requireUser } from './_supabase.js';
 import { checkRateLimit } from './_rate-limit.js';
 import { persistIdeas } from './content-ideas.js';
 import { fetchMemoryBlock } from './_ai-memory.js';
+import { clampVoice } from './_brand-voice.js';
 
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 // Bumped from 1200 — each idea now ships a narrative paragraph, stat pills,
@@ -133,6 +134,39 @@ export default async function handler(req, res) {
 
   const battingSample = stratifiedSample(context.batting || [], 3, 3, 1);
   const pitchingSample = stratifiedSample(context.pitching || [], 3, 3, 1);
+
+  // v5: per-team BRAND VOICE injection. The content team authors a voice
+  // guideline per team on the Team page (app_settings key brand-voice-{TEAMID},
+  // value { text }). Until now nothing read it, so every team was voiced off
+  // the one generic tone block below — the #1 reason generated copy drifted
+  // from the intended vibe. Fetched in parallel with the feedback read.
+  const brandVoiceKeys = (() => {
+    const ids = new Set();
+    const scopedTeam = scopeTeam && scopeTeam !== 'BLW' ? String(scopeTeam).toUpperCase() : null;
+    const seededTeam = seedIdea?.team && seedIdea.team !== 'BLW' ? String(seedIdea.team).toUpperCase() : null;
+    if (scopedTeam || seededTeam) {
+      // Scoped batch — load just that team (+ sampled teammates/rivals it may mention).
+      if (scopedTeam) ids.add(scopedTeam);
+      if (seededTeam) ids.add(seededTeam);
+      for (const p of [...battingSample, ...pitchingSample]) {
+        if (p.team) ids.add(String(p.team).toUpperCase());
+      }
+    } else {
+      // Unscoped / league-wide batch (the highest-volume path): the model can
+      // write about ANY team (the 4-team-spread rule), and the random player
+      // sample only covers a subset — so load voice for EVERY team in play.
+      // The league is bounded (~10 teams), so this stays cheap.
+      for (const t of (context.teams || [])) {
+        if (t.id && t.id !== 'BLW') ids.add(String(t.id).toUpperCase());
+      }
+      if (!ids.size) {
+        for (const p of [...battingSample, ...pitchingSample]) {
+          if (p.team) ids.add(String(p.team).toUpperCase());
+        }
+      }
+    }
+    return [...ids].map(id => `brand-voice-${id}`);
+  })();
 
   // v4.8.15: same-lastname disambiguation. Pre-fix, when the prompt
   // listed both Sam Skibbe and Gus Skibbe on NYG, the model would
@@ -428,13 +462,23 @@ RULES:
   // body.recentFeedback fills in anything not yet synced. Soft-fails to
   // client-only signal when the table doesn't exist yet (db/019 unrun).
   let mergedFeedback = Array.isArray(recentFeedback) ? recentFeedback.slice(0, 30) : [];
+  let brandVoiceBlock = '';
   try {
-    const sbFb = getServiceClient();
-    if (sbFb) {
-      const { data: fbRows } = await sbFb.from('idea_feedback')
-        .select('idea_id, vote, headline, angle, team, created_at')
-        .order('created_at', { ascending: false })
-        .limit(30);
+    const sbShared = getServiceClient();
+    if (sbShared) {
+      // Both reads are independent — run them together so brand voice
+      // adds zero latency on top of the feedback read.
+      const [fbRes, bvRes] = await Promise.all([
+        sbShared.from('idea_feedback')
+          .select('idea_id, vote, headline, angle, team, created_at')
+          .order('created_at', { ascending: false })
+          .limit(30),
+        brandVoiceKeys.length
+          ? sbShared.from('app_settings').select('key, value').in('key', brandVoiceKeys)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const fbRows = fbRes?.data;
       if (Array.isArray(fbRows) && fbRows.length) {
         const serverRows = fbRows.map(r => ({
           id: r.idea_id, vote: r.vote,
@@ -446,8 +490,17 @@ RULES:
           ...mergedFeedback.filter(f => f.id && !seenFb.has(f.id)),
         ].slice(0, 30);
       }
+
+      const bvLines = (bvRes?.data || []).map(r => {
+        const text = clampVoice(r.value?.text);
+        if (!text) return null;
+        return `- ${r.key.replace('brand-voice-', '')}: ${text}`;
+      }).filter(Boolean);
+      if (bvLines.length) {
+        brandVoiceBlock = `\nBRAND VOICE — per-team voice guidelines authored by the BLW content team. They define how each team's content should SOUND (tone, vocabulary, do's and don'ts). When a headline or caption is for one of these teams, MATCH its brand voice — it overrides the generic tone rules above:\n${bvLines.join('\n')}\n`;
+      }
     }
-  } catch { /* degrade to client-only feedback */ }
+  } catch { /* degrade to client-only feedback, no brand voice */ }
 
   // ─── Per-call user message (NOT cached — randomised samples + dynamic context) ─
   const stateBlock = `BLW CURRENT STATE:
@@ -464,7 +517,7 @@ ${topPitchers || '(none)'}
 BIGGEST RANK MOVERS:
 ${rankMovers || '(none notable this week)'}
 ${recentResultsBlock}${upcomingSlateBlock}${photoInventoryBlock}${cadenceBlock}
-${athleteVoiceBlock}${leagueNarrativesBlock}${(() => {
+${brandVoiceBlock}${athleteVoiceBlock}${leagueNarrativesBlock}${(() => {
   // v4.5.68: feedback loop. Recent thumbs up/down reads from the
   // client (idea-feedback-store). We summarize as "more like this"
   // (up-voted angles + headline themes) and "avoid this" (down-voted
@@ -556,12 +609,13 @@ Generate ${count} fresh content ideas. CRITICAL: each idea must take a different
   const anthropicBody = {
     model,
     max_tokens: MAX_OUTPUT_TOKENS,
-    // High temperature for content ideation — we want variance across the
-    // batch, not consensus. The angle-diversity rule + anti-paraphrase
-    // rule in the system prompt enforce STRUCTURE; the temperature gives
-    // us creative WIDTH within that structure. Output is JSON-validated
-    // downstream so high temp doesn't risk format breakage.
-    temperature: 1,
+    // v5: dropped 1.0 → 0.85. The angle-diversity + anti-paraphrase rules
+    // already enforce structural WIDTH, and the new BRAND VOICE block now
+    // anchors HOW each team should sound. At temp 1 the model drifted off
+    // that voice (the "far from the vision" complaint); 0.85 keeps the
+    // batch varied while staying on-brand. Output is JSON-validated
+    // downstream so this doesn't risk format breakage either way.
+    temperature: 0.85,
     system: [
       { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
     ],
@@ -653,6 +707,14 @@ Generate ${count} fresh content ideas. CRITICAL: each idea must take a different
     res.status(502).json({ error: 'Upstream fetch failed', detail: err.message });
   }
 }
+
+// v5: the function does a Supabase auth + profile read, a few DB reads, and a
+// Haiku generation of up to 3200 tokens. On a cold auth handshake that can
+// exceed Vercel's short default cap and 504 (surfaced as a "couldn't fetch"
+// hang). For bare Node serverless functions Vercel reads the timeout from this
+// TOP-LEVEL export (NOT from `config`) — 60s is valid on Hobby (max 60) and
+// Pro (max 300).
+export const maxDuration = 60;
 
 export const config = {
   api: {

@@ -200,6 +200,18 @@ input[type="range"]:active::-webkit-slider-thumb {
   animation: blw-route-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ─── Icon pulse ─────────────────────────────────────────────────────── */
+/* A gentle opacity pulse for an icon that's "working" (e.g. the Generate
+   button's spark while ideas stream in). Subtler than a spinner, on-brand
+   for the v5 restraint. */
+@keyframes blw-icon-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.icon-pulse {
+  animation: blw-icon-pulse 1.1s ease-in-out infinite;
+}
+
 /* ─── Tabular figures on stats data ──────────────────────────────────── */
 /* Numbers in stats columns align rigidly so .341 / .298 / .287 read as
    a column instead of a smear. Applied at the table level so cells with
@@ -242,7 +254,8 @@ input[type="range"]:active::-webkit-slider-thumb {
     transform: none !important;
   }
   .skeleton,
-  .route-enter {
+  .route-enter,
+  .icon-pulse {
     animation: none !important;
   }
 }

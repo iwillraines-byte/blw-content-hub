@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, applyCanonicalToStats, fetchStandings, teamWithStanding } from '../data';
 import { getAllManualPlayers } from '../player-store';
-import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
+import { Card, PageHeader, SectionHeading, TeamLogo, Skeleton } from '../components';
 import { Icon } from '../icon';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
@@ -243,8 +243,24 @@ export default function ContentStudio() {
           recentFeedback: getRecentFeedback(20),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      let data = null;
+      try { data = await res.json(); } catch { /* non-JSON body, e.g. a 504 timeout page */ }
+      if (!res.ok) {
+        const s = res.status;
+        const msg =
+          (s === 504 || s === 408 || s === 524) ? 'Generation timed out — the model took too long. Give it another shot.'
+          : s === 429 ? 'Rate limit reached — wait a minute, then try again.'
+          : (s === 401 || s === 403) ? 'Your session expired — refresh the page and sign back in.'
+          : (data?.error === 'Could not parse model JSON') ? 'The model returned an unexpected format. Try again.'
+          : (data?.detail || data?.error || `Request failed (HTTP ${s}).`);
+        throw new Error(msg);
+      }
+      // Guard a 2xx with a non-JSON / empty body (e.g. a proxy returning an
+      // HTML 200) — without this, the data.ideas access below throws a
+      // TypeError that the catch mislabels as a connection failure.
+      if (!data || !Array.isArray(data.ideas)) {
+        throw new Error('The server returned an unexpected response. Try again.');
+      }
       // Server now stamps id + aiGenerated; we only normalise defensively.
       const tagged = (data.ideas || []).map((i, idx) => ({
         ...i,
@@ -265,8 +281,13 @@ export default function ContentStudio() {
         detail: seedIdea ? `Seeded from "${seedIdea.headline}"` : 'Scroll down in Content ideas to see them',
       });
     } catch (err) {
-      setIdeasError(err.message || 'Failed to fetch ideas');
-      toast.error('Couldn\'t fetch AI ideas', { detail: err.message?.slice(0, 80) });
+      // A rejected fetch (network/CORS) throws a TypeError with no useful
+      // message — translate it so the user isn't staring at "Failed to fetch".
+      const msg = (err instanceof TypeError)
+        ? 'Couldn\'t reach the server — check your connection and try again.'
+        : (err.message || 'Failed to generate ideas.');
+      setIdeasError(msg);
+      toast.error('Couldn\'t generate ideas', { detail: msg.slice(0, 90) });
     } finally {
       setIdeasLoading(false);
     }
@@ -584,6 +605,7 @@ export default function ContentStudio() {
                       : 'Generate a fresh batch of AI-powered content ideas using the current BLW state'
                   }
                   style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
                     background: ideasLoading ? colors.bg : colors.redLight,
                     border: `1px solid ${ideasLoading ? colors.border : colors.redBorder}`,
                     color: ideasLoading ? colors.textMuted : colors.red,
@@ -593,11 +615,12 @@ export default function ContentStudio() {
                     letterSpacing: 0.6,
                   }}
                 >
+                  <Icon name="studio" size={13} className={ideasLoading ? 'icon-pulse' : undefined} />
                   {ideasLoading
-                    ? '…THINKING'
+                    ? 'GENERATING…'
                     : aiIdeas.length
-                      ? (targetTeam ? `✨ REGENERATE ${targetTeam}` : '✨ REGENERATE')
-                      : (targetTeam ? `✨ GENERATE ${targetTeam} IDEAS` : '✨ GENERATE IDEAS')}
+                      ? (targetTeam ? `REGENERATE ${targetTeam}` : 'REGENERATE')
+                      : (targetTeam ? `GENERATE ${targetTeam} IDEAS` : 'GENERATE IDEAS')}
                 </button>
               </div>
             </div>
@@ -608,13 +631,11 @@ export default function ContentStudio() {
             </p>
             {ideasError && (
               <div style={{
-                background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B',
-                padding: '8px 12px', borderRadius: radius.sm, fontSize: 12, marginBottom: 10,
+                background: colors.redLight, border: `1px solid ${colors.redBorder}`,
+                color: colors.text, padding: '9px 12px', borderRadius: radius.sm,
+                fontSize: 12, marginBottom: 10, lineHeight: 1.45,
               }}>
-                Couldn't fetch AI ideas: {ideasError}
-                {ideasError.includes('ANTHROPIC_API_KEY') && <div style={{ fontSize: 11, marginTop: 4, opacity: 0.8 }}>
-                  Set ANTHROPIC_API_KEY in Vercel → Settings → Environment Variables and redeploy.
-                </div>}
+                <span style={{ color: colors.red, fontWeight: 700 }}>Couldn’t generate: </span>{ideasError}
               </div>
             )}
             {/* v4.5.20: Search + shuffle row. Search narrows by
@@ -688,6 +709,28 @@ export default function ContentStudio() {
                 chasing the bottom one as card heights vary. */}
             <Pager {...ideasPagerProps} position="top" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Skeleton placeholders while a batch generates — the deck
+                  feels alive instead of frozen behind a "thinking" button.
+                  New ideas prepend to the top, so the skeletons sit there. */}
+              {ideasLoading && Array.from({ length: IDEAS_PAGE_SIZE }).map((_, i) => (
+                <div key={`idea-skeleton-${i}`} aria-hidden="true" style={{
+                  background: colors.white, border: `1px solid ${colors.borderLight}`,
+                  borderRadius: radius.lg, padding: 16,
+                  display: 'flex', flexDirection: 'column', gap: 10,
+                }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Skeleton width={46} height={18} radius={5} />
+                    <Skeleton width="52%" height={18} />
+                  </div>
+                  <Skeleton width="92%" height={12} />
+                  <Skeleton width="74%" height={12} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                    <Skeleton width={58} height={20} radius={999} />
+                    <Skeleton width={44} height={20} radius={999} />
+                    <Skeleton width={68} height={20} radius={999} />
+                  </div>
+                </div>
+              ))}
               {ideasPageItems.map(s => {
                 // v4.5.17: pass the spotlit player's athleteVoice (if any)
                 // so /api/captions grounds the copy in their actual
