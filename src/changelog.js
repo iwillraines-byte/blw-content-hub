@@ -32,6 +32,9 @@ export const RELEASES = [
       'Schedule and Game Center restyled to the v5 dark-premium language.',
       'The BLW Brand Command Center (cross-property social reporting) is now reachable from the sidebar for the content team and up, and keeps the BLW Studio chrome present via a slim nav rail so it feels native instead of a detached page.',
       'Dark-mode logos: teams whose marks were navy-on-navy (and disappeared on the charcoal surfaces) now use a light variant in dark mode.',
+      'Redesigned login and sign-up: a slow-scrolling wall of BLW imagery (gameday graphics, stat cards, standings) behind the form, which is rebuilt in the v5 type and styling.',
+      'Smarter content generation: the AI now writes in each team’s authored brand voice instead of one generic tone, runs on a stronger model, surfaces clear errors, and shows the deck filling in while it works.',
+      'The BLW Brand Command Center (cross-property social reporting) is reachable from the sidebar for the content team, with the BLW chrome kept in place so it feels like part of the app.',
     ],
   },
   {
