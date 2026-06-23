@@ -15,7 +15,7 @@
     --display:"Helvetica Neue","Helvetica","Arial",sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.4;font-variant-numeric:tabular-nums}
+  body{background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.4;font-variant-numeric:tabular-nums;padding-left:60px}
   #particles{position:fixed;inset:0;z-index:0;pointer-events:none}
   .glow{position:fixed;z-index:0;pointer-events:none;filter:blur(120px);opacity:.5}
   .glow.a{top:-180px;left:-120px;width:520px;height:520px;background:radial-gradient(circle,rgba(124,241,168,.08),transparent 70%)}
@@ -138,11 +138,32 @@
   .parity b{font-weight:700}
   .parity.ok{background:rgba(124,241,168,.08);border:1px solid rgba(124,241,168,.25);color:#bdf5d3}
   .parity.warn{background:rgba(255,192,76,.09);border:1px solid rgba(255,192,76,.3);color:#ffdca0}
+  /* Left nav rail — keeps BLW Studio chrome present so the Command Center reads
+     as part of the app, not a detached page. Links navigate back into the SPA
+     (full page loads, by design). Hidden on phones, where the top-bar
+     "BLW Studio" link covers navigation. */
+  .railnav{position:fixed;top:0;left:0;bottom:0;width:60px;z-index:20;background:#0E0F12;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 0}
+  .rail-logo{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;margin-bottom:8px}
+  .rail-logo img{width:30px;height:30px;object-fit:contain;display:block}
+  .rail-i{position:relative;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;color:var(--ink-3);transition:.16s}
+  .rail-i svg{width:20px;height:20px;display:block}
+  .rail-i:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+  .rail-i.active{color:var(--ink);background:rgba(255,255,255,.09)}
+  .rail-i.active::before{content:"";position:absolute;left:-9px;top:50%;transform:translateY(-50%);width:3px;height:22px;border-radius:0 3px 3px 0;background:var(--pos)}
   @media(max-width:1080px){.hero{grid-template-columns:repeat(2,1fr)}.g-2{grid-template-columns:1fr}.roster{grid-template-columns:repeat(2,1fr)}.recs{grid-template-columns:1fr 1fr}}
-  @media(max-width:620px){.hero{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.recs{grid-template-columns:1fr}.wrap{padding:14px 14px 48px}.pcounts{gap:8px}.dname{min-width:110px}}
+  @media(max-width:620px){.hero{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.recs{grid-template-columns:1fr}.wrap{padding:14px 14px 48px}.pcounts{gap:8px}.dname{min-width:110px}body{padding-left:0}.railnav{display:none}}
 </style>
 </head>
 <body>
+<nav class="railnav" aria-label="BLW Studio">
+  <a class="rail-logo" href="/dashboard" title="BLW Studio"><img src="/brand/blw-logo.svg" alt="BLW"></a>
+  <a class="rail-i" href="/dashboard" title="Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></a>
+  <a class="rail-i" href="/generate" title="Studio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg></a>
+  <a class="rail-i" href="/requests" title="Requests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></a>
+  <a class="rail-i" href="/game-center" title="ProWiffle Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></a>
+  <a class="rail-i" href="/files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg></a>
+  <a class="rail-i active" href="/command-center" title="Command Center" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg></a>
+</nav>
 <canvas id="particles"></canvas>
 <div class="glow a"></div><div class="glow b"></div>
 <div id="overlay"><div class="loader"></div><div class="msg" id="ovmsg">Pulling live data from Metricool...</div></div>
@@ -310,8 +331,8 @@ function showGate(expired){
   $("#content").style.display="none";
   $("#errbox").classList.add("on");
   $("#errbox").innerHTML = expired
-    ? "<b>Admins only.</b> Your BLW Studio session isn't an admin, or it has expired. Open this page while signed in to BLW Studio as an admin."
-    : "<b>Admins only.</b> Sign in to BLW Studio first, then open /command-center. &nbsp;<a href='/' style='color:var(--ink);font-weight:600;text-decoration:none'>Go to BLW Studio &#8594;</a>";
+    ? "<b>Restricted.</b> Your BLW Studio session doesn't have Command Center access, or it has expired. Open this page while signed in with a content or admin account."
+    : "<b>Restricted.</b> Sign in to BLW Studio first, then open /command-center. &nbsp;<a href='/' style='color:var(--ink);font-weight:600;text-decoration:none'>Go to BLW Studio &#8594;</a>";
 }
 async function load(q,fresh){
   STATE.q=q;

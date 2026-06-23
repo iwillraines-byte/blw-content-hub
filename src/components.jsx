@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { TEAMS, getTeam } from './data';
 import { colors, fonts, radius, shadows } from './theme';
+import { useIsDark } from './theme-mode';
 
 // ─── Layout Components ─────────────────────────────────────────────────────
 
@@ -206,6 +207,7 @@ export const CollapsibleCard = ({
 export const TeamLogo = ({ teamId, size = 40, rounded = 'rounded', background, style }) => {
   const t = getTeam(teamId);
   const [errored, setErrored] = useState(false);
+  const isDark = useIsDark();
   if (!t) return null;
 
   const br = rounded === 'circle' ? radius.full : rounded === 'square' ? 0 : radius.base;
@@ -237,13 +239,20 @@ export const TeamLogo = ({ teamId, size = 40, rounded = 'rounded', background, s
     );
   }
 
+  // v5: in dark mode, prefer a team's dark-mode logo at every size when one
+  // exists. Some primary marks are navy-on-navy and disappear against the
+  // charcoal surfaces (ATL, PHI), so these teams supply a light/white variant.
+  // Falls through to the small-size altLogo / primary logic when no darkLogo.
+  //
   // v4.8.4: at small sizes (≤32px) prefer the icon-only altLogo when a
   // team provides one. The wordmark version of a logo packs the city
   // name + script + supporting type — unreadable below ~40px. The icon
   // version (e.g. ATL's FAB monogram) is purpose-built to stay legible
   // at chip and sidebar sizes. Teams without an altLogo fall through to
   // their primary logo as before, no behavior change.
-  const logoSrc = (t.altLogo && size <= 32) ? t.altLogo : t.logo;
+  const logoSrc = (isDark && t.darkLogo)
+    ? t.darkLogo
+    : (t.altLogo && size <= 32) ? t.altLogo : t.logo;
 
   return (
     <div style={baseStyle}>

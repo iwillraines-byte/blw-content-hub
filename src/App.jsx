@@ -66,6 +66,10 @@ const navItems = [
   // first season ends and archive data exists.
   { path: "/schedule",    label: "Schedule",         icon: "schedule", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
   { path: "/files",       label: "Files",            icon: "files", roles: ['master_admin', 'admin', 'content'] },
+  // Command Center is a standalone static dashboard (public/command-center.html),
+  // not an SPA route — `external` makes the sidebar render a real <a> so the
+  // browser fully navigates to it. Gated to the content team and up.
+  { path: "/command-center", label: "Command Center", icon: "command-center", roles: ['master_admin', 'admin', 'content'], external: true },
   { path: "/rapid-tag",   label: "Rapid Tag",        icon: "rapid-tag", roles: ['master_admin'] },
   { path: "/train-ai",    label: "Train AI",         icon: "train-ai", roles: ['master_admin', 'admin'] },
   { path: "/settings",    label: "Settings",         icon: "settings", roles: ['master_admin', 'admin', 'content', 'athlete', 'fan'] },
@@ -256,19 +260,17 @@ function Sidebar({ isMobile, open, onClose }) {
         <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {visibleNavItems.map(n => {
             const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/dashboard');
-            return (
-              <Link
-                key={n.path}
-                to={n.path}
-                className={['nav-link', active ? 'is-active' : ''].filter(Boolean).join(' ')}
-                style={{
-                  textDecoration: 'none', display: 'flex', alignItems: 'center',
-                  gap: 11, padding: '10px 12px', borderRadius: radius.base,
-                  background: active ? colors.redLight : 'transparent',
-                  color: active ? '#fff' : colors.textOnDarkMuted,
-                  fontFamily: fonts.body, fontSize: 15,
-                  fontWeight: active ? 700 : 500,
-                }}>
+            const linkClass = ['nav-link', active ? 'is-active' : ''].filter(Boolean).join(' ');
+            const linkStyle = {
+              textDecoration: 'none', display: 'flex', alignItems: 'center',
+              gap: 11, padding: '10px 12px', borderRadius: radius.base,
+              background: active ? colors.redLight : 'transparent',
+              color: active ? '#fff' : colors.textOnDarkMuted,
+              fontFamily: fonts.body, fontSize: 15,
+              fontWeight: active ? 700 : 500,
+            };
+            const inner = (
+              <>
                 <Icon
                   name={n.icon}
                   size={19}
@@ -285,7 +287,14 @@ function Sidebar({ isMobile, open, onClose }) {
                     letterSpacing: 0.4, lineHeight: 1.6,
                   }}>{navUnread.totalUnread > 99 ? '99+' : navUnread.totalUnread}</span>
                 )}
-              </Link>
+              </>
+            );
+            // External items (the standalone Command Center page) aren't SPA
+            // routes — render a real <a> so the browser navigates fully.
+            return n.external ? (
+              <a key={n.path} href={n.path} className={linkClass} style={linkStyle}>{inner}</a>
+            ) : (
+              <Link key={n.path} to={n.path} className={linkClass} style={linkStyle}>{inner}</Link>
             );
           })}
 

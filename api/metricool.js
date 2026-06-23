@@ -282,10 +282,12 @@ export async function compute(days, rng, token, userId) {
 }
 
 export default async function handler(req, res) {
-  // Admin-gated: only signed-in master_admin / admin accounts may read league data.
+  // Gated to the content team and up: master_admin / admin / content accounts
+  // may read league data. (Athletes and fans cannot — this is internal
+  // cross-property reporting, not athlete-facing.)
   const ctx = await requireUser(req, res);
   if (!ctx) return; // 401 already sent
-  if (requireRole(res, ctx.profile, ['master_admin', 'admin'])) return; // 403 already sent
+  if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return; // 403 already sent
 
   const token = process.env.METRICOOL_TOKEN, userId = process.env.METRICOOL_USER_ID;
   if (!token || !userId) {
