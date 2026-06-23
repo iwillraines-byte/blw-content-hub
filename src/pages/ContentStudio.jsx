@@ -4,6 +4,7 @@ import { TEAMS, generateContentSuggestions, fetchAllData, getTeam, API_CONFIG, a
 import { getAllManualPlayers } from '../player-store';
 import { Card, PageHeader, SectionHeading, TeamLogo, Skeleton } from '../components';
 import { Icon } from '../icon';
+import { HeroBand } from '../dashboard-hero';
 import { BattingTable, PitchingTable } from '../stats-tables';
 import { colors, fonts, radius } from '../theme';
 import { timeAgo } from '../format-time';
@@ -454,7 +455,10 @@ export default function ContentStudio() {
           stays gone after the first visit. */}
       <FirstRunWelcomeCard />
 
-      {/* Live-state cards — each reflects current state, not just a nav shortcut */}
+      {/* v5 hero — the same login-wall imagery crossfading (faded) behind the
+          three live action cards, with a rotating headline cycling the
+          cross-user stored content ideas. */}
+      <HeroBand ideas={ideasListBase}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <LiveCard
           icon="studio"
@@ -509,6 +513,7 @@ export default function ContentStudio() {
           />
         )}
       </div>
+      </HeroBand>
 
       {/* League context — master admin only. Returns null for everyone else,
           so it's safe to always render. The hook still fetches the value so
