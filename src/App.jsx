@@ -70,6 +70,9 @@ const navItems = [
   // Command Center is a standalone static dashboard (public/command-center.html),
   // not an SPA route — `external` makes the sidebar render a real <a> so the
   // browser fully navigates to it. Gated to the content team and up.
+  // (Supersedes main's "CS DATA" hotfix entry — same destination, but this v5
+  // version uses the Lucide icon and adds content-role access. main's
+  // command-center.html auth fix (blw-auth-v1) is preserved via the merge.)
   { path: "/command-center", label: "Command Center", icon: "command-center", roles: ['master_admin', 'admin', 'content'], external: true },
   { path: "/rapid-tag",   label: "Rapid Tag",        icon: "rapid-tag", roles: ['master_admin'] },
   { path: "/train-ai",    label: "Train AI",         icon: "train-ai", roles: ['master_admin', 'admin'] },
