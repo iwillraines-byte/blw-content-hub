@@ -172,6 +172,15 @@ export default async function handler(req, res) {
       // the full history.
       let q = sb.from(table).select('*');
 
+      // SQLi hardening: the athlete-scoping filters below build a PostgREST
+      // `.or()` string, and `.or()` interpolation is a filter-injection vector
+      // (a comma / paren in a value breaks out and adds OR conditions). user.id
+      // is a server-verified UUID and always safe; the email is only safe to
+      // interpolate if it's a well-formed address (no PostgREST metacharacters).
+      // A malformed/hostile email falls back to user_id-only scoping.
+      const safeEmail = (user.email && /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(user.email))
+        ? user.email : null;
+
       // Athletes only see their OWN requests. Server-side filter so a
       // crafted client can't bypass it. Staff (master/admin/content)
       // sees everything. We compare on requester_user_id when set,
@@ -180,7 +189,7 @@ export default async function handler(req, res) {
       if (kind === 'request' && isAthlete) {
         q = q.or(
           `requester_user_id.eq.${user.id}` +
-          (user.email ? `,requester_email.eq.${user.email}` : '')
+          (safeEmail ? `,requester_email.eq.${safeEmail}` : '')
         );
       }
 
@@ -191,7 +200,7 @@ export default async function handler(req, res) {
       if (kind === 'request-comment' && isAthlete) {
         const { data: ownReqs, error: ownErr } = await sb.from('requests').select('id').or(
           `requester_user_id.eq.${user.id}` +
-          (user.email ? `,requester_email.eq.${user.email}` : '')
+          (safeEmail ? `,requester_email.eq.${safeEmail}` : '')
         );
         if (ownErr) throw ownErr;
         const ownIds = (ownReqs || []).map(r => r.id);
