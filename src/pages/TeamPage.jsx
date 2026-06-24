@@ -1573,7 +1573,7 @@ export default function TeamPage() {
                         fontFamily: fonts.condensed, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
                         color: colors.textMuted, textTransform: 'uppercase', marginTop: 3,
                       }}>
-                        {statLabel}{handStr ? ` · ${handStr}` : ''}{p.manual ? ' · Manual' : ''}
+                        {statLabel}{handStr ? ` · ${handStr}` : ''}
                       </div>
                       {statTrio && (
                         <div style={{

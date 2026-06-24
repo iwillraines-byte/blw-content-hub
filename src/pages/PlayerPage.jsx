@@ -30,6 +30,24 @@ import { useIsDark } from '../theme-mode';
 // Team primaries (e.g. Atlanta navy #021E42) are tuned for light surfaces and
 // vanish on dark charcoal, so accent-bearing chrome swaps to the lighter
 // team.accent on dark.
+// The cloud-sync upsert is "tolerant": if the live DB is missing a column
+// (a migration wasn't run), it strips that column and still returns ok:true.
+// That made profile-photo / position saves silently no-op while the toast said
+// "saved". This maps a dropped column back to the migration that fixes it so we
+// can surface an honest error instead.
+const MIGRATION_FOR_COL = {
+  profile_media_id: 'db/005_player_profile_pic.sql',
+  profile_offset_x: 'db/009_player_profile_pic_position.sql',
+  profile_offset_y: 'db/009_player_profile_pic_position.sql',
+  profile_zoom: 'db/009_player_profile_pic_position.sql',
+};
+function droppedColMigrationHint(cloudResult) {
+  const dropped = cloudResult?.droppedColumns;
+  if (!Array.isArray(dropped) || !dropped.length) return null;
+  const migs = [...new Set(dropped.map(c => MIGRATION_FOR_COL[c]).filter(Boolean))];
+  return { cols: dropped, migration: migs[0] || 'the matching db/ migration' };
+}
+
 function readableAccent(team, isDark) {
   const a = isDark ? (team.accent || team.color) : (team.color || team.accent);
   // On the charcoal dark surface a near-white / cream team accent (Chicago
@@ -1937,8 +1955,11 @@ export default function PlayerPage() {
         profileZoom: null,
       } : prev);
       const cloudResult = result?.cloud;
+      const dropHint = droppedColMigrationHint(cloudResult);
       if (cloudResult && cloudResult.ok === false) {
         toast.error('Saved locally — cloud sync failed', { detail: String(cloudResult.error || '').slice(0, 120) });
+      } else if (dropHint) {
+        toast.error('Photo didn’t save to the cloud', { detail: `Your database is missing the ${dropHint.cols.join(', ')} column — run ${dropHint.migration} in Supabase, then retry.` });
       } else {
         toast.success(mediaId ? 'Profile photo updated' : 'Profile photo reset');
       }
@@ -1977,8 +1998,11 @@ export default function PlayerPage() {
         profileZoom: zoom,
       } : prev);
       const cloudResult = result?.cloud;
+      const dropHint = droppedColMigrationHint(cloudResult);
       if (cloudResult && cloudResult.ok === false) {
         toast.error('Saved locally — cloud sync failed', { detail: String(cloudResult.error || '').slice(0, 120) });
+      } else if (dropHint) {
+        toast.error('Position didn’t save to the cloud', { detail: `Your database is missing the ${dropHint.cols.join(', ')} column — run ${dropHint.migration} in Supabase, then retry.` });
       } else {
         toast.success('Position saved');
       }
