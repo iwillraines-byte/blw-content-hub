@@ -172,7 +172,23 @@ export default function PlayerBioImportCard() {
       const res = await authedJson('/api/players-sheet-sync', { method: 'POST', body: buildBody(false) });
       setApplied(res);
       const s = res.summary || {};
-      toast.success(`Applied: ${s.created || 0} created · ${s.updated || 0} updated`);
+      // v5: don't hide skips behind a green toast — a skipped row means a
+      // player's bio did NOT save. If anything skipped, warn (and flag a
+      // missing-column / migration case loudly, since that's silent loss).
+      const skipped = s.skipped || 0;
+      const skipRows = (res.rows || []).filter(r => r.status === 'skipped');
+      const colErr = skipRows.find(r => /could not find the '.*' column|column .* does not exist/i.test(r.reason || ''));
+      if (colErr) {
+        toast.error(`Applied ${s.created || 0}+${s.updated || 0}, but ${skipped} row(s) hit a missing DB column`, {
+          detail: `${colErr.reason?.slice(0, 100)} — run the matching db/ migration in Supabase, then re-Apply.`,
+        });
+      } else if (skipped > 0) {
+        toast.error(`Applied ${s.created || 0} created · ${s.updated || 0} updated · ${skipped} skipped`, {
+          detail: 'Expand "Row-by-row results" below to see why each row skipped (usually a name/team mismatch).',
+        });
+      } else {
+        toast.success(`Applied: ${s.created || 0} created · ${s.updated || 0} updated`);
+      }
       // Force a fresh hydrate so the new bios land in IndexedDB immediately
       // — otherwise the next visit to a player page reads stale cached
       // rows for up to 10 minutes (the throttled auto-hydrate window).
@@ -581,30 +597,37 @@ export default function PlayerBioImportCard() {
             </div>
           )}
 
-          {/* Per-row audit — collapsed by default, first 12 visible */}
-          {preview.rows && preview.rows.length > 0 && (
-            <details>
+          {/* Per-row audit — after Apply, shows the APPLIED rows (incl. why any
+              skipped), not the preview's. Skipped rows auto-expand so a silent
+              loss can't hide behind a collapsed section. */}
+          {(() => {
+            const rows = applied?.rows || preview.rows;
+            if (!rows || !rows.length) return null;
+            const anySkipped = rows.some(r => r.status === 'skipped');
+            const label = applied ? 'Apply results' : 'Preview results';
+            return (
+            <details open={!!applied && anySkipped}>
               <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: colors.text }}>
-                Row-by-row results ({preview.rows.length} shown)
+                {label} ({rows.length} shown){anySkipped ? ' — some rows skipped' : ''}
               </summary>
               <div style={{
                 marginTop: 8, maxHeight: 280, overflowY: 'auto',
                 border: `1px solid ${colors.borderLight}`, borderRadius: radius.base,
                 background: colors.bg,
               }}>
-                {preview.rows.map((r, i) => (
+                {rows.map((r, i) => (
                   <div key={i} style={{
                     display: 'grid', gridTemplateColumns: '50px 90px 1fr',
                     gap: 8, padding: '6px 10px',
-                    borderBottom: i < preview.rows.length - 1 ? `1px solid ${colors.divider}` : 'none',
+                    borderBottom: i < rows.length - 1 ? `1px solid ${colors.divider}` : 'none',
                     fontSize: 11,
                   }}>
                     <span style={{ color: colors.textMuted, fontFamily: fonts.condensed }}>#{r.row}</span>
                     <span style={{
                       fontFamily: fonts.condensed, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
-                      color: r.status === 'created' ? colors.success
+                      color: r.status === 'created' ? colors.successText
                            : r.status === 'updated' ? colors.info
-                           : colors.warning,
+                           : colors.warningText,
                     }}>{r.status}</span>
                     <span style={{ color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.record?.first_name || ''} {r.record?.last_name || ''}
@@ -615,19 +638,29 @@ export default function PlayerBioImportCard() {
                 ))}
               </div>
             </details>
-          )}
+            );
+          })()}
         </div>
       )}
 
-      {applied && (
-        <div style={{
-          marginTop: 12, padding: 10, borderRadius: radius.base,
-          background: colors.successBg, border: `1px solid ${colors.successBorder}`,
-          fontSize: 12, color: colors.text,
-        }}>
-          ✓ Applied · created {applied.summary.created}, updated {applied.summary.updated}, skipped {applied.summary.skipped}. Hard-refresh a player page to see the new vitals.
-        </div>
-      )}
+      {applied && (() => {
+        const sk = applied.summary.skipped || 0;
+        const warn = sk > 0;
+        return (
+          <div style={{
+            marginTop: 12, padding: 10, borderRadius: radius.base,
+            background: warn ? colors.warningBg : colors.successBg,
+            border: `1px solid ${warn ? colors.warningBorder : colors.successBorder}`,
+            fontSize: 12, color: colors.text,
+          }}>
+            {warn ? '⚠ ' : '✓ '}Applied · created {applied.summary.created}, updated {applied.summary.updated},{' '}
+            <strong>skipped {sk}</strong>.{' '}
+            {warn
+              ? 'Skipped rows did NOT save — see the auto-expanded results above for why (usually a name/team mismatch).'
+              : 'Hard-refresh a player page to see the new vitals.'}
+          </div>
+        );
+      })()}
     </Card>
   );
 }
