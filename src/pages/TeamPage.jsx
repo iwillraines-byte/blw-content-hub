@@ -1136,10 +1136,15 @@ export default function TeamPage() {
 
   // Rank lookup for roster tiles. Uses the composite rankings list (joined by
   // name since rankings include all BLW players, not just this team).
+  // Roster-card tier badges read the BLW-internal rank (1..70), not the global
+  // OPWR rank — the badges' own tiers (top-3 gems, 4-10, 11-25, 26-50, 51-100)
+  // were always meant for the BLW pool. Falls back to global currentRank for any
+  // BLW player the OPWR board hasn't ranked yet.
   const rankByName = useMemo(() => {
     const m = new Map();
     for (const r of rankings) {
-      if (r.name && r.currentRank != null) m.set(r.name.toLowerCase(), r.currentRank);
+      const blw = r.blwRank ?? null;
+      if (r.name && blw != null) m.set(r.name.toLowerCase(), blw);
     }
     return m;
   }, [rankings]);

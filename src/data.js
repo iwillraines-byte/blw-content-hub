@@ -280,6 +280,31 @@ function transformRankings(apiData) {
   }));
 }
 
+// The OPWR board (/rankings/0) is a GLOBAL cross-league list (~238 players incl.
+// non-BLW). `currentRank` is a player's standing among ALL of them. For a
+// BLW-internal standing we filter to the 70 canonical BLW players and number
+// them 1..N by their global OPWR order. Returns the same array with `blwRank`
+// (1..N for BLW players, null otherwise) + `blwTotal` attached. The displayed
+// OPWR number is unchanged — blwRank is shown ALONGSIDE it.
+function attachBlwRanks(rankings) {
+  if (!Array.isArray(rankings)) return rankings;
+  const normOf = (r) => {
+    const aliased = NAME_ALIASES[_normName(r.name || '')] || r.name || '';
+    return _normName(aliased);
+  };
+  const isBlw = (r) => _canonicalNameByNorm.has(normOf(r));
+  const blw = rankings
+    .filter(r => isBlw(r) && Number.isFinite(r.currentRank) && r.currentRank > 0)
+    .sort((a, b) => a.currentRank - b.currentRank);
+  const total = blw.length;
+  const rankByNorm = new Map();
+  blw.forEach((r, i) => rankByNorm.set(normOf(r), i + 1));
+  return rankings.map(r => {
+    const blwRank = rankByNorm.get(normOf(r)) || null;
+    return { ...r, blwRank, blwTotal: blwRank ? total : null };
+  });
+}
+
 // Apply canonical name + team overlay to API stat rows. Forward-declared
 // helper used by fetchers to bake in resolution at the cache layer so
 // every downstream reader (PlayerPage, GameCenter, TeamPage,
@@ -460,7 +485,7 @@ export async function fetchRankings() {
     const res = await fetch(`${GSS_BASE}/rankings/0?showAll=true`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    _rankingsCache = transformRankings(data);
+    _rankingsCache = attachBlwRanks(transformRankings(data));
     _lastFetch = Date.now();
     return _rankingsCache;
   } catch (e) {

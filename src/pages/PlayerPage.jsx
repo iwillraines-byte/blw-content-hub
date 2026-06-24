@@ -665,7 +665,8 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
 
   const radarDisc = disc === 'pit' && hasPit ? 'pit' : (hasBat ? 'bat' : 'pit');
   const radarAxes = radarDisc === 'pit' ? pitAxes : batAxes;
-  const playerRank = player.ranking?.currentRank;
+  const playerRank = player.ranking?.currentRank;     // global OPWR rank
+  const blwRank = player.ranking?.blwRank;            // rank among the 70 BLW players
 
   const groupHead = (text, vs) => (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
@@ -699,9 +700,10 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
     <Card>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 6 }}>
         <SectionHeading style={{ margin: 0, fontFamily: fonts.heading, fontSize: 16, fontWeight: 700, letterSpacing: 0 }}>League Standing</SectionHeading>
-        {Number.isFinite(playerRank) && playerRank > 0 && (
-          <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textSecondary, letterSpacing: 0.3 }}>
-            OPWR {ordinal(playerRank)}
+        {((Number.isFinite(playerRank) && playerRank > 0) || (Number.isFinite(blwRank) && blwRank > 0)) && (
+          <span style={{ fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700, color: colors.textSecondary, letterSpacing: 0.3, display: 'inline-flex', gap: 10 }}>
+            {Number.isFinite(playerRank) && playerRank > 0 && <span>OPWR {ordinal(playerRank)}</span>}
+            {Number.isFinite(blwRank) && blwRank > 0 && <span style={{ color: accent }}>BLW {ordinal(blwRank)}</span>}
           </span>
         )}
       </div>
@@ -1598,6 +1600,17 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
                     </span>
                   );
                 })()}
+                {/* BLW-internal rank, shown ALONGSIDE the global OPWR rank
+                    (never replacing it). blwRank = standing among the 70 BLW
+                    players; OPWR above = standing across the whole league. */}
+                {player.ranking?.blwRank && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span>BLW Rank</span>
+                    <span style={{ fontFamily: fonts.mono, fontWeight: 700 }}>
+                      #{player.ranking.blwRank}{player.ranking.blwTotal ? ` / ${player.ranking.blwTotal}` : ''}
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -2388,7 +2401,10 @@ export default function PlayerPage() {
     ip:   rankWithTie(pitchingLeaders, pn, 'ip',   'desc', parseFloat),
   } : null;
 
-  const playerRank = player.ranking?.currentRank || null;
+  // The hero tier badge reflects BLW-internal standing (1..70), matching the
+  // roster cards + the badge tiers' own design. The global OPWR number is still
+  // shown as text in the hero meta line.
+  const playerRank = player.ranking?.blwRank || null;
 
   return (
     <PageDropZone ref={dropZoneRef} team={team} player={player} onUploaded={handleDropUploaded}>
