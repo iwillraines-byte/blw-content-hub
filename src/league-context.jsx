@@ -264,7 +264,7 @@ export function LeagueContextCard({ ctx }) {
               <span className="tnum" style={{
                 fontFamily: fonts.condensed,
                 fontSize: 11, fontWeight: 600,
-                color: charsLeft < 200 ? colors.warning || '#D97706' : colors.textMuted,
+                color: charsLeft < 200 ? colors.warningText || '#92400E' : colors.textMuted,
                 letterSpacing: 0.3,
               }}>
                 {charsLeft.toLocaleString()} chars left

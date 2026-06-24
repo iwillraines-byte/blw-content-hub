@@ -87,12 +87,15 @@ export default function PeopleAdminCard() {
         body: { id: p.id },
       });
       setProfiles(prev => prev.map(x => x.id === p.id ? { ...x, pending_invite: false } : x));
-      toast.success(`Invite sent to ${p.email}`);
-      // Surface the action_link as a fallback in case Supabase email
-      // delivery is delayed — master can copy/paste it directly.
+      // v5 (audit): the action_link is a credential — it lets whoever holds
+      // it set this user's password. NEVER log it to the browser console
+      // (persists in logs, readable by any extension/script). Copy it to the
+      // clipboard as a delayed-email fallback the master can paste, instead.
+      let copied = false;
       if (res?.action_link) {
-        console.log('[invite link, fallback]', res.action_link);
+        try { await navigator.clipboard?.writeText(res.action_link); copied = true; } catch { /* clipboard blocked */ }
       }
+      toast.success(`Invite sent to ${p.email}`, copied ? { detail: 'Backup sign-in link copied to your clipboard.' } : undefined);
     } catch (err) {
       toast.error('Send failed', { detail: err.message });
     }
@@ -629,7 +632,7 @@ function InviteModal({ invitableRoles, isMaster, onClose, onSuccess }) {
           </div>
         </div>
         {role === 'athlete' && !teamId && (
-          <div style={{ fontSize: 11, color: colors.warning, marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: colors.warningText, marginTop: 4 }}>
             Athletes need a team so they can generate content. You can set it later from the People list too.
           </div>
         )}
@@ -667,7 +670,7 @@ function InviteModal({ invitableRoles, isMaster, onClose, onSuccess }) {
               </select>
             )}
             {linkPlayerId && (
-              <div style={{ fontSize: 11, color: colors.success, marginTop: 4, fontFamily: fonts.condensed, letterSpacing: 0.3 }}>
+              <div style={{ fontSize: 11, color: colors.successText, marginTop: 4, fontFamily: fonts.condensed, letterSpacing: 0.3 }}>
                 ✓ This account will own that player's record on first login (or immediately, for silent staging).
               </div>
             )}

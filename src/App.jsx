@@ -6,7 +6,6 @@ import { TeamThemeScope } from './team-theme';
 import { GlobalStyles } from './global-styles';
 import { useIsDark, applyMode } from './theme-mode';
 import { GIT_COMMIT, BUILD_LABEL, formattedBuildDate } from './version';
-import ChangelogModal from './changelog-modal';
 // Dashboard + auth pages load eagerly (the landing surfaces — no Suspense
 // flash on first paint). The heavy / less-frequently-first-hit pages are
 // v4.19.0 code-split so the initial bundle is ~250KB lighter: Studio's
@@ -29,6 +28,10 @@ const Settings = lazy(() => import('./pages/Settings'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PlayerPage = lazy(() => import('./pages/PlayerPage'));
 const Schedule = lazy(() => import('./pages/Schedule'));
+// v5 (audit): lazy-load the changelog modal — it pulls in changelog.js
+// (~180KB of release notes) which bloated the main bundle for a surface
+// almost no session opens. Loads on demand when the version row is clicked.
+const ChangelogModal = lazy(() => import('./changelog-modal'));
 import { TeamLogo } from './components';
 import { Icon } from './icon';
 import { TierBadgeStyles } from './tier-badges';
@@ -361,7 +364,11 @@ function Sidebar({ isMobile, open, onClose }) {
           </a>
         </div>
       </aside>
-      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+      {changelogOpen && (
+        <Suspense fallback={null}>
+          <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+        </Suspense>
+      )}
     </>
   );
 }

@@ -549,7 +549,7 @@ export default function PlayerBioImportCard() {
                       {f.label}
                       {f.required && <span style={{ color: colors.red }}>*</span>}
                       {detectedMap[f.key] && !overrideMap[f.key] && (
-                        <span title="Auto-detected" style={{ color: colors.success, fontSize: 10 }}>✓</span>
+                        <span title="Auto-detected" style={{ color: colors.successText, fontSize: 10 }}>✓</span>
                       )}
                     </div>
                     <select
@@ -609,7 +609,7 @@ export default function PlayerBioImportCard() {
                     <span style={{ color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.record?.first_name || ''} {r.record?.last_name || ''}
                       {r.record?.team && <span style={{ color: colors.textMuted }}> · {r.record.team}</span>}
-                      {r.reason && <span style={{ color: colors.warning, marginLeft: 6 }}>· {r.reason}</span>}
+                      {r.reason && <span style={{ color: colors.warningText, marginLeft: 6 }}>· {r.reason}</span>}
                     </span>
                   </div>
                 ))}

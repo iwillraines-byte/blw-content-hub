@@ -1517,17 +1517,20 @@ export default function TeamPage() {
               const hand = handByName.get(nameKey);
               const handStr = hand && (hand.bats || hand.throws) ? `${hand.bats || '–'}/${hand.throws || '–'}` : '';
               const stats = rosterStatByName.get(nameKey);
-              // Pitching-first for pitchers: anyone with a real pitching line
-              // (innings > 0) leads with ERA/W-L/K — two-way wiffle players
-              // were always resolving to batting under the old isBatter-first
-              // precedence, so their pitching never showed. Pure hitters (no
-              // pitching line) keep AVG/HR/OPS+.
-              const pitchesForReal = !!stats?.pitching && (stats.pitchingIp || 0) > 0;
-              const statTrio = stats
-                ? (pitchesForReal ? stats.pitching
-                  : stats.batting ? stats.batting
-                  : stats.pitching)
-                : null;
+              // Two-way players (a batting line AND a real pitching line,
+              // innings > 0 — the norm in wiffle) show BOTH stat rows stacked
+              // so neither side is hidden. Pure hitters show batting only;
+              // pure pitchers show pitching only. A pitcher with a line but no
+              // innings logged yet still falls back to the pitching row so the
+              // card isn't blank.
+              const hasBatting = !!stats?.batting;
+              const hasPitching = !!stats?.pitching && (stats.pitchingIp || 0) > 0;
+              const trios = [];
+              if (stats) {
+                if (hasBatting) trios.push({ key: 'BAT', rows: stats.batting });
+                if (hasPitching) trios.push({ key: 'PIT', rows: stats.pitching });
+                if (!trios.length && stats.pitching) trios.push({ key: 'PIT', rows: stats.pitching });
+              }
               return (
                 <div key={rowKey} style={{ position: 'relative' }}>
                   <Link
@@ -1583,12 +1586,13 @@ export default function TeamPage() {
                       }}>
                         {statLabel}{handStr ? ` · ${handStr}` : ''}
                       </div>
-                      {statTrio && (
-                        <div style={{
+                      {trios.map((trio, ti) => (
+                        <div key={trio.key} style={{
                           display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4,
-                          marginTop: 9, paddingTop: 8, borderTop: `1px solid ${colors.borderLight}`,
+                          marginTop: ti === 0 ? 9 : 6, paddingTop: ti === 0 ? 8 : 6,
+                          borderTop: `1px solid ${colors.borderLight}`,
                         }}>
-                          {statTrio.map(s => (
+                          {trio.rows.map(s => (
                             <div key={s.label} style={{ textAlign: 'center' }}>
                               <div className="tnum" style={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 700, color: colors.text, lineHeight: 1 }}>
                                 {s.value == null || s.value === '' ? '—' : s.value}
@@ -1599,7 +1603,7 @@ export default function TeamPage() {
                             </div>
                           ))}
                         </div>
-                      )}
+                      ))}
                     </div>
                   </Link>
                   {p.manual && p.manualId && (

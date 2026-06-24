@@ -944,14 +944,14 @@ export default function GameCenter() {
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
                           {p.hasStats ? (
-                            <span style={{ color: colors.success, fontWeight: 700 }}>
+                            <span style={{ color: colors.successText, fontWeight: 700 }}>
                               {p.isBatter && p.isPitcher ? 'B+P' : p.isBatter ? 'B' : p.isPitcher ? 'P' : '✓'}
                             </span>
                           ) : <span style={{ color: colors.textMuted }}>—</span>}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12 }}>
                           {p.hasMedia
-                            ? <span style={{ color: colors.success, fontWeight: 700 }}>✓</span>
+                            ? <span style={{ color: colors.successText, fontWeight: 700 }}>✓</span>
                             : <span style={{ color: colors.textMuted }}>—</span>}
                         </td>
                         <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: fonts.condensed, color: colors.textMuted, letterSpacing: 0.4 }}>

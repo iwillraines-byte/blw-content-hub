@@ -915,7 +915,7 @@ function DriveFolderPanel({ folder, importedFileIds, onImport, onRemove, onRenam
                             fontFamily: fonts.body,
                           }}>{isImporting ? 'Importing…' : 'Import'}</button>
                         ) : (
-                          <div style={{ flex: 1, fontSize: 10, color: colors.success, fontFamily: fonts.condensed, fontWeight: 700, textAlign: 'center', padding: '4px' }}>In library</div>
+                          <div style={{ flex: 1, fontSize: 10, color: colors.successText, fontFamily: fonts.condensed, fontWeight: 700, textAlign: 'center', padding: '4px' }}>In library</div>
                         )}
                         <a href={f.webViewLink} target="_blank" rel="noopener noreferrer" style={{
                           padding: '4px 6px', fontSize: 11, color: colors.textSecondary,
@@ -1458,11 +1458,11 @@ export default function Files() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="FILES" subtitle="Upload, tag, and manage team media assets — files persist in your browser">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: fonts.body, fontSize: 13, color: colors.success, fontWeight: 600 }}>
+          <span style={{ fontFamily: fonts.body, fontSize: 13, color: colors.successText, fontWeight: 600 }}>
             {storedMedia.length} stored
           </span>
           {untagged.length > 0 && (
-            <span style={{ fontFamily: fonts.body, fontSize: 13, color: colors.warning, fontWeight: 600 }}>
+            <span style={{ fontFamily: fonts.body, fontSize: 13, color: colors.warningText, fontWeight: 600 }}>
               {untagged.length} untagged
             </span>
           )}
