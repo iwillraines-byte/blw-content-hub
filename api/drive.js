@@ -12,7 +12,15 @@
 // googleapis endpoint which is more reliable for large files. Otherwise we fall
 // back to drive.google.com/uc which works for any publicly-shared file.
 
+import { requireUser } from './_supabase.js';
+
 export default async function handler(req, res) {
+  // v5 (audit fix): gate the Drive proxy behind a valid session so it can't
+  // be used as an open relay. The sole caller (src/drive-api.js) now sends
+  // the JWT via authedFetch. Bulk import is a logged-in-only Files action.
+  const ctx = await requireUser(req, res);
+  if (!ctx) return;
+
   const { fileId, apiKey } = req.query;
 
   if (!fileId) {

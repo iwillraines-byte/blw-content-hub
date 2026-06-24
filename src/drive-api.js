@@ -202,7 +202,7 @@ export async function downloadFileAsBlob(fileId, { apiKey } = {}) {
   const key = apiKey || getApiKey();
   const qs = new URLSearchParams({ fileId });
   if (key) qs.set('apiKey', key);
-  const res = await fetch(`/api/drive?${qs.toString()}`);
+  const res = await authedFetch(`/api/drive?${qs.toString()}`);
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     throw new Error(`Download failed (HTTP ${res.status}): ${errText.slice(0, 200)}`);

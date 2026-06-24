@@ -37,6 +37,11 @@ import { checkRateLimit } from './_rate-limit.js';
 const DEFAULT_MODEL = 'claude-haiku-4-5';
 const MAX_OUTPUT_TOKENS = 300;
 
+// Claude Vision on a full-size image is the slowest call type; raise the
+// function ceiling from the ~10s default so large photos don't 504. Must be
+// a TOP-LEVEL export — nesting maxDuration inside `config` is a no-op.
+export const maxDuration = 60;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'POST required' });

@@ -405,6 +405,10 @@ async function doPlayer(key, body) {
   return { player: name, count: assets.length, assets };
 }
 
+// Vision suggest-action can run long on full-size images; raise from the
+// ~10s default so it doesn't 504. TOP-LEVEL export (not nested in `config`).
+export const maxDuration = 60;
+
 export default async function handler(req, res) {
   const ctx = await requireUser(req, res);
   if (!ctx) return;

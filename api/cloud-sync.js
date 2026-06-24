@@ -483,6 +483,25 @@ export default async function handler(req, res) {
       // or the unset case for a brand-new row they\'re claiming).
       // Server-side enforcement: fetch the target row by (team, last,
       // first/num) and require its user_id be NULL or === auth.uid().
+      // v5 (audit IDOR fix): an athlete upserting a request with a supplied
+      // id must own that request. Without this, an athlete could set
+      // record.id to another team's request id (+ record.team to their own)
+      // so onConflict:id overwrites it, then the requester_* stamp below
+      // reassigns it to them. Mirror the manual-player own-row guard.
+      // Degrade safely if requester_user_id isn't migrated yet (the GET
+      // athlete-scoping already fails loudly on un-migrated DBs).
+      if (kind === 'request' && record?.id) {
+        const { data: existingReq, error: reqLookupErr } = await sb
+          .from('requests').select('requester_user_id').eq('id', record.id).maybeSingle();
+        if (!reqLookupErr && existingReq && existingReq.requester_user_id
+            && existingReq.requester_user_id !== user.id) {
+          res.status(403).json({
+            error: 'Athletes can only edit their own requests',
+            detail: `Request ${record.id} belongs to another user.`,
+          });
+          return;
+        }
+      }
       if (kind === 'manual-player') {
         const rec = record || {};
         const t = rec.team || rec.team_id;
@@ -561,6 +580,25 @@ export default async function handler(req, res) {
         if (!id) {
           res.status(400).json({ error: 'delete requires id' });
           return;
+        }
+        // v5 (audit IDOR fix): an athlete may only delete a row they own.
+        // generate-log is the sole athlete-deletable kind and carries
+        // owner_id (+ team). Require owner_id === auth.uid(), or for legacy
+        // rows predating owner_id stamping, team === the athlete's team.
+        if (isAthlete) {
+          const { data: own, error: ownErr } = await sb
+            .from(table).select('owner_id, team').eq('id', id).maybeSingle();
+          if (ownErr) {
+            res.status(500).json({ error: 'ownership lookup failed', detail: ownErr.message });
+            return;
+          }
+          if (!own) { res.status(404).json({ error: 'Record not found' }); return; }
+          const ownsByUser = own.owner_id && own.owner_id === user.id;
+          const ownsByTeam = !own.owner_id && own.team && own.team === userTeamId;
+          if (!ownsByUser && !ownsByTeam) {
+            res.status(403).json({ error: 'Athletes can only delete their own records' });
+            return;
+          }
         }
         // For media/overlay/effect, also delete the storage object.
         if (BLOB_KINDS.has(kind)) {

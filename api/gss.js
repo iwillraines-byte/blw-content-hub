@@ -14,6 +14,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  // v5 (audit): this proxy is intentionally unauthenticated — it serves
+  // public league stats and its callers (src/data.js) fetch without a JWT.
+  // To stop it being abused as a general relay, constrain it to the only
+  // GSS read paths the app actually requests: leagues/*, rankings/*, teams/*.
+  if (!/^(leagues|rankings|teams)\//.test(path) || path.includes('..')) {
+    res.status(400).json({ error: 'Unsupported path' });
+    return;
+  }
+
   // Forward any additional query params
   const qs = Object.entries(rest)
     .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(val => `${encodeURIComponent(k)}=${encodeURIComponent(val)}`))

@@ -65,6 +65,10 @@ function extractJSON(text) {
   try { return JSON.parse(body); } catch { return null; }
 }
 
+// Memory synthesis calls Claude; raise from the ~10s default so it doesn't
+// 504. TOP-LEVEL export (not nested in `config`).
+export const maxDuration = 60;
+
 export default async function handler(req, res) {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
