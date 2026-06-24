@@ -1161,6 +1161,8 @@ export default function TeamPage() {
       m.set(n, {
         batting: b ? [{ label: 'AVG', value: b.avg }, { label: 'HR', value: b.hr }, { label: 'OPS+', value: b.ops_plus }] : null,
         pitching: p ? [{ label: 'ERA', value: p.era }, { label: 'W-L', value: `${p.w ?? 0}-${p.l ?? 0}` }, { label: 'K', value: p.k }] : null,
+        // Innings decides whether a two-way player's card leads with pitching.
+        pitchingIp: p ? (parseFloat(p.ip) || 0) : 0,
       });
     }
     return m;
@@ -1515,10 +1517,16 @@ export default function TeamPage() {
               const hand = handByName.get(nameKey);
               const handStr = hand && (hand.bats || hand.throws) ? `${hand.bats || '–'}/${hand.throws || '–'}` : '';
               const stats = rosterStatByName.get(nameKey);
+              // Pitching-first for pitchers: anyone with a real pitching line
+              // (innings > 0) leads with ERA/W-L/K — two-way wiffle players
+              // were always resolving to batting under the old isBatter-first
+              // precedence, so their pitching never showed. Pure hitters (no
+              // pitching line) keep AVG/HR/OPS+.
+              const pitchesForReal = !!stats?.pitching && (stats.pitchingIp || 0) > 0;
               const statTrio = stats
-                ? ((p.isBatter && stats.batting) ? stats.batting
-                  : (p.isPitcher && stats.pitching) ? stats.pitching
-                  : (stats.batting || stats.pitching))
+                ? (pitchesForReal ? stats.pitching
+                  : stats.batting ? stats.batting
+                  : stats.pitching)
                 : null;
               return (
                 <div key={rowKey} style={{ position: 'relative' }}>
