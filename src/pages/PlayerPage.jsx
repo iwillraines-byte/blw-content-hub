@@ -2555,6 +2555,9 @@ export default function PlayerPage() {
                   throws:      updates.throws || null,
                   birthplace:  updates.birthplace || null,
                   status:      updates.status || null,
+                  instagram_handle: updates.instagramHandle ?? null,
+                  fun_facts:        updates.funFacts ?? null,
+                  is_rookie:        updates.isRookie ?? null,
                 },
                 awaitCloud: true,
               });
@@ -2570,6 +2573,9 @@ export default function PlayerPage() {
                 throws:     updates.throws,
                 birthplace: updates.birthplace,
                 status:     updates.status,
+                instagramHandle: updates.instagramHandle,
+                funFacts:   updates.funFacts,
+                isRookie:   updates.isRookie,
               } : prev);
               // v5 (audit): gate the success toast on the cloud actually
               // persisting. If the live DB lacks the vitals columns (db/004
@@ -3530,6 +3536,10 @@ function EditPlayerInfoModal({ player, team, onClose, onSave }) {
   const [throws,     setThrows]     = useState(player.throws || '');
   const [birthplace, setBirthplace] = useState(player.birthplace || '');
   const [status,     setStatus]     = useState(player.status || 'active');
+  // About-extras (db/006) — previously only settable via the CSV import.
+  const [instagramHandle, setInstagramHandle] = useState(player.instagramHandle || '');
+  const [funFacts,   setFunFacts]   = useState(player.funFacts || '');
+  const [isRookie,   setIsRookie]   = useState(!!player.isRookie);
   const [saving,     setSaving]     = useState(false);
 
   // Body scroll lock while modal open. Mirrors the photo picker /
@@ -3561,6 +3571,9 @@ function EditPlayerInfoModal({ player, team, onClose, onSave }) {
         throws:     throws || null,
         birthplace: birthplace.trim() || null,
         status:     status || 'active',
+        instagramHandle: instagramHandle.trim().replace(/^@+/, '') || null,
+        funFacts:   funFacts.trim() || null,
+        isRookie:   isRookie,
       });
     } finally {
       setSaving(false);
@@ -3664,6 +3677,18 @@ function EditPlayerInfoModal({ player, team, onClose, onSave }) {
               <option value="injured">Injured</option>
               <option value="inactive">Inactive</option>
             </select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Instagram</label>
+            <input style={fieldStyle} value={instagramHandle} onChange={e => setInstagramHandle(e.target.value)} placeholder="handle (without @)" />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Fun facts</label>
+            <textarea style={{ ...fieldStyle, minHeight: 64, resize: 'vertical' }} value={funFacts} onChange={e => setFunFacts(e.target.value)} placeholder="Surfaces in the player's About dropdown." />
+          </div>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" id="isRookieEdit" checked={isRookie} onChange={e => setIsRookie(e.target.checked)} style={{ width: 15, height: 15 }} />
+            <label htmlFor="isRookieEdit" style={{ ...labelStyle, marginBottom: 0, cursor: 'pointer' }}>BLW Rookie</label>
           </div>
         </div>
 
