@@ -1810,10 +1810,33 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     }
     return all[0] || null;
   };
+  // manual_players can hold DUPLICATE rows for one player (trade-preset +
+  // canonical-injection + repeated bio imports — e.g. 5 "Dallas Allen / LAN"
+  // rows). The bio import writes to ONE of them, so picking narrowed[0] often
+  // surfaces an EMPTY dup and the page shows no vitals. When more than one row
+  // matches the SAME player, prefer the one carrying the most actual data so
+  // the bio always wins. (Proper dedup of the table is the real fix.)
+  const MANUAL_DATA_KEYS = [
+    'height_in', 'heightIn', 'weight_lbs', 'weightLbs', 'birthdate', 'bats', 'throws',
+    'birthplace', 'nickname', 'instagram_handle', 'instagramHandle', 'fun_facts', 'funFacts',
+    'is_rookie', 'isRookie', 'profile_media_id', 'profileMediaId', 'user_id', 'userId',
+    'num', 'position',
+  ];
+  const manualDataScore = (r) => MANUAL_DATA_KEYS.reduce((n, k) => {
+    const v = r?.[k];
+    return n + (v != null && v !== '' && v !== false ? 1 : 0);
+  }, 0);
+  const pickRichestManual = (narrowed, all) => {
+    if (narrowed.length > 1) {
+      return narrowed.slice().sort((a, b) => manualDataScore(b) - manualDataScore(a))[0];
+    }
+    return pickStrict(narrowed, all);
+  };
+
   const batting = pickStrict(battingMatches, battingAll);
   const pitching = pickStrict(pitchingMatches, pitchingAll);
   const rosterPlayer = pickStrict(rosterMatches, rosterAll);
-  const manual = pickStrict(manualMatches, manualAll);
+  const manual = pickRichestManual(manualMatches, manualAll);
 
   const source = batting || pitching || rosterPlayer || manual;
   if (!source && rankingMatches.length === 0 && rankingAll.length === 0) return null;
