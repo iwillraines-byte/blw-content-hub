@@ -16,11 +16,13 @@ import { colors, fonts, radius } from './theme';
 
 const ToastContext = createContext(null);
 
+// v5: theme tokens (dark-mode adaptive) instead of hardcoded light-mode hex —
+// the old #15803D/#991B1B/#075985/#92400E read poorly on the charcoal dark UI.
 const KIND_STYLES = {
-  success: { bg: 'rgba(34,197,94,0.10)', fg: '#15803D', border: 'rgba(34,197,94,0.35)', icon: '✓' },
-  error:   { bg: 'rgba(220,38,38,0.10)', fg: '#991B1B', border: 'rgba(220,38,38,0.35)', icon: '✕' },
-  info:    { bg: 'rgba(14,165,233,0.10)', fg: '#075985', border: 'rgba(14,165,233,0.35)', icon: 'ℹ' },
-  warn:    { bg: 'rgba(245,158,11,0.12)', fg: '#92400E', border: 'rgba(245,158,11,0.35)', icon: '⚠' },
+  success: { bg: colors.successBg, fg: colors.successText, border: colors.successBorder, icon: '✓' },
+  error:   { bg: 'rgba(220,38,38,0.12)', fg: colors.dangerText, border: 'rgba(220,38,38,0.35)', icon: '✕' },
+  info:    { bg: colors.infoBg, fg: colors.infoText, border: colors.infoBorder, icon: 'ℹ' },
+  warn:    { bg: colors.warningBg, fg: colors.warningText, border: colors.warningBorder, icon: '⚠' },
 };
 
 export function ToastProvider({ children }) {
