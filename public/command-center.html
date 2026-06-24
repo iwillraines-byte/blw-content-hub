@@ -11,11 +11,11 @@
 <style>
   :root{
     --bg:#0A0B0D; --panel:rgba(20,21,25,0.66); --line:rgba(255,255,255,0.07); --line-2:rgba(255,255,255,0.12);
-    --ink:#EDEDE7; --ink-2:#9A9DA4; --ink-3:#62656C; --pos:#7CF1A8; --neg:#FF7D7D; --warn:#FFC04C;
+    --ink:#EDEDE7; --ink-2:#A6AAB2; --ink-3:#878B94; --pos:#7CF1A8; --neg:#FF8A8A; --warn:#FFC04C;
     --display:"Helvetica Neue","Helvetica","Arial",sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.4;font-variant-numeric:tabular-nums;padding-left:60px}
+  body{background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.4;font-variant-numeric:tabular-nums}
   #particles{position:fixed;inset:0;z-index:0;pointer-events:none}
   .glow{position:fixed;z-index:0;pointer-events:none;filter:blur(120px);opacity:.5}
   .glow.a{top:-180px;left:-120px;width:520px;height:520px;background:radial-gradient(circle,rgba(124,241,168,.08),transparent 70%)}
@@ -30,30 +30,33 @@
   .dot.err{background:var(--neg)}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(124,241,168,.45)}70%{box-shadow:0 0 0 7px rgba(124,241,168,0)}100%{box-shadow:0 0 0 0 rgba(124,241,168,0)}}
   .clock{color:var(--ink);font-size:12.5px}
-  .btn{font-family:var(--body);font-size:12px;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line-2);padding:7px 13px;border-radius:9px;cursor:pointer;transition:.18s;letter-spacing:.02em}
-  .btn:hover{background:rgba(255,255,255,.09);transform:translateY(-1px)}
+  .btn{font-family:var(--body);font-size:12px;color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--line-2);padding:8px 13px;border-radius:9px;cursor:pointer;transition:.18s;letter-spacing:.02em}
+  .btn:hover{background:rgba(255,255,255,.10);transform:translateY(-1px)}
   .btn:active{transform:translateY(0) scale(.98)}
+  .btn:focus-visible{outline:2px solid var(--pos);outline-offset:2px}
   .btn.spin{opacity:.6;pointer-events:none}
   .controls{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:18px 0 4px}
   .eyebrow{font-size:12.5px;color:var(--ink-2);font-weight:500}
   .tabs{display:inline-flex;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:3px;flex-wrap:wrap}
-  .tab{font-size:12px;color:var(--ink-2);padding:6px 12px;border-radius:7px;cursor:pointer;transition:.18s;letter-spacing:.02em;white-space:nowrap}
+  .tab{font-size:12px;color:var(--ink-2);padding:8px 13px;border-radius:7px;cursor:pointer;transition:.18s;letter-spacing:.02em;white-space:nowrap}
+  .tab:focus-visible{outline:2px solid var(--pos)}
   .tab.active{background:rgba(255,255,255,.10);color:var(--ink)}
-  .section-title{font-family:var(--display);font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:12px;margin-top:26px}
+  .section-title{font-family:var(--display);font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);display:flex;align-items:center;gap:12px;margin-top:26px}
   .section-title .rule{height:1px;flex:1;background:var(--line)}
   .hero{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}
   .kpi{position:relative;background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:14px;padding:15px 15px 12px;overflow:hidden;transition:.2s;animation:rise .6s cubic-bezier(.2,.7,.2,1) backwards;display:flex;flex-direction:column;cursor:pointer}
   .kpi:hover{border-color:var(--line-2);transform:translateY(-2px)}
-  .kpi .label{font-size:11px;color:var(--ink-3);letter-spacing:.12em;text-transform:uppercase}
+  .kpi:focus-visible{outline:2px solid var(--pos);outline-offset:2px}
+  .kpi .label{font-size:11px;color:var(--ink-2);letter-spacing:.1em;text-transform:uppercase}
   .kpi .val{font-weight:600;font-size:32px;letter-spacing:-.02em;margin-top:6px;line-height:1}
   .kpi .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px;min-height:16px}
   .delta{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
   .delta.up{color:var(--pos)} .delta.down{color:var(--neg)} .delta.flat{color:var(--ink-3)}
-  .kpi .sub{font-size:10.5px;color:var(--ink-3)}
+  .kpi .sub{font-size:10.5px;color:var(--ink-2)}
   .kpi .kalert{font-size:11px;font-weight:600;color:var(--warn);display:inline-flex;align-items:center;gap:4px}
-  .kpi .hint{position:absolute;top:11px;right:13px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);opacity:0;transition:.2s}
-  .kpi:hover .hint{opacity:1}
-  .kpi .sparkwrap{position:relative;height:34px;margin:11px -15px -12px 0}
+  .kpi .hint{position:absolute;top:11px;right:13px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);opacity:0;transition:.2s}
+  .kpi:hover .hint, .kpi:focus-visible .hint{opacity:1}
+  .kpi .sparkwrap{position:relative;height:36px;margin:11px -15px -12px 0}
   .kpi .accent{position:absolute;top:0;left:0;height:2px;width:100%}
   @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
   .grid{display:grid;gap:12px;margin-top:12px}
@@ -61,7 +64,7 @@
   .panel{background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:14px;padding:15px 15px 13px}
   .panel .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:10px}
   .panel .head .t{font-family:var(--display);font-weight:700;font-size:13.5px;letter-spacing:.01em}
-  .panel .head .meta{font-size:11px;color:var(--ink-3);letter-spacing:.03em;text-align:right}
+  .panel .head .meta{font-size:11px;color:var(--ink-2);letter-spacing:.03em;text-align:right}
   .chart-box{position:relative;height:236px;margin-top:6px}
   .legend{display:flex;flex-wrap:wrap;gap:9px 14px;margin-top:12px}
   .legend span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2);cursor:pointer;user-select:none}
@@ -69,51 +72,54 @@
   .roster{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
   .team{position:relative;background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;transition:.25s;overflow:hidden}
   .team:hover{transform:translateY(-3px);border-color:var(--line-2)}
+  .team:focus-visible{outline:2px solid var(--pos);outline-offset:2px}
   .team .top{display:flex;align-items:flex-start;gap:11px}
   .logowrap{width:44px;height:44px;border-radius:12px;flex:none;padding:2px;display:grid;place-items:center}
   .badge{width:100%;height:100%;border-radius:10px;object-fit:cover;background:#16171b;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:14px;color:#0A0B0D}
   .team .who{min-width:0}
   .team .name{font-family:var(--display);font-weight:700;font-size:14px;line-height:1.12;letter-spacing:.005em}
-  .team .handle{font-size:11px;color:var(--ink-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .team .handle{font-size:11px;color:var(--ink-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .team .plats{display:flex;gap:5px;margin-top:7px}
   .plat{padding:0 5px;height:16px;border-radius:5px;background:rgba(255,255,255,.06);display:grid;place-items:center;font-size:8.5px;color:var(--ink-2);font-weight:700;letter-spacing:.04em}
   .team .mom{margin-left:auto;font-size:11px;font-weight:600;padding:4px 9px;border-radius:20px;letter-spacing:.02em;white-space:nowrap;flex:none}
   .team .stats{display:flex;gap:16px;margin-top:12px}
   .team .stat .n{font-weight:600;font-size:17px}
-  .team .stat .k{font-size:10px;color:var(--ink-3);letter-spacing:.09em;text-transform:uppercase;margin-top:2px}
+  .team .stat .k{font-size:10px;color:var(--ink-2);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
   .team .minichart{height:36px;margin-top:10px}
   .fc-head{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:6px 0 2px}
-  .chip{font-size:11px;color:var(--ink-2);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:5px 9px;cursor:pointer;transition:.16s}
+  .chip{font-size:11px;color:var(--ink-2);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer;transition:.16s}
+  .chip:focus-visible{outline:2px solid var(--pos)}
   .fc-note{font-size:11px;color:var(--ink-2);margin-top:9px;line-height:1.5}
   .fc-note b{color:var(--ink)}
   .recs{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:12px}
   .rec{display:flex;flex-direction:column;background:rgba(255,255,255,.025);border:1px solid var(--line);border-left-width:3px;border-radius:12px;padding:13px}
   .rec .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:rgba(255,255,255,.05);margin-bottom:8px}
-  .rec .kind{font-size:10px;color:var(--ink-3);letter-spacing:.1em;text-transform:uppercase}
+  .rec .kind{font-size:10px;color:var(--ink-2);letter-spacing:.1em;text-transform:uppercase}
   .rec .rt{font-weight:600;font-size:13px;margin-top:2px}
   .rec .rd{font-size:11.5px;color:var(--ink-2);margin-top:5px;line-height:1.45}
   .recpost{font-size:11px;color:var(--ink-2);margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:8px;line-height:1.45;font-style:italic}
   .recpost a{color:var(--ink);font-style:normal;font-weight:600;text-decoration:none;white-space:nowrap}
   .recpost a:hover{text-decoration:underline}
-  .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3);text-align:center}
+  .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-2);text-align:center}
   .fade{transition:opacity .28s ease}.dim{opacity:.18}
   #overlay{position:fixed;inset:0;z-index:50;background:rgba(10,11,13,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px}
   #overlay.on{display:flex}
   .loader{width:34px;height:34px;border-radius:50%;border:2.5px solid rgba(255,255,255,.12);border-top-color:var(--pos);animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   #overlay .msg{font-size:12.5px;color:var(--ink-2);letter-spacing:.03em}
-  .errbox{display:none;background:rgba(255,125,125,.08);border:1px solid rgba(255,125,125,.3);color:#ffd0d0;border-radius:12px;padding:14px 16px;font-size:12.5px;margin-top:14px}
+  .errbox{display:none;background:rgba(255,138,138,.08);border:1px solid rgba(255,138,138,.3);color:#ffd6d6;border-radius:12px;padding:14px 16px;font-size:12.5px;margin-top:14px}
   .errbox.on{display:block}
+  .errbox a{color:#fff;font-weight:600}
   .modal{position:fixed;inset:0;z-index:60;background:rgba(8,9,11,.74);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:24px}
   .modal.on{display:flex}
-  .modal-card{position:relative;background:#121317;border:1px solid var(--line-2);border-radius:16px;width:min(880px,96vw);max-height:90vh;overflow:auto;padding:20px 22px;animation:pop .26s cubic-bezier(.2,.8,.2,1)}
+  .modal-card{position:relative;background:#121317;border:1px solid var(--line-2);border-radius:16px;width:min(920px,96vw);max-height:90vh;overflow:auto;padding:20px 22px;animation:pop .26s cubic-bezier(.2,.8,.2,1)}
   @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
-  .modal-x{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.06);border:1px solid var(--line-2);color:var(--ink);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:15px;line-height:1}
+  .modal-x{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.06);border:1px solid var(--line-2);color:var(--ink);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;line-height:1}
   .modal-x:hover{background:rgba(255,255,255,.12)}
   .modal-title{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.01em;display:flex;align-items:center;gap:10px}
-  .modal-sub{font-size:11.5px;color:var(--ink-3);margin-top:4px;letter-spacing:.02em}
-  .mtoggle{display:inline-flex;gap:3px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;padding:3px;margin-top:10px;flex-wrap:wrap}
-  .mtoggle .mt{font-size:11.5px;color:var(--ink-2);padding:6px 12px;border-radius:7px;cursor:pointer}
+  .modal-sub{font-size:11.5px;color:var(--ink-2);margin-top:4px;letter-spacing:.02em}
+  .mtoggle{display:inline-flex;gap:3px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;padding:3px;margin-top:12px;flex-wrap:wrap}
+  .mtoggle .mt{font-size:11.5px;color:var(--ink-2);padding:7px 13px;border-radius:7px;cursor:pointer}
   .mtoggle .mt.active{background:rgba(255,255,255,.10);color:var(--ink)}
   .platlegend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
   .platlegend span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2)}
@@ -121,10 +127,11 @@
   .drill-list{margin-top:14px;display:flex;flex-direction:column;gap:1px}
   .drow{display:flex;align-items:center;gap:11px;padding:8px;border-radius:10px;cursor:pointer;transition:.15s}
   .drow:hover{background:rgba(255,255,255,.045)}
+  .drow.sel{background:rgba(255,255,255,.07)}
   .drow .logowrap{width:30px;height:30px;border-radius:9px;padding:2px}
   .drow .badge{font-size:11px}
   .dname{font-size:12.5px;font-weight:600;min-width:148px;flex:none}
-  .dname .dtot{font-size:10.5px;color:var(--ink-3);font-weight:500;margin-top:1px}
+  .dname .dtot{font-size:10.5px;color:var(--ink-2);font-weight:500;margin-top:1px}
   .dbar{flex:1;height:8px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden}
   .dbar > span{display:block;height:100%;width:0;border-radius:5px;transition:width .85s cubic-bezier(.2,.7,.2,1)}
   .dval{font-size:13px;font-weight:600;min-width:62px;text-align:right}
@@ -138,36 +145,35 @@
   .parity b{font-weight:700}
   .parity.ok{background:rgba(124,241,168,.08);border:1px solid rgba(124,241,168,.25);color:#bdf5d3}
   .parity.warn{background:rgba(255,192,76,.09);border:1px solid rgba(255,192,76,.3);color:#ffdca0}
-  /* Left nav rail — keeps BLW Studio chrome present so the Command Center reads
-     as part of the app, not a detached page. Links navigate back into the SPA
-     (full page loads, by design). Hidden on phones, where the top-bar
-     "BLW Studio" link covers navigation. */
-  .railnav{position:fixed;top:0;left:0;bottom:0;width:60px;z-index:20;background:#0E0F12;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 0}
-  .rail-logo{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;margin-bottom:8px}
-  .rail-logo img{width:30px;height:30px;object-fit:contain;display:block}
-  .rail-i{position:relative;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;color:var(--ink-3);transition:.16s}
-  .rail-i svg{width:20px;height:20px;display:block}
-  .rail-i:hover{color:var(--ink);background:rgba(255,255,255,.05)}
-  .rail-i.active{color:var(--ink);background:rgba(255,255,255,.09)}
-  .rail-i.active::before{content:"";position:absolute;left:-9px;top:50%;transform:translateY(-50%);width:3px;height:22px;border-radius:0 3px 3px 0;background:var(--pos)}
-  @media(max-width:1080px){.hero{grid-template-columns:repeat(2,1fr)}.g-2{grid-template-columns:1fr}.roster{grid-template-columns:repeat(2,1fr)}.recs{grid-template-columns:1fr 1fr}}
-  @media(max-width:620px){.hero{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.recs{grid-template-columns:1fr}.wrap{padding:14px 14px 48px}.pcounts{gap:8px}.dname{min-width:110px}body{padding-left:0}.railnav{display:none}}
+  .gchips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 2px}
+  .gchip{flex:1;min-width:130px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:11px;padding:9px 12px}
+  .gchip .gh{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink-2);letter-spacing:.05em;text-transform:uppercase}
+  .gchip .gh i{width:8px;height:8px;border-radius:2px}
+  .gchip .gv{font-weight:700;font-size:18px;margin-top:3px}
+  .gchip .gd{font-size:11px;font-weight:600;margin-top:1px}
+  .gd.up{color:var(--pos)} .gd.down{color:var(--neg)} .gd.flat{color:var(--ink-3)}
+  .drill-ctl{display:flex;align-items:center;gap:9px;margin-top:10px;font-size:11.5px;color:var(--ink-2)}
+  .drill-ctl .reset{cursor:pointer;color:var(--ink);border:1px solid var(--line-2);border-radius:7px;padding:5px 10px}
+  .xcols{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .xcol{background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:11px;padding:10px 11px}
+  .xcol h5{font-size:11px;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--ink-2)}
+  .xcol h5 i{width:9px;height:9px;border-radius:2px}
+  .xcol h5 .cnt{margin-left:auto;font-weight:700;color:var(--ink)}
+  .xlist{max-height:340px;overflow:auto}
+  .xpost{font-size:11px;color:var(--ink-2);padding:7px 0;border-top:1px solid var(--line);line-height:1.4}
+  .xpost:first-child{border-top:none}
+  .xpost .xd{color:var(--ink-3);font-size:10px;display:flex;justify-content:space-between}
+  .xpost a{color:var(--ink);text-decoration:none}.xpost a:hover{text-decoration:underline}
+  @media(max-width:1080px){.hero{grid-template-columns:repeat(2,1fr)}.g-2{grid-template-columns:1fr}.roster{grid-template-columns:repeat(2,1fr)}.recs{grid-template-columns:1fr 1fr}.xcols{grid-template-columns:1fr}}
+  @media(max-width:620px){.hero{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.recs{grid-template-columns:1fr}.wrap{padding:14px 14px 48px}.pcounts{gap:8px}.dname{min-width:110px}}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition:none !important} #particles{display:none} }
 </style>
 </head>
 <body>
-<nav class="railnav" aria-label="BLW Studio">
-  <a class="rail-logo" href="/dashboard" title="BLW Studio"><img src="/brand/blw-logo.svg" alt="BLW"></a>
-  <a class="rail-i" href="/dashboard" title="Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></a>
-  <a class="rail-i" href="/generate" title="Studio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg></a>
-  <a class="rail-i" href="/requests" title="Requests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></a>
-  <a class="rail-i" href="/game-center" title="ProWiffle Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></a>
-  <a class="rail-i" href="/files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg></a>
-  <a class="rail-i active" href="/command-center" title="Command Center" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg></a>
-</nav>
 <canvas id="particles"></canvas>
 <div class="glow a"></div><div class="glow b"></div>
 <div id="overlay"><div class="loader"></div><div class="msg" id="ovmsg">Pulling live data from Metricool...</div></div>
-<div class="modal" id="modal"><div class="modal-card"><button class="modal-x" id="modalX">&#10005;</button><div id="modalBody"></div></div></div>
+<div class="modal" id="modal"><div class="modal-card"><button class="modal-x" id="modalX" aria-label="Close">&#10005;</button><div id="modalBody"></div></div></div>
 
 <div class="wrap">
   <div class="topbar">
@@ -226,11 +232,12 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const STATE = { q: "days=30", data: null, fcTeam: null, charts: {}, modalCharts: [] };
+const STATE = { q: "days=30", data: null, fcTeam: null, charts: {}, modalCharts: [], drillIsolate: null };
 const logoCache = {};
 const PCOL = { ig:"#FF6FCF", tt:"#5CE0E0", fb:"#5B8DEF" };
 const PNAME = { ig:"Instagram", tt:"TikTok", fb:"Facebook" };
 const PSHORT = { ig:"IG", tt:"TikTok", fb:"FB" };
+const REDUCE = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const ICONS = {
   "Double down":'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>',
   "Amplify":'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="20" x2="5" y2="13"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="19" y1="20" x2="19" y2="4"/></svg>',
@@ -242,14 +249,16 @@ const ICONS = {
 };
 const fmt = n => { n = Number(n)||0; const a=Math.abs(n); return a>=1e6?(n/1e6).toFixed(2)+"M":a>=1e3?(n/1e3).toFixed(1)+"k":Math.round(n).toLocaleString(); };
 const fmtFull = n => Math.round(Number(n)||0).toLocaleString();
+const signed = n => (n>0?"+":"")+fmtFull(n);
 const mmdd = d => { const p=(d||"").split("-"); return p.length===3?p[1]+"/"+p[2]:d; };
 const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 
 Chart.defaults.font.family = "Hanken Grotesk";
-Chart.defaults.color = "#9A9DA4";
+Chart.defaults.color = "#A6AAB2";
 Chart.defaults.font.size = 11;
 const GRID = { color:"rgba(255,255,255,.06)", drawTicks:false };
-const TT = { backgroundColor:"#16171b", borderColor:"rgba(255,255,255,.1)", borderWidth:1, padding:9, titleColor:"#ECECE7", bodyColor:"#9A9DA4" };
+const TT = { backgroundColor:"#16171b", borderColor:"rgba(255,255,255,.12)", borderWidth:1, padding:10, titleColor:"#ECECE7", bodyColor:"#C2C6CE" };
+const ANIM = REDUCE ? 0 : 700;
 
 function teamLogo(url){
   if(!url) return null;
@@ -263,18 +272,12 @@ function logoHTML(t){
   const inner=t.picture?`<img class="badge" src="${esc(t.picture)}" alt="" onerror="this.outerHTML='<div class=\\'badge\\' style=\\'background:${t.accent}\\'>${initials}</div>'">`:`<div class="badge" style="background:${t.accent}">${initials}</div>`;
   return `<div class="logowrap" style="box-shadow:inset 0 0 0 2px ${t.accent}">${inner}</div>`;
 }
-function parity(t){
-  const b=t.byPlatform.posts; const target=Math.max(b.ig,b.tt,b.fb);
-  const def={ig:target-b.ig,tt:target-b.tt,fb:target-b.fb};
-  return { counts:b, target, def, gap:def.ig+def.tt+def.fb };
-}
-function leagueParity(d){
-  const p=d.totalsByPlatform.posts; const target=Math.max(p.ig,p.tt,p.fb);
-  const def={ig:target-p.ig,tt:target-p.tt,fb:target-p.fb};
-  return { counts:p, target, def, gap:def.ig+def.tt+def.fb };
-}
+function parity(t){ const b=t.byPlatform.posts; const target=Math.max(b.ig,b.tt,b.fb); const def={ig:target-b.ig,tt:target-b.tt,fb:target-b.fb}; return { counts:b, target, def, gap:def.ig+def.tt+def.fb }; }
+function leagueParity(d){ const p=d.totalsByPlatform.posts; const target=Math.max(p.ig,p.tt,p.fb); const def={ig:target-p.ig,tt:target-p.tt,fb:target-p.fb}; return { counts:p, target, def, gap:def.ig+def.tt+def.fb }; }
 function defText(def){ return Object.entries(def).filter(([k,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${PSHORT[k]} -${v}`).join(", "); }
 function defLong(def){ return Object.entries(def).filter(([k,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${PNAME[k]} ${v}`).join(", "); }
+function growthPct(series){ const a=series.filter(p=>p.v>0); if(a.length<2) return null; const f=a[0].v,l=a[a.length-1].v; return f>0?(l-f)/f*100:null; }
+function alignKeys(obj, keys){ const set=new Set(); keys.forEach(k=>(obj[k]||[]).forEach(p=>set.add(p.d))); const labels=[...set].sort(); const map={}; keys.forEach(k=>{ const m=Object.fromEntries((obj[k]||[]).map(p=>[p.d,p.v])); map[k]=labels.map(x=>x in m?m[x]:null); }); return {labels,map}; }
 
 Chart.register({
   id:"endpointLogos",
@@ -303,7 +306,7 @@ Chart.register({
     if(chart.canvas.id!=="bellChart" || !chart.$bell) return;
     const {mean,sd}=chart.$bell; if(!(sd>0)) return;
     const ctx=chart.ctx, xs=chart.scales.x, area=chart.chartArea;
-    const marks=[[mean,"μ "+fmt(mean),1,"#EDEDE7"],[mean-sd,"-1σ",.55,"#9A9DA4"],[mean+sd,"+1σ",.55,"#9A9DA4"],[mean-2*sd,"-2σ",.32,"#62656C"],[mean+2*sd,"+2σ",.32,"#62656C"]];
+    const marks=[[mean,"μ "+fmt(mean),1,"#EDEDE7"],[mean-sd,"-1σ",.6,"#A6AAB2"],[mean+sd,"+1σ",.6,"#A6AAB2"],[mean-2*sd,"-2σ",.4,"#878B94"],[mean+2*sd,"+2σ",.4,"#878B94"]];
     ctx.save(); ctx.textAlign="center"; ctx.font="10px Hanken Grotesk";
     marks.forEach(([val,lab,al,col])=>{ if(val<xs.min||val>xs.max) return; const px=xs.getPixelForValue(val);
       ctx.strokeStyle="rgba(255,255,255,"+(al*0.45)+")"; ctx.setLineDash(val===mean?[]:[3,3]); ctx.lineWidth=val===mean?1.4:1;
@@ -315,7 +318,7 @@ Chart.register({
 
 function countUp(el,to,dur,f){
   f=f||fmtFull; const from=parseFloat(el.dataset.v||"0")||0; el.dataset.v=to;
-  if(document.hidden||dur<=0){ el.textContent=f(to); return; }
+  if(document.hidden||dur<=0||REDUCE){ el.textContent=f(to); return; }
   const t0=performance.now();
   function step(now){ const p=Math.min(1,(now-t0)/dur); const e=1-Math.pow(1-p,3); el.textContent=f(from+(to-from)*e); if(p<1) requestAnimationFrame(step); else el.textContent=f(to); }
   requestAnimationFrame(step);
@@ -339,8 +342,8 @@ function showGate(expired){
   $("#content").style.display="none";
   $("#errbox").classList.add("on");
   $("#errbox").innerHTML = expired
-    ? "<b>Restricted.</b> Your BLW Studio session doesn't have Command Center access, or it has expired. Open this page while signed in with a content or admin account."
-    : "<b>Restricted.</b> Sign in to BLW Studio first, then open /command-center. &nbsp;<a href='/' style='color:var(--ink);font-weight:600;text-decoration:none'>Go to BLW Studio &#8594;</a>";
+    ? "<b>Admins only.</b> Your BLW Studio session isn't an admin, or it has expired. Open this page while signed in to BLW Studio as an admin."
+    : "<b>Admins only.</b> Sign in to BLW Studio first, then open /command-center. &nbsp;<a href='/'>Go to BLW Studio &#8594;</a>";
 }
 async function load(q,fresh){
   STATE.q=q;
@@ -382,14 +385,16 @@ function renderHero(){
   const lp=leagueParity(d);
   let postsAlert=null;
   if(lp.gap>0){ const w=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; postsAlert=`${PNAME[w[0]]} ${w[1]} behind`; }
+  const interSpark=(d.network.interactionsByPlatform?["ig","tt","fb"].reduce((acc,k)=>{ (d.network.interactionsByPlatform[k]||[]).forEach(p=>{acc[p.d]=(acc[p.d]||0)+p.v}); return acc; },{}):{});
+  const interArr=Object.keys(interSpark).sort().map(k=>interSpark[k]);
   const cards=[
     {key:"followers",label:"Total followers",val:t.followers,accent:"#7CF1A8",spark:d.network.followers.map(p=>p.v),delta:folDelta,deltaLabel:"vs start of window"},
     {key:"views",label:"Views ("+d.label+")",val:t.views,accent:"#5B8DEF",spark:d.network.views.map(p=>p.v),sub:"IG + TikTok + FB"},
-    {key:"interactions",label:"Interactions ("+d.label+")",val:t.interactions,accent:"#FFB13C",spark:d.network.engagement.map(p=>p.v),sub:"likes, comments, shares"},
-    {key:"posts",label:"Posts ("+d.label+")",val:t.content,accent:"#FF6FCF",sub:"shipped across teams",alert:postsAlert}
+    {key:"interactions",label:"Interactions ("+d.label+")",val:t.interactions,accent:"#FFB13C",spark:interArr,sub:"likes, comments, shares"},
+    {key:"posts",label:"Posts ("+d.label+")",val:t.content,accent:"#FF6FCF",spark:d.network.netNew.map(p=>Math.abs(p.v)),sub:"shipped across teams",alert:postsAlert}
   ];
   $("#hero").innerHTML=cards.map((k,i)=>`
-    <div class="kpi" data-metric="${k.key}" style="animation-delay:${i*.06}s">
+    <div class="kpi" data-metric="${k.key}" tabindex="0" role="button" style="animation-delay:${i*.06}s">
       <div class="accent" style="background:${k.accent}"></div>
       <div class="hint">Click to drill in</div>
       <div class="label">${k.label}</div>
@@ -398,26 +403,26 @@ function renderHero(){
       <div class="sparkwrap"><canvas id="spark${i}"></canvas></div>
     </div>`).join("");
   cards.forEach((k,i)=>{ countUp($("#kpi"+i),k.val,950); if(k.spark&&k.spark.length) miniSpark("spark"+i,k.spark,k.accent); });
-  $("#hero").querySelectorAll(".kpi").forEach(el=>el.onclick=()=>openDrill(el.dataset.metric));
+  $("#hero").querySelectorAll(".kpi").forEach(el=>{ el.onclick=()=>openDrill(el.dataset.metric); el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();openDrill(el.dataset.metric);} }; });
 }
 
 function miniSpark(id,arr,color){
   const el=document.getElementById(id); if(!el) return;
-  STATE.charts[id]=new Chart(el,{type:"line",data:{labels:arr.map((_,i)=>i),datasets:[{data:arr,borderColor:color,borderWidth:1.6,pointRadius:0,tension:.4,fill:true,
-    backgroundColor:ctx=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,40);g.addColorStop(0,color+"3a");g.addColorStop(1,color+"00");return g}}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}}}});
+  STATE.charts[id]=new Chart(el,{type:"line",data:{labels:arr.map((_,i)=>i),datasets:[{data:arr,borderColor:color,borderWidth:1.8,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:color,tension:.4,fill:true,
+    backgroundColor:ctx=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,42);g.addColorStop(0,color+"42");g.addColorStop(1,color+"00");return g}}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:ANIM},interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}}}});
 }
 
 function alignedAxis(key){ const set=new Set(); STATE.data.teams.forEach(t=>t.series[key].forEach(p=>set.add(p.d))); return Array.from(set).sort(); }
 
 function lineChart(canvas, teams, labels, key, opts){
   const ds=teams.map(t=>{ const m=Object.fromEntries(t.series[key].map(p=>[p.d,p.v]));
-    const o={label:t.name,data:labels.map(d=>(d in m)?m[d]:(opts.zero?0:null)),borderColor:t.accent,backgroundColor:opts.fill?t.accent+"33":t.accent,borderWidth:opts.bw||2,pointRadius:0,tension:.32,spanGaps:true};
+    const o={label:t.name,data:labels.map(d=>(d in m)?m[d]:(opts.zero?0:null)),borderColor:t.accent,backgroundColor:opts.fill?t.accent+"33":t.accent,borderWidth:opts.bw||2,pointRadius:0,pointHoverRadius:4,tension:.32,spanGaps:true};
     if(opts.logo) o.__logo=teamLogo(t.picture); return o; });
   return new Chart(canvas,{type:"line",data:{labels:labels.map(mmdd),datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,layout:{padding:{right:opts.logo?30:2}},interaction:{mode:"index",intersect:false},
       plugins:{legend:{display:false},tooltip:{...TT,itemSort:(a,b)=>b.parsed.y-a.parsed.y}},
-      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{stacked:!!opts.stacked,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:700}}});
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{stacked:!!opts.stacked,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
 }
 
 function renderFollowersSplit(){
@@ -445,22 +450,22 @@ function renderRoster(){
     const up=t.netNew>=0;
     const handle=t.handles.instagram?"@"+esc(t.handles.instagram):(t.handles.tiktok?"@"+esc(t.handles.tiktok):"");
     const plats=["instagram","tiktok","facebook"].filter(n=>t.handles[n]).map(n=>`<span class="plat">${n==='tiktok'?'TT':n==='instagram'?'IG':'FB'}</span>`).join("");
-    return `<div class="team" data-id="${t.blogId}" style="animation:rise .55s ${i*.04}s backwards">
+    return `<div class="team" data-id="${t.blogId}" tabindex="0" role="button" style="animation:rise .55s ${i*.04}s backwards">
       <div class="top">${logoHTML(t)}
         <div class="who"><div class="name">${esc(t.name)}</div><div class="handle">${handle}</div><div class="plats">${plats}</div></div>
-        <div class="mom" style="background:${up?'rgba(124,241,168,.12)':'rgba(255,125,125,.12)'};color:${up?'var(--pos)':'var(--neg)'}">${up?'▲':'▼'} ${Math.abs(t.mom).toFixed(1)}%</div>
+        <div class="mom" style="background:${up?'rgba(124,241,168,.12)':'rgba(255,138,138,.12)'};color:${up?'var(--pos)':'var(--neg)'}">${up?'▲':'▼'} ${Math.abs(t.mom).toFixed(1)}%</div>
       </div>
       <div class="stats">
         <div class="stat"><div class="n" data-v="0" data-to="${t.followersNow}">0</div><div class="k">Followers</div></div>
         <div class="stat"><div class="n">${fmt(t.views)}</div><div class="k">Views</div></div>
-        <div class="stat"><div class="n">${t.engagementRate}%</div><div class="k">Eng rate</div></div>
+        <div class="stat"><div class="n">${fmt(t.interactions)}</div><div class="k">Interactions</div></div>
       </div>
       <div class="minichart"><canvas id="mc-${t.blogId}"></canvas></div>
     </div>`;
   }).join("");
   STATE.data.teams.forEach(t=>{ const arr=t.series.followers.map(p=>p.v); miniSpark("mc-"+t.blogId,arr.length?arr:[0,0],t.accent); });
   host.querySelectorAll(".team .stat .n[data-to]").forEach(el=>countUp(el,+el.dataset.to,900));
-  host.querySelectorAll(".team").forEach(c=>c.onclick=()=>openTeamModal(+c.dataset.id));
+  host.querySelectorAll(".team").forEach(c=>{ const go=()=>openTeamModal(+c.dataset.id); c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
 }
 
 function holt(data,a,b,H){ if(data.length<2) return null; let lvl=data[0],tr=data[1]-data[0]; const fit=[lvl];
@@ -475,8 +480,8 @@ function ols(data,H){ const n=data.length; let sx=0,sy=0,sxx=0,sxy=0;
 
 function renderChips(){
   $("#fcChips").innerHTML=STATE.data.teams.map(t=>{const on=t.blogId===STATE.fcTeam;
-    return `<span class="chip" data-id="${t.blogId}" style="${on?`background:${t.accent}1f;border-color:${t.accent}66;color:${t.accent}`:''}">${esc(t.name.split(" ")[0])}</span>`;}).join("");
-  $("#fcChips").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{STATE.fcTeam=+c.dataset.id; renderChips(); renderForecast();});
+    return `<span class="chip" data-id="${t.blogId}" tabindex="0" style="${on?`background:${t.accent}1f;border-color:${t.accent}66;color:${t.accent}`:''}">${esc(t.name.split(" ")[0])}</span>`;}).join("");
+  $("#fcChips").querySelectorAll(".chip").forEach(c=>{ const go=()=>{STATE.fcTeam=+c.dataset.id; renderChips(); renderForecast();}; c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"){go();} }; });
 }
 
 function renderForecast(){
@@ -504,7 +509,7 @@ function renderForecast(){
     {label:"OLS",data:oMid,borderColor:"#9AA0AA",borderDash:[2,3],borderWidth:1.6,pointRadius:0,tension:.3}
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
     plugins:{legend:{display:false},tooltip:{...TT,filter:i=>["Actual","Holt","OLS"].includes(i.dataset.label)}},
-    scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}}}});
+    scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
   const hp=hl.fc[H-1],op=ol.fc[H-1],band=hl.sd*Math.sqrt(H);
   $("#fcNote").innerHTML=`<b>${esc(t.name)}</b>, trending <b>${hl.trend>=0?'+':''}${hl.trend.toFixed(1)}/day</b>. Day-14: <b>${fmt(hp)}</b> (Holt) vs <b>${fmt(op)}</b> (OLS). 1σ band ±${fmt(band)}. When the two models agree, confidence is higher.`;
   renderBell(hp,band,op,ol.sd*Math.sqrt(H),t);
@@ -519,10 +524,10 @@ function renderBell(hMean,hSd,oMean,oSd,t){
     {label:"Holt",data:xs.map(x=>gauss(x,hMean,hSd)),borderColor:t.accent,borderWidth:2.2,pointRadius:0,tension:.4,fill:true,
       backgroundColor:ctx=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,170);g.addColorStop(0,t.accent+"30");g.addColorStop(1,t.accent+"00");return g}},
     {label:"OLS",data:xs.map(x=>oSd>0?gauss(x,oMean,oSd):null),borderColor:"#9AA0AA",borderDash:[3,3],borderWidth:1.5,pointRadius:0,tension:.4,fill:false}
-  ]},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},plugins:{legend:{display:false},tooltip:{enabled:false}},
-    scales:{x:{type:"linear",grid:{display:false},title:{display:true,text:"Projected day-14 followers · "+t.name,color:"#9A9DA4",font:{size:10}},ticks:{maxTicksLimit:6,callback:v=>fmt(v)}},y:{display:false}}}});
+  ]},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},plugins:{legend:{display:false},tooltip:{enabled:false}},animation:{duration:ANIM},
+    scales:{x:{type:"linear",grid:{display:false},title:{display:true,text:"Projected day-14 followers · "+t.name,color:"#A6AAB2",font:{size:10}},ticks:{maxTicksLimit:6,callback:v=>fmt(v)}},y:{display:false}}}});
   STATE.charts.bell.$bell={mean:hMean,sd:hSd}; STATE.charts.bell.update("none");
-  $("#bellNote").innerHTML=`Where <b>${esc(t.name)}</b> likely lands in 14 days. Peak (μ) is the most likely outcome (<b>${fmt(hMean)}</b>); ~68% inside ±1σ (<b>${fmt(hMean-hSd)}</b>–<b>${fmt(hMean+hSd)}</b>), ~95% inside ±2σ. Grey curve is the OLS model for comparison.`;
+  $("#bellNote").innerHTML=`Where <b>${esc(t.name)}</b> likely lands in 14 days. Peak (μ) is the most likely outcome (<b>${fmt(hMean)}</b>); ~68% inside ±1σ (<b>${fmt(hMean-hSd)}</b> to <b>${fmt(hMean+hSd)}</b>), ~95% inside ±2σ. Grey curve is the OLS model for comparison.`;
 }
 
 function renderRecs(){
@@ -543,63 +548,84 @@ $("#modalX").onclick=closeModal;
 $("#modal").onclick=e=>{ if(e.target===$("#modal")) closeModal(); };
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
 
-function postsLineChart(canvasId, pb){
-  const labs=new Set(); ["ig","tt","fb"].forEach(k=>pb[k].forEach(p=>labs.add(p.d))); const labels=[...labs].sort();
-  const mk=k=>{const m=Object.fromEntries(pb[k].map(p=>[p.d,p.v])); return labels.map(x=>x in m?m[x]:0);};
-  STATE.modalCharts.push(new Chart($("#"+canvasId),{type:"line",data:{labels:labels.map(mmdd),datasets:[
-    {label:"Instagram",data:mk("ig"),borderColor:PCOL.ig,backgroundColor:PCOL.ig,borderWidth:2,pointRadius:0,tension:.3},
-    {label:"TikTok",data:mk("tt"),borderColor:PCOL.tt,backgroundColor:PCOL.tt,borderWidth:2,pointRadius:0,tension:.3},
-    {label:"Facebook",data:mk("fb"),borderColor:PCOL.fb,backgroundColor:PCOL.fb,borderWidth:2,pointRadius:0,tension:.3}
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:true,labels:{boxWidth:9,boxHeight:9,font:{size:11}}},tooltip:TT},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{precision:0}}}}}));
+function platLineChart(canvasId, byPlatform, opts){
+  opts=opts||{};
+  const a=alignKeys(byPlatform,["ig","tt","fb"]);
+  const mkds=(k)=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:opts.fill?PCOL[k]+"22":PCOL[k],borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:.32,spanGaps:true,fill:!!opts.fill});
+  STATE.modalCharts.push(new Chart($("#"+canvasId),{type:"line",data:{labels:a.labels.map(mmdd),datasets:[mkds("ig"),mkds("tt"),mkds("fb")]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:true,labels:{boxWidth:9,boxHeight:9,font:{size:11}}},tooltip:TT},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{callback:v=>opts.int?Math.round(v):fmt(v),precision:opts.int?0:undefined}}},animation:{duration:ANIM}}}));
 }
 
 function openDrill(metric){
   const d=STATE.data;
-  const titleMap={followers:"Total followers",views:"Views",interactions:"Interactions",posts:"Posts"};
+  const titleMap={followers:"Followers gained per day",views:"Views",interactions:"Interactions",posts:"Posts"};
   const teams=[...d.teams].sort((a,b)=>val(metric,b)-val(metric,a));
   const totalVal = metric==='posts'?d.totals.content:d.totals[metric];
-  let body=`<div class="modal-title">${titleMap[metric]} · by team</div>
-    <div class="modal-sub">${esc(d.label)} · total ${fmtFull(totalVal)} · click a team to drill in</div>`;
 
   if(metric==='posts'){
     const lp=leagueParity(d);
     const counts=`Instagram ${lp.counts.ig} · TikTok ${lp.counts.tt} · Facebook ${lp.counts.fb}`;
-    if(lp.gap>0) body+=`<div class="parity warn">&#9888; <b>Platform parity off.</b> ${defLong(lp.def)} behind across the league. Every post should run on all 3 platforms; these are posts that still need cross-posting. <span style="opacity:.8">(${counts})</span></div>`;
-    else body+=`<div class="parity ok">&#10003; <b>Platforms are balanced.</b> Every team posted evenly across Instagram, TikTok and Facebook. (${counts})</div>`;
-    body+=`<div class="drill-list">`+teams.map(t=>{
-      const par=parity(t);
-      const chip = par.gap===0?`<span class="pchip ok">&#10003; all 3</span>`:`<span class="pchip warn">&#9888; ${defText(par.def)}</span>`;
-      return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}
-        <div class="dname">${esc(t.name)}<div class="dtot">${t.contentCount} posts</div></div>
-        <div class="pcounts">
-          <span class="pc"><i style="background:${PCOL.ig}"></i>${par.counts.ig}</span>
-          <span class="pc"><i style="background:${PCOL.tt}"></i>${par.counts.tt}</span>
-          <span class="pc"><i style="background:${PCOL.fb}"></i>${par.counts.fb}</span>
-        </div>${chip}</div>`;
+    let body=`<div class="modal-title">Posts · by team</div><div class="modal-sub">${esc(d.label)} · total ${fmtFull(totalVal)} · click a team to see which posts are missing per platform</div>`;
+    body+= lp.gap>0
+      ? `<div class="parity warn">&#9888; <b>Platform parity off.</b> ${defLong(lp.def)} behind across the league. Every post should run on all 3 platforms; these still need cross-posting. <span style="opacity:.8">(${counts})</span></div>`
+      : `<div class="parity ok">&#10003; <b>Platforms are balanced.</b> Every team posted evenly across all 3. (${counts})</div>`;
+    body+=`<div class="drill-list">`+teams.map(t=>{ const par=parity(t);
+      const chip=par.gap===0?`<span class="pchip ok">&#10003; all 3</span>`:`<span class="pchip warn">&#9888; ${defText(par.def)}</span>`;
+      return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}<div class="dname">${esc(t.name)}<div class="dtot">${t.contentCount} posts</div></div>
+        <div class="pcounts"><span class="pc"><i style="background:${PCOL.ig}"></i>${par.counts.ig}</span><span class="pc"><i style="background:${PCOL.tt}"></i>${par.counts.tt}</span><span class="pc"><i style="background:${PCOL.fb}"></i>${par.counts.fb}</span></div>${chip}</div>`;
     }).join("")+`</div>`;
-    body+=`<div class="platlegend" style="margin-top:12px"><span><i style="background:${PCOL.ig}"></i>Instagram</span><span><i style="background:${PCOL.tt}"></i>TikTok</span><span><i style="background:${PCOL.fb}"></i>Facebook</span></div>`;
-    body+=`<div class="modal-sub" style="margin-top:16px">Posts per day by platform (spot cross-posting gaps over time)</div><div class="chart-box" style="height:170px;margin-top:6px"><canvas id="drillTime"></canvas></div>`;
-  } else {
-    const top=teams[0]; const maxV=val(metric,top)||1;
-    body+=`<div class="drill-list">`+teams.map(t=>{
-      const v=val(metric,t); const pct=Math.max(2,Math.round(v/maxV*100));
-      return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}
-        <div class="dname">${esc(t.name)}</div>
-        <div class="dbar"><span data-w="${pct}%" style="background:${t.accent}"></span></div>
-        <div class="dval">${fmtFull(v)}</div></div>`;
-    }).join("")+`</div>`;
-    body+=`<div class="modal-sub" style="margin-top:16px">By platform</div><div class="chart-box" style="height:120px;margin-top:6px"><canvas id="drillPlat"></canvas></div>`;
+    body+=`<div class="modal-sub" style="margin-top:16px">Posts per day by platform</div><div class="chart-box" style="height:170px;margin-top:6px"><canvas id="drillTime"></canvas></div>`;
+    openModal(body);
+    platLineChart("drillTime", d.network.postsByPlatform, {int:true});
+    document.querySelectorAll("#modalBody .drow").forEach(r=>r.onclick=()=>openTeamModal(+r.dataset.id,'crosspost'));
+    return;
   }
-  openModal(body);
 
-  if(metric==='posts'){ postsLineChart("drillTime", d.network.postsByPlatform); }
-  else {
-    const plat=d.totalsByPlatform[metric];
-    STATE.modalCharts.push(new Chart($("#drillPlat"),{type:"bar",data:{labels:["Instagram","TikTok","Facebook"],datasets:[{data:[plat.ig,plat.tt,plat.fb],backgroundColor:[PCOL.ig,PCOL.tt,PCOL.fb],borderRadius:5}]},
-      options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:TT},animation:{duration:900},scales:{x:{grid:GRID,ticks:{callback:v=>fmt(v)}},y:{grid:{display:false}}}}}));
-    requestAnimationFrame(()=>document.querySelectorAll("#modalBody .dbar > span").forEach(el=>{ el.style.width=el.dataset.w; }));
+  let body=`<div class="modal-title">${titleMap[metric]} · by team</div><div class="modal-sub" id="drillSub">${esc(d.label)} · total ${fmtFull(totalVal)} · hover the chart for daily detail</div>`;
+  if(metric==='followers'){
+    body+=`<div class="drill-ctl" id="drillCtl" style="display:none">Showing one team. <span class="reset" id="drillReset">Show all teams</span></div>`;
   }
-  document.querySelectorAll("#modalBody .drow").forEach(r=>r.onclick=()=>openTeamModal(+r.dataset.id, metric==='posts'?'posts':'followers'));
+  body+=`<div class="chart-box" style="height:250px;margin-top:10px"><canvas id="drillMain"></canvas></div>`;
+  body+=`<div class="modal-sub" style="margin-top:14px">${metric==='followers'?'Click a team to isolate just its daily growth':'By team (click to open the team)'}</div>`;
+  const maxV=val(metric,teams[0])||1;
+  body+=`<div class="drill-list">`+teams.map(t=>{ const v=val(metric,t); const pct=Math.max(2,Math.round(v/maxV*100));
+    return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}<div class="dname">${esc(t.name)}</div><div class="dbar"><span data-w="${pct}%" style="background:${t.accent}"></span></div><div class="dval">${metric==='followers'?signed(t.netNew):fmtFull(v)}</div></div>`;
+  }).join("")+`</div>`;
+  openModal(body);
+  STATE.drillIsolate=null;
+  if(metric==='followers') drawFollowersDrill(null);
+  else if(metric==='views') platLineChart("drillMain", d.network.viewsByPlatform, {fill:true});
+  else platLineChart("drillMain", d.network.interactionsByPlatform, {int:true,fill:true});
+  requestAnimationFrame(()=>document.querySelectorAll("#modalBody .dbar > span").forEach(el=>{ el.style.width=el.dataset.w; }));
+  document.querySelectorAll("#modalBody .drow").forEach(r=>r.onclick=()=>{
+    if(metric==='followers'){ const id=+r.dataset.id; STATE.drillIsolate = (STATE.drillIsolate===id?null:id);
+      document.querySelectorAll("#modalBody .drow").forEach(x=>x.classList.toggle("sel", STATE.drillIsolate && +x.dataset.id===STATE.drillIsolate));
+      drawFollowersDrill(STATE.drillIsolate);
+    } else { openTeamModal(+r.dataset.id, metric); }
+  });
+  const rs=document.getElementById("drillReset"); if(rs) rs.onclick=()=>{ STATE.drillIsolate=null; document.querySelectorAll("#modalBody .drow").forEach(x=>x.classList.remove("sel")); drawFollowersDrill(null); };
+}
+
+function drawFollowersDrill(isolate){
+  const d=STATE.data; if(STATE.charts.drillMain){ try{STATE.charts.drillMain.destroy()}catch(e){} }
+  const labels=alignedAxis("netNew");
+  const teams = isolate? d.teams.filter(t=>t.blogId===isolate) : d.teams;
+  const ds=teams.map(t=>{ const m=Object.fromEntries(t.series.netNew.map(p=>[p.d,p.v]));
+    return {label:t.name,data:labels.map(x=>x in m?m[x]:null),borderColor:t.accent,backgroundColor:isolate?t.accent+"26":t.accent,borderWidth:isolate?2.6:2,pointRadius:0,pointHoverRadius:4,tension:.32,spanGaps:true,fill:!!isolate}; });
+  STATE.charts.drillMain=new Chart($("#drillMain"),{type:"line",data:{labels:labels.map(mmdd),datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{display:false},tooltip:{...TT,itemSort:(a,b)=>b.parsed.y-a.parsed.y,callbacks:{label:ctx=>ctx.dataset.label+": "+(ctx.parsed.y>=0?"+":"")+fmtFull(ctx.parsed.y)+" followers"}}},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
+  const t = isolate? d.teams.find(x=>x.blogId===isolate):null;
+  $("#drillSub").innerHTML = t? `${esc(t.name)} · <b style="color:${t.accent}">${signed(t.netNew)}</b> net followers in ${esc(d.label)} · hover for daily gains` : `${esc(d.label)} · daily followers gained, all 9 teams · hover for detail`;
+  const ctl=document.getElementById("drillCtl"); if(ctl) ctl.style.display = isolate?"flex":"none";
+}
+
+function gchip(label,color,value,deltaPct){
+  let dd="";
+  if(deltaPct!==null && deltaPct!==undefined){ const cls=deltaPct>0?"up":deltaPct<0?"down":"flat"; dd=`<div class="gd ${cls}">${deltaPct>0?"▲":deltaPct<0?"▼":"•"} ${Math.abs(deltaPct).toFixed(1)}%</div>`; }
+  return `<div class="gchip"><div class="gh"><i style="background:${color}"></i>${label}</div><div class="gv">${value}</div>${dd}</div>`;
 }
 
 function openTeamModal(id, initial){
@@ -607,46 +633,62 @@ function openTeamModal(id, initial){
   initial = initial || "followers";
   openModal(`
     <div class="modal-title">${logoHTML(t)}${esc(t.name)}</div>
-    <div class="modal-sub">${esc(t.handles.instagram?'@'+t.handles.instagram:'')} · ${fmtFull(t.followersNow)} followers · ${t.engagementRate}% eng · ${t.contentCount} posts (${esc(STATE.data.label)})</div>
+    <div class="modal-sub">${esc(t.handles.instagram?'@'+t.handles.instagram:'')} · ${fmtFull(t.followersNow)} followers · ${fmtFull(t.interactions)} interactions · ${t.contentCount} posts (${esc(STATE.data.label)})</div>
     <div class="mtoggle" id="tmToggle">
       <div class="mt" data-m="followers">Followers</div>
       <div class="mt" data-m="views">Views</div>
-      <div class="mt" data-m="engagement">Eng rate</div>
-      <div class="mt" data-m="posts">Posts</div>
+      <div class="mt" data-m="interactions">Interactions</div>
+      <div class="mt" data-m="posts">Posts/day</div>
+      <div class="mt" data-m="crosspost">Cross-post</div>
     </div>
+    <div id="tmChips"></div>
     <div class="parity" id="teamParity" style="display:none"></div>
-    <div class="platlegend"><span><i style="background:${PCOL.ig}"></i>Instagram</span><span><i style="background:${PCOL.tt}"></i>TikTok</span><span><i style="background:${PCOL.fb}"></i>Facebook</span></div>
-    <div class="chart-box" style="height:330px;margin-top:8px"><canvas id="teamChart"></canvas></div>
+    <div id="tmPlatLegend"></div>
+    <div id="tmBody"></div>
   `);
-  const tp=$("#teamParity");
+  const chartHTML='<div class="chart-box" style="height:300px;margin-top:8px"><canvas id="teamChart"></canvas></div>';
+  const platLegend=`<div class="platlegend"><span><i style="background:${PCOL.ig}"></i>Instagram</span><span><i style="background:${PCOL.tt}"></i>TikTok</span><span><i style="background:${PCOL.fb}"></i>Facebook</span></div>`;
   const draw=(metric)=>{
     destroyModalCharts();
-    if(metric==='posts'){
+    const tp=$("#teamParity"), chips=$("#tmChips"), leg=$("#tmPlatLegend"), bodyEl=$("#tmBody");
+    tp.style.display="none"; chips.innerHTML=""; leg.innerHTML=""; bodyEl.innerHTML="";
+
+    if(metric==='crosspost'){
       const par=parity(t);
-      tp.style.display='block'; tp.className='parity '+(par.gap===0?'ok':'warn');
+      tp.style.display="block"; tp.className='parity '+(par.gap===0?'ok':'warn');
       tp.innerHTML = par.gap===0
-        ? `&#10003; <b>${esc(t.name)} is balanced.</b> IG ${par.counts.ig} · TikTok ${par.counts.tt} · FB ${par.counts.fb}. Every post made it to all 3 platforms.`
-        : `&#9888; <b>${esc(t.name)} is uneven.</b> IG ${par.counts.ig} · TikTok ${par.counts.tt} · FB ${par.counts.fb}. Still to cross-post: <b>${defLong(par.def)}</b>. Push the missing posts to equalize.`;
-      postsLineChart("teamChart", t.seriesByPlatform.posts);
+        ? `&#10003; <b>${esc(t.name)} is balanced.</b> IG ${par.counts.ig} · TikTok ${par.counts.tt} · FB ${par.counts.fb} posts. Every post ran on all 3.`
+        : `&#9888; <b>${esc(t.name)} is uneven.</b> IG ${par.counts.ig} · TikTok ${par.counts.tt} · FB ${par.counts.fb} posts. Behind: <b>${defLong(par.def)}</b>. The platform with the most posts is the source of truth; compare the columns to spot what didn't get cross-posted.`;
+      bodyEl.innerHTML=`<div class="xcols">`+["ig","tt","fb"].map(k=>{ const list=t.postsList[k]||[];
+        return `<div class="xcol"><h5><i style="background:${PCOL[k]}"></i>${PNAME[k]}<span class="cnt">${list.length}</span></h5><div class="xlist">`+
+          (list.length?list.map(p=>{ const dt=(p.date||"").slice(5,10); const txt=esc((p.text||"").slice(0,90))||"(no caption)";
+            return `<div class="xpost"><div class="xd"><span>${dt}</span><span>${fmtFull(p.interactions)} int</span></div>${p.link?`<a href="${esc(p.link)}" target="_blank" rel="noopener">${txt}</a>`:txt}</div>`;
+          }).join(""):`<div class="xpost" style="color:var(--ink-3)">No posts this window</div>`)+`</div></div>`;
+      }).join("")+`</div>`;
       return;
     }
-    tp.style.display='none';
-    const sp=t.seriesByPlatform[metric]; const labs=new Set();
-    ["ig","tt","fb"].forEach(k=>(sp[k]||[]).forEach(p=>labs.add(p.d))); const labels=[...labs].sort();
-    const stacked = metric!=="engagement";
-    const mk=k=>{const m=Object.fromEntries((sp[k]||[]).map(p=>[p.d,p.v])); return labels.map(x=>x in m?m[x]:(stacked?0:null));};
-    STATE.modalCharts.push(new Chart($("#teamChart"),{type:"line",data:{labels:labels.map(mmdd),datasets:[
-      {label:"Instagram",data:mk("ig"),borderColor:PCOL.ig,backgroundColor:stacked?PCOL.ig+"55":PCOL.ig,borderWidth:1.6,pointRadius:0,tension:.32,fill:stacked,spanGaps:true},
-      {label:"TikTok",data:mk("tt"),borderColor:PCOL.tt,backgroundColor:stacked?PCOL.tt+"55":PCOL.tt,borderWidth:1.6,pointRadius:0,tension:.32,fill:stacked,spanGaps:true},
-      {label:"Facebook",data:mk("fb"),borderColor:PCOL.fb,backgroundColor:stacked?PCOL.fb+"55":PCOL.fb,borderWidth:1.6,pointRadius:0,tension:.32,fill:stacked,spanGaps:true}
-    ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{...TT,itemSort:(a,b)=>b.parsed.y-a.parsed.y}},
-      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{stacked,grid:GRID,ticks:{callback:v=>metric==='engagement'?v+'%':fmt(v)}}},animation:{duration:600}}}));
+
+    leg.innerHTML=platLegend; bodyEl.innerHTML=chartHTML;
+    const sp=t.seriesByPlatform[metric];
+    if(metric==='followers'){
+      chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[]; const cur=s.length?s[s.length-1].v:0; return gchip(PNAME[k],PCOL[k],fmtFull(cur),growthPct(s)); }).join("")+`</div>`;
+    } else {
+      chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[]; const tot=s.reduce((a,b)=>a+b.v,0); return gchip(PNAME[k],PCOL[k],fmtFull(tot),null); }).join("")+`</div>`;
+    }
+    const a=alignKeys(sp,["ig","tt","fb"]);
+    const stacked = metric!=="followers";
+    const mk=k=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:stacked?PCOL[k]+"40":PCOL[k],borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.32,fill:stacked,spanGaps:true});
+    const anyData=["ig","tt","fb"].some(k=>(sp[k]||[]).length);
+    if(!anyData){ bodyEl.innerHTML=`<div class="fc-note" style="margin-top:16px">No ${metric} data reported for any platform in this window.</div>`; return; }
+    STATE.modalCharts.push(new Chart($("#teamChart"),{type:"line",data:{labels:a.labels.map(mmdd),datasets:[mk("ig"),mk("tt"),mk("fb")]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{...TT,itemSort:(x,y)=>y.parsed.y-x.parsed.y}},
+        scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{stacked,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}}));
   };
   $("#tmToggle").querySelectorAll(".mt").forEach(b=>{ if(b.dataset.m===initial) b.classList.add("active"); b.onclick=()=>{ $("#tmToggle").querySelectorAll(".mt").forEach(x=>x.classList.remove("active")); b.classList.add("active"); draw(b.dataset.m); }; });
   draw(initial);
 }
 
-$("#tfTabs").querySelectorAll(".tab").forEach(tab=>tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); load(tab.dataset.q,false); });
+$("#tfTabs").querySelectorAll(".tab").forEach(tab=>{ tab.setAttribute("tabindex","0"); tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); load(tab.dataset.q,false); }; tab.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();tab.click();} }; });
 $("#refreshBtn").onclick=()=>{ const b=$("#refreshBtn"); b.classList.add("spin"); load(STATE.q,true).finally(()=>b.classList.remove("spin")); };
 function tick(){ $("#clock").textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
 setInterval(tick,1000); tick();
@@ -657,7 +699,7 @@ function initP(){ W=cv.width=innerWidth; Hh=cv.height=innerHeight; parts=Array.f
 function drawP(){ cx.clearRect(0,0,W,Hh); for(const p of parts){ p.x+=p.vx;p.y+=p.vy; if(p.x<0||p.x>W)p.vx*=-1; if(p.y<0||p.y>Hh)p.vy*=-1; cx.beginPath();cx.arc(p.x,p.y,p.r,0,7);cx.fillStyle="rgba(220,225,210,"+p.a+")";cx.fill(); }
   for(let i=0;i<parts.length;i++)for(let j=i+1;j<parts.length;j++){const a=parts[i],b=parts[j],dx=a.x-b.x,dy=a.y-b.y,dd=Math.hypot(dx,dy); if(dd<120){cx.strokeStyle="rgba(180,200,160,"+(0.045*(1-dd/120))+")";cx.lineWidth=.5;cx.beginPath();cx.moveTo(a.x,a.y);cx.lineTo(b.x,b.y);cx.stroke();}}
   requestAnimationFrame(drawP); }
-initP(); drawP(); addEventListener("resize",initP);
+if(!REDUCE){ initP(); drawP(); addEventListener("resize",initP); }
 
 load("days=30",false);
 </script>

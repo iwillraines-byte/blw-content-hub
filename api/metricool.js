@@ -157,20 +157,26 @@ async function buildTeam(t, from, to, profiles, api, tl) {
   const eng_series = mergeDicts([ig_eng, tt_eng, fb_eng], "mean");
 
   const inter_by = { ig: 0, tt: 0, fb: 0 }, posts_by = { ig: 0, tt: 0, fb: 0 }, posts_daily = { ig: {}, tt: {}, fb: {} };
+  const inter_daily = { ig: {}, tt: {}, fb: {} };
+  const posts_list = { ig: [], tt: [], fb: [] };
   const ranked = [];
   for (const p of posts) {
     const net = NETMAP[p.network]; const m = p.metrics || {};
+    const inter = Math.round(m.INTERACTIONS || 0);
+    const dt = (p.publicationDate || {}).dateTime || "";
     if (net) {
       inter_by[net] += (m.INTERACTIONS || 0); posts_by[net] += 1;
-      const day = ((p.publicationDate || {}).dateTime || "").slice(0, 10);
-      if (day) posts_daily[net][day] = (posts_daily[net][day] || 0) + 1;
+      const day = dt.slice(0, 10);
+      if (day) { posts_daily[net][day] = (posts_daily[net][day] || 0) + 1; inter_daily[net][day] = (inter_daily[net][day] || 0) + (m.INTERACTIONS || 0); }
+      posts_list[net].push({ date: dt, text: (p.text || "").slice(0, 140), link: p.link, interactions: inter });
     }
     ranked.push({
       network: p.network, text: (p.text || "").slice(0, 160), link: p.link,
-      date: (p.publicationDate || {}).dateTime,
-      interactions: Math.round(m.INTERACTIONS || 0), engagement: round(m.ENGAGEMENT || 0, 2), impressions: Math.round(m.IMPRESSIONS || 0),
+      date: dt,
+      interactions: inter, engagement: round(m.ENGAGEMENT || 0, 2), impressions: Math.round(m.IMPRESSIONS || 0),
     });
   }
+  for (const net of ["ig", "tt", "fb"]) posts_list[net].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   ranked.sort((a, b2) => (b2.interactions - a.interactions) || (b2.impressions - a.impressions));
 
   const prof = profiles[b] || {};
@@ -199,8 +205,10 @@ async function buildTeam(t, from, to, profiles, api, tl) {
       followers: { ig: slist(ig_f), tt: slist(tt_f), fb: slist(fb_f) },
       views: { ig: slist(ig_views), tt: slist(tt_views), fb: slist(fb_views) },
       engagement: { ig: slist(ig_eng, 2), tt: slist(tt_eng, 2), fb: slist(fb_eng, 2) },
+      interactions: { ig: slist(inter_daily.ig), tt: slist(inter_daily.tt), fb: slist(inter_daily.fb) },
       posts: { ig: slist(posts_daily.ig), tt: slist(posts_daily.tt), fb: slist(posts_daily.fb) },
     },
+    postsList: posts_list,
     topPosts: ranked.slice(0, 3),
   };
 }
@@ -257,13 +265,18 @@ export async function compute(days, rng, token, userId) {
 
   const sd = key => teams.map(tm => Object.fromEntries(tm.series[key].map(p => [p.d, p.v])));
   const posts_by_platform = { ig: {}, tt: {}, fb: {} };
+  const views_by_platform = { ig: {}, tt: {}, fb: {} };
+  const inter_by_platform = { ig: {}, tt: {}, fb: {} };
   const totals_platform = { followers: { ig: 0, tt: 0, fb: 0 }, views: { ig: 0, tt: 0, fb: 0 }, interactions: { ig: 0, tt: 0, fb: 0 }, posts: { ig: 0, tt: 0, fb: 0 } };
   for (const tm of teams) {
     for (const net of ["ig", "tt", "fb"]) {
       for (const p of tm.seriesByPlatform.posts[net]) posts_by_platform[net][p.d] = (posts_by_platform[net][p.d] || 0) + p.v;
+      for (const p of tm.seriesByPlatform.views[net]) views_by_platform[net][p.d] = (views_by_platform[net][p.d] || 0) + p.v;
+      for (const p of tm.seriesByPlatform.interactions[net]) inter_by_platform[net][p.d] = (inter_by_platform[net][p.d] || 0) + p.v;
       for (const m of ["followers", "views", "interactions", "posts"]) totals_platform[m][net] += tm.byPlatform[m][net];
     }
   }
+  const dailyByPlat = obj => Object.fromEntries(["ig", "tt", "fb"].map(net => [net, Object.keys(obj[net]).sort().map(k => ({ d: k, v: obj[net][k] }))]));
   return {
     generatedAt: new Date().toISOString(), from, to, label, days, range: rng, timezone: TZ,
     totals: {
@@ -274,7 +287,9 @@ export async function compute(days, rng, token, userId) {
     network: {
       followers: fmtPairs(carrySum(sd("followers"))), views: fmtPairs(mergeDicts(sd("views"), "sum")),
       netNew: fmtPairs(mergeDicts(sd("netNew"), "sum")), engagement: fmtPairs(mergeDicts(sd("engagement"), "mean")),
-      postsByPlatform: Object.fromEntries(["ig", "tt", "fb"].map(net => [net, Object.keys(posts_by_platform[net]).sort().map(k => ({ d: k, v: posts_by_platform[net][k] }))])),
+      postsByPlatform: dailyByPlat(posts_by_platform),
+      viewsByPlatform: dailyByPlat(views_by_platform),
+      interactionsByPlatform: dailyByPlat(inter_by_platform),
     },
     teams,
     insights: buildInsights(teams, label),
