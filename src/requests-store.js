@@ -6,7 +6,7 @@
 //   { id, team, template, status, requester, date, createdAt (ms epoch),
 //     priority, note }
 
-import { cloud } from './cloud-sync';
+import { cloud, cloudAwait } from './cloud-sync';
 
 const LS_KEY = 'blw_requests_v1';
 const LS_COMMENTS_KEY = 'blw_request_comments_v1';
@@ -40,6 +40,19 @@ export function saveRequests(list) {
   for (const [id] of prevById) {
     if (!nextById.has(id)) cloud.deleteRequest(id);
   }
+}
+
+// v5 (audit): awaitable create. saveRequests fires the cloud write
+// fire-and-forget, so the UI couldn't tell whether a brand-new request
+// actually reached the server (401/403/500/missing-columns all looked like
+// success). The submit flow uses this instead: it persists the full list
+// locally, then AWAITS the single new request's upsert and returns the
+// cloud result ({ ok, error?, droppedColumns? }) so the caller can show an
+// honest "sent" vs "saved locally, not yet sent".
+export async function saveRequestAwaitable(list, newReq) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list || [])); } catch {}
+  if (!newReq?.id) return { ok: true };
+  return cloudAwait.syncRequest(newReq);
 }
 
 export function getComments() {

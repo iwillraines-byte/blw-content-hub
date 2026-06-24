@@ -59,6 +59,23 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
 
   report('starting');
 
+  // v5 (audit): a 200 carrying droppedColumns means the server's tolerant
+  // upsert stripped a column missing from the live schema (an unrun
+  // migration) — that's a PARTIAL write, not a success. Count it as a
+  // failure and name the columns so the backup summary tells the operator
+  // which migration to run instead of silently reporting "N/N ok".
+  const tally = (bucket, res, ident) => {
+    const dropped = res?.droppedColumns;
+    if (res?.ok && !(dropped && dropped.length)) { bucket.ok++; return; }
+    bucket.fail++;
+    bucket.errors.push({
+      ...ident,
+      error: dropped && dropped.length
+        ? `migration unrun — dropped: ${dropped.join(', ')}`
+        : (res?.error || res?.status || 'failed'),
+    });
+  };
+
   // ── MEDIA ────────────────────────────────────────────────────────────────
   try {
     const media = await getAllMedia();
@@ -72,8 +89,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
     for (let i = 0; i < pending.length; i++) {
       const r = pending[i];
       const res = await cloudAwait.syncMedia(r);
-      if (res.ok) results.media.ok++;
-      else { results.media.fail++; results.media.errors.push({ name: r.name, error: res.error || res.status }); }
+      tally(results.media, res, { name: r.name });
       report('media', { done: i + 1, total: pending.length, skipped: results.media.skipped, record: r.name });
     }
   } catch (err) {
@@ -90,8 +106,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
     for (let i = 0; i < pending.length; i++) {
       const r = pending[i];
       const res = await cloudAwait.syncOverlay(r);
-      if (res.ok) results.overlays.ok++;
-      else { results.overlays.fail++; results.overlays.errors.push({ name: r.name, error: res.error || res.status }); }
+      tally(results.overlays, res, { name: r.name });
       report('overlays', { done: i + 1, total: pending.length, skipped: results.overlays.skipped, record: r.name });
     }
   } catch (err) {
@@ -108,8 +123,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
     for (let i = 0; i < pending.length; i++) {
       const r = pending[i];
       const res = await cloudAwait.syncEffect(r);
-      if (res.ok) results.effects.ok++;
-      else { results.effects.fail++; results.effects.errors.push({ name: r.name, error: res.error || res.status }); }
+      tally(results.effects, res, { name: r.name });
       report('effects', { done: i + 1, total: pending.length, skipped: results.effects.skipped, record: r.name });
     }
   } catch (err) {
@@ -122,8 +136,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
   for (let i = 0; i < requests.length; i++) {
     const r = requests[i];
     const res = await cloudAwait.syncRequest(r);
-    if (res.ok) results.requests.ok++;
-    else { results.requests.fail++; results.requests.errors.push({ id: r.id, error: res.error || res.status }); }
+    tally(results.requests, res, { id: r.id });
     report('requests', { done: i + 1, total: requests.length });
   }
 
@@ -133,8 +146,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
   for (let i = 0; i < comments.length; i++) {
     const c = comments[i];
     const res = await cloudAwait.syncRequestComment(c);
-    if (res.ok) results.comments.ok++;
-    else { results.comments.fail++; results.comments.errors.push({ id: c.id, error: res.error || res.status }); }
+    tally(results.comments, res, { id: c.id });
     report('comments', { done: i + 1, total: comments.length });
   }
 
@@ -145,8 +157,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
       const res = await cloudAwait.syncManualPlayer(p);
-      if (res.ok) results.manualPlayers.ok++;
-      else { results.manualPlayers.fail++; results.manualPlayers.errors.push({ id: p.id, error: res.error || res.status }); }
+      tally(results.manualPlayers, res, { id: p.id });
       report('manualPlayers', { done: i + 1, total: players.length });
     }
   } catch (err) {
@@ -167,8 +178,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
   for (let i = 0; i < overrideRows.length; i++) {
     const { templateType, platform, fieldKey, override } = overrideRows[i];
     const res = await cloudAwait.syncFieldOverride(templateType, platform, fieldKey, override);
-    if (res.ok) results.fieldOverrides.ok++;
-    else { results.fieldOverrides.fail++; results.fieldOverrides.errors.push({ templateType, platform, fieldKey, error: res.error || res.status }); }
+    tally(results.fieldOverrides, res, { templateType, platform, fieldKey });
     report('fieldOverrides', { done: i + 1, total: overrideRows.length });
   }
 
@@ -184,8 +194,7 @@ export async function backupLibraryToCloud({ onProgress, skipExisting = true } =
   for (let i = 0; i < usageRows.length; i++) {
     const { day, kind, count } = usageRows[i];
     const res = await cloudAwait.syncAiUsage(day, kind, count);
-    if (res.ok) results.aiUsage.ok++;
-    else { results.aiUsage.fail++; results.aiUsage.errors.push({ day, kind, error: res.error || res.status }); }
+    tally(results.aiUsage, res, { day, kind });
     report('aiUsage', { done: i + 1, total: usageRows.length });
   }
 

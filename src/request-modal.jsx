@@ -23,7 +23,7 @@ import { colors, fonts, radius } from './theme';
 import { TEAMS, TEMPLATES, getTeam } from './data';
 import { useAuth } from './auth';
 import { REQUEST_TYPES, PRIORITY_LEVELS, getRequestType, visibleRequestTypes } from './request-types';
-import { getRequests, saveRequests } from './requests-store';
+import { getRequests, saveRequestAwaitable } from './requests-store';
 import { useToast } from './toast';
 
 export function RequestModal({ open, onClose, onSubmitted, defaultType = 'content', defaultTeam = '', roster = [] }) {
@@ -123,12 +123,23 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
     };
 
     const next = [newReq, ...getRequests()];
-    saveRequests(next);
+    // v5 (audit): await the cloud write so we don't claim "sent" when the
+    // request only landed in localStorage (401/403/500 or an un-migrated
+    // requests table = staff never see it). Persists locally regardless.
+    const cloudRes = await saveRequestAwaitable(next, newReq);
     setSubmitting(false);
     onSubmitted?.(newReq);
-    // v4.15.0: explicit confirmation — replies land in the request's
-    // thread (with an unread badge), so point the requester there.
-    toast.success('Request sent', { detail: "We'll reply in the request's thread — watch for the badge on Requests." });
+    const dropped = Array.isArray(cloudRes?.droppedColumns) && cloudRes.droppedColumns.length
+      ? cloudRes.droppedColumns : null;
+    if (cloudRes && cloudRes.ok === false) {
+      toast.error('Saved locally — not sent yet', { detail: `Couldn't reach the server (${String(cloudRes.error || '').slice(0, 80)}). It'll sync on the next backup; staff may not see it yet.` });
+    } else if (dropped) {
+      toast.error('Saved locally — server schema outdated', { detail: `Your database is missing the ${dropped.join(', ')} column — ask an admin to run the requests migration.` });
+    } else {
+      // v4.15.0: explicit confirmation — replies land in the request's
+      // thread (with an unread badge), so point the requester there.
+      toast.success('Request sent', { detail: "We'll reply in the request's thread — watch for the badge on Requests." });
+    }
     // Reset for next open
     setTitle(''); setDescription(''); setPriority('medium'); setNeedBy('');
     setFieldValues({});

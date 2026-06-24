@@ -63,7 +63,18 @@ async function postSync(body) {
       }
       return { ok: false, status: res.status, error: errMsg };
     }
-    return { ok: true };
+    // v5 (audit keystone): the server returns HTTP 200 with
+    // {ok:true, droppedColumns:[...]} when its tolerant upsert had to strip a
+    // column missing from the live schema (an unrun migration). Until now
+    // this body was never read, so EVERY caller counted a silently-stripped
+    // write as a FULL success — the root of the profile-pic / bio
+    // silent-data-loss class, app-wide. Parse it and propagate so awaitable
+    // callers can treat a partial write as a failure and name the migration.
+    const j = await res.json().catch(() => ({}));
+    const droppedColumns = Array.isArray(j?.droppedColumns) && j.droppedColumns.length
+      ? j.droppedColumns
+      : null;
+    return { ok: true, droppedColumns };
   } catch (err) {
     console.warn('[cloud-sync] network', body.kind, body.action, err?.message);
     return { ok: false, error: err?.message || 'network error' };

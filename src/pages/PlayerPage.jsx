@@ -36,10 +36,27 @@ import { useIsDark } from '../theme-mode';
 // "saved". This maps a dropped column back to the migration that fixes it so we
 // can surface an honest error instead.
 const MIGRATION_FOR_COL = {
+  // vitals (db/004)
+  height_in: 'db/004_player_vitals.sql',
+  weight_lbs: 'db/004_player_vitals.sql',
+  birthdate: 'db/004_player_vitals.sql',
+  bats: 'db/004_player_vitals.sql',
+  throws: 'db/004_player_vitals.sql',
+  birthplace: 'db/004_player_vitals.sql',
+  status: 'db/004_player_vitals.sql',
+  nickname: 'db/004_player_vitals.sql',
+  // profile pic (db/005) + pan/zoom (db/009)
   profile_media_id: 'db/005_player_profile_pic.sql',
   profile_offset_x: 'db/009_player_profile_pic_position.sql',
   profile_offset_y: 'db/009_player_profile_pic_position.sql',
   profile_zoom: 'db/009_player_profile_pic_position.sql',
+  // socials / rookie (db/006)
+  instagram_handle: 'db/006_player_socials_rookie.sql',
+  fun_facts: 'db/006_player_socials_rookie.sql',
+  is_rookie: 'db/006_player_socials_rookie.sql',
+  // athlete About-me + user link (db/018a catch-up)
+  athlete_voice: 'db/018a_manual_players_columns_catchup.sql',
+  user_id: 'db/018a_manual_players_columns_catchup.sql',
 };
 function droppedColMigrationHint(cloudResult) {
   const dropped = cloudResult?.droppedColumns;
@@ -2502,7 +2519,7 @@ export default function PlayerPage() {
           onClose={() => setEditInfoOpen(false)}
           onSave={async (updates) => {
             try {
-              await upsertManualPlayer({
+              const result = await upsertManualPlayer({
                 team: team.id,
                 lastName: player.lastName,
                 firstInitial: player.firstInitial,
@@ -2523,6 +2540,7 @@ export default function PlayerPage() {
                   birthplace:  updates.birthplace || null,
                   status:      updates.status || null,
                 },
+                awaitCloud: true,
               });
               setPlayer(prev => prev ? {
                 ...prev,
@@ -2537,8 +2555,20 @@ export default function PlayerPage() {
                 birthplace: updates.birthplace,
                 status:     updates.status,
               } : prev);
-              toast.success('Player info saved');
-              setEditInfoOpen(false);
+              // v5 (audit): gate the success toast on the cloud actually
+              // persisting. If the live DB lacks the vitals columns (db/004
+              // unrun), the tolerant upsert strips them and the save is local
+              // only — surface that instead of a false "saved".
+              const cloudResult = result?.cloud;
+              const dropHint = droppedColMigrationHint(cloudResult);
+              if (cloudResult && cloudResult.ok === false) {
+                toast.error('Saved locally — cloud sync failed', { detail: String(cloudResult.error || '').slice(0, 120) });
+              } else if (dropHint) {
+                toast.error('Player info didn’t save to the cloud', { detail: `Your database is missing the ${dropHint.cols.join(', ')} column — run ${dropHint.migration} in Supabase, then retry.` });
+              } else {
+                toast.success('Player info saved');
+                setEditInfoOpen(false);
+              }
             } catch (err) {
               toast.error('Save failed', { detail: err?.message?.slice(0, 80) });
             }
@@ -3132,17 +3162,28 @@ function AthleteVoiceCard({ player, team, canEdit, isMaster }) {
     if (!player?.lastName) return;
     setSaving(true);
     try {
-      await upsertManualPlayer({
+      const result = await upsertManualPlayer({
         team: player.team,
         lastName: player.lastName,
         firstInitial: player.firstInitial,
         firstName: player.firstName,
         num: player.num,
         updates: { athleteVoice: voice },
+        awaitCloud: true,
       });
-      setSavedAt(Date.now());
-      setEditing(false);
-      toast.success('About-me saved', { detail: 'AI will use this on the next idea generation' });
+      // v5 (audit): don't claim it saved if the cloud silently dropped
+      // athlete_voice (db/018a unrun) or the sync failed.
+      const cloudResult = result?.cloud;
+      const dropHint = droppedColMigrationHint(cloudResult);
+      if (cloudResult && cloudResult.ok === false) {
+        toast.error('Saved locally — cloud sync failed', { detail: String(cloudResult.error || '').slice(0, 120) });
+      } else if (dropHint) {
+        toast.error('About-me didn’t save to the cloud', { detail: `Your database is missing the ${dropHint.cols.join(', ')} column — run ${dropHint.migration} in Supabase, then retry.` });
+      } else {
+        setSavedAt(Date.now());
+        setEditing(false);
+        toast.success('About-me saved', { detail: 'AI will use this on the next idea generation' });
+      }
     } catch (err) {
       toast.error('Couldn\'t save', { detail: err.message?.slice(0, 80) });
     } finally {
@@ -3445,7 +3486,7 @@ function LinkAthleteAccount({ player, team, linkedUserId, onLink }) {
           title={`Currently linked: ${linked.email}`}
           style={{
             fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
-            letterSpacing: 0.5, color: colors.success,
+            letterSpacing: 0.5, color: colors.successText,
             background: colors.successBg,
             border: `1px solid ${colors.successBorder}`,
             padding: '3px 8px', borderRadius: radius.sm,
