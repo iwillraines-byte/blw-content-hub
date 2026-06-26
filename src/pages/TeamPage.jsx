@@ -392,7 +392,7 @@ function ExpandableTeamMediaGrid({ items, team, thumbUrls, onTileClick }) {
                 border: `1px solid ${colors.borderLight}`, background: colors.white,
               }}>
               <div
-                onClick={onTileClick ? () => onTileClick(visible, i) : undefined}
+                onClick={onTileClick ? () => onTileClick(filtered, i) : undefined}
                 style={{ position: 'relative', cursor: onTileClick ? 'zoom-in' : 'default', lineHeight: 0 }}>
                 {url ? (
                   isVideoMedia(m) ? (
@@ -421,7 +421,7 @@ function ExpandableTeamMediaGrid({ items, team, thumbUrls, onTileClick }) {
                   <div style={{ display: 'flex', gap: 8, pointerEvents: hovered ? 'auto' : 'none' }}>
                     {actionBtn('download', 'Download', (e) => doDownload(m, e))}
                     {actionBtn('copy', copied ? 'Copied' : 'Copy image', (e) => doCopy(m, e), copied)}
-                    {onTileClick && actionBtn('expand', 'Open', (e) => { e.stopPropagation(); onTileClick(visible, i); })}
+                    {onTileClick && actionBtn('expand', 'Open', (e) => { e.stopPropagation(); onTileClick(filtered, i); })}
                   </div>
                 </div>
               </div>
@@ -581,17 +581,22 @@ export default function TeamPage() {
     const next = mutate(base);
     headerPhotosRef.current = next;
     setHeaderPhotos(next); // optimistic
-    const res = await authedFetch('/api/app-settings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key: 'team-header-photos', value: next }),
-    });
-    if (!res.ok) { // roll back to the pre-save map on failure
+    try {
+      const res = await authedFetch('/api/app-settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'team-header-photos', value: next }),
+      });
+      if (!res.ok) throw new Error(`save failed (${res.status})`);
+      return true;
+    } catch { // roll back on ANY failure — a non-ok response OR a rejected
+      // fetch (authedFetch returns raw fetch(), which rejects when offline).
+      // Returning false (never throwing) also keeps callers from leaking an
+      // unhandled rejection.
       headerPhotosRef.current = base;
       setHeaderPhotos(base);
       return false;
     }
-    return true;
   }, []);
   const saveHeaderPhoto = useCallback((mediaId) =>
     persistHeader(prev => ({ ...prev, [team.id]: { ...normalizeHeaderCfg(prev?.[team.id]), mediaId: mediaId || null } })),
@@ -1143,8 +1148,12 @@ export default function TeamPage() {
   const rankByName = useMemo(() => {
     const m = new Map();
     for (const r of rankings) {
-      const blw = r.blwRank ?? null;
-      if (r.name && blw != null) m.set(r.name.toLowerCase(), blw);
+      if (!r.name) continue;
+      // Prefer the BLW-internal rank; fall back to the global OPWR rank so a
+      // BLW player the OPWR board hasn't ranked yet still gets a tier badge
+      // (matches the documented behavior above).
+      const rank = r.blwRank ?? (Number.isFinite(r.currentRank) && r.currentRank > 0 ? r.currentRank : null);
+      if (rank != null) m.set(r.name.toLowerCase(), rank);
     }
     return m;
   }, [rankings]);
