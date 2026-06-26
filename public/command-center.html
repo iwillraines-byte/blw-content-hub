@@ -202,6 +202,38 @@
   .fmtval{font-size:12.5px;font-weight:600;min-width:104px;text-align:right}
   .fmtval .s{font-size:10.5px;color:var(--ink-2);font-weight:500}
   @media(max-width:1080px){.substrip{grid-template-columns:1fr}}
+  .digest{background:linear-gradient(180deg,rgba(124,241,168,.05),rgba(20,21,25,.5));border:1px solid var(--line-2);border-radius:16px;padding:16px 18px;margin-top:14px}
+  .dghead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .dgtitle{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.02em}
+  .dgsub{font-size:11.5px;color:var(--ink-2);margin-top:3px}
+  .dgquick{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);align-items:center}
+  .dgquick span{display:inline-flex;flex-direction:column}
+  .dgquick b{font-size:16px;color:var(--ink);font-weight:600}
+  .digest .pos{color:var(--pos)} .digest .neg{color:var(--neg)}
+  .dggrid{display:grid;grid-template-columns:1.3fr 1fr 1.4fr;gap:14px;margin-top:13px}
+  .dgwide{grid-column:1/-1;border-top:1px solid var(--line);padding-top:11px}
+  .dglbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);margin-bottom:5px}
+  .dgteam{font-family:var(--display);font-weight:700;font-size:13.5px}
+  .dgmet{font-size:12px;color:var(--ink-2);margin-top:3px;line-height:1.45} .dgmet b{color:var(--ink)}
+  .dgbreak{display:flex;gap:11px;text-decoration:none;color:var(--ink)}
+  .dgthumb{width:54px;height:54px;border-radius:10px;overflow:hidden;background:#15161a;flex:none}
+  .dgthumb img{width:100%;height:100%;object-fit:cover}
+  .dgph{width:100%;height:100%;display:grid;place-items:center;font-family:var(--display);font-weight:700;color:var(--ink-3);font-size:13px}
+  .dgalerts{font-size:11.5px;color:var(--ink-2);line-height:1.5;display:flex;flex-direction:column;gap:3px}
+  .dgalerts b{color:var(--ink)}
+  .heatrow{display:flex;align-items:center;gap:11px;padding:7px 4px;border-radius:9px;cursor:pointer;transition:.15s}
+  .heatrow:hover{background:rgba(255,255,255,.04)}
+  .heatrow:focus-visible{outline:2px solid var(--pos)}
+  .hname{font-size:12px;font-weight:600;min-width:150px;display:flex;align-items:center;gap:8px}
+  .hdot{width:9px;height:9px;border-radius:3px;flex:none}
+  .hbar{flex:1;height:9px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden}
+  .hbar>span{display:block;height:100%;width:0;border-radius:5px;transition:width .85s cubic-bezier(.2,.7,.2,1)}
+  .hval{font-size:13px;font-weight:700;min-width:104px;text-align:right}
+  .hval .hs{font-size:10px;color:var(--ink-2);font-weight:500}
+  .watchwrap{display:flex;gap:26px;flex-wrap:wrap}
+  .watchbig .wv{font-weight:600;font-size:30px;letter-spacing:-.02em} .watchbig .wv .wu{font-size:13px;color:var(--ink-2);margin-left:4px;font-weight:500}
+  .watchbig .wl{font-size:11px;color:var(--ink-2);margin-top:4px}
+  @media(max-width:760px){.dggrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -234,6 +266,7 @@
 
   <div class="errbox" id="errbox"></div>
   <div id="content" class="fade">
+    <div id="digest"></div>
     <div class="hero" id="hero"></div>
     <div class="substrip" id="substrip"></div>
 
@@ -256,6 +289,12 @@
     <div class="grid g-2">
       <div class="panel"><div class="head"><div class="t">Average interactions per post</div><div class="meta">by content format</div></div><div id="formatBars" style="margin-top:6px"></div></div>
       <div class="panel"><div class="head"><div class="t">Format mix</div><div class="meta" id="formatMixMeta">posts this window</div></div><div class="chart-box" style="height:210px"><canvas id="formatMix"></canvas></div></div>
+    </div>
+
+    <div class="section-title"><span>Virality &amp; retention</span><span class="rule"></span></div>
+    <div class="grid g-2">
+      <div class="panel"><div class="head"><div class="t">Team Heat Index</div><div class="meta">breakout potential · 0-100</div></div><div id="heatBars" style="margin-top:8px"></div></div>
+      <div class="panel"><div class="head"><div class="t">Facebook watch time</div><div class="meta">Phase 1 · FB video only</div></div><div id="watchPanel" style="margin-top:6px"></div></div>
     </div>
 
     <div class="section-title"><span>Roster</span><span class="rule"></span></div>
@@ -416,7 +455,7 @@ async function load(q,fresh){
 function render(){
   const c=$("#content"); c.classList.add("dim");
   setTimeout(()=>{ destroyCharts();
-    renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderRoster(); renderChips(); renderForecast(); renderRecs();
+    renderDigest(); renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderHeat(); renderWatch(); renderRoster(); renderChips(); renderForecast(); renderRecs();
     c.classList.remove("dim");
   },120);
 }
@@ -659,6 +698,65 @@ function openStat(kind){
   openModal(body);
   requestAnimationFrame(()=>document.querySelectorAll("#modalBody .dbar>span").forEach(el=>el.style.width=el.dataset.w));
   document.querySelectorAll("#modalBody .drow").forEach(r=>r.onclick=()=>openTeamModal(+r.dataset.id, kind==="engagement"?"engagement":"views"));
+}
+
+function renderDigest(){
+  const d=STATE.data, host=$("#digest"); if(!host) return;
+  const net=d.network.netNew||[]; const yday=net.length?net[net.length-1].v:0; const w7=net.slice(-7).reduce((a,b)=>a+b.v,0);
+  const lb=d.leaderboard&&d.leaderboard[0];
+  const grower=[...d.teams].sort((a,b)=>b.netNew-a.netNew)[0];
+  const lp=leagueParity(d);
+  const weak=[...d.teams].sort((a,b)=>a.mom-b.mom)[0];
+  const fbk=(d.formatBreakdown||[]).filter(f=>f.count>=2);
+  const topF=fbk[0], img=fbk.find(f=>f.type==="IMAGE");
+  const syncT=new Date(d.generatedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
+  let bo="";
+  if(lb){ const tm=d.teams.find(x=>x.blogId===lb.blogId)||{}; const amp=tm.followersNow?Math.round(lb.impressions/tm.followersNow):0;
+    const init=esc((lb.team||"").split(" ").map(w=>w[0]).join("").slice(0,3));
+    const thumb=lb.picture?`<img src="${esc(lb.picture)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="dgph" style="display:none">${init}</div>`:`<div class="dgph">${init}</div>`;
+    bo=`<a class="dgbreak" href="${esc(lb.link||'#')}" target="_blank" rel="noopener"><div class="dgthumb">${thumb}</div><div><div class="dglbl">Breakout post</div><div class="dgteam" style="color:${lb.accent}">${esc(lb.team)} · ${LBNET[lb.network]||''} ${capw(lb.type)}</div><div class="dgmet"><b>${fmt(lb.interactions)}</b> interactions${amp?` · reached ~${amp}x its followers`:""}</div></div></a>`;
+  }
+  const alerts=[];
+  if(lp.gap>0){ const wpl=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; alerts.push(`<b>Cross-post gap:</b> ${PNAME[wpl[0]]} is ${wpl[1]} posts behind across the league.`); }
+  if(weak && (weak.netNew<0||weak.mom<1)) alerts.push(`<b>Watch ${esc(weak.name)}:</b> ${weak.netNew<0?signed(weak.netNew)+" followers":"flat growth ("+weak.mom.toFixed(1)+"%)"} this window.`);
+  if(!alerts.length) alerts.push("All teams healthy: no cross-post gaps or growth drops flagged.");
+  const nudge=(topF&&img&&img.avgInteractions>0)?`<b>${capw(topF.type)}s</b> average ${fmt(topF.avgInteractions)} interactions vs ${fmt(img.avgInteractions)} for static images (${(topF.avgInteractions/img.avgInteractions).toFixed(1)}x). Lead with ${capw(topF.type)}s today.`:(topF?`<b>${capw(topF.type)}s</b> are your top format at ${fmt(topF.avgInteractions)} interactions per post.`:"Keep shipping across all three platforms.");
+  host.innerHTML=`<div class="digest">
+    <div class="dghead"><div><div class="dgtitle">Morning digest</div><div class="dgsub">BLW league · ${esc(d.label)} · as of ${syncT}</div></div>
+      <div class="dgquick"><span><b class="${yday>=0?'pos':'neg'}">${signed(yday)}</b>follows yesterday</span><span><b class="${w7>=0?'pos':'neg'}">${signed(w7)}</b>last 7 days</span><span><b>${(d.totals.engagementRate||0).toFixed(1)}%</b>eng rate</span></div></div>
+    <div class="dggrid">
+      ${bo||'<div class="dgblock"><div class="dglbl">Breakout post</div><div class="dgmet">No standout post yet this window.</div></div>'}
+      <div class="dgblock"><div class="dglbl">Biggest grower</div><div class="dgteam" style="color:${grower.accent}">${esc(grower.name)}</div><div class="dgmet"><b>${signed(grower.netNew)}</b> net followers · ${grower.mom.toFixed(1)}% of base</div></div>
+      <div class="dgblock"><div class="dglbl">Watch out</div><div class="dgalerts">${alerts.map(a=>`<div>&#9888; ${a}</div>`).join("")}</div></div>
+      <div class="dgblock dgwide"><div class="dglbl">Do this today</div><div class="dgmet">${nudge}</div></div>
+    </div></div>`;
+}
+
+function renderHeat(){
+  const d=STATE.data, host=$("#heatBars"); if(!host) return;
+  const norm=arr=>{const mn=Math.min(...arr),mx=Math.max(...arr);return arr.map(v=>mx>mn?(v-mn)/(mx-mn):0);};
+  const A=d.teams.map(t=>t.impressions/Math.max(1,t.followersNow));
+  const S=d.teams.map(t=>((t.saves||0)+(t.shares||0))/Math.max(1,t.impressions));
+  const Eg=d.teams.map(t=>t.engagementRatePost||0);
+  const M=d.teams.map(t=>t.mom||0);
+  const An=norm(A),Sn=norm(S),En=norm(Eg),Mn=norm(M);
+  const rows=d.teams.map((t,i)=>({t,heat:Math.round(100*(0.35*An[i]+0.30*Sn[i]+0.20*En[i]+0.15*Mn[i])),amp:A[i]}));
+  rows.sort((a,b)=>b.heat-a.heat);
+  host.innerHTML=rows.map(r=>{const w=Math.max(3,r.heat);
+    return `<div class="heatrow" data-id="${r.t.blogId}" tabindex="0" role="button"><div class="hname"><span class="hdot" style="background:${r.t.accent}"></span>${esc(r.t.name.split(" ").slice(0,2).join(" "))}</div><div class="hbar"><span data-w="${w}%" style="background:${r.t.accent}"></span></div><div class="hval">${r.heat}<span class="hs"> · ${Math.round(r.amp)}x reach</span></div></div>`;}).join("")
+    +`<div class="fc-note" style="margin-top:10px">Heat blends reach-vs-followers (35%), saves + shares rate (30%), engagement (20%) and follower momentum (15%), scored relative to the league. Click a team to drill in.</div>`;
+  const set=()=>host.querySelectorAll(".hbar>span").forEach(el=>el.style.width=el.dataset.w);
+  REDUCE?set():requestAnimationFrame(set);
+  host.querySelectorAll(".heatrow").forEach(el=>{const go=()=>openTeamModal(+el.dataset.id,"engagement");el.onclick=go;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
+}
+
+function renderWatch(){
+  const w=STATE.data.watch||{}, host=$("#watchPanel"); if(!host) return;
+  host.innerHTML=`<div class="watchwrap">
+    <div class="watchbig"><div class="wv">${fmt(w.totalHrs||0)}<span class="wu">hrs</span></div><div class="wl">total FB video watch time</div></div>
+    <div class="watchbig"><div class="wv">${(w.avgSec||0).toFixed(1)}<span class="wu">sec</span></div><div class="wl">avg watch per FB video</div></div>
+  </div>
+  <div class="fc-note" style="margin-top:14px">Facebook is the only platform that exposes watch time through the API (${w.teamsWithData||0} of 9 teams have FB video this window). TikTok and Instagram reel retention arrive in Phase 2 (manual export) and Phase 3 (direct API).</div>`;
 }
 
 /* ============ MODALS ============ */

@@ -134,7 +134,7 @@ async function loadProfiles(api) {
 
 async function buildTeam(t, from, to, profiles, api, tl) {
   const b = t.blogId;
-  const [ig_f, ig_views, ig_eng, tt_f, tt_views, tt_eng, fb_f, fb_eng, fb_mv, fb_reels, ig_saved, ig_shares, tt_shares, resp] = await Promise.all([
+  const [ig_f, ig_views, ig_eng, tt_f, tt_views, tt_eng, fb_f, fb_eng, fb_mv, fb_reels, ig_saved, ig_shares, tt_shares, fb_vwatch, fb_vtime, resp] = await Promise.all([
     tl(b, "instagram", "Followers", from, to, "account"),
     tl(b, "instagram", "views", from, to, "account"),
     tl(b, "instagram", "engagement", from, to, "posts"),
@@ -148,6 +148,8 @@ async function buildTeam(t, from, to, profiles, api, tl) {
     tl(b, "instagram", "saved", from, to, "posts"),
     tl(b, "instagram", "shares", from, to, "posts"),
     tl(b, "tiktok", "shares", from, to, "video"),
+    tl(b, "facebook", "post_video_avg_time_watched", from, to, undefined),
+    tl(b, "facebook", "post_video_view_time", from, to, undefined),
     api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ }),
   ]);
   const fb_views = dsum(fb_mv, fb_reels);
@@ -196,6 +198,8 @@ async function buildTeam(t, from, to, profiles, api, tl) {
   const engRate = round(mean([...eng_by.ig, ...eng_by.tt, ...eng_by.fb]), 2);
   const savesByPlatform = { ig: Math.round(sumVals(ig_saved)), tt: 0, fb: 0 };
   const sharesByPlatform = { ig: Math.round(sumVals(ig_shares)), tt: Math.round(sumVals(tt_shares)), fb: 0 };
+  const watchDays = Object.values(fb_vwatch).filter(v => v > 0);
+  const watch = { avgSec: watchDays.length ? round(watchDays.reduce((a, b) => a + b, 0) / watchDays.length / 1000, 1) : 0, totalHrs: round(sumVals(fb_vtime) / 3.6e6, 1), days: watchDays.length };
 
   const prof = profiles[b] || {};
   return {
@@ -236,6 +240,7 @@ async function buildTeam(t, from, to, profiles, api, tl) {
     savesByPlatform, sharesByPlatform,
     seriesSavesShares: slist(dsum(ig_saved, ig_shares, tt_shares)),
     formats: fmt,
+    watch,
     postsList: posts_list,
     topPosts: ranked.slice(0, 3),
     rankedTop: ranked.slice(0, 8),
@@ -325,6 +330,8 @@ export async function compute(days, rng, token, userId) {
   const impByPlat = { ig: sum(teams.map(t => t.impressionsByPlatform.ig)), tt: sum(teams.map(t => t.impressionsByPlatform.tt)), fb: sum(teams.map(t => t.impressionsByPlatform.fb)) };
   const savesByPlat = { ig: sum(teams.map(t => t.savesByPlatform.ig)), tt: 0, fb: 0 };
   const sharesByPlat = { ig: sum(teams.map(t => t.sharesByPlatform.ig)), tt: sum(teams.map(t => t.sharesByPlatform.tt)), fb: 0 };
+  const wTeams = teams.filter(t => t.watch.days > 0);
+  const watchLeague = { totalHrs: round(sum(teams.map(t => t.watch.totalHrs)), 1), avgSec: wTeams.length ? round(sum(wTeams.map(t => t.watch.avgSec)) / wTeams.length, 1) : 0, teamsWithData: wTeams.length, platform: "facebook" };
 
   return {
     generatedAt: new Date().toISOString(), from, to, label, days, range: rng, timezone: TZ,
@@ -334,7 +341,7 @@ export async function compute(days, rng, token, userId) {
       engagementRate: engRate, impressions: sum(teams.map(t => t.impressions)),
       saves: sum(teams.map(t => t.saves)), shares: sum(teams.map(t => t.shares)),
     },
-    leaderboard, formatBreakdown,
+    leaderboard, formatBreakdown, watch: watchLeague,
     engRateByPlatform, impressionsByPlatform: impByPlat, savesByPlatform: savesByPlat, sharesByPlatform: sharesByPlat,
     totalsByPlatform: totals_platform,
     network: {
