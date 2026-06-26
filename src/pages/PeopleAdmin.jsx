@@ -101,6 +101,23 @@ export default function PeopleAdminCard() {
     }
   }, [toast]);
 
+  // Manually mark a user's email verified, bypassing the confirmation email.
+  // For when Supabase auth-email delivery is failing for one specific user.
+  const confirmEmail = useCallback(async (p) => {
+    const ok = window.confirm(`Mark ${p.email} as verified? This skips the confirmation email and lets them sign in immediately.`);
+    if (!ok) return;
+    try {
+      await authedJson('/api/admin-people?action=confirm-email', {
+        method: 'POST',
+        body: { id: p.id },
+      });
+      setProfiles(prev => prev.map(x => x.id === p.id ? { ...x, email_confirmed: true } : x));
+      toast.success(`${p.email} verified`, { detail: 'They can sign in now — no email needed.' });
+    } catch (err) {
+      toast.error('Confirm failed', { detail: err.message });
+    }
+  }, [toast]);
+
   // ── Pending athlete claims (v4.24.0) ──────────────────────────────────────
   // Profiles that self-identified as a player at signup. Master verifies the
   // name against the roster, then approves (→ athlete + linked) or denies.
@@ -201,6 +218,7 @@ export default function PeopleAdminCard() {
               onChangeRole={(role) => patchRow(p.id, { role })}
               onChangeTeam={(team_id) => patchRow(p.id, { team_id })}
               onSendInvite={() => sendInvite(p)}
+              onConfirmEmail={() => confirmEmail(p)}
             />
           ))}
         </div>
@@ -236,7 +254,7 @@ export default function PeopleAdminCard() {
   );
 }
 
-function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvite }) {
+function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvite, onConfirmEmail }) {
   // Figure out what this admin is allowed to do on this row.
   // - master_admin: can edit anyone (but the server still blocks self-demotion)
   // - admin: can only edit content/athlete rows
@@ -256,6 +274,13 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvit
   // the athlete on their player page).
   const isPending = !!p.pending_invite;
   const canSendInvite = myTier === 'master_admin' && isPending;
+
+  // Email-verified state (from the admin enrich on GET). `email_confirmed` is
+  // explicitly false for unverified users; undefined when the enrich couldn't
+  // run — in that case we still offer the confirm action as a manual override,
+  // but only badge a row UNVERIFIED when we actually know it's false.
+  const isUnverified = p.email_confirmed === false;
+  const canConfirmEmail = myTier === 'master_admin' && p.email_confirmed !== true;
 
   return (
     <div style={{
@@ -286,6 +311,21 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvit
                 borderRadius: radius.sm,
               }}
             >⏳ NOT INVITED</span>
+          )}
+          {isUnverified && (
+            <span
+              title="Email not verified — the user hasn't confirmed via the signup email. Click 'Confirm email' to verify them directly."
+              style={{
+                marginLeft: 6,
+                fontFamily: fonts.condensed,
+                fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                color: '#92400E',
+                background: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                padding: '2px 6px',
+                borderRadius: radius.sm,
+              }}
+            >✉ UNVERIFIED</span>
           )}
         </div>
         {p.display_name && (
@@ -334,6 +374,26 @@ function ProfileRow({ p, isSelf, myTier, onChangeRole, onChangeTeam, onSendInvit
               cursor: 'pointer',
             }}
           >SEND INVITE</button>
+        )}
+        {canConfirmEmail && (
+          <button
+            type="button"
+            onClick={onConfirmEmail}
+            title="Mark this email verified without the confirmation email — for when delivery is failing"
+            style={{
+              padding: '5px 10px',
+              fontSize: 11,
+              fontFamily: fonts.condensed,
+              fontWeight: 800,
+              letterSpacing: 0.5,
+              color: colors.text,
+              background: 'transparent',
+              border: `1px solid ${colors.border || colors.borderLight}`,
+              borderRadius: radius.sm,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >CONFIRM EMAIL</button>
         )}
         <div style={{ fontFamily: fonts.condensed, fontSize: 10, color: colors.textMuted, letterSpacing: 0.3 }}>
           {p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}

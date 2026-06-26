@@ -10,6 +10,11 @@
 // POST /api/admin-people?action=send-invite
 //                                         — email an invite to a silently-created
 //                                           profile. Body: { id }
+// POST /api/admin-people?action=confirm-email
+//                                         — mark a user's email verified directly,
+//                                           bypassing the confirmation email. For when
+//                                           Supabase auth-email delivery is failing for
+//                                           a specific user. Body: { id }
 // PATCH /api/admin-people                 — update role/team_id for a profile.
 //                                           Body: { id, role?, team_id?, display_name? }
 //
@@ -49,6 +54,24 @@ async function selectProfiles(sb) {
   return data || [];
 }
 
+// Email-confirmed status lives on auth.users, not the profiles table, so we
+// pull it via the admin listing and merge by id. Best-effort: callers wrap
+// this in try/catch so a listing failure just omits the verified state rather
+// than 500-ing the People list. perPage=100 is comfortably within GoTrue's cap
+// (so a short page reliably means "last page"); cap the loop as a runaway guard.
+async function emailConfirmedMap(sb) {
+  const map = new Map();
+  const perPage = 100;
+  for (let page = 1; page <= 100; page++) {
+    const { data, error } = await sb.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    const users = data?.users || [];
+    for (const u of users) map.set(u.id, !!u.email_confirmed_at);
+    if (users.length < perPage) break;
+  }
+  return map;
+}
+
 export default async function handler(req, res) {
   const ctx = await requireUser(req, res);
   if (!ctx) return;
@@ -58,6 +81,18 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const profiles = await selectProfiles(sb);
+      // Annotate each profile with whether its email is verified, so the UI
+      // can flag unverified users and offer a one-click confirm.
+      try {
+        const confirmedMap = await emailConfirmedMap(sb);
+        for (const p of profiles) {
+          if (confirmedMap.has(p.id)) p.email_confirmed = confirmedMap.get(p.id);
+        }
+      } catch (e) {
+        // Degrade gracefully — the People list still loads; the UI just falls
+        // back to showing the confirm action without a verified/unverified tag.
+        console.warn('[admin-people] email-confirmed enrich failed:', e?.message || e);
+      }
       return res.status(200).json({ profiles });
     }
 
@@ -129,6 +164,35 @@ export default async function handler(req, res) {
           sent: true,
           kind: 'invite',
           action_link: linkData?.properties?.action_link || null,
+        });
+      }
+
+      // ─── Confirm a user's email directly (no email needed) ───────────
+      // Manual override for when Supabase's confirmation email isn't reaching
+      // a user (default-SMTP throttling, spam, etc). profiles.id IS the
+      // auth.users id (the migration-003 trigger keys them the same), so we
+      // pass it straight to the admin API. Idempotent — re-confirming an
+      // already-verified user is a harmless no-op.
+      if (action === 'confirm-email') {
+        const { id } = req.body || {};
+        if (!id) return res.status(400).json({ error: 'id is required' });
+
+        const { data: target, error: getErr } = await sb
+          .from('profiles')
+          .select('id, email')
+          .eq('id', id)
+          .maybeSingle();
+        if (getErr) throw getErr;
+        if (!target) return res.status(404).json({ error: 'profile not found' });
+
+        const { data: updated, error: confErr } = await sb.auth.admin.updateUserById(id, { email_confirm: true });
+        if (confErr) {
+          return res.status(400).json({ error: confErr.message || 'Failed to confirm email' });
+        }
+        return res.status(200).json({
+          confirmed: true,
+          email: target.email || updated?.user?.email || null,
+          email_confirmed_at: updated?.user?.email_confirmed_at || null,
         });
       }
 
