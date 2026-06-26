@@ -635,13 +635,15 @@ export function computeStandings(games) {
     };
   });
 
-  // Rank ALL teams together to mirror the official prowiffleball.com standings:
-  // win pct desc → run differential desc → apiTeamId asc as the final tiebreak.
-  // This is what puts winless-but-played Atlanta (0-4, -10) BELOW the still-0-0
-  // teams (which sit at 0 diff), and orders the 0-0 group by team id exactly as
-  // prowiffle does (AZ, NY, DAL, LV, CHI). Every team gets a numeric rank.
+  // Rank ALL teams together to mirror the official BLW standings:
+  // win pct desc → FEWEST runs against (the official BLW tiebreaker for similar
+  // records, NOT run differential) → run differential desc as a deeper fallback
+  // → apiTeamId asc as the final tiebreak. Every team gets a numeric rank.
+  // (Runs-against is why Philadelphia sits above Miami at the same record — PHI
+  // has allowed fewer runs.)
   const ordered = rows.sort((a, b) =>
     b.pctNum - a.pctNum ||
+    a.ra - b.ra ||
     b.diffNum - a.diffNum ||
     (a.apiTeamId || 0) - (b.apiTeamId || 0)
   );
@@ -726,20 +728,22 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
   const baseW = teams.map(r => r.w);
   const baseL = teams.map(r => r.l);
   const baseDiff = teams.map(r => r.diffNum);
+  const baseRA = teams.map(r => r.ra);
   const api = teams.map(r => r.apiTeamId || 0);
 
-  // Observed winning margins — bootstrapped into the remaining games so run
-  // differentials actually MOVE during the sim. Without this, every team's diff
-  // is frozen at today's value, so a low-diff team can never climb the
-  // tiebreaker (e.g. a team going from -6 to +5 by winning out with big
-  // margins), which made diff-tiebreak leads look safer than they are.
-  const margins = [];
+  // Observed full score pairs [winnerScore, loserScore] — bootstrapped into the
+  // remaining games so BOTH run differential AND runs-against actually MOVE
+  // during the sim. Runs-against is the official BLW tiebreaker (fewest allowed),
+  // so the sim must track each team's RA rather than freezing today's value;
+  // that needs real scores, not just the margin.
+  const scorePairs = [];
   for (const g of (games || [])) {
     if (g.status !== 'SUBMITTED') continue;
-    const m = Math.abs(Number(g.home?.score) - Number(g.away?.score));
-    if (Number.isFinite(m) && m > 0) margins.push(m);
+    const hs = Number(g.home?.score), as = Number(g.away?.score);
+    if (!Number.isFinite(hs) || !Number.isFinite(as) || hs === as) continue;
+    scorePairs.push([Math.max(hs, as), Math.min(hs, as)]);
   }
-  if (!margins.length) margins.push(1, 2, 3);
+  if (!scorePairs.length) scorePairs.push([3, 1], [4, 2], [5, 3]);
 
   // Pythagorean win%, regressed toward .500 with a 3-game prior, then clamped
   // off the rails so no team is a 0%/100% per-game certainty.
@@ -777,20 +781,27 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
 
   const playoffCount = new Array(N).fill(0);
   const order = Array.from({ length: N }, (_, i) => i);
-  const M = margins.length;
+  const P = scorePairs.length;
   for (let s = 0; s < sims; s++) {
     const w = baseW.slice();
     const l = baseL.slice();
     const d = baseDiff.slice();
+    const ra = baseRA.slice();
     for (const [a, b] of remaining) {
-      const m = margins[(Math.random() * M) | 0];
-      if (Math.random() < log5(strength[a], strength[b])) { w[a]++; l[b]++; d[a] += m; d[b] -= m; }
-      else { w[b]++; l[a]++; d[b] += m; d[a] -= m; }
+      const [ws, ls] = scorePairs[(Math.random() * P) | 0];
+      const m = ws - ls;
+      if (Math.random() < log5(strength[a], strength[b])) {
+        // a wins: a allows the loser's score, b allows the winner's score
+        w[a]++; l[b]++; d[a] += m; d[b] -= m; ra[a] += ls; ra[b] += ws;
+      } else {
+        w[b]++; l[a]++; d[b] += m; d[a] -= m; ra[b] += ls; ra[a] += ws;
+      }
     }
     order.sort((i, j) => {
       const pi = (w[i] + l[i]) ? w[i] / (w[i] + l[i]) : 0;
       const pj = (w[j] + l[j]) ? w[j] / (w[j] + l[j]) : 0;
-      return (pj - pi) || (d[j] - d[i]) || (api[i] - api[j]);
+      // win pct desc → FEWEST runs against (BLW tiebreaker) → run diff desc → api
+      return (pj - pi) || (ra[i] - ra[j]) || (d[j] - d[i]) || (api[i] - api[j]);
     });
     for (let k = 0; k < spots && k < N; k++) playoffCount[order[k]]++;
   }
