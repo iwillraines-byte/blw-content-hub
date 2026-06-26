@@ -234,6 +234,20 @@
   .watchbig .wv{font-weight:600;font-size:30px;letter-spacing:-.02em} .watchbig .wv .wu{font-size:13px;color:var(--ink-2);margin-left:4px;font-weight:500}
   .watchbig .wl{font-size:11px;color:var(--ink-2);margin-top:4px}
   @media(max-width:760px){.dggrid{grid-template-columns:1fr}}
+  .prow{display:flex;align-items:center;gap:11px;padding:8px 5px;border-radius:9px;cursor:pointer;transition:.15s}
+  .prow:hover{background:rgba(255,255,255,.04)}
+  .prow:focus-visible{outline:2px solid var(--pos)}
+  .prank{font-size:11px;font-weight:700;color:var(--ink-2);min-width:20px;text-align:center}
+  .pinfo{min-width:170px}
+  .pn{font-size:12.5px;font-weight:600}
+  .ptm{font-size:10.5px;color:var(--ink-2);display:flex;align-items:center;gap:5px;margin-top:1px}
+  .ptm i{width:7px;height:7px;border-radius:2px}
+  .pbar{flex:1;height:8px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden;min-width:50px}
+  .pbar>span{display:block;height:100%;width:0;border-radius:5px;transition:width .85s cubic-bezier(.2,.7,.2,1)}
+  .pstats{display:flex;gap:15px;min-width:200px;justify-content:flex-end}
+  .pstat{text-align:right} .pstat b{font-size:13px} .pstat .k{font-size:9px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em;margin-top:1px}
+  .pheat{font-size:15px;font-weight:700;min-width:34px;text-align:right}
+  @media(max-width:760px){.pinfo{min-width:118px}.pstats{display:none}}
 </style>
 </head>
 <body>
@@ -296,6 +310,9 @@
       <div class="panel"><div class="head"><div class="t">Team Heat Index</div><div class="meta">breakout potential · 0-100</div></div><div id="heatBars" style="margin-top:8px"></div></div>
       <div class="panel"><div class="head"><div class="t">Facebook watch time</div><div class="meta">Phase 1 · FB video only</div></div><div id="watchPanel" style="margin-top:6px"></div></div>
     </div>
+
+    <div class="section-title"><span>Player Heat Index</span><span class="rule"></span></div>
+    <div class="panel"><div class="head"><div class="t">Who is driving your traffic</div><div class="meta" id="playerMeta">attributed by caption mentions</div></div><div id="playerBoard" style="margin-top:8px"></div></div>
 
     <div class="section-title"><span>Roster</span><span class="rule"></span></div>
     <div class="roster" id="roster"></div>
@@ -455,7 +472,7 @@ async function load(q,fresh){
 function render(){
   const c=$("#content"); c.classList.add("dim");
   setTimeout(()=>{ destroyCharts();
-    renderDigest(); renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderHeat(); renderWatch(); renderRoster(); renderChips(); renderForecast(); renderRecs();
+    renderDigest(); renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderHeat(); renderWatch(); renderPlayers(); renderRoster(); renderChips(); renderForecast(); renderRecs();
     c.classList.remove("dim");
   },120);
 }
@@ -757,6 +774,40 @@ function renderWatch(){
     <div class="watchbig"><div class="wv">${(w.avgSec||0).toFixed(1)}<span class="wu">sec</span></div><div class="wl">avg watch per FB video</div></div>
   </div>
   <div class="fc-note" style="margin-top:14px">Facebook is the only platform that exposes watch time through the API (${w.teamsWithData||0} of 9 teams have FB video this window). TikTok and Instagram reel retention arrive in Phase 2 (manual export) and Phase 3 (direct API).</div>`;
+}
+
+function renderPlayers(){
+  const lb=STATE.data.playerLeaderboard||[], host=$("#playerBoard"); if(!host) return;
+  const cov=STATE.data.rosterCoverage||{};
+  const meta=$("#playerMeta"); if(meta) meta.textContent=`top ${Math.min(20,lb.length)} by attributed interactions`;
+  if(!lb.length){ host.innerHTML=`<div class="fc-note">No player name mentions matched in captions this window.</div>`; return; }
+  const max=lb[0].interactions||1;
+  host.innerHTML=lb.map((p,i)=>{const w=Math.max(3,Math.round(p.interactions/max*100));
+    return `<div class="prow" data-i="${i}" tabindex="0" role="button">
+      <div class="prank">${i+1}</div>
+      <div class="pinfo"><div class="pn">${esc(p.name)}</div><div class="ptm"><i style="background:${p.accent}"></i>${esc(p.team.split(" ").slice(0,2).join(" "))} · ${p.posts} posts</div></div>
+      <div class="pbar"><span data-w="${w}%" style="background:${p.accent}"></span></div>
+      <div class="pstats"><div class="pstat"><b>${fmt(p.interactions)}</b><div class="k">int</div></div><div class="pstat"><b>${fmt(p.impressions)}</b><div class="k">reach</div></div><div class="pstat"><b>${(p.engAvg||0).toFixed(1)}%</b><div class="k">eng</div></div></div>
+      <div class="pheat" style="color:${p.accent}">${p.heat}</div></div>`;}).join("")
+    +`<div class="fc-note" style="margin-top:11px">Attributed when a player's name appears in the caption (a post can credit more than one player). Heat blends interactions (55%), reach (30%) and engagement (15%), scored across the league. ${cov.missing&&cov.missing.length?"No roster yet for "+esc(cov.missing.join(", "))+". ":""}${cov.untracked&&cov.untracked.length?esc(cov.untracked.join(" and "))+" rosters received but those accounts are not tracked yet.":""}</div>`;
+  const set=()=>host.querySelectorAll(".pbar>span").forEach(el=>el.style.width=el.dataset.w);
+  REDUCE?set():requestAnimationFrame(set);
+  host.querySelectorAll(".prow").forEach(el=>{const go=()=>openPlayer(+el.dataset.i);el.onclick=go;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
+}
+
+function openPlayer(i){
+  const p=(STATE.data.playerLeaderboard||[])[i]; if(!p) return;
+  const NET={instagram:"IG",tiktok:"TikTok",facebook:"FB"};
+  const ini=esc(p.name.split(" ").map(w=>w[0]).join("").slice(0,3));
+  let body=`<div class="modal-title"><span style="width:12px;height:12px;border-radius:4px;background:${p.accent};display:inline-block"></span>${esc(p.name)}</div>
+    <div class="modal-sub">${esc(p.team)} · ${p.posts} posts mentioning · heat ${p.heat}/100</div>
+    <div class="gchips" style="margin-top:12px">${gchip("Interactions",p.accent,fmtFull(p.interactions),null)}${gchip("Reach",PCOL.fb,fmtFull(p.impressions),null)}${gchip("Avg engagement",PCOL.ig,(p.engAvg||0).toFixed(2)+"%",null)}${gchip("Reach vs followers",PCOL.tt,(p.amp||0)+"x",null)}</div>
+    <div class="modal-sub" style="margin-top:14px">Posts driving ${esc(p.name.split(" ")[0])}'s numbers</div>
+    <div class="lbgrid" style="margin-top:10px">`+(p.items||[]).map(it=>{
+      const thumb=it.picture?`<img src="${esc(it.picture)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="ph" style="display:none">${ini}</div>`:`<div class="ph">${ini}</div>`;
+      return `<a class="lbcard" href="${esc(it.link||'#')}" target="_blank" rel="noopener" style="--accent:${p.accent}"><div class="lbthumb">${thumb}<span class="lbnet">${NET[it.network]||""} · ${capw(it.type)}</span></div><div class="lbbody"><div class="lbmet"><b>${fmt(it.interactions)}</b> int <span class="e">· ${fmt(it.impressions)} reach</span></div><div class="lbcap">${(it.date||"").slice(0,10)}</div></div></a>`;
+    }).join("")+`</div>`;
+  openModal(body);
 }
 
 /* ============ MODALS ============ */

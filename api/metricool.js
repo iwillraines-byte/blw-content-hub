@@ -26,6 +26,36 @@ const TEAMS = [
   { blogId: 6201828, name: "Philadelphia Wiffle Club", accent: "#34489E" },
 ];
 
+const ROSTER = {
+  6201154: ["Andrew Ledet","Paul Marshall","Will Marshall","Edward Martinez","Brice Clark","Cooper Ruckel","Jackson Richardson"],
+  6201165: ["Randy Dalbey","Jake Sullivan","Ethan Winer","Jonathan Dalbey","Jim Balian","Tom Gannon","Kyle Vonschleusingen"],
+  6201157: ["Keaton Kimmel","Justin Hall","Bryson Livingston","Ryan O'Rear","Drew Baalman","Jeff Lopes","Grant Miller"],
+  6201149: ["Jaxson Blum","Carson Rose","Logan Rose","Luke Rose","Joey Jankowski","Caleb Jeter","Ben Dulin"],
+  6201166: ["Dustin Staggs","Jaxen Pearson","Preston Kolm","Steven Hayden","Sawyer Behen","James Lee","Justin Lee"],
+  6201159: ["Jordan Robles","Konner Jaso","Vincent Lea","Mychal Witty Jr.","Joaquin Jimenez","Bryan Owens","Dallas Allen"],
+  6200089: ["Tommy Hernandez","Cam Smith","Jeremy Adams","Jackson Albers","John Paul Gunn","Mike Stiles","Sean Hornberger"],
+  6201828: ["Josh Wheeler","Dominic Citrowske","Chandler Melton","Kaiden Rice","Spencer Foss","Brody Livingston","Jimmy Cole"],
+};
+const SUFFIX = /\b(jr|sr|ii|iii|iv)\b/g;
+const normText = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(SUFFIX, " ").replace(/\s+/g, " ").trim();
+const PLAYER_PAT = (() => {
+  const lastCount = {};
+  for (const arr of Object.values(ROSTER)) for (const nm of arr) { const l = normText(nm).split(" ").slice(-1)[0]; lastCount[l] = (lastCount[l] || 0) + 1; }
+  const out = {};
+  for (const [b, arr] of Object.entries(ROSTER)) out[b] = arr.map(nm => {
+    const full = normText(nm); const collapsed = full.replace(/ /g, ""); const last = full.split(" ").slice(-1)[0];
+    return { name: nm, full, collapsed, last, useLast: last.length >= 6 && lastCount[last] === 1 };
+  });
+  return out;
+})();
+function matchPlayers(text, pats) {
+  const n = normText(text); if (!n) return [];
+  const padded = " " + n + " ", collapsed = n.replace(/ /g, "");
+  const hits = [];
+  for (const p of pats) if (padded.includes(" " + p.full + " ") || collapsed.includes(p.collapsed) || (p.useLast && padded.includes(" " + p.last + " "))) hits.push(p.name);
+  return hits;
+}
+
 function round(v, nd = 0) { const f = Math.pow(10, nd); return Math.round((Number(v) || 0) * f) / f; }
 const sum = a => a.reduce((x, y) => x + y, 0);
 const sumVals = d => Object.values(d).reduce((a, b) => a + b, 0);
@@ -167,6 +197,7 @@ async function buildTeam(t, from, to, profiles, api, tl) {
   const ranked = [];
   const eng_by = { ig: [], tt: [], fb: [] }, imp_by = { ig: 0, tt: 0, fb: 0 };
   const fmt = {};
+  const pats = PLAYER_PAT[b] || [], pAgg = {};
   for (const p of posts) {
     const net = NETMAP[p.network]; const m = p.metrics || {};
     const inter = Math.round(m.INTERACTIONS || 0);
@@ -176,6 +207,11 @@ async function buildTeam(t, from, to, profiles, api, tl) {
     const dt = (p.publicationDate || {}).dateTime || "";
     fmt[ty] = fmt[ty] || { count: 0, inter: 0, imp: 0, engSum: 0 };
     fmt[ty].count += 1; fmt[ty].inter += inter; fmt[ty].imp += imp; fmt[ty].engSum += eng;
+    if (pats.length) for (const nm of matchPlayers(p.text, pats)) {
+      const a = pAgg[nm] || (pAgg[nm] = { name: nm, posts: 0, interactions: 0, impressions: 0, engSum: 0, items: [] });
+      a.posts += 1; a.interactions += inter; a.impressions += imp; a.engSum += eng;
+      a.items.push({ network: p.network, type: ty, interactions: inter, impressions: imp, link: p.link, picture: p.picture || null, date: dt });
+    }
     if (net) {
       inter_by[net] += (m.INTERACTIONS || 0); posts_by[net] += 1;
       eng_by[net].push(eng); imp_by[net] += imp;
@@ -198,6 +234,7 @@ async function buildTeam(t, from, to, profiles, api, tl) {
   const engRate = round(mean([...eng_by.ig, ...eng_by.tt, ...eng_by.fb]), 2);
   const savesByPlatform = { ig: Math.round(sumVals(ig_saved)), tt: 0, fb: 0 };
   const sharesByPlatform = { ig: Math.round(sumVals(ig_shares)), tt: Math.round(sumVals(tt_shares)), fb: 0 };
+  const players = Object.values(pAgg).map(a => ({ name: a.name, posts: a.posts, interactions: a.interactions, impressions: a.impressions, engAvg: round(a.engSum / a.posts, 2), items: a.items.sort((x, y) => y.interactions - x.interactions).slice(0, 6) })).sort((a, b) => b.interactions - a.interactions);
   const watchDays = Object.values(fb_vwatch).filter(v => v > 0);
   const watch = { avgSec: watchDays.length ? round(watchDays.reduce((a, b) => a + b, 0) / watchDays.length / 1000, 1) : 0, totalHrs: round(sumVals(fb_vtime) / 3.6e6, 1), days: watchDays.length };
 
@@ -240,6 +277,7 @@ async function buildTeam(t, from, to, profiles, api, tl) {
     savesByPlatform, sharesByPlatform,
     seriesSavesShares: slist(dsum(ig_saved, ig_shares, tt_shares)),
     formats: fmt,
+    players,
     watch,
     postsList: posts_list,
     topPosts: ranked.slice(0, 3),
@@ -330,6 +368,12 @@ export async function compute(days, rng, token, userId) {
   const impByPlat = { ig: sum(teams.map(t => t.impressionsByPlatform.ig)), tt: sum(teams.map(t => t.impressionsByPlatform.tt)), fb: sum(teams.map(t => t.impressionsByPlatform.fb)) };
   const savesByPlat = { ig: sum(teams.map(t => t.savesByPlatform.ig)), tt: 0, fb: 0 };
   const sharesByPlat = { ig: sum(teams.map(t => t.sharesByPlatform.ig)), tt: sum(teams.map(t => t.sharesByPlatform.tt)), fb: 0 };
+  const playersAll = teams.flatMap(t => (t.players || []).map(pl => ({ ...pl, team: t.name, accent: t.accent, blogId: t.blogId, amp: t.followersNow ? round(pl.impressions / t.followersNow, 1) : 0 })));
+  const nz = arr => { const mx = Math.max(1, ...arr); return arr.map(v => v / mx); };
+  const pI = nz(playersAll.map(x => x.interactions)), pP = nz(playersAll.map(x => x.impressions)), pE = nz(playersAll.map(x => x.engAvg));
+  playersAll.forEach((x, i) => { x.heat = Math.round(100 * (0.55 * pI[i] + 0.30 * pP[i] + 0.15 * pE[i])); });
+  const playerLeaderboard = playersAll.sort((a, b) => b.interactions - a.interactions).slice(0, 20);
+  const rosterCoverage = { withRoster: teams.filter(t => (ROSTER[t.blogId] || []).length).length, total: teams.length, missing: teams.filter(t => !(ROSTER[t.blogId] || []).length).map(t => t.name), untracked: ["New York Green Apples", "San Diego Orcas"] };
   const wTeams = teams.filter(t => t.watch.days > 0);
   const watchLeague = { totalHrs: round(sum(teams.map(t => t.watch.totalHrs)), 1), avgSec: wTeams.length ? round(sum(wTeams.map(t => t.watch.avgSec)) / wTeams.length, 1) : 0, teamsWithData: wTeams.length, platform: "facebook" };
 
@@ -341,7 +385,7 @@ export async function compute(days, rng, token, userId) {
       engagementRate: engRate, impressions: sum(teams.map(t => t.impressions)),
       saves: sum(teams.map(t => t.saves)), shares: sum(teams.map(t => t.shares)),
     },
-    leaderboard, formatBreakdown, watch: watchLeague,
+    leaderboard, formatBreakdown, watch: watchLeague, playerLeaderboard, rosterCoverage,
     engRateByPlatform, impressionsByPlatform: impByPlat, savesByPlatform: savesByPlat, sharesByPlatform: sharesByPlat,
     totalsByPlatform: totals_platform,
     network: {
