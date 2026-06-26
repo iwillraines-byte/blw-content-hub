@@ -517,7 +517,9 @@ export async function fetchOpwrHistory(playerId) {
       .sort((a, b) => a.monthNumber - b.monthNumber);
   } catch (e) {
     console.warn('OPWR history fetch failed:', e);
-    return [];
+    // null signals a failed/transient fetch (caller may retry); an empty array
+    // is reserved for a player who genuinely has no ranking history.
+    return null;
   }
 }
 

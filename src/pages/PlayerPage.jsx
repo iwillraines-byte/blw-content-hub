@@ -603,15 +603,22 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
   // blank. Card is keyed per player, so this state is per-player.
   const playerId = player.ranking?.playerId;
   const [historyPts, setHistoryPts] = useState(null);
+  // Separate "loaded" flag so we don't overload historyPts===null as both
+  // "not fetched yet" and the data sentinel. A failed fetch (h===null) leaves
+  // historyLoaded false, so re-opening the Trend tab retries instead of being
+  // stuck forever on the prev→now seed; a genuine empty history ([]) marks it
+  // loaded and falls back to the seed without retrying.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   useEffect(() => {
-    if (view !== 'trend' || historyPts !== null || playerId == null) return undefined;
+    if (view !== 'trend' || historyLoaded || playerId == null) return undefined;
     let alive = true;
     fetchOpwrHistory(playerId).then(h => {
-      if (!alive) return;
-      setHistoryPts((h || []).slice(-6).map(m => ({ label: monthLabel(m.from), rank: m.rank })));
+      if (!alive || h == null) return; // null = transient failure → allow retry
+      setHistoryPts(h.slice(-6).map(m => ({ label: monthLabel(m.from), rank: m.rank })));
+      setHistoryLoaded(true);
     });
     return () => { alive = false; };
-  }, [view, playerId, historyPts]);
+  }, [view, playerId, historyLoaded]);
 
   if (!hasBat && !hasPit) return null;
 

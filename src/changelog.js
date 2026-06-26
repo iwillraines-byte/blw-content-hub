@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '5.1.0',
+    date: '2026-06-25',
+    kind: 'patch',
+    summary: 'v5.1 — four bug fixes from the v5 code review (team banner, roster badges, media lightbox, OPWR trend)',
+    items: [
+      'Team banner edits no longer silently lose your change when the network blips. Previously, picking or repositioning a header photo while briefly offline would leave the new image showing on screen but never actually save it — so it vanished on the next reload. The save now rolls back cleanly on any failure (offline included), so what you see always matches what was stored.',
+      'Roster tier badges no longer disappear for players the OPWR board hasn\'t ranked yet. The roster cards are supposed to fall back to a player\'s global rank when their BLW-internal rank isn\'t available — that fallback was never wired up, so newly added or unranked players showed no badge at all. They now get their badge as intended.',
+      'The team media lightbox can now page through the ENTIRE filtered set, not just the first 12. When a media collection was collapsed, opening a photo and using the arrows only cycled the 12 visible thumbnails (and the counter read "n / 12"). It now spans every photo in the current filter — e.g. "n / 40" — without needing to click "Show all" first.',
+      'The player OPWR ranking trend no longer gets stuck on the 2-point fallback after a momentary fetch hiccup. A transient failure used to be cached as if it were the real (empty) history, so the chart stayed on the prev→now seed for the rest of that visit. A failed load is now distinguished from a genuinely empty one, so re-opening the Trend tab retries and shows the full monthly history once it\'s reachable.',
+    ],
+  },
+  {
     version: '5.0.0',
     date: '2026-06-23',
     kind: 'major',
