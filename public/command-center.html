@@ -668,21 +668,40 @@ function openTeamModal(id, initial){
       return;
     }
 
-    leg.innerHTML=platLegend; bodyEl.innerHTML=chartHTML;
+    leg.innerHTML=platLegend;
     const sp=t.seriesByPlatform[metric];
+    const diffSeries = s => { const o=[]; for(let i=1;i<s.length;i++) o.push({d:s[i].d, v:s[i].v - s[i-1].v}); return o; };
     if(metric==='followers'){
-      chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[]; const cur=s.length?s[s.length-1].v:0; return gchip(PNAME[k],PCOL[k],fmtFull(cur),growthPct(s)); }).join("")+`</div>`;
-    } else {
-      chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[]; const tot=s.reduce((a,b)=>a+b.v,0); return gchip(PNAME[k],PCOL[k],fmtFull(tot),null); }).join("")+`</div>`;
+      const gained={ig:diffSeries(sp.ig||[]),tt:diffSeries(sp.tt||[]),fb:diffSeries(sp.fb||[])};
+      const setChips=mode=>{ chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[];
+        if(mode==='gained'){ const g=gained[k]; const tot=g.reduce((a,b)=>a+b.v,0); const per=g.length?tot/g.length:0; return gchip(PNAME[k]+" gained",PCOL[k],signed(tot),null).replace('</div></div>',`</div><div class="gd ${per>=0?'flat':'down'}" style="color:var(--ink-2)">${(per>=0?'+':'')+per.toFixed(0)}/day avg</div></div>`); }
+        const cur=s.length?s[s.length-1].v:0; return gchip(PNAME[k],PCOL[k],fmtFull(cur),growthPct(s)); }).join("")+`</div>`; };
+      setChips('total');
+      bodyEl.innerHTML=`<div class="mtoggle" id="folSub" style="margin-top:10px"><div class="mt active" data-f="total">Total over time</div><div class="mt" data-f="gained">Gained / day</div></div>`+chartHTML;
+      const drawFol=mode=>{ destroyModalCharts(); setChips(mode);
+        const src = mode==='gained' ? gained : sp;
+        const a=alignKeys(src,["ig","tt","fb"]);
+        const mk=k=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:PCOL[k],borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:.32,fill:false,spanGaps:true});
+        const anyData=["ig","tt","fb"].some(k=>(src[k]||[]).length);
+        if(!anyData){ $("#teamChart").parentElement.innerHTML=`<div class="fc-note" style="margin-top:16px">No follower data reported for this window.</div>`; return; }
+        STATE.modalCharts.push(new Chart($("#teamChart"),{type:"line",data:{labels:a.labels.map(mmdd),datasets:[mk("ig"),mk("tt"),mk("fb")]},
+          options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+            plugins:{legend:{display:false},tooltip:{...TT,itemSort:(x,y)=>y.parsed.y-x.parsed.y, callbacks: mode==='gained'?{label:ctx=>ctx.dataset.label+": "+(ctx.parsed.y>=0?"+":"")+fmtFull(ctx.parsed.y)+" followers"}:{}}},
+            scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}}));
+      };
+      drawFol('total');
+      $("#folSub").querySelectorAll(".mt").forEach(b=>b.onclick=()=>{ $("#folSub").querySelectorAll(".mt").forEach(x=>x.classList.remove("active")); b.classList.add("active"); drawFol(b.dataset.f); });
+      return;
     }
+    bodyEl.innerHTML=chartHTML;
+    chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[]; const tot=s.reduce((a,b)=>a+b.v,0); return gchip(PNAME[k],PCOL[k],fmtFull(tot),null); }).join("")+`</div>`;
     const a=alignKeys(sp,["ig","tt","fb"]);
-    const stacked = metric!=="followers";
-    const mk=k=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:stacked?PCOL[k]+"40":PCOL[k],borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.32,fill:stacked,spanGaps:true});
+    const mk=k=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:PCOL[k]+"40",borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.32,fill:true,spanGaps:true});
     const anyData=["ig","tt","fb"].some(k=>(sp[k]||[]).length);
     if(!anyData){ bodyEl.innerHTML=`<div class="fc-note" style="margin-top:16px">No ${metric} data reported for any platform in this window.</div>`; return; }
     STATE.modalCharts.push(new Chart($("#teamChart"),{type:"line",data:{labels:a.labels.map(mmdd),datasets:[mk("ig"),mk("tt"),mk("fb")]},
       options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{...TT,itemSort:(x,y)=>y.parsed.y-x.parsed.y}},
-        scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{stacked,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}}));
+        scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{stacked:true,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}}));
   };
   $("#tmToggle").querySelectorAll(".mt").forEach(b=>{ if(b.dataset.m===initial) b.classList.add("active"); b.onclick=()=>{ $("#tmToggle").querySelectorAll(".mt").forEach(x=>x.classList.remove("active")); b.classList.add("active"); draw(b.dataset.m); }; });
   draw(initial);
