@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '5.1.1',
+    date: '2026-06-25',
+    kind: 'patch',
+    summary: 'v5.1.1 — player bios, BLW ranking, a production-hardening pass, and the runs-against tiebreaker',
+    items: [
+      'Player bios now show up. After a CSV import, vitals (height, weight, bats/throws, hometown, fun facts) were saving to the cloud but the player page was reading an empty duplicate row, so the page looked blank. The page now always reads the row carrying the real data, so every imported bio surfaces.',
+      'Each team’s Instagram, fun facts, and rookie flag are now editable in-app from the player’s "Edit player info" panel — previously they could only be set via the CSV import. The master admin can edit any player; an athlete can edit their own page.',
+      'A BLW-internal ranking now sits beside the global OPWR number on player pages (e.g. "OPWR #96 · BLW #51 / 70"), and the roster tier badges reflect a player’s standing among the 70 BLW players instead of the whole cross-league board.',
+      'Roster cards show BOTH a batting and a pitching stat line for two-way players, so neither side is hidden.',
+      'Standings and playoff odds now break ties by fewest runs against (the official BLW tiebreaker) instead of run differential — so, for example, Philadelphia correctly seeds above Miami at the same record.',
+      'The bio importer no longer hides skipped rows: the result clearly reports anything that didn’t save and why, instead of a green "done" that masked failures.',
+      'A broad reliability + security pass: saves now tell you honestly when a write didn’t reach the cloud (instead of a false "saved"), the vision/AI endpoints no longer time out, the app shows a friendly recovery screen instead of a white page if something crashes, status colors read correctly in dark mode, and a couple of data-access holes were closed.',
+    ],
+  },
+  {
     version: '5.1.0',
     date: '2026-06-25',
     kind: 'patch',
