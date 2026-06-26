@@ -134,7 +134,7 @@ async function loadProfiles(api) {
 
 async function buildTeam(t, from, to, profiles, api, tl) {
   const b = t.blogId;
-  const [ig_f, ig_views, ig_eng, tt_f, tt_views, tt_eng, fb_f, fb_eng, fb_mv, fb_reels, resp] = await Promise.all([
+  const [ig_f, ig_views, ig_eng, tt_f, tt_views, tt_eng, fb_f, fb_eng, fb_mv, fb_reels, ig_saved, ig_shares, tt_shares, resp] = await Promise.all([
     tl(b, "instagram", "Followers", from, to, "account"),
     tl(b, "instagram", "views", from, to, "account"),
     tl(b, "instagram", "engagement", from, to, "posts"),
@@ -145,6 +145,9 @@ async function buildTeam(t, from, to, profiles, api, tl) {
     tl(b, "facebook", "engagement", from, to, undefined),
     tl(b, "facebook", "page_media_view", from, to, "account"),
     tl(b, "facebook", "blue_reels_play_count", from, to, undefined),
+    tl(b, "instagram", "saved", from, to, "posts"),
+    tl(b, "instagram", "shares", from, to, "posts"),
+    tl(b, "tiktok", "shares", from, to, "video"),
     api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ }),
   ]);
   const fb_views = dsum(fb_mv, fb_reels);
@@ -160,24 +163,39 @@ async function buildTeam(t, from, to, profiles, api, tl) {
   const inter_daily = { ig: {}, tt: {}, fb: {} };
   const posts_list = { ig: [], tt: [], fb: [] };
   const ranked = [];
+  const eng_by = { ig: [], tt: [], fb: [] }, imp_by = { ig: 0, tt: 0, fb: 0 };
+  const fmt = {};
   for (const p of posts) {
     const net = NETMAP[p.network]; const m = p.metrics || {};
     const inter = Math.round(m.INTERACTIONS || 0);
+    const imp = Math.round(m.IMPRESSIONS || 0);
+    const eng = Number(m.ENGAGEMENT) || 0;
+    const ty = String(p.type || "OTHER").toUpperCase();
     const dt = (p.publicationDate || {}).dateTime || "";
+    fmt[ty] = fmt[ty] || { count: 0, inter: 0, imp: 0, engSum: 0 };
+    fmt[ty].count += 1; fmt[ty].inter += inter; fmt[ty].imp += imp; fmt[ty].engSum += eng;
     if (net) {
       inter_by[net] += (m.INTERACTIONS || 0); posts_by[net] += 1;
+      eng_by[net].push(eng); imp_by[net] += imp;
       const day = dt.slice(0, 10);
       if (day) { posts_daily[net][day] = (posts_daily[net][day] || 0) + 1; inter_daily[net][day] = (inter_daily[net][day] || 0) + (m.INTERACTIONS || 0); }
-      posts_list[net].push({ date: dt, text: (p.text || "").slice(0, 140), link: p.link, interactions: inter });
+      posts_list[net].push({ date: dt, text: (p.text || "").slice(0, 140), link: p.link, interactions: inter, type: ty });
     }
     ranked.push({
-      network: p.network, text: (p.text || "").slice(0, 160), link: p.link,
-      date: dt,
-      interactions: inter, engagement: round(m.ENGAGEMENT || 0, 2), impressions: Math.round(m.IMPRESSIONS || 0),
+      team: t.name, accent: t.accent, blogId: b, network: p.network, type: ty,
+      text: (p.text || "").slice(0, 140), link: p.link, picture: p.picture || null, date: dt,
+      interactions: inter, engagement: round(eng, 2), impressions: imp,
     });
   }
   for (const net of ["ig", "tt", "fb"]) posts_list[net].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   ranked.sort((a, b2) => (b2.interactions - a.interactions) || (b2.impressions - a.impressions));
+
+  const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+  const engRateByPlatform = { ig: round(mean(eng_by.ig), 2), tt: round(mean(eng_by.tt), 2), fb: round(mean(eng_by.fb), 2) };
+  const engAgg = { ig: { s: sum(eng_by.ig), n: eng_by.ig.length }, tt: { s: sum(eng_by.tt), n: eng_by.tt.length }, fb: { s: sum(eng_by.fb), n: eng_by.fb.length } };
+  const engRate = round(mean([...eng_by.ig, ...eng_by.tt, ...eng_by.fb]), 2);
+  const savesByPlatform = { ig: Math.round(sumVals(ig_saved)), tt: 0, fb: 0 };
+  const sharesByPlatform = { ig: Math.round(sumVals(ig_shares)), tt: Math.round(sumVals(tt_shares)), fb: 0 };
 
   const prof = profiles[b] || {};
   return {
@@ -208,8 +226,19 @@ async function buildTeam(t, from, to, profiles, api, tl) {
       interactions: { ig: slist(inter_daily.ig), tt: slist(inter_daily.tt), fb: slist(inter_daily.fb) },
       posts: { ig: slist(posts_daily.ig), tt: slist(posts_daily.tt), fb: slist(posts_daily.fb) },
     },
+    engagementRatePost: engRate,
+    engRateByPlatform,
+    engAgg,
+    impressions: Math.round(imp_by.ig + imp_by.tt + imp_by.fb),
+    impressionsByPlatform: { ig: imp_by.ig, tt: imp_by.tt, fb: imp_by.fb },
+    saves: savesByPlatform.ig,
+    shares: sharesByPlatform.ig + sharesByPlatform.tt,
+    savesByPlatform, sharesByPlatform,
+    seriesSavesShares: slist(dsum(ig_saved, ig_shares, tt_shares)),
+    formats: fmt,
     postsList: posts_list,
     topPosts: ranked.slice(0, 3),
+    rankedTop: ranked.slice(0, 8),
   };
 }
 
@@ -277,12 +306,36 @@ export async function compute(days, rng, token, userId) {
     }
   }
   const dailyByPlat = obj => Object.fromEntries(["ig", "tt", "fb"].map(net => [net, Object.keys(obj[net]).sort().map(k => ({ d: k, v: obj[net][k] }))]));
+
+  const leaderboard = teams.flatMap(t => t.rankedTop).filter(p => p.interactions > 0 || p.impressions > 0)
+    .sort((a, b) => (b.interactions - a.interactions) || (b.impressions - a.impressions)).slice(0, 15);
+  const fmtAll = {};
+  for (const t of teams) for (const [ty, f] of Object.entries(t.formats)) {
+    fmtAll[ty] = fmtAll[ty] || { count: 0, inter: 0, imp: 0, engSum: 0 };
+    fmtAll[ty].count += f.count; fmtAll[ty].inter += f.inter; fmtAll[ty].imp += f.imp; fmtAll[ty].engSum += f.engSum;
+  }
+  const formatBreakdown = Object.entries(fmtAll).map(([type, f]) => ({
+    type, count: f.count, interactions: f.inter, impressions: f.imp,
+    avgInteractions: round(f.inter / f.count, 1), avgEngagement: round(f.engSum / f.count, 2),
+  })).sort((a, b) => b.avgInteractions - a.avgInteractions);
+  const engL = { ig: { s: 0, n: 0 }, tt: { s: 0, n: 0 }, fb: { s: 0, n: 0 } };
+  for (const t of teams) for (const net of ["ig", "tt", "fb"]) { engL[net].s += t.engAgg[net].s; engL[net].n += t.engAgg[net].n; }
+  const engRateByPlatform = { ig: round(engL.ig.n ? engL.ig.s / engL.ig.n : 0, 2), tt: round(engL.tt.n ? engL.tt.s / engL.tt.n : 0, 2), fb: round(engL.fb.n ? engL.fb.s / engL.fb.n : 0, 2) };
+  const engRate = round((engL.ig.s + engL.tt.s + engL.fb.s) / Math.max(1, engL.ig.n + engL.tt.n + engL.fb.n), 2);
+  const impByPlat = { ig: sum(teams.map(t => t.impressionsByPlatform.ig)), tt: sum(teams.map(t => t.impressionsByPlatform.tt)), fb: sum(teams.map(t => t.impressionsByPlatform.fb)) };
+  const savesByPlat = { ig: sum(teams.map(t => t.savesByPlatform.ig)), tt: 0, fb: 0 };
+  const sharesByPlat = { ig: sum(teams.map(t => t.sharesByPlatform.ig)), tt: sum(teams.map(t => t.sharesByPlatform.tt)), fb: 0 };
+
   return {
     generatedAt: new Date().toISOString(), from, to, label, days, range: rng, timezone: TZ,
     totals: {
       followers: sum(teams.map(t => t.followersNow)), views: sum(teams.map(t => t.views)),
       interactions: sum(teams.map(t => t.interactions)), content: sum(teams.map(t => t.contentCount)),
+      engagementRate: engRate, impressions: sum(teams.map(t => t.impressions)),
+      saves: sum(teams.map(t => t.saves)), shares: sum(teams.map(t => t.shares)),
     },
+    leaderboard, formatBreakdown,
+    engRateByPlatform, impressionsByPlatform: impByPlat, savesByPlatform: savesByPlat, sharesByPlatform: sharesByPlat,
     totalsByPlatform: totals_platform,
     network: {
       followers: fmtPairs(carrySum(sd("followers"))), views: fmtPairs(mergeDicts(sd("views"), "sum")),

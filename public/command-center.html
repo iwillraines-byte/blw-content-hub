@@ -167,6 +167,41 @@
   @media(max-width:1080px){.hero{grid-template-columns:repeat(2,1fr)}.g-2{grid-template-columns:1fr}.roster{grid-template-columns:repeat(2,1fr)}.recs{grid-template-columns:1fr 1fr}.xcols{grid-template-columns:1fr}}
   @media(max-width:620px){.hero{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.recs{grid-template-columns:1fr}.wrap{padding:14px 14px 48px}.pcounts{gap:8px}.dname{min-width:110px}}
   @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition:none !important} #particles{display:none} }
+  .substrip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+  .scard{position:relative;background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:14px;padding:14px 15px;cursor:pointer;transition:.2s;overflow:hidden}
+  .scard:hover{border-color:var(--line-2);transform:translateY(-2px)}
+  .scard:focus-visible{outline:2px solid var(--pos);outline-offset:2px}
+  .scard .accent{position:absolute;top:0;left:0;height:2px;width:100%}
+  .scard .label{font-size:11px;color:var(--ink-2);letter-spacing:.1em;text-transform:uppercase}
+  .scard .val{font-weight:600;font-size:27px;letter-spacing:-.02em;margin-top:5px;line-height:1}
+  .scard .sub{font-size:10.5px;color:var(--ink-2);margin-top:6px}
+  .scard .pmini{display:flex;gap:12px;margin-top:9px;flex-wrap:wrap}
+  .scard .pmini span{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-2)}
+  .scard .pmini i{width:8px;height:8px;border-radius:2px}
+  .scard .hint{position:absolute;top:12px;right:13px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);opacity:0;transition:.2s}
+  .scard:hover .hint,.scard:focus-visible .hint{opacity:1}
+  .lbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px;margin-top:12px}
+  .lbcard{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:13px;overflow:hidden;text-decoration:none;color:var(--ink);transition:.2s}
+  .lbcard:hover{transform:translateY(-3px);border-color:var(--line-2)}
+  .lbcard:focus-visible{outline:2px solid var(--pos)}
+  .lbthumb{position:relative;aspect-ratio:1/1;background:#15161a;overflow:hidden}
+  .lbthumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .lbthumb .ph{width:100%;height:100%;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:13px;color:var(--ink-3)}
+  .lbrank{position:absolute;top:7px;left:7px;min-width:20px;height:20px;padding:0 5px;border-radius:6px;background:rgba(10,11,13,.8);display:grid;place-items:center;font-size:11px;font-weight:700}
+  .lbnet{position:absolute;bottom:7px;left:7px;font-size:9px;font-weight:700;letter-spacing:.03em;padding:3px 6px;border-radius:6px;background:rgba(10,11,13,.8);color:#fff}
+  .lbbody{padding:9px 10px 11px;display:flex;flex-direction:column;gap:3px;border-top:2px solid var(--accent,transparent)}
+  .lbteam{font-family:var(--display);font-weight:700;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lbmet{font-size:11px;color:var(--ink)} .lbmet b{font-size:14px} .lbmet .e{color:var(--ink-2)}
+  .lbcap{font-size:10.5px;color:var(--ink-2);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
+  .fmtrow{display:flex;align-items:center;gap:11px;padding:8px 0;border-top:1px solid var(--line)}
+  .fmtrow:first-child{border-top:none}
+  .fmtname{font-size:12px;font-weight:600;min-width:96px;display:flex;align-items:center;gap:7px}
+  .fmtname .ic{width:8px;height:8px;border-radius:2px}
+  .fmtbar{flex:1;height:9px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden}
+  .fmtbar>span{display:block;height:100%;width:0;border-radius:5px;transition:width .85s cubic-bezier(.2,.7,.2,1)}
+  .fmtval{font-size:12.5px;font-weight:600;min-width:104px;text-align:right}
+  .fmtval .s{font-size:10.5px;color:var(--ink-2);font-weight:500}
+  @media(max-width:1080px){.substrip{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -200,6 +235,7 @@
   <div class="errbox" id="errbox"></div>
   <div id="content" class="fade">
     <div class="hero" id="hero"></div>
+    <div class="substrip" id="substrip"></div>
 
     <div class="section-title"><span>Total followers over time</span><span class="rule"></span></div>
     <div class="grid g-2">
@@ -211,6 +247,15 @@
     <div class="grid g-2">
       <div class="panel"><div class="head"><div class="t">Follower-growth velocity</div><div class="meta">net new / day</div></div><div class="chart-box"><canvas id="velChart"></canvas></div></div>
       <div class="panel"><div class="head"><div class="t">Views over time</div><div class="meta">stacked, all teams</div></div><div class="chart-box"><canvas id="viewsChart"></canvas></div></div>
+    </div>
+
+    <div class="section-title"><span>Top posts this window</span><span class="rule"></span></div>
+    <div class="lbgrid" id="leaderboard"></div>
+
+    <div class="section-title"><span>What is working &middot; by format</span><span class="rule"></span></div>
+    <div class="grid g-2">
+      <div class="panel"><div class="head"><div class="t">Average interactions per post</div><div class="meta">by content format</div></div><div id="formatBars" style="margin-top:6px"></div></div>
+      <div class="panel"><div class="head"><div class="t">Format mix</div><div class="meta" id="formatMixMeta">posts this window</div></div><div class="chart-box" style="height:210px"><canvas id="formatMix"></canvas></div></div>
     </div>
 
     <div class="section-title"><span>Roster</span><span class="rule"></span></div>
@@ -371,7 +416,7 @@ async function load(q,fresh){
 function render(){
   const c=$("#content"); c.classList.add("dim");
   setTimeout(()=>{ destroyCharts();
-    renderHero(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderRoster(); renderChips(); renderForecast(); renderRecs();
+    renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderRoster(); renderChips(); renderForecast(); renderRecs();
     c.classList.remove("dim");
   },120);
 }
@@ -541,6 +586,81 @@ function renderRecs(){
   }).join("");
 }
 
+const capw=s=>{s=String(s||"").toLowerCase();return s.charAt(0).toUpperCase()+s.slice(1);};
+const LBNET={instagram:"IG",tiktok:"TikTok",facebook:"FB"};
+const TYPECOL={REEL:"#FF6FCF",VIDEO:"#5CE0E0",CAROUSEL:"#C7F24E",ALBUM:"#9AD1FF",IMAGE:"#FFB13C",STORY:"#C4C9D2",OTHER:"#878B94"};
+
+function renderSubstrip(){
+  const d=STATE.data, t=d.totals; const ss=(t.saves||0)+(t.shares||0);
+  const cards=[
+    {key:"engagement",label:"Engagement rate",accent:"#FFB13C",val:t.engagementRate||0,sub:"avg across all posts",plat:d.engRateByPlatform,pf:v=>(v||0).toFixed(1)+"%",pct:true},
+    {key:"impressions",label:"Impressions ("+d.label+")",accent:"#5B8DEF",val:t.impressions||0,sub:"total times posts were shown",plat:d.impressionsByPlatform,pf:fmt},
+    {key:"savesshares",label:"Saves + shares",accent:"#79E6C2",val:ss,sub:(t.saves||0).toLocaleString()+" saves · "+(t.shares||0).toLocaleString()+" shares (IG + TikTok)"}
+  ];
+  $("#substrip").innerHTML=cards.map(c=>`
+    <div class="scard" data-k="${c.key}" tabindex="0" role="button">
+      <div class="accent" style="background:${c.accent}"></div><div class="hint">Drill in</div>
+      <div class="label">${c.label}</div><div class="val" id="s_${c.key}" data-v="0">0</div>
+      <div class="sub">${c.sub}</div>
+      ${c.plat?`<div class="pmini">`+["ig","tt","fb"].map(k=>`<span><i style="background:${PCOL[k]}"></i>${PNAME[k]} ${c.pf(c.plat[k]||0)}</span>`).join("")+`</div>`:``}
+    </div>`).join("");
+  cards.forEach(c=>{ const el=$("#s_"+c.key); if(!el)return; c.pct?countUp(el,c.val,900,v=>v.toFixed(2)+"%"):countUp(el,c.val,900,fmt); });
+  $("#substrip").querySelectorAll(".scard").forEach(el=>{ const go=()=>openStat(el.dataset.k); el.onclick=go; el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}}; });
+}
+
+function renderLeaderboard(){
+  const lb=STATE.data.leaderboard||[]; const host=$("#leaderboard");
+  if(!lb.length){ host.innerHTML=`<div class="fc-note">No posts with measured interactions in this window.</div>`; return; }
+  host.innerHTML=lb.slice(0,12).map((p,i)=>{
+    const init=esc((p.team||"").split(" ").map(w=>w[0]).join("").slice(0,3));
+    const thumb=p.picture?`<img src="${esc(p.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="ph" style="display:none">${init}</div>`:`<div class="ph">${init}</div>`;
+    const tail=p.engagement?(p.engagement.toFixed(1)+"% eng"):(fmt(p.impressions)+" imp");
+    return `<a class="lbcard" href="${esc(p.link||'#')}" target="_blank" rel="noopener" style="--accent:${p.accent}">
+      <div class="lbthumb">${thumb}<span class="lbrank">#${i+1}</span><span class="lbnet">${LBNET[p.network]||''} · ${capw(p.type)}</span></div>
+      <div class="lbbody"><div class="lbteam" style="color:${p.accent}">${esc(p.team)}</div>
+        <div class="lbmet"><b>${fmt(p.interactions)}</b> int <span class="e">· ${tail}</span></div>
+        <div class="lbcap">${esc((p.text||"").slice(0,90))||"(no caption)"}</div></div></a>`;
+  }).join("");
+}
+
+function renderFormats(){
+  const all=(STATE.data.formatBreakdown||[]).filter(f=>f.count>0);
+  const fb=all.filter(f=>f.count>=2); const host=$("#formatBars");
+  if(!fb.length){ host.innerHTML=`<div class="fc-note">Not enough posts to break down by format.</div>`; }
+  else{
+    const max=Math.max(...fb.map(f=>f.avgInteractions))||1;
+    host.innerHTML=fb.map(f=>{ const c=TYPECOL[f.type]||TYPECOL.OTHER; const w=Math.max(2,Math.round(f.avgInteractions/max*100));
+      return `<div class="fmtrow"><div class="fmtname"><span class="ic" style="background:${c}"></span>${capw(f.type)}</div>
+        <div class="fmtbar"><span data-w="${w}%" style="background:${c}"></span></div>
+        <div class="fmtval">${fmt(f.avgInteractions)}<span class="s"> /post · ${f.count} posts</span></div></div>`; }).join("");
+    if(!REDUCE) requestAnimationFrame(()=>host.querySelectorAll(".fmtbar>span").forEach(el=>el.style.width=el.dataset.w));
+    else host.querySelectorAll(".fmtbar>span").forEach(el=>el.style.width=el.dataset.w);
+  }
+  if(STATE.charts.formatMix){try{STATE.charts.formatMix.destroy()}catch(e){}}
+  const tot=all.reduce((a,b)=>a+b.count,0);
+  $("#formatMixMeta").textContent=tot+" posts this window";
+  if(all.length) STATE.charts.formatMix=new Chart($("#formatMix"),{type:"doughnut",data:{labels:all.map(f=>capw(f.type)),datasets:[{data:all.map(f=>f.count),backgroundColor:all.map(f=>TYPECOL[f.type]||TYPECOL.OTHER),borderColor:"#0A0B0D",borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:"58%",plugins:{legend:{position:"right",labels:{boxWidth:9,boxHeight:9,font:{size:11},color:"#A6AAB2"}},tooltip:{...TT,callbacks:{label:ctx=>ctx.label+": "+ctx.parsed+" posts"}}},animation:{duration:ANIM}}});
+}
+
+function openStat(kind){
+  const d=STATE.data;
+  const cfgs={
+    engagement:{title:"Engagement rate",sub:"avg interactions per impression · "+d.label,plat:d.engRateByPlatform,pf:v=>(v||0).toFixed(2)+"%",teamVal:t=>t.engagementRatePost||0,fmtv:v=>(v||0).toFixed(2)+"%",note:"Engagement rate normalizes for audience size, so a smaller team posting sharp content can outrank a bigger one. Facebook runs high here because it has few but high-interaction posts."},
+    impressions:{title:"Impressions",sub:"total post impressions · "+d.label,plat:d.impressionsByPlatform,pf:fmt,teamVal:t=>t.impressions||0,fmtv:fmtFull,note:"Impressions count how many times posts were shown. It is the most consistent reach signal Metricool returns across all three platforms."},
+    savesshares:{title:"Saves + shares",sub:"high-intent actions · "+d.label,plat:{ig:(d.savesByPlatform.ig+d.sharesByPlatform.ig),tt:d.sharesByPlatform.tt,fb:0},pf:fmt,teamVal:t=>(t.saves||0)+(t.shares||0),fmtv:fmtFull,note:"Saves and shares predict reach better than likes. Instagram and TikTok report them; Facebook does not expose them through the API, so it shows as zero."}
+  };
+  const c=cfgs[kind]; const teams=[...d.teams].sort((a,b)=>c.teamVal(b)-c.teamVal(a)); const max=c.teamVal(teams[0])||1;
+  let body=`<div class="modal-title">${c.title} · by team</div><div class="modal-sub">${c.sub}</div>`;
+  body+=`<div class="gchips" style="margin-top:12px">`+["ig","tt","fb"].map(k=>gchip(PNAME[k],PCOL[k],c.pf(c.plat[k]||0),null)).join("")+`</div>`;
+  body+=`<div class="drill-list">`+teams.map(t=>{ const v=c.teamVal(t); const pct=Math.max(2,Math.round(v/max*100));
+    return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}<div class="dname">${esc(t.name)}</div><div class="dbar"><span data-w="${pct}%" style="background:${t.accent}"></span></div><div class="dval">${c.fmtv(v)}</div></div>`; }).join("")+`</div>`;
+  body+=`<div class="parity ok" style="background:rgba(255,255,255,.03);border-color:var(--line);color:var(--ink-2);margin-top:14px">${c.note}</div>`;
+  openModal(body);
+  requestAnimationFrame(()=>document.querySelectorAll("#modalBody .dbar>span").forEach(el=>el.style.width=el.dataset.w));
+  document.querySelectorAll("#modalBody .drow").forEach(r=>r.onclick=()=>openTeamModal(+r.dataset.id, kind==="engagement"?"engagement":"views"));
+}
+
 /* ============ MODALS ============ */
 function openModal(html){ destroyModalCharts(); $("#modalBody").innerHTML=html; $("#modal").classList.add("on"); }
 function closeModal(){ $("#modal").classList.remove("on"); destroyModalCharts(); }
@@ -638,6 +758,7 @@ function openTeamModal(id, initial){
       <div class="mt" data-m="followers">Followers</div>
       <div class="mt" data-m="views">Views</div>
       <div class="mt" data-m="interactions">Interactions</div>
+      <div class="mt" data-m="engagement">Engagement</div>
       <div class="mt" data-m="posts">Posts/day</div>
       <div class="mt" data-m="crosspost">Cross-post</div>
     </div>
@@ -691,6 +812,18 @@ function openTeamModal(id, initial){
       };
       drawFol('total');
       $("#folSub").querySelectorAll(".mt").forEach(b=>b.onclick=()=>{ $("#folSub").querySelectorAll(".mt").forEach(x=>x.classList.remove("active")); b.classList.add("active"); drawFol(b.dataset.f); });
+      return;
+    }
+    if(metric==='engagement'){
+      leg.innerHTML=platLegend; bodyEl.innerHTML=chartHTML;
+      chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>gchip(PNAME[k]+" rate",PCOL[k],(t.engRateByPlatform[k]||0).toFixed(2)+"%",null)).join("")+`</div>`;
+      const a=alignKeys(sp,["ig","tt","fb"]);
+      const mk=k=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:PCOL[k],borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:.32,fill:false,spanGaps:true});
+      const anyData=["ig","tt","fb"].some(k=>(sp[k]||[]).length);
+      if(!anyData){ bodyEl.innerHTML=`<div class="fc-note" style="margin-top:16px">No engagement-rate data reported in this window.</div>`; return; }
+      STATE.modalCharts.push(new Chart($("#teamChart"),{type:"line",data:{labels:a.labels.map(mmdd),datasets:[mk("ig"),mk("tt"),mk("fb")]},
+        options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>ctx.dataset.label+": "+(ctx.parsed.y==null?String.fromCharCode(8212):ctx.parsed.y.toFixed(2)+"%")}}},
+          scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{callback:v=>v+"%"}}},animation:{duration:ANIM}}}));
       return;
     }
     bodyEl.innerHTML=chartHTML;
