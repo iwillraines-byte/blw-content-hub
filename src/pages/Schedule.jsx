@@ -448,7 +448,7 @@ function StandingsTable({ standings, odds }) {
         </table>
       </div>
       <p style={{ fontSize: 11, color: colors.textMuted, margin: '10px 2px 0', lineHeight: 1.5 }}>
-        Playoff odds simulate every remaining game 10,000 times from each team's scoring strength, breaking ties by fewest runs against (the BLW tiebreaker). Teams whose season is already complete show their locked-in odds.
+        Playoff odds simulate every remaining game 10,000 times from each team's scoring strength, breaking ties by head-to-head, then fewest runs against (the BLW tiebreaker). Teams whose season is already complete show their locked-in odds.
       </p>
     </Card>
   );
