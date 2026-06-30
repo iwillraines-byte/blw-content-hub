@@ -1021,6 +1021,7 @@ function PhotoPicker({ team, player, teamMedia, mediaUrls, currentId, onClose, o
   // headshot hasn't been uploaded yet.
   const wantLast = String(player?.lastName || '').toUpperCase();
   const wantFI   = String(player?.firstInitial || (player?.firstName || '').charAt(0)).toUpperCase();
+  const wantNum  = String(player?.num || '').padStart(2, '0');
   const playerScoped = teamMedia.filter(m => {
     if ((m.scope || 'player') !== 'player') return false;
     if (!wantLast) return false;
@@ -1032,6 +1033,14 @@ function PhotoPicker({ team, player, teamMedia, mediaUrls, currentId, onClose, o
     // upstream, so by the time we're in PhotoPicker the lastName+team
     // pair is already narrow enough.
     if (mFI && wantFI && mFI !== wantFI) return false;
+    // A file stamped with a DIFFERENT jersey number than this player's
+    // belongs to a same-lastname teammate (Logan #08 vs Luke #05) — hide it
+    // so a cousin's headshot can't be mis-picked as this player's avatar.
+    // Numberless files still pass; a human is picking and can judge those.
+    if (wantNum && wantNum !== '00') {
+      const mNum = String(m.num || '').padStart(2, '0');
+      if (mNum && mNum !== '00' && mNum !== wantNum) return false;
+    }
     return true;
   });
   const usingFallback = playerScoped.length === 0;
@@ -1854,9 +1863,24 @@ export default function PlayerPage() {
           // AND by jersey number (Logan vs Luke Rose share initial 'L', so
           // jersey is the only signal that separates their assets). The
           // canonical roster carries explicit `num` for cousin pairs.
+          //
+          // fiUnique: does any teammate share this player's lastName+initial?
+          // If so (Logan/Luke Rose, both "L.ROSE"), findPlayerMedia must NOT
+          // surface a numberless file for both — pass the flag so it requires
+          // an explicit jersey-number match. Carson Rose ("C.ROSE") is
+          // initial-unique, so he keeps his numberless legacy files.
+          let rosterForFi = [];
+          try { rosterForFi = getTeamRoster(team.id, [], manualList || []); } catch { rosterForFi = []; }
+          const pFI = String(p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
+          const pLN = String(p.lastName || '').toUpperCase();
+          const fiUnique = rosterForFi.filter(r =>
+            String(r.lastName || '').toUpperCase() === pLN &&
+            String(r.firstInitial || (r.firstName || '').charAt(0)).toUpperCase() === pFI
+          ).length <= 1;
           const m = await findPlayerMedia(team.id, p.lastName, {
             firstInitial: p.firstInitial,
             jerseyNum: p.num,
+            fiUnique,
           });
           if (cancel) return;
           // Source jersey from first uploaded media file if available
@@ -2274,12 +2298,26 @@ export default function PlayerPage() {
     if (!team?.id || !player?.lastName) return;
     if (!Array.isArray(allMediaPool) || allMediaPool.length === 0) return;
     const lastnameUnique = !player.candidateCount || player.candidateCount === 1;
+    // fiUnique: does a teammate share this player's lastName+initial
+    // (Logan/Luke Rose)? If so we must NOT auto-pin an FI-only match — it
+    // could be the wrong cousin's photo. When the lastname is shared but the
+    // roster hasn't loaded yet, we can't tell, so we skip auto-pinning this
+    // pass (it re-runs once `teammates` is populated) rather than risk
+    // persisting a wrong pin to the database.
+    const FI = String(player.firstInitial || (player.firstName || '').charAt(0)).toUpperCase();
+    const LN = String(player.lastName || '').toUpperCase();
+    if (!lastnameUnique && (!Array.isArray(teammates) || teammates.length === 0)) return;
+    const fiUnique = (teammates || []).filter(t =>
+      String(t.lastName || '').toUpperCase() === LN &&
+      String(t.firstInitial || (t.firstName || '').charAt(0)).toUpperCase() === FI
+    ).length <= 1;
     const resolved = resolvePlayerAvatar(player, allMediaPool, {
       // Skip the override branch — we're trying to AUTO-PICK the avatar
       // here. (player.profileMediaId is null by the early-out above,
       // so this passes through unchanged either way.)
       profileMediaId: null,
       lastnameUnique,
+      fiUnique,
     });
     if (!resolved?.id) return;
     let cancelled = false;
@@ -2311,6 +2349,7 @@ export default function PlayerPage() {
     player?.firstName,
     player?.num,
     allMediaPool,
+    teammates,
   ]);
 
   if (!team) {
@@ -2377,9 +2416,20 @@ export default function PlayerPage() {
   // happens to render first). Single-Jeter players (Caleb on LAN) get
   // the relaxed fallback so a stale FI mismatch doesn't blank the avatar.
   const lastnameUnique = !player.candidateCount || player.candidateCount === 1;
+  // fiUnique: a teammate shares this player's lastName+initial (Logan/Luke
+  // Rose). When true-cousin, the resolver must require a jersey-number match
+  // and skip the FI-only fallback so the hero never shows the wrong cousin's
+  // face. Carson Rose ("C.ROSE") is initial-unique → keeps the FI-only path.
+  const heroFI = String(player.firstInitial || (player.firstName || '').charAt(0)).toUpperCase();
+  const heroLN = String(player.lastName || '').toUpperCase();
+  const fiUnique = (teammates || []).filter(t =>
+    String(t.lastName || '').toUpperCase() === heroLN &&
+    String(t.firstInitial || (t.firstName || '').charAt(0)).toUpperCase() === heroFI
+  ).length <= 1;
   const headshot = resolvePlayerAvatar(player, avatarPool, {
     profileMediaId: player.profileMediaId,
     lastnameUnique,
+    fiUnique,
   });
   const avatarUrl = headshot ? mediaUrls[headshot.id] : null;
 

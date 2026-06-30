@@ -922,9 +922,12 @@ export default function TeamPage() {
       // resolver knows whether the legacy lastname-only fallback is
       // safe (only one player on the team carries that surname).
       const lastnameCount = new Map();
+      const lnFiCount = new Map();
       for (const p of fullRoster) {
         const ln = p.lastName.toUpperCase();
+        const fi = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
         lastnameCount.set(ln, (lastnameCount.get(ln) || 0) + 1);
+        lnFiCount.set(`${ln}|${fi}`, (lnFiCount.get(`${ln}|${fi}`) || 0) + 1);
       }
       for (const p of fullRoster) {
         const LN = p.lastName.toUpperCase();
@@ -935,6 +938,10 @@ export default function TeamPage() {
         const headshot = resolvePlayerAvatar(p, allMedia, {
           profileMediaId: overrideId,
           lastnameUnique: lastnameCount.get(LN) === 1,
+          // FI-unique: no teammate shares this lastName+initial. Logan/Luke
+          // Rose ("L|ROSE") share it → fiUnique:false forces a jersey-number
+          // match so neither cousin's roster card shows the other's photo.
+          fiUnique: lnFiCount.get(`${LN}|${FI}`) === 1,
         });
         // v4.5.64: pin-on-first-resolve.
         //

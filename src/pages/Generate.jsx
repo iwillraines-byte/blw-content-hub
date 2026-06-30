@@ -966,7 +966,18 @@ export default function Generate() {
           // Marshalls). Jersey number is the unambiguous key — every
           // canonical entry has it.
           const firstInitial = (p.firstName || (p.name || '').split(' ')[0] || '').charAt(0);
-          primary = await findPlayerMedia(p.team, p.lastName, { firstInitial, jerseyNum: p.num });
+          // Cousin guard: if a same-initial teammate shares this lastName
+          // (Logan/Luke Rose, both "L.ROSE"), a numberless file is ambiguous
+          // between them — tell findPlayerMedia not to surface it for both.
+          // Carson Rose ("C.ROSE") is initial-unique, so he's unaffected.
+          const pLN = String(p.lastName || '').toUpperCase();
+          const pFI = String(firstInitial || '').toUpperCase();
+          const fiUnique = allPlayers.filter(pl =>
+            pl.team === p.team &&
+            String(pl.lastName || '').toUpperCase() === pLN &&
+            String((pl.firstName || (pl.name || '').split(' ')[0] || '').charAt(0)).toUpperCase() === pFI
+          ).length <= 1;
+          primary = await findPlayerMedia(p.team, p.lastName, { firstInitial, jerseyNum: p.num, fiUnique });
           // Team photos for the same team — appended below the player's
           // own photos so the player-specific ones still win the top slots.
           secondary = await findTeamMedia(p.team, { scope: 'team' });
