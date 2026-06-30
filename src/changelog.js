@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '5.1.2',
+    date: '2026-06-29',
+    kind: 'patch',
+    summary: 'v5.1.2 — fixes cousins on the same team sharing photos and profile pictures (Logan/Luke Rose)',
+    items: [
+      'Players who share a last name AND first initial on the same team — Logan and Luke Rose on Dallas, both "L. Rose" — no longer share each other\'s photos or profile pictures. A photo saved for one cousin was appearing in the other\'s media and could overwrite the other\'s profile picture, because the only thing telling them apart was a jersey number and any photo tagged without one matched both.',
+      'The avatar resolver now refuses the name-and-initial fallback when a teammate shares that same name and initial — it requires the jersey number and leaves the picture blank rather than risk showing the wrong cousin\'s face. Players with a unique initial (Carson Rose, "C. Rose") are unaffected and keep their photos.',
+      'The player media gallery and the Generate/Studio photo picker no longer surface a number-less photo for both cousins, and the profile-photo picker hides a teammate\'s differently-numbered shot so it can\'t be picked by mistake.',
+      'At the source: when tagging a photo on the Files page for a player whose name + initial isn\'t unique on the team, the tagger now requires a jersey number before saving instead of silently stamping a "00" placeholder — which is how the ambiguous, leak-prone files got created in the first place.',
+    ],
+  },
+  {
     version: '5.1.1',
     date: '2026-06-25',
     kind: 'patch',

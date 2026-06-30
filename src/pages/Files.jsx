@@ -335,8 +335,28 @@ function TagRow({ file, thumbUrl, blobRef, roster, priorMedia, tagHint, onUpdate
     preview = buildLeagueFilename({ assetType: type, variant: v, ext });
   }
 
+  // A player-scoped file that can't be pinned to ONE roster player is the
+  // root of the cousin cross-contamination: "DAL_00_L.ROSE" matches both
+  // Logan #08 and Luke #05 in findPlayerMedia / resolvePlayerAvatar. Require
+  // enough to disambiguate before saving — a real jersey number, OR a first
+  // initial that narrows to exactly one player — instead of silently stamping
+  // the "00" placeholder that leaks the file into both cousins' media.
+  const cousinBlock = (() => {
+    if (tagScope !== 'player' || !tagTeam || !tagName) return false;
+    if (tagNum && tagNum !== '00') return false; // an explicit number pins one player
+    if (!Array.isArray(roster) || roster.length === 0) return false;
+    const ln = tagName.toUpperCase();
+    let mates = roster.filter(p => p.team === tagTeam && (p.lastName || '').toUpperCase() === ln);
+    if (mates.length <= 1) return false; // unique lastname — safe without a number
+    if (tagInitial) {
+      const fi = tagInitial.toUpperCase();
+      mates = mates.filter(p => ((p.firstInitial || (p.firstName || '').charAt(0)) || '').toUpperCase() === fi);
+    }
+    return mates.length > 1; // still >1 after the initial → a jersey number is required
+  })();
+
   const apply = async () => {
-    if (!preview) return;
+    if (!preview || cousinBlock) return;
     setSaving(true);
     await onUpdate(file.id, preview);
     setSaving(false);
@@ -534,13 +554,22 @@ function TagRow({ file, thumbUrl, blobRef, roster, priorMedia, tagHint, onUpdate
             AI: {aiError}
           </div>
         ) : preview ? (
-          <div style={{
-            fontSize: 10, fontFamily: fonts.condensed, fontWeight: 600,
-            color: ambiguous && !tagInitial ? '#92400E' : colors.success,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }} title={ambiguous && !tagInitial ? 'Add a first initial — two players share this lastname' : preview}>
-            {ambiguous && !tagInitial ? '⚠︎ ' : '→ '}{preview}
-          </div>
+          cousinBlock ? (
+            <div style={{
+              fontSize: 10, fontFamily: fonts.condensed, fontWeight: 700,
+              color: '#92400E', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }} title="Two players share this team + lastname + initial (e.g. Logan/Luke Rose). Enter a jersey number so the photo tags to one of them — a numberless file leaks into both players' media.">
+              ⚠︎ Add jersey # to tag {tagName.toUpperCase()}
+            </div>
+          ) : (
+            <div style={{
+              fontSize: 10, fontFamily: fonts.condensed, fontWeight: 600,
+              color: ambiguous && !tagInitial ? '#92400E' : colors.success,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }} title={ambiguous && !tagInitial ? 'Add a first initial — two players share this lastname' : preview}>
+              {ambiguous && !tagInitial ? '⚠︎ ' : '→ '}{preview}
+            </div>
+          )
         ) : null}
       </div>
 
@@ -553,13 +582,15 @@ function TagRow({ file, thumbUrl, blobRef, roster, priorMedia, tagHint, onUpdate
         opacity: blobRef ? 1 : 0.5,
       }}>{aiBusy ? '...' : '✨'}</button>
 
-      <button onClick={apply} disabled={!preview || saving} style={{
-        background: preview ? colors.red : colors.border, color: '#fff',
-        border: 'none', borderRadius: radius.sm, padding: '5px 12px',
-        fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
-        cursor: preview ? 'pointer' : 'default', opacity: preview ? 1 : 0.4,
-        whiteSpace: 'nowrap',
-      }}>{saving ? '...' : 'Apply'}</button>
+      <button onClick={apply} disabled={!preview || saving || cousinBlock}
+        title={cousinBlock ? 'Add a jersey number — two players share this name + initial' : undefined}
+        style={{
+          background: (preview && !cousinBlock) ? colors.red : colors.border, color: '#fff',
+          border: 'none', borderRadius: radius.sm, padding: '5px 12px',
+          fontFamily: fonts.condensed, fontSize: 11, fontWeight: 700,
+          cursor: (preview && !cousinBlock) ? 'pointer' : 'default', opacity: (preview && !cousinBlock) ? 1 : 0.4,
+          whiteSpace: 'nowrap',
+        }}>{saving ? '...' : 'Apply'}</button>
 
       <button onClick={() => onDelete(file.id)} style={{
         background: 'none', border: 'none', color: colors.textMuted,

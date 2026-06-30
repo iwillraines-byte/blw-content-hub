@@ -385,6 +385,12 @@ export async function findPlayerMedia(team, lastName, optsOrJersey = null) {
     : { jerseyNum: optsOrJersey };
   const wantInitial = (opts.firstInitial || '').toUpperCase().slice(0, 1);
   const wantNum = opts.jerseyNum;
+  // When another player on the team shares this lastName AND first initial
+  // (Logan/Luke Rose — both "L.ROSE"), a media file with no jersey number is
+  // ambiguous between the cousins. Callers pass fiUnique:false in that case so
+  // a numberless file isn't surfaced in both cousins' galleries. Defaults true
+  // (back-compat — unique players keep seeing their numberless legacy files).
+  const fiUnique = opts.fiUnique !== false;
 
   // Exclude team-scoped records from player matches.
   const playerRecords = all.filter(f => f.scope !== 'team');
@@ -427,7 +433,11 @@ export async function findPlayerMedia(team, lastName, optsOrJersey = null) {
       // (file num "00") was rejected on a page that knows the player's real
       // number, hiding their media entirely. (The two genuine "00" players —
       // Grant Miller, Cael Foreman — have no same-name teammate to leak to.)
-      if (!num || num === '00') return true;
+      // v5.1.x: but when a same-initial cousin shares this lastName
+      // (fiUnique === false: Logan/Luke Rose), a numberless file genuinely
+      // can't be assigned to one cousin — require an explicit number match
+      // rather than leaking the file into BOTH cousins' galleries.
+      if (!num || num === '00') return fiUnique;
       return num === padded || num === wantNumStr;
     });
   }
@@ -540,6 +550,12 @@ export function resolvePlayerAvatar(player, allMedia, opts = {}) {
   const NUM = String(player.num || '').padStart(2, '0');
   const TEAM = String(player.team || '').toUpperCase();
   const lastnameUnique = opts.lastnameUnique !== false;
+  // Stronger than lastnameUnique: is this player's lastName+firstInitial
+  // unique on the team? Carson Rose ("C.ROSE") shares the lastname but not
+  // the initial, so FI-only matching is safe for him; Logan/Luke Rose (both
+  // "L.ROSE") are not. Defaults to lastnameUnique when a caller doesn't
+  // distinguish — safe, since a shared lastname then disables FI-only too.
+  const fiUnique = opts.fiUnique !== undefined ? opts.fiUnique : lastnameUnique;
 
   // 1. Admin-picked override — wins everything else.
   if (opts.profileMediaId) {
@@ -580,8 +596,14 @@ export function resolvePlayerAvatar(player, allMedia, opts = {}) {
       if (hit) return hit;
     }
   }
-  // 5-7. Same FI alone, in priority order.
-  if (FI) {
+  // 5-7. Same FI alone, in priority order. Gated on firstInitial-uniqueness:
+  // when a same-team cousin shares this lastName AND initial (Logan/Luke
+  // Rose, both "L.ROSE"), an FI-only match is ambiguous — it can return the
+  // wrong cousin's photo or a numberless file that belongs to neither. We
+  // require the jersey-number match from steps 2-4 in that case and let the
+  // avatar blank rather than show the wrong person's face. FI-unique players
+  // (Carson Rose, "C.ROSE") keep the relaxed FI-only fallback.
+  if (FI && fiUnique) {
     for (const t of AVATAR_ASSET_TYPES_PRIORITY) {
       const hit = pool.find(m => matchesFI(m) && isType(m, t));
       if (hit) return hit;
