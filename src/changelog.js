@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '5.1.4',
+    date: '2026-06-29',
+    kind: 'patch',
+    summary: 'v5.1.4 — player profile photos now match between the player page and the team roster card',
+    items: [
+      'A player\'s profile photo now shows the same image on their player page and on their team\'s roster card — and updates in both places when you change it. The roster card was looking up the chosen photo by an exact full-name match, which silently missed whenever the stored name didn\'t exactly match the displayed name; the card then fell back to a different auto-picked photo and could even overwrite the one you\'d set. The roster now finds the photo the same robust way the player page does (team + last name, with first-name / jersey-number tiebreakers), so the two always agree.',
+    ],
+  },
+  {
     version: '5.1.3',
     date: '2026-06-29',
     kind: 'patch',
