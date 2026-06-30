@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '5.1.5',
+    date: '2026-06-30',
+    kind: 'patch',
+    summary: 'v5.1.5 — standings and playoff odds break ties by head-to-head first, then runs against',
+    items: [
+      'The standings table and the playoff-odds model now break ties the way the league actually does: head-to-head record first, and only then fewest runs against. Both previously skipped the head-to-head layer and went straight to runs against, so every tie resolved by the wrong rule. (Example: in a Miami/Chicago tie, Miami now correctly seeds ahead on its head-to-head edge, even though Chicago has allowed fewer runs.)',
+      'The playoff simulation now remembers who beat whom in each of its 10,000 simulated seasons — head-to-head can\'t be derived from win totals alone, since the matchups play out differently every simulated season. Each iteration now carries a real game log (the completed games plus that season\'s simulated results) and ranks teams with the same three-level tiebreaker as the standings table, so the odds and the table always agree on tied teams.',
+    ],
+  },
+  {
     version: '5.1.4',
     date: '2026-06-29',
     kind: 'patch',

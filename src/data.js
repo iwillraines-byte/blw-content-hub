@@ -606,9 +606,82 @@ export const SEASON_START = '2026-06-07';
 // `.ordered` array (ranked) attached for table consumers. Teams that haven't
 // played yet appear at 0-0 with rank null (rendered as "—") so an unplayed team
 // never appears to outrank a team that's earned a win.
+// ─── Tiebreaker ranking (shared by standings + playoff sim) ─────────────────
+// Ranks teams by the official BLW order: win pct → head-to-head → fewest runs
+// against. `items[i]` = { pct, ra, diff, api }; `winsOver(i, j)` = number of
+// times team i beat team j across the games that count. Head-to-head is applied
+// WITHIN each win-pct-tied group only, and recursively on any sub-group it
+// leaves still tied; runs against is reached ONLY when head-to-head can't
+// separate the tie at all (a circular tie, or teams that never played each
+// other). Returns an array of item indices, best first.
+export function rankWithTiebreakers(items, winsOver) {
+  const byRA = (a, b) =>
+    items[a].ra - items[b].ra ||        // fewest runs against
+    items[b].diff - items[a].diff ||    // then run differential
+    items[a].api - items[b].api;        // then a stable id, so it's deterministic
+
+  const resolve = (group, out) => {
+    if (group.length === 1) { out.push(group[0]); return; }
+    // Head-to-head win pct within THIS group only (win pct, since teams may have
+    // played each other an uneven number of times).
+    const pct = new Map();
+    let anyGames = false;
+    for (const i of group) {
+      let wins = 0, dec = 0;
+      for (const j of group) {
+        if (j === i) continue;
+        const wij = winsOver(i, j) || 0, wji = winsOver(j, i) || 0;
+        wins += wij; dec += wij + wji;
+      }
+      if (dec > 0) anyGames = true;
+      pct.set(i, dec > 0 ? wins / dec : -1); // -1 = no games vs this group
+    }
+    const vals = group.map(i => pct.get(i));
+    const allSame = vals.every(v => v === vals[0]);
+    if (!anyGames || allSame) {
+      // Head-to-head can't break it (no games among them, circular, or all
+      // even) → fall to runs against.
+      [...group].sort(byRA).forEach(i => out.push(i));
+      return;
+    }
+    // Order by head-to-head win pct, then recurse on any sub-group still tied
+    // (re-computing head-to-head within that smaller set).
+    const sorted = [...group].sort((i, j) => pct.get(j) - pct.get(i));
+    let s = 0;
+    while (s < sorted.length) {
+      let e = s + 1;
+      while (e < sorted.length && pct.get(sorted[e]) === pct.get(sorted[s])) e++;
+      const sub = sorted.slice(s, e);
+      if (sub.length === 1) out.push(sub[0]);
+      else resolve(sub, out); // strictly smaller (H2H made progress) → terminates
+      s = e;
+    }
+  };
+
+  const order = items.map((_, i) => i).sort((a, b) => items[b].pct - items[a].pct);
+  const out = [];
+  let s = 0;
+  while (s < order.length) {
+    let e = s + 1;
+    while (e < order.length && items[order[e]].pct === items[order[s]].pct) e++;
+    resolve(order.slice(s, e), out);
+    s = e;
+  }
+  return out;
+}
+
 export function computeStandings(games) {
   const acc = new Map();
   for (const t of TEAMS) acc.set(t.id, { teamId: t.id, apiTeamId: t.apiTeamId, w: 0, l: 0, gp: 0, rf: 0, ra: 0 });
+
+  // Head-to-head wins: h2hWins.get(`${winnerId}|${loserId}`) = games won. The
+  // official BLW tiebreaker is head-to-head FIRST, then fewest runs against, so
+  // we must remember who beat whom — not just each team's aggregate W-L.
+  const h2hWins = new Map();
+  const addH2H = (winId, loseId) => {
+    const k = `${winId}|${loseId}`;
+    h2hWins.set(k, (h2hWins.get(k) || 0) + 1);
+  };
 
   for (const g of (games || [])) {
     if (g.status !== 'SUBMITTED') continue;
@@ -620,7 +693,7 @@ export function computeStandings(games) {
     if (!Number.isFinite(hs) || !Number.isFinite(as)) continue;
     const H = acc.get(hId), A = acc.get(aId);
     H.gp++; A.gp++; H.rf += hs; H.ra += as; A.rf += as; A.ra += hs;
-    if (hs > as) { H.w++; A.l++; } else if (as > hs) { A.w++; H.l++; }
+    if (hs > as) { H.w++; A.l++; addH2H(hId, aId); } else if (as > hs) { A.w++; H.l++; addH2H(aId, hId); }
   }
 
   const rows = [...acc.values()].map(r => {
@@ -636,17 +709,13 @@ export function computeStandings(games) {
   });
 
   // Rank ALL teams together to mirror the official BLW standings:
-  // win pct desc → FEWEST runs against (the official BLW tiebreaker for similar
-  // records, NOT run differential) → run differential desc as a deeper fallback
-  // → apiTeamId asc as the final tiebreak. Every team gets a numeric rank.
-  // (Runs-against is why Philadelphia sits above Miami at the same record — PHI
-  // has allowed fewer runs.)
-  const ordered = rows.sort((a, b) =>
-    b.pctNum - a.pctNum ||
-    a.ra - b.ra ||
-    b.diffNum - a.diffNum ||
-    (a.apiTeamId || 0) - (b.apiTeamId || 0)
-  );
+  // win pct desc → HEAD-TO-HEAD (within the tied group, recursive) → FEWEST
+  // runs against → run differential desc → apiTeamId asc. Runs-against is
+  // reached only when head-to-head can't separate tied teams (no games between
+  // them or a circular tie). Every team gets a numeric rank.
+  const stat = rows.map(r => ({ pct: r.pctNum, ra: r.ra, diff: r.diffNum, api: r.apiTeamId || 0 }));
+  const winsOver = (i, j) => h2hWins.get(`${rows[i].teamId}|${rows[j].teamId}`) || 0;
+  const ordered = rankWithTiebreakers(stat, winsOver).map(i => rows[i]);
   ordered.forEach((r, i) => { r.rank = i + 1; });
 
   const map = new Map(ordered.map(r => [r.teamId, r]));
@@ -731,6 +800,23 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
   const baseRA = teams.map(r => r.ra);
   const api = teams.map(r => r.apiTeamId || 0);
 
+  // Base head-to-head from completed games: baseH2H[i*N+j] = times team i has
+  // beaten team j so far. Copied into every iteration and extended with each
+  // simulated game, so the sim breaks ties by head-to-head the same way the
+  // live standings do (head-to-head can't be derived from win totals alone —
+  // it depends on who beat whom, which differs every simulated season).
+  const baseH2H = new Int32Array(N * N);
+  for (const g of (games || [])) {
+    if (g.status !== 'SUBMITTED') continue;
+    const date = (g.dateTime || '').slice(0, 10);
+    if (date < SEASON_START) continue;
+    const hi = idx.get(g.home?.teamId), ai = idx.get(g.away?.teamId);
+    if (hi == null || ai == null) continue;
+    const hs = Number(g.home?.score), as = Number(g.away?.score);
+    if (!Number.isFinite(hs) || !Number.isFinite(as) || hs === as) continue;
+    if (hs > as) baseH2H[hi * N + ai]++; else baseH2H[ai * N + hi]++;
+  }
+
   // Observed full score pairs [winnerScore, loserScore] — bootstrapped into the
   // remaining games so BOTH run differential AND runs-against actually MOVE
   // during the sim. Runs-against is the official BLW tiebreaker (fewest allowed),
@@ -780,30 +866,31 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
   };
 
   const playoffCount = new Array(N).fill(0);
-  const order = Array.from({ length: N }, (_, i) => i);
   const P = scorePairs.length;
   for (let s = 0; s < sims; s++) {
     const w = baseW.slice();
     const l = baseL.slice();
     const d = baseDiff.slice();
     const ra = baseRA.slice();
+    const h2 = Int32Array.from(baseH2H);   // this season's head-to-head log
     for (const [a, b] of remaining) {
       const [ws, ls] = scorePairs[(Math.random() * P) | 0];
       const m = ws - ls;
       if (Math.random() < log5(strength[a], strength[b])) {
         // a wins: a allows the loser's score, b allows the winner's score
-        w[a]++; l[b]++; d[a] += m; d[b] -= m; ra[a] += ls; ra[b] += ws;
+        w[a]++; l[b]++; d[a] += m; d[b] -= m; ra[a] += ls; ra[b] += ws; h2[a * N + b]++;
       } else {
-        w[b]++; l[a]++; d[b] += m; d[a] -= m; ra[b] += ls; ra[a] += ws;
+        w[b]++; l[a]++; d[b] += m; d[a] -= m; ra[b] += ls; ra[a] += ws; h2[b * N + a]++;
       }
     }
-    order.sort((i, j) => {
-      const pi = (w[i] + l[i]) ? w[i] / (w[i] + l[i]) : 0;
-      const pj = (w[j] + l[j]) ? w[j] / (w[j] + l[j]) : 0;
-      // win pct desc → FEWEST runs against (BLW tiebreaker) → run diff desc → api
-      return (pj - pi) || (ra[i] - ra[j]) || (d[j] - d[i]) || (api[i] - api[j]);
-    });
-    for (let k = 0; k < spots && k < N; k++) playoffCount[order[k]]++;
+    // Rank with the official three-level tiebreaker (same helper as the live
+    // standings): win pct → head-to-head within the tied group → runs against.
+    const stat = new Array(N);
+    for (let i = 0; i < N; i++) {
+      stat[i] = { pct: (w[i] + l[i]) ? w[i] / (w[i] + l[i]) : 0, ra: ra[i], diff: d[i], api: api[i] };
+    }
+    const ranked = rankWithTiebreakers(stat, (i, j) => h2[i * N + j]);
+    for (let k = 0; k < spots && k < N; k++) playoffCount[ranked[k]]++;
   }
 
   // A 10k-run sampled sim can't PROVE a mathematical clinch/elimination, so the
