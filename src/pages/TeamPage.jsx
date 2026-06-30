@@ -918,6 +918,44 @@ export default function TeamPage() {
         const fullName = (m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim()).toLowerCase();
         if (fullName) manualByFullName.set(fullName, m);
       }
+      // Robust manual_players lookup for the profile-photo override. The old
+      // exact-full-name key missed whenever the stored row name didn't
+      // string-match the roster's display name — so a pinned profile photo
+      // never reached the roster card, and (worse) the pin-on-first-resolve
+      // below would overwrite the pin with the roster's auto-pick. This
+      // mirrors the team+lastName(+firstName/num/initial) matching the player
+      // page uses (getPlayerByTeamLastName / upsertManualPlayer) so BOTH
+      // surfaces resolve the SAME row and honor the SAME pinned photo.
+      const findManualRow = (p) => {
+        const ln = String(p.lastName || '').toLowerCase();
+        const sameTeamLast = manualList.filter(m =>
+          m.team === p.team && String(m.lastName || '').toLowerCase() === ln
+        );
+        if (sameTeamLast.length === 1) return sameTeamLast[0];
+        if (sameTeamLast.length > 1) {
+          const fn = String(p.firstName || '').trim().toLowerCase();
+          if (fn) {
+            const byFn = sameTeamLast.find(m => String(m.firstName || '').trim().toLowerCase() === fn);
+            if (byFn) return byFn;
+          }
+          const num = p.num ? String(p.num).replace(/^0+/, '') : '';
+          if (num) {
+            const byNum = sameTeamLast.find(m => String(m.num || '').replace(/^0+/, '') === num);
+            if (byNum) return byNum;
+          }
+          const fi = String(p.firstInitial || (p.firstName || '').charAt(0) || '').toUpperCase();
+          if (fi) {
+            const byFi = sameTeamLast.filter(m =>
+              String(m.firstName || m.name || '').trim().charAt(0).toUpperCase() === fi
+            );
+            if (byFi.length === 1) return byFi[0];
+          }
+        }
+        // Last resort: legacy exact-full-name match (covers rows that carry
+        // only a `name` with no firstName/lastName split).
+        const fullName = (p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim()).toLowerCase();
+        return manualByFullName.get(fullName) || null;
+      };
       // Count how many roster entries share each lastname so the
       // resolver knows whether the legacy lastname-only fallback is
       // safe (only one player on the team carries that surname).
@@ -932,8 +970,7 @@ export default function TeamPage() {
       for (const p of fullRoster) {
         const LN = p.lastName.toUpperCase();
         const FI = (p.firstInitial || (p.firstName || '').charAt(0)).toUpperCase();
-        const fullName = (p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim()).toLowerCase();
-        const manualRow = manualByFullName.get(fullName);
+        const manualRow = findManualRow(p);
         const overrideId = manualRow?.profile_media_id || manualRow?.profileMediaId || null;
         const headshot = resolvePlayerAvatar(p, allMedia, {
           profileMediaId: overrideId,
