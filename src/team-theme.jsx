@@ -34,10 +34,19 @@ export function bestTextOn(hex) {
   if (!hex) return '#FFFFFF';
   const m = /^#?([a-f\d]{6})$/i.exec(String(hex).trim());
   if (!m) return '#FFFFFF';
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? '#111827' : '#FFFFFF';
+  // WCAG relative-luminance contrast — pick whichever of near-black / white
+  // actually reads better on this color. The old code used the YIQ
+  // perceived-brightness average with a 0.6 cutoff, which is NOT WCAG
+  // luminance: it handed WHITE text to mid-tone team accents (greens,
+  // oranges, mid-reds) where it fails 4.5:1, when BLACK would have passed.
+  const lumOf = (v) => {
+    const f = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f((v >> 16) & 0xff) + 0.7152 * f((v >> 8) & 0xff) + 0.0722 * f(v & 0xff);
+  };
+  const bg = lumOf(parseInt(m[1], 16));
+  const contrastWhite = 1.05 / (bg + 0.05);                 // white text, lum = 1.0
+  const contrastInk   = (bg + 0.05) / (lumOf(0x111827) + 0.05); // near-black ink
+  return contrastInk > contrastWhite ? '#111827' : '#FFFFFF';
 }
 
 // Convert a hex string to "rgba(r, g, b, alpha)". Used for soft tints.

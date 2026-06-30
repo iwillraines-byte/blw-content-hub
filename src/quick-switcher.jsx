@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { TEAMS, TEMPLATES, getAllPlayers, playerSlug } from './data';
 import { TEMPLATE_TYPES } from './template-config';
 import { colors, fonts, radius } from './theme';
+import { useModalA11y } from './use-modal-a11y';
 
 const PAGES = [
   { id: 'page:dashboard',    label: 'Dashboard',      path: '/dashboard',   icon: '⌂',  hint: 'Home' },
@@ -43,6 +44,7 @@ export function QuickSwitcher() {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef(null);
+  const panelRef = useRef(null);
   const navigate = useNavigate();
 
   // Global hotkey — Cmd+K on Mac, Ctrl+K elsewhere.
@@ -69,6 +71,9 @@ export function QuickSwitcher() {
       setCursor(0);
     }
   }, [open]);
+
+  // Focus trap + restore-focus-on-close for the command palette.
+  useModalA11y(open, panelRef);
 
   // Build the item universe once. Players list is large-ish (200+) but
   // filtering is trivial on a substring match, so we don't memoise aggressively.
@@ -168,6 +173,11 @@ export function QuickSwitcher() {
       }}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Quick switcher"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: colors.white, borderRadius: radius.lg,
@@ -180,7 +190,13 @@ export function QuickSwitcher() {
         <div style={{ padding: '12px 16px', borderBottom: `1px solid ${colors.border}` }}>
           <input
             ref={inputRef}
+            data-autofocus
             type="text"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="qs-results"
+            aria-activedescendant={results[cursor] ? `qs-opt-${cursor}` : undefined}
+            aria-label="Search teams, players, templates, and pages"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
             onKeyDown={onInputKey}
@@ -192,7 +208,7 @@ export function QuickSwitcher() {
             }}
           />
         </div>
-        <div style={{ overflowY: 'auto', padding: '6px 0' }}>
+        <div id="qs-results" role="listbox" aria-label="Results" style={{ overflowY: 'auto', padding: '6px 0' }}>
           {results.length === 0 ? (
             <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>
               No matches. Try a player's last name or a team code.
@@ -202,6 +218,9 @@ export function QuickSwitcher() {
             return (
               <div
                 key={item.id}
+                id={`qs-opt-${i}`}
+                role="option"
+                aria-selected={active}
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => pick(item)}
                 style={{

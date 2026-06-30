@@ -77,7 +77,10 @@ function ToastViewport({ toasts, dismiss }) {
       {toasts.map(t => {
         const s = KIND_STYLES[t.kind] || KIND_STYLES.info;
         return (
-          <div key={t.id} style={{
+          <div key={t.id}
+            // a11y: announce toasts to screen readers as they appear/auto-dismiss
+            role="alert" aria-live="polite" aria-atomic="true"
+            style={{
             pointerEvents: 'auto',
             background: 'white',
             // Severity is already conveyed by the colored icon circle at left
@@ -116,7 +119,9 @@ function ToastViewport({ toasts, dismiss }) {
                 }}
               >{t.action.label}</button>
             )}
-            <button onClick={() => dismiss(t.id)} style={{
+            <button onClick={() => dismiss(t.id)}
+              // a11y: "×" glyph alone has no accessible name
+              aria-label="Dismiss notification" style={{
               background: 'transparent', border: 'none', color: colors.textMuted,
               cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
               width: 18, height: 18, flexShrink: 0,

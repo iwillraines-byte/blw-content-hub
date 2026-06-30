@@ -9,9 +9,10 @@
 // optional sidebar element (used by the bulk modal to show edit
 // fields right next to the photo).
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { colors, fonts, radius } from './theme';
+import { useModalA11y } from './use-modal-a11y';
 
 // usePhotoLightbox — small state machine for a photo grid that wants
 // click-to-zoom + arrow-key nav. Returns helpers the grid wires onto
@@ -97,6 +98,10 @@ export function PreviewLightbox({
   // Revoke on unmount / blob swap so we don't leak.
   const resolvedUrl = useResolvedUrl(url, blob, open);
 
+  // Focus trap + restore-focus-on-close.
+  const lightboxRef = useRef(null);
+  useModalA11y(open, lightboxRef);
+
   // Body scroll-lock while the lightbox is open. Without this the page
   // behind can still scroll (mouse-wheel, trackpad, arrow keys) which
   // makes the viewport feel like it "moves" out from under the modal —
@@ -131,6 +136,11 @@ export function PreviewLightbox({
   };
   const overlay = (
     <div
+      ref={lightboxRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={caption ? `Preview: ${caption}` : 'Image preview'}
       onClick={handleBackdropClick}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',

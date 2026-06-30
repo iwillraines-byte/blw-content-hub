@@ -77,9 +77,16 @@ export function PercentileBubble({
   const valueFs = compact ? 10.5 : 12;
   const bubbleFs = compact ? 8 : 9.5;
 
+  // a11y: when onClick is provided, render a real <button> so the row is
+  // keyboard-operable (focusable + Enter/Space activation). Default button
+  // chrome is stripped via inline styles so the visual appearance is
+  // identical to the non-interactive <div>. With no onClick, stay a plain
+  // <div> (no role/tabindex) — it's purely presentational.
+  const Root = onClick ? 'button' : 'div';
   return (
-    <div
+    <Root
       onClick={onClick}
+      {...(onClick ? { type: 'button' } : {})}
       aria-label={ariaLabel || `${label}: ${value}${pct != null ? `, ${pct}th percentile` : ''}`}
       style={{
         display: 'grid',
@@ -88,6 +95,8 @@ export function PercentileBubble({
         gap: colGap,
         padding: '1px 0',
         cursor: onClick ? 'pointer' : 'default',
+        // a11y: neutralize default <button> chrome so it matches the <div>.
+        ...(onClick ? { background: 'none', border: 'none', font: 'inherit', textAlign: 'inherit', width: '100%' } : {}),
       }}
     >
       {/* Label */}
@@ -161,7 +170,7 @@ export function PercentileBubble({
         whiteSpace: 'nowrap',
         fontVariantNumeric: 'tabular-nums',
       }}>{value ?? '—'}</div>
-    </div>
+    </Root>
   );
 }
 

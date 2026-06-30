@@ -23,6 +23,8 @@ const tickerKeyframes = `
 }
 .blw-ticker-track { animation: blw-ticker-scroll var(--ticker-duration, 45s) linear infinite; will-change: transform; }
 .blw-ticker:hover .blw-ticker-track { animation-play-state: paused; }
+/* A11y: honor reduced-motion — kill the marquee auto-scroll entirely. */
+@media (prefers-reduced-motion: reduce) { .blw-ticker-track { animation: none !important; } }
 `;
 
 function Item({ tag, tagColor, children, to }) {

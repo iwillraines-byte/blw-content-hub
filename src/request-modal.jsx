@@ -16,7 +16,7 @@
 // client can't spoof who sent it (and athletes get auto-pinned to
 // their own email).
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Card, Label, RedButton, OutlineButton, TeamLogo, inputStyle, selectStyle } from './components';
 import { colors, fonts, radius } from './theme';
@@ -25,6 +25,7 @@ import { useAuth } from './auth';
 import { REQUEST_TYPES, PRIORITY_LEVELS, getRequestType, visibleRequestTypes } from './request-types';
 import { getRequests, saveRequestAwaitable } from './requests-store';
 import { useToast } from './toast';
+import { useModalA11y } from './use-modal-a11y';
 
 export function RequestModal({ open, onClose, onSubmitted, defaultType = 'content', defaultTeam = '', roster = [] }) {
   const toast = useToast();
@@ -71,6 +72,10 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose, submitting]);
+
+  // Focus trap + move-focus-in + restore-focus-on-close.
+  const dialogRef = useRef(null);
+  useModalA11y(open, dialogRef);
 
   if (!open) return null;
 
@@ -155,8 +160,6 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
   const overlay = (
     <div
       onClick={onClose}
-      role="dialog"
-      aria-label="New request"
       style={{
         position: 'fixed', inset: 0, zIndex: 250,
         background: 'rgba(0,0,0,0.55)',
@@ -166,6 +169,11 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New request"
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 720,
@@ -251,9 +259,12 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
 
           {/* Title — universal, the headline of the request */}
           <div>
-            <Label>Title</Label>
+            <Label htmlFor="req-title">Title</Label>
             <input
+              id="req-title"
               type="text"
+              required
+              aria-required="true"
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="One sentence that says what this is"
@@ -278,8 +289,11 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
 
           {/* Description — universal, free-form context */}
           <div>
-            <Label>Description</Label>
+            <Label htmlFor="req-description">Description</Label>
             <textarea
+              id="req-description"
+              required
+              aria-required="true"
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder={isAthlete
@@ -363,7 +377,7 @@ export function RequestModal({ open, onClose, onSubmitted, defaultType = 'conten
           display: 'flex', alignItems: 'center', gap: 10,
           background: colors.bg,
         }}>
-          <span style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, flex: 1 }}>
+          <span role="status" aria-live="polite" aria-atomic="true" style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.condensed, flex: 1 }}>
             {requiredMissing
               ? <>⚠ {requiredMissing}</>
               : 'Ready to send.'}

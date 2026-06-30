@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '5.1.3',
+    date: '2026-06-29',
+    kind: 'patch',
+    summary: 'v5.1.3 — a full accessibility (WCAG 2.1 AA) pass: contrast, keyboard, focus, labels, and screen-reader support',
+    items: [
+      'Text contrast now meets WCAG AA across the app: muted and secondary text was too faint to read (especially placeholders and helper text in light mode), and the primary red button\'s white label sat just under the legibility threshold. Both are fixed, and team-colored buttons now automatically pick black or white text by which is actually readable — so a green or orange team button no longer shows hard-to-read white text.',
+      'Every dialog — New Request, Release Notes, the ⌘K quick switcher, and the photo lightbox — now traps keyboard focus while open and returns focus to where you were when it closes, so keyboard and screen-reader users don\'t get dropped back at the top of the page.',
+      'Form fields are properly labeled for screen readers now (request title/description, the dashboard idea search, and the team filter), validation messages are announced when they appear, and required fields are marked as such.',
+      'Icon-only buttons that previously had no spoken name — the menu, search, refresh, and toast-dismiss buttons — now announce what they do, and the mobile menu reports whether it\'s open.',
+      'Keyboard users can reach everything now: the dashboard standings rows are real links with a focus-revealed "Create" action (previously click-only), the stat-leader tables\' sort controls are buttons with the sort direction announced, and the caption tabs respond to arrow keys.',
+      'Motion + dark-mode polish: the dashboard ticker stops animating for anyone whose system asks for reduced motion, form fields read as recessed wells so they stand apart from the cards behind them, and disabled buttons no longer flash light-gray on the dark theme.',
+    ],
+  },
+  {
     version: '5.1.2',
     date: '2026-06-29',
     kind: 'patch',

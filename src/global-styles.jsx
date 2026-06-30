@@ -34,21 +34,21 @@ const css = `
    ring on every button click. */
 :focus { outline: none; }
 :focus-visible {
-  outline: 2px solid var(--accent, #DD3C3C);
+  outline: 2px solid var(--accent, #C73535);
   outline-offset: 2px;
   border-radius: 6px;
 }
 
 /* ─── Primary button (RedButton) ──────────────────────────────────────── */
 .btn-primary {
-  background: var(--accent, #DD3C3C);
+  background: var(--accent, #C73535);
   color: var(--accent-text, #FFFFFF);
   transition: background 0.12s cubic-bezier(0.22, 1, 0.36, 1),
               transform 0.08s cubic-bezier(0.22, 1, 0.36, 1),
               box-shadow 0.12s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover, #C73535);
+  background: var(--accent-hover, #A82E2E);
   box-shadow: 0 2px 8px rgba(221, 60, 60, 0.18);
 }
 .btn-primary:active:not(:disabled) {
@@ -56,8 +56,10 @@ const css = `
   box-shadow: none;
 }
 .btn-primary:disabled {
-  background: #E5E7EB;
-  color: #9CA3AF;
+  /* a11y/dark-mode: theme tokens so a disabled CTA doesn't render as a
+     light-gray button on the charcoal dark surface. */
+  background: var(--color-muted, #EDF3F3);
+  color: var(--color-textMuted, #726C6B);
   cursor: default;
 }
 
@@ -82,7 +84,7 @@ const css = `
 }
 .btn-icon:hover {
   background: var(--accent-soft, rgba(221, 60, 60, 0.08));
-  color: var(--accent, #DD3C3C);
+  color: var(--accent, #C73535);
 }
 
 /* ─── Card hover (only when clickable) ────────────────────────────────── */
@@ -133,7 +135,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  border-color: var(--accent, #DD3C3C) !important;
+  border-color: var(--accent, #C73535) !important;
   box-shadow: 0 0 0 3px var(--accent-soft, rgba(221, 60, 60, 0.10));
 }
 

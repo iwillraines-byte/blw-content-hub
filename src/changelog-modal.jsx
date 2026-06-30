@@ -13,9 +13,12 @@ import { createPortal } from 'react-dom';
 import { RELEASES, KIND_TOKENS } from './changelog';
 import { GIT_COMMIT, formattedBuildDate } from './version';
 import { colors, fonts, radius } from './theme';
+import { useModalA11y } from './use-modal-a11y';
 
 export default function ChangelogModal({ open, onClose }) {
   const dialogRef = useRef(null);
+  // Focus trap + move-focus-in + restore-focus-on-close.
+  useModalA11y(open, dialogRef);
 
   // ESC closes; click outside the dialog body closes; focus moves into
   // the dialog on open so keyboard nav lands somewhere reasonable.
@@ -23,12 +26,8 @@ export default function ChangelogModal({ open, onClose }) {
     if (!open) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
     window.addEventListener('keydown', onKey);
-    // Defer focus until after paint so the browser doesn't fight the
-    // animation reveal.
-    const t = setTimeout(() => dialogRef.current?.focus(), 30);
     return () => {
       window.removeEventListener('keydown', onKey);
-      clearTimeout(t);
     };
   }, [open, onClose]);
 
@@ -39,8 +38,6 @@ export default function ChangelogModal({ open, onClose }) {
   const overlay = (
     <div
       onClick={onClose}
-      role="dialog"
-      aria-label="Release notes"
       style={{
         position: 'fixed', inset: 0, zIndex: 300,
         background: 'rgba(0,0,0,0.55)',
@@ -51,6 +48,9 @@ export default function ChangelogModal({ open, onClose }) {
       <div
         ref={dialogRef}
         tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Release notes"
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 720,
