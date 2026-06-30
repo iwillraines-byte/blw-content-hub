@@ -67,8 +67,12 @@ export const SectionHeading = ({ children, style }) => (
 );
 
 // Label — form-field label. Semibold secondary text, sentence-case.
-export const Label = ({ children, style }) => (
-  <div style={{
+// a11y: renders a real <label>; pass `htmlFor` to associate it with an
+// input's id so screen readers announce the field name (1.3.1 / 3.3.2).
+// Back-compat: omitting htmlFor still renders a styled label, unchanged.
+export const Label = ({ children, htmlFor, style }) => (
+  <label htmlFor={htmlFor} style={{
+    display: 'block',
     fontFamily: fonts.body,
     fontSize: 12,
     fontWeight: 600,
@@ -76,7 +80,7 @@ export const Label = ({ children, style }) => (
     marginBottom: 8,
     letterSpacing: 0,
     ...style
-  }}>{children}</div>
+  }}>{children}</label>
 );
 
 // Skeleton — loading-state placeholder. Renders a softly-shimmering block
@@ -415,7 +419,10 @@ export const OutlineButton = ({ children, onClick, disabled, style, className, t
 export const inputStyle = {
   width: '100%',
   boxSizing: 'border-box',
-  background: colors.white,
+  // a11y (1.4.11): inset field background so the input is distinguishable
+  // from the card it sits on — the hairline border alone was ~1.3:1 in
+  // dark mode (invisible). A recessed well reads as an editable field.
+  background: colors.bg,
   border: `1px solid ${colors.border}`,
   borderRadius: radius.base,
   padding: '9px 12px',

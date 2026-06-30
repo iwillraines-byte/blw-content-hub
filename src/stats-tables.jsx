@@ -57,8 +57,22 @@ export function ProWiffleBallBlurb({ compact = false }) {
 function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
   const active = currentSort.key === sortKey;
   const arrow = active ? (currentSort.dir === 'desc' ? ' ▼' : ' ▲') : '';
+  // a11y: shared sort handler so both the click and keyboard paths use it.
+  const doSort = () => {
+    if (!sortKey) return;
+    if (currentSort.key === sortKey) {
+      setSort({ key: sortKey, dir: currentSort.dir === 'desc' ? 'asc' : 'desc' });
+    } else {
+      setSort({ key: sortKey, dir: 'desc' });
+    }
+  };
   return (
     <th
+      // a11y: scope="col" associates this header with its column for AT.
+      scope="col"
+      // a11y: expose sort state on the active sortable column; "none" on
+      // the rest so AT announces the column as sortable but unsorted.
+      aria-sort={sortKey ? (active ? (currentSort.dir === 'desc' ? 'descending' : 'ascending') : 'none') : undefined}
       style={{
         padding: '8px 5px', textAlign: align,
         fontFamily: fonts.condensed, fontWeight: 700, fontSize: 10,
@@ -73,16 +87,26 @@ function SortHeader({ label, sortKey, currentSort, setSort, align = 'right' }) {
         background: colors.bg,
         boxShadow: `inset 0 -1px 0 ${colors.border}`,
       }}
-      onClick={() => {
-        if (!sortKey) return;
-        if (currentSort.key === sortKey) {
-          setSort({ key: sortKey, dir: currentSort.dir === 'desc' ? 'asc' : 'desc' });
-        } else {
-          setSort({ key: sortKey, dir: 'desc' });
-        }
-      }}
     >
-      {label}{arrow}
+      {sortKey ? (
+        // a11y: a real <button> makes the sort keyboard-operable (Enter/Space
+        // come for free) and announced as a button. Styled transparent so it
+        // inherits the th's typography/color and looks identical to before.
+        <button
+          type="button"
+          onClick={doSort}
+          style={{
+            font: 'inherit', color: 'inherit', cursor: 'pointer',
+            background: 'transparent', border: 'none', padding: 0, margin: 0,
+            textTransform: 'inherit', letterSpacing: 'inherit',
+            display: 'inline', width: '100%', textAlign: align,
+          }}
+        >
+          {label}{arrow}
+        </button>
+      ) : (
+        <>{label}{arrow}</>
+      )}
     </th>
   );
 }

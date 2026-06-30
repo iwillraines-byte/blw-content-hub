@@ -591,6 +591,7 @@ export default function ContentStudio() {
                   const tinted = !!t;
                   return (
                     <select
+                      aria-label="Scope ideas and generation to a team"
                       value={targetTeam || 'ALL'}
                       onChange={(e) => setTargetTeam(e.target.value === 'ALL' ? null : e.target.value)}
                       title="Scope generation + visible list to one team. Pick a team to lock the next batch and filter the cards below."
@@ -668,6 +669,7 @@ export default function ContentStudio() {
                 <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 200 }}>
                   <input
                     type="search"
+                    aria-label="Search ideas — player, team, headline"
                     value={ideasFilter}
                     onChange={(e) => setIdeasFilter(e.target.value)}
                     placeholder="Search ideas — player, team, headline…"
@@ -1339,7 +1341,12 @@ function LiveCard({ icon, label, primary, secondary, to, cta, warn }) {
 // "Create graphic →" action that deep-links to Generate with the standings
 // template pre-selected.
 function StandingsRow({ team, navigate }) {
-  const [hovering, setHovering] = useState(false);
+  // a11y: `active` tracks hover OR keyboard focus-within, so the Create
+  // action reveals for both pointer and keyboard users. The row is a plain
+  // container; the team name is a real <Link> (keyboard-navigable) and the
+  // Create button is always in the DOM (just visually hidden when idle) so
+  // Tab can reach it — focusing it flips `active` and makes it visible.
+  const [active, setActive] = useState(false);
   const goTeam = () => navigate(`/teams/${team.slug}`);
   const goGen  = (e) => {
     e.preventDefault(); e.stopPropagation();
@@ -1348,13 +1355,15 @@ function StandingsRow({ team, navigate }) {
   return (
     <div
       onClick={goTeam}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
+      onMouseEnter={() => setActive(true)}
+      onMouseLeave={() => setActive(false)}
+      onFocus={() => setActive(true)}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setActive(false); }}
       style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
         borderRadius: radius.sm, cursor: 'pointer',
         marginBottom: 2, transition: 'background 0.15s',
-        background: hovering ? colors.bg : 'transparent',
+        background: active ? colors.bg : 'transparent',
       }}
     >
       <span style={{
@@ -1365,21 +1374,28 @@ function StandingsRow({ team, navigate }) {
         flexShrink: 0,
       }}>{team.rank ?? '—'}</span>
       <TeamLogo teamId={team.id} size={22} rounded="square" />
-      <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</span>
-      {hovering ? (
+      <Link
+        to={`/teams/${team.slug}`}
+        onClick={(e) => e.stopPropagation()}
+        style={{ flex: 1, fontSize: 12, fontWeight: 600, color: colors.text, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+      >{team.name}</Link>
+      <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: 58, flexShrink: 0 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, fontVariantNumeric: 'tabular-nums', fontFamily: fonts.condensed, opacity: active ? 0 : 1 }}>{team.record}</span>
         <button
           onClick={goGen}
+          aria-label={`Create a standings graphic for ${team.name}`}
+          title="Generate a standings graphic featuring this team"
           style={{
-            background: colors.red, color: '#fff', border: 'none',
+            position: 'absolute', right: 0,
+            background: colors.accent, color: '#fff', border: 'none',
             borderRadius: radius.sm, padding: '3px 8px',
             fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
             cursor: 'pointer', whiteSpace: 'nowrap',
+            opacity: active ? 1 : 0,
+            pointerEvents: active ? 'auto' : 'none',
           }}
-          title="Generate a standings graphic featuring this team"
         >Create →</button>
-      ) : (
-        <span style={{ fontSize: 12, fontWeight: 700, color: colors.textSecondary, fontVariantNumeric: 'tabular-nums', fontFamily: fonts.condensed }}>{team.record}</span>
-      )}
+      </span>
     </div>
   );
 }

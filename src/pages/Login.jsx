@@ -183,6 +183,9 @@ export default function Login() {
           value={email}
           onChange={e => setEmail(e.target.value)}
           disabled={submitting}
+          // a11y: flag invalid + point to the error message when present
+          aria-invalid={errorMsg ? 'true' : undefined}
+          aria-describedby={errorMsg ? 'login-error' : undefined}
           style={styles.input}
         />
 
@@ -196,10 +199,14 @@ export default function Login() {
           value={password}
           onChange={e => setPassword(e.target.value)}
           disabled={submitting}
+          // a11y: flag invalid + point to the error message when present
+          aria-invalid={errorMsg ? 'true' : undefined}
+          aria-describedby={errorMsg ? 'login-error' : undefined}
           style={styles.input}
         />
 
-        {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
+        {/* a11y: announce errors via live region + associate with inputs below */}
+        {errorMsg && <div id="login-error" role="alert" aria-live="assertive" style={styles.errorBox}>{errorMsg}</div>}
 
         <button
           type="submit"

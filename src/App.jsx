@@ -263,8 +263,9 @@ function Sidebar({ isMobile, open, onClose }) {
           }}>BLW Studio</div>
         </Link>
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+        {/* Nav — a11y: named "Primary" landmark; id is the target of the
+            top-bar hamburger's aria-controls. */}
+        <nav id="primary-nav" aria-label="Primary" style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {visibleNavItems.map(n => {
             const active = location.pathname === n.path || (location.pathname === '/' && n.path === '/dashboard');
             const linkClass = ['nav-link', active ? 'is-active' : ''].filter(Boolean).join(' ');
@@ -430,7 +431,7 @@ function ThemeToggle() {
   );
 }
 
-function TopBar({ isMobile, onMenuToggle }) {
+function TopBar({ isMobile, onMenuToggle, sidebarOpen }) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentTeam = useCurrentTeamFromUrl();
@@ -498,7 +499,13 @@ function TopBar({ isMobile, onMenuToggle }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Hamburger menu on mobile */}
         {isMobile && (
-          <button onClick={onMenuToggle} style={{
+          <button onClick={onMenuToggle}
+            // a11y: icon-only button had no accessible name; expose label +
+            // open state + the controlled nav (id="primary-nav" on <nav>).
+            aria-label="Toggle navigation menu"
+            aria-expanded={sidebarOpen}
+            aria-controls="primary-nav"
+            style={{
             background: 'none', border: 'none', cursor: 'pointer',
             fontSize: 22, color: colors.text, padding: '2px 4px',
             display: 'flex', alignItems: 'center',
@@ -519,11 +526,14 @@ function TopBar({ isMobile, onMenuToggle }) {
             flexShrink: 0,
           }}
         />
-        <h2 style={{
+        {/* a11y: this is persistent app-brand chrome, not a section heading —
+            was an <h2> that competed with the page <h1> for screen readers.
+            Now a plain <div> with role="img"/aria-label; identical styles. */}
+        <div role="img" aria-label="BLW Studio" style={{
           fontFamily: fonts.heading, fontSize: isMobile ? 18 : 23,
           fontWeight: 700, color: colors.text, margin: 0, letterSpacing: 0,
           whiteSpace: 'nowrap',
-        }}>{title}</h2>
+        }}>{title}</div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 12, flexShrink: 0 }}>
@@ -539,6 +549,8 @@ function TopBar({ isMobile, onMenuToggle }) {
             window.dispatchEvent(ev);
           }}
           title="Search players, teams, pages · ⌘K"
+          // a11y: title alone isn't a reliable accessible name for screen readers.
+          aria-label="Search (Cmd K)"
           style={{
             background: colors.bg, border: `1px solid ${colors.border}`,
             color: colors.textSecondary, cursor: 'pointer',
@@ -580,6 +592,8 @@ function TopBar({ isMobile, onMenuToggle }) {
             onClick={forceResync}
             disabled={resyncing}
             title={resyncing ? 'Pulling fresh data…' : `Synced ${syncedAgo} · click to refresh`}
+            // a11y: icon-only button — give it a stable accessible name.
+            aria-label="Refresh data"
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 32, height: 32, borderRadius: radius.base,
@@ -1053,6 +1067,7 @@ function AppShell() {
         <TopBar
           isMobile={isMobile}
           onMenuToggle={() => setSidebarOpen(prev => !prev)}
+          sidebarOpen={sidebarOpen}
         />
 
         {/* Sticky banner that nudges profile setup when the user's role

@@ -49,7 +49,9 @@ const LIGHT = {
 
   'text':             'oklch(0.20 0.015 26.5)',
   'textSecondary':    'oklch(0.50 0.012 26.5)',
-  'textMuted':        'oklch(0.70 0.008 26.5)',
+  // a11y: darkened from 0.70 so muted/placeholder text clears WCAG AA 4.5:1
+  // on every light surface (was ~2.5:1 on white — a hard fail).
+  'textMuted':        'oklch(0.537 0.008 26.5)',
   'textOnDark':       'oklch(0.99 0.001 26.5)',
   'textOnDarkMuted':  'oklch(0.99 0.001 26.5 / 0.6)',
 
@@ -96,7 +98,9 @@ const DARK = {
   // restrained hierarchy (still legible on the 0.205 card surface).
   'text':             'oklch(0.965 0.003 265)',
   'textSecondary':    'oklch(0.770 0.005 265)',
-  'textMuted':        'oklch(0.585 0.006 265)',
+  // a11y: lightened from 0.585 so muted/placeholder text clears WCAG AA
+  // 4.5:1 on every dark surface incl. the muted panel (was ~3.8-4.3:1).
+  'textMuted':        'oklch(0.627 0.006 265)',
   'textOnDark':       'oklch(0.980 0.003 265)',
   'textOnDarkMuted':  'oklch(0.980 0.003 265 / 0.62)',
 

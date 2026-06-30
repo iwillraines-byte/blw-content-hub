@@ -26,8 +26,8 @@ export const colors = {
   // honor team context (CTAs, active states, focus rings, content rows).
   // Use plain `red` for chrome that should stay brand-consistent
   // regardless of which team is in view (sidebar, app-level nav, etc).
-  accent:          'var(--accent, #DD3C3C)',
-  accentHover:     'var(--accent-hover, #C73535)',
+  accent:          'var(--accent, #C73535)',
+  accentHover:     'var(--accent-hover, #A82E2E)',
   accentText:      'var(--accent-text, #FFFFFF)',
   accentSoft:      'var(--accent-soft, rgba(221, 60, 60, 0.10))',
   accentBorder:    'var(--accent-border, rgba(221, 60, 60, 0.30))',
@@ -41,7 +41,7 @@ export const colors = {
   // Text
   text:            'var(--color-text, #151C28)',
   textSecondary:   'var(--color-textSecondary, #676F7E)',
-  textMuted:       'var(--color-textMuted, #9CA3AF)',
+  textMuted:       'var(--color-textMuted, #726C6B)',
   textOnDark:      'var(--color-textOnDark, #FFFFFF)',
   textOnDarkMuted: 'var(--color-textOnDarkMuted, rgba(255, 255, 255, 0.6))',
 

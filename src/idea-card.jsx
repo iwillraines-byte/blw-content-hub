@@ -210,6 +210,23 @@ export default function IdeaCard({
     }
   };
 
+  // a11y: roving-tabindex keyboard support for the caption tablist.
+  // ArrowLeft/Right move selection (wrapping) and activate the tab, matching
+  // the click handler's setActivePlatform. Home/End jump to first/last.
+  const onTabKeyDown = (e) => {
+    const keys = PLATFORM_TABS.map(p => p.key);
+    const i = keys.indexOf(activePlatform);
+    if (i < 0) return;
+    let next = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = keys[(i + 1) % keys.length];
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = keys[(i - 1 + keys.length) % keys.length];
+    else if (e.key === 'Home') next = keys[0];
+    else if (e.key === 'End') next = keys[keys.length - 1];
+    if (next == null) return;
+    e.preventDefault();
+    setActivePlatform(next);
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -596,8 +613,13 @@ export default function IdeaCard({
                     <button
                       key={p.key}
                       role="tab"
+                      // a11y: associate each tab with its panel + roving tabindex
+                      id={`tab-${p.key}`}
                       aria-selected={active}
+                      aria-controls={`panel-${p.key}`}
+                      tabIndex={active ? 0 : -1}
                       onClick={() => setActivePlatform(p.key)}
+                      onKeyDown={onTabKeyDown}
                       style={{
                         flex: 1,
                         background: active ? accent : 'transparent',
@@ -619,8 +641,15 @@ export default function IdeaCard({
                 })}
               </div>
 
-              {/* Editable caption */}
-              <div style={{
+              {/* Editable caption — this single container is the active tab's
+                  panel (it shows whichever platform is selected). */}
+              <div
+                // a11y: tabpanel for the active tab; keyboard-focusable
+                role="tabpanel"
+                id={`panel-${activePlatform}`}
+                aria-labelledby={`tab-${activePlatform}`}
+                tabIndex={0}
+                style={{
                 position: 'relative',
                 background: colors.white,
                 border: `1px solid ${colors.borderLight}`,
