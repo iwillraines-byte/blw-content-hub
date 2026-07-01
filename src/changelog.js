@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.1.6',
+    date: '2026-06-30',
+    kind: 'patch',
+    summary: 'v5.1.6 — setting one twin\'s profile photo no longer changes the other (Logan/Luke Rose, James/Justin Lee)',
+    items: [
+      'Fixed profile photos bleeding between players who share a team, last name, AND first initial — Logan Rose and Luke Rose (both "L. Rose" on Dallas), and James Lee / Justin Lee on Las Vegas. Setting or changing one twin\'s photo was overwriting the other\'s, because the stat data often only knows them as "L. Rose" with no jersey number, so both pages resolved to the same identity and saved onto the same record.',
+      'Player pages now anchor each twin\'s identity to the official roster — full name and jersey number (Logan #08 vs Luke #05, James #05 vs Justin #18) — so each one reads and writes its OWN profile photo, vitals, and info even when the underlying stat feed can\'t tell them apart. Carson Rose (#06) was never affected — a different initial already kept him separate.',
+      'The save path now refuses to write one player\'s photo onto a record whose jersey number belongs to someone else, and repairs the record\'s name/number the first time you set a photo — so any already-mixed-up twins split cleanly back apart the next time you set each one\'s picture.',
+    ],
+  },
+  {
     version: '5.1.5',
     date: '2026-06-30',
     kind: 'patch',

@@ -1933,10 +1933,41 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
     return pickStrict(narrowed, all);
   };
 
+  // ─── Canonical identity anchor (v5.1.6) ──────────────────────────────
+  // The canonical roster is the source of truth for a player's full name
+  // AND jersey number. Cousins who share team + lastName + first initial
+  // (Logan #08 vs Luke #05 Rose, both "L. Rose" on DAL) collapse in the
+  // stat/manual sources to an initial-only name with no number — so the
+  // derived identity is ambiguous. An ambiguous identity is exactly what
+  // lets a profile-photo save (keyed on firstName + num) land on the wrong
+  // record, cross-contaminating the two cousins. When the URL slug names a
+  // specific canonical player, pin name + number to that entry so every
+  // downstream consumer (display, and the upsert write-key) is unambiguous.
+  const canonSlugMatch = (WANT_FN || WANT_FI)
+    ? CANONICAL_ROSTER_2026.find(c => {
+        if (c.team !== teamId) return false;
+        const parts = String(c.name || '').trim().split(/\s+/);
+        if (slugify(parts.slice(1).join(' ')) !== LN_NORM) return false;
+        const cFirst = parts[0] || '';
+        return WANT_FN ? slugify(cFirst) === WANT_FN
+                       : cFirst.charAt(0).toUpperCase() === WANT_FI;
+      })
+    : null;
+  const canonNum = canonSlugMatch ? String(canonSlugMatch.num || '').replace(/^0+/, '') : '';
+
   const batting = pickStrict(battingMatches, battingAll);
   const pitching = pickStrict(pitchingMatches, pitchingAll);
   const rosterPlayer = pickStrict(rosterMatches, rosterAll);
-  const manual = pickRichestManual(manualMatches, manualAll);
+  let manual = pickRichestManual(manualMatches, manualAll);
+  // Cousin disambiguation on READ: when the first-name narrow didn't land a
+  // single manual row but we know the canonical jersey number, prefer the
+  // manual row carrying that number. This is how Luke Rose (#05) reads HIS
+  // profile_media_id / vitals instead of Logan's (#08) when their rows were
+  // written without a firstName (the collapsed-data case).
+  if (canonNum && manualMatches.length !== 1) {
+    const byNum = manualAll.filter(p => String(p.num || '').replace(/^0+/, '') === canonNum);
+    if (byNum.length === 1) manual = byNum[0];
+  }
 
   const source = batting || pitching || rosterPlayer || manual;
   if (!source && rankingMatches.length === 0 && rankingAll.length === 0) return null;
@@ -1953,7 +1984,9 @@ export function getPlayerByTeamLastName(teamId, lastNameSlug, manualPlayers = []
 
   if (!source && !ranking) return null;
 
-  const name = source?.name || ranking?.name || '';
+  // Canonical name wins over the (possibly initial-only) stat/ranking name
+  // so firstName resolves to "Logan"/"Luke" — not "L." — for the write key.
+  const name = canonSlugMatch?.name || source?.name || ranking?.name || '';
   const lastName = name.split(' ').pop();
   const firstName = name.split(' ').slice(0, -1).join(' ');
 

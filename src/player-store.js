@@ -152,12 +152,26 @@ export async function upsertManualPlayer({ team, lastName, firstInitial, firstNa
       return pNum && pNum === numNorm;
     });
   }
-  // Rule 3: firstInitial + lastName + team — but ONLY if unique on team
+  // Rule 3: firstInitial + lastName + team — but ONLY if unique on team.
+  //
+  // Jersey-number guard (v5.1.6): when we KNOW this player's number, a
+  // same-initial row carrying a DIFFERENT number is a different person —
+  // Logan Rose (#08) and Luke Rose (#05) are both "L. Rose" on DAL. Without
+  // this guard, saving Logan against a lone number-less "L. Rose" row grabs
+  // it (candidates.length === 1), then saving Luke grabs the SAME row, so
+  // one player's profile photo overwrites the other's. Excluding rows whose
+  // number contradicts ours keeps the two cousins on separate records.
   if (!match && finNorm) {
-    const candidates = sameTeamLast.filter(p => {
+    let candidates = sameTeamLast.filter(p => {
       const pFn = String(p.firstName || p.name || '').trim();
       return pFn.charAt(0).toUpperCase() === finNorm;
     });
+    if (numNorm) {
+      candidates = candidates.filter(p => {
+        const pNum = String(p.num || '').replace(/^0+/, '');
+        return !pNum || pNum === numNorm;   // empty num is claimable; a conflicting num is not
+      });
+    }
     if (candidates.length === 1) match = candidates[0];
   }
   // Rule 4: lastName + team — but ONLY if unique on team
@@ -172,7 +186,20 @@ export async function upsertManualPlayer({ team, lastName, firstInitial, firstNa
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       const merged = { ...match, ...updates };
-      if (updates.firstName || updates.lastName) {
+      // Identity backfill (v5.1.6): stamp the number/firstName we matched
+      // against onto rows that lack them, so a same-initial cousin's later
+      // save can't collapse back onto this record. Only fill BLANKS — never
+      // overwrite an existing identity (that would be its own corruption).
+      let identityChanged = false;
+      if (numNorm && !String(merged.num || '').trim()) {
+        merged.num = num;
+        identityChanged = true;
+      }
+      if (firstName && !String(merged.firstName || '').trim()) {
+        merged.firstName = firstName;
+        identityChanged = true;
+      }
+      if (updates.firstName || updates.lastName || identityChanged) {
         merged.name = `${merged.firstName || ''} ${merged.lastName || ''}`.trim();
       }
       store.put(merged);
