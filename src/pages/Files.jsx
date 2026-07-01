@@ -5,7 +5,7 @@ import { useIsDark } from '../theme-mode';
 import { readableAccent } from '../team-colors';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
+import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, resyncAllLocalOnlyMedia, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
 import {
   getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder, pushDriveToCloud,
   extractFolderId, listFolderFiles, downloadFileAsBlob,
@@ -1113,6 +1113,28 @@ export default function Files() {
     }
   }, []);
 
+  // v5.2.0: one-click recovery for images stuck local-only (upload failed or
+  // was never awaited). Re-pushes every media blob missing cloudSyncedAt and
+  // reports the outcome — this is what makes "photos vanish on a new device"
+  // fixable without touching code. Reuses resyncAllLocalOnlyMedia (media-store).
+  const [repairing, setRepairing] = useState(false);
+  const [repairReport, setRepairReport] = useState(null);
+  const runRepair = useCallback(async () => {
+    setRepairing(true);
+    setRepairReport(null);
+    try {
+      const report = await resyncAllLocalOnlyMedia();
+      setRepairReport(report);
+      // Reflect freshly-stamped cloudSyncedAt in the on-screen list.
+      const media = await getAllMedia();
+      setStoredMedia(media);
+    } catch (err) {
+      setRepairReport({ error: err.message });
+    } finally {
+      setRepairing(false);
+    }
+  }, []);
+
   useEffect(() => {
     // Preload the full player directory once for heuristic matching. We pull
     // firstName/firstInitial so the heuristic can detect same-lastname
@@ -1687,6 +1709,30 @@ export default function Files() {
             >
               {refreshing ? '↻ Refreshing…' : '↻ Refresh from cloud'}
             </OutlineButton>
+            <OutlineButton
+              onClick={runRepair}
+              disabled={repairing}
+              title="Re-upload every image that's still local-only (never reached the cloud). Fixes photos that don't appear on other devices."
+              style={{ padding: '6px 12px', fontSize: 11 }}
+            >
+              {repairing ? '⛑ Repairing…' : '⛑ Repair unsynced media'}
+            </OutlineButton>
+            {repairReport && (
+              <div style={{ fontSize: 11, fontFamily: fonts.condensed, textAlign: 'center', lineHeight: 1.5 }}>
+                {repairReport.error ? (
+                  <span style={{ color: '#991B1B', fontWeight: 700 }}>Repair failed: {repairReport.error}</span>
+                ) : repairReport.total === 0 ? (
+                  <span style={{ color: '#065F46', fontWeight: 700 }}>All media already in the cloud ✓</span>
+                ) : (
+                  <span style={{ color: repairReport.failed > 0 ? '#92400E' : '#065F46' }}>
+                    Re-synced <strong>{repairReport.synced}</strong>/{repairReport.total}
+                    {repairReport.failed > 0 && (
+                      <span style={{ color: '#991B1B', fontWeight: 700 }}> · {repairReport.failed} still failing</span>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
             {refreshReport && !refreshReport.error && (
               <div style={{ fontSize: 11, color: '#075985', fontFamily: fonts.condensed, textAlign: 'center', lineHeight: 1.5 }}>
                 {/* v4.5.49: detailed refresh outcome — fetched count

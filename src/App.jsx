@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { TEAMS, API_CONFIG } from './data';
+import { TEAMS, API_CONFIG, applyTeamBrandingOverride } from './data';
+import { authedFetch } from './authed-fetch';
 import { colors, fonts, radius, sidebar as sidebarConfig, shadows } from './theme';
 import { TeamThemeScope } from './team-theme';
 import { GlobalStyles } from './global-styles';
@@ -1037,6 +1038,12 @@ function AppShell() {
     // v4.5.10: also pull the cloud-synced Drive config (api key + folder
     // list) so every admin inherits the master's setup automatically.
     hydrateDriveFromCloud().catch(err => console.warn('[drive-api] hydrate failed', err));
+    // v5.2.0: pull the master's team-branding color overrides so every
+    // account renders the same team colors set in the Global settings console.
+    authedFetch('/api/app-settings?key=team-branding')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (j?.value && typeof j.value === 'object') applyTeamBrandingOverride(j.value); })
+      .catch(err => console.warn('[team-branding] hydrate failed', err));
   }, [user?.id]);
 
   return (

@@ -235,7 +235,13 @@ function mapPlayerToRow(p) {
 //
 // Returns { ok, path, mime, error? }. Caller decides what to do on
 // failure — fall back to relay, surface the error, etc.
-const DIRECT_UPLOAD_THRESHOLD = 3 * 1024 * 1024; // 3 MB binary
+// v5.2.0: lowered 3 MB → 1.5 MB. The relay path base64-inflates a blob by
+// ~33%, so its real ceiling is ~3.3 MB binary before it 413s on Vercel's
+// 4.5 MB function cap. Anything in the ~1.5–3.3 MB band that failed a direct
+// upload used to fall onto a relay already near that cliff. Routing more
+// traffic to the presigned PUT (25 MB server cap) shrinks the fragile relay
+// window so large photos reliably reach storage.
+const DIRECT_UPLOAD_THRESHOLD = 1.5 * 1024 * 1024; // 1.5 MB binary
 const DIRECT_UPLOAD_KINDS = new Set(['media', 'overlay', 'effect']);
 
 export function shouldDirectUpload(blob, kind) {
@@ -251,13 +257,8 @@ export function shouldDirectUpload(blob, kind) {
   return blob.size > DIRECT_UPLOAD_THRESHOLD;
 }
 
-async function directUploadBlob({ kind, id, blob }) {
-  if (!supabaseConfigured) return { ok: false, error: 'supabase not configured' };
-  if (!blob || !id) return { ok: false, error: 'blob + id required' };
-  const mime = blob.type || 'application/octet-stream';
-
-  // 1. Mint a presigned URL.
-  let presign;
+// Mint a fresh presigned PUT URL from /api/storage-presign.
+async function mintPresign({ kind, id, mime }) {
   try {
     const res = await authedFetch('/api/storage-presign', {
       method: 'POST',
@@ -268,36 +269,50 @@ async function directUploadBlob({ kind, id, blob }) {
       const detail = await res.text().catch(() => '');
       return { ok: false, error: `presign ${res.status}: ${detail.slice(0, 160)}` };
     }
-    presign = await res.json();
+    const presign = await res.json();
+    if (!presign?.signedUrl || !presign?.path) {
+      return { ok: false, error: 'presign returned no URL' };
+    }
+    return { ok: true, presign };
   } catch (err) {
     return { ok: false, error: `presign network: ${err?.message || err}` };
   }
-  if (!presign?.signedUrl || !presign?.path) {
-    return { ok: false, error: 'presign returned no URL' };
-  }
+}
 
-  // 2. PUT the blob directly to Supabase Storage. The signed URL embeds
-  // its own auth token — no Authorization header needed. We DO need the
-  // x-upsert header so re-uploads of the same id overwrite (Supabase
-  // defaults to fail-on-exists for direct PUT).
-  try {
-    const putRes = await fetch(presign.signedUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': mime,
-        'x-upsert': 'true',
-      },
-      body: blob,
-    });
-    if (!putRes.ok) {
+async function directUploadBlob({ kind, id, blob }) {
+  if (!supabaseConfigured) return { ok: false, error: 'supabase not configured' };
+  if (!blob || !id) return { ok: false, error: 'blob + id required' };
+  const mime = blob.type || 'application/octet-stream';
+
+  // Up to 2 attempts. A signed upload URL is short-lived (~60 s), so a slow
+  // PUT — a large photo on a phone connection — can outlive the token and
+  // 400/403 on expiry. v5.2.0: on that (or a transient network) failure we
+  // re-mint a fresh URL once and retry the PUT, instead of dead-ending into
+  // the relay path. The signed URL embeds its own auth; x-upsert lets a
+  // re-upload of the same id overwrite (Supabase defaults to fail-on-exists).
+  let lastErr = 'unknown';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const minted = await mintPresign({ kind, id, mime });
+    if (!minted.ok) { lastErr = minted.error; break; } // presign itself failed — retrying the PUT won't help
+    const { presign } = minted;
+    try {
+      const putRes = await fetch(presign.signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mime, 'x-upsert': 'true' },
+        body: blob,
+      });
+      if (putRes.ok) return { ok: true, path: presign.path, mime, bucket: presign.bucket };
       const detail = await putRes.text().catch(() => '');
-      return { ok: false, error: `storage PUT ${putRes.status}: ${detail.slice(0, 160)}` };
+      lastErr = `storage PUT ${putRes.status}: ${detail.slice(0, 160)}`;
+      // Only an expiry/auth-class failure benefits from a fresh token.
+      const retryable = putRes.status === 400 || putRes.status === 403;
+      if (!retryable || attempt === 1) return { ok: false, error: lastErr };
+    } catch (err) {
+      lastErr = `storage PUT network: ${err?.message || err}`;
+      if (attempt === 1) return { ok: false, error: lastErr };
     }
-  } catch (err) {
-    return { ok: false, error: `storage PUT network: ${err?.message || err}` };
   }
-
-  return { ok: true, path: presign.path, mime, bucket: presign.bucket };
+  return { ok: false, error: lastErr };
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '5.2.0',
+    date: '2026-06-30',
+    kind: 'minor',
+    summary: 'v5.2.0 — reliable photo saving across devices + a master Media & Global-settings console',
+    items: [
+      'Fixed the root cause of "my profile photos don\'t show up when I log in on another device." A photo could be set while its actual image file had never finished uploading to the cloud — so the pin pointed at nothing on any other device. Now a photo can only be set once its image is confirmed in cloud storage: if it hasn\'t uploaded yet, the app pushes it up first and only saves the pin once it\'s confirmed, and tells you plainly if it still can\'t.',
+      'Large images upload far more reliably. Big photos now go straight to cloud storage more often (instead of a size-limited relay that could silently fail), and a slow upload that outlives its access window automatically retries with a fresh one instead of dead-ending.',
+      'On a fresh device, player photos now fill in as soon as the cloud sync finishes downloading them, instead of showing blank until a manual refresh.',
+      'New master-only Media Console (Settings): see every image\'s cloud-sync health at a glance (in the cloud / local-only / cloud-missing), one-click "Repair unsynced media" to push up anything stuck, a scan that finds profile photos pointing at missing images (with one-click unpin), a grid of all 70 players\' photos to spot blanks and jump straight to fixing them, and a per-team branding-asset checklist.',
+      'New master-only Global Settings (Settings): edit team colors and monthly post targets in one place, applied to every account and page — no more per-device drift. Plus a "Repair unsynced media" button on the Files page.',
+    ],
+  },
+  {
     version: '5.1.6',
     date: '2026-06-30',
     kind: 'patch',

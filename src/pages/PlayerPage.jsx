@@ -9,14 +9,14 @@ import { PageDropZone } from '../page-drop-zone';
 import { colors, fonts, radius, shadows } from '../theme';
 import { Icon } from '../icon';
 import { timeAgo } from '../format-time';
-import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL } from '../media-store';
+import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL, resyncMedia } from '../media-store';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
 import { useAuth, isStaffRole } from '../auth';
 import { useToast } from '../toast';
 import { fetchRecentGenerates } from '../cloud-sync';
-import { refreshManualPlayersFromCloud } from '../cloud-reader';
+import { refreshManualPlayersFromCloud, onHydrated } from '../cloud-reader';
 import { formatPostName } from '../template-config';
 import { authedJson, authedFetch } from '../authed-fetch';
 import { PercentileList, percentileFor, derivedPercentileFor } from '../percentile-bubble';
@@ -1129,12 +1129,19 @@ function PhotoPicker({ team, player, teamMedia, mediaUrls, currentId, onClose, o
                 {groups[key].map(m => {
                   const url = mediaUrls[m.id];
                   const active = m.id === currentId;
+                  // v5.2.0 sync-health badge. A photo can't be pinned unless its
+                  // blob is in the cloud (see choosePhoto gate); surface WHY a
+                  // tile might refuse: amber = local-only (not uploaded yet),
+                  // red = cloud copy missing.
+                  const syncBadge = m.cloudBlobMissing
+                    ? { label: 'NO CLOUD', bg: '#B91C1C' }
+                    : (!m.cloudSyncedAt ? { label: 'LOCAL', bg: '#B45309' } : null);
                   return (
                     <button
                       key={m.id}
                       onClick={() => !saving && onPick(m.id)}
                       disabled={saving}
-                      title={m.name}
+                      title={syncBadge ? `${m.name} — ${syncBadge.label === 'LOCAL' ? 'not uploaded to the cloud yet' : 'cloud image missing'}` : m.name}
                       style={{
                         display: 'flex', flexDirection: 'column',
                         padding: 0, border: `2px solid ${active ? colors.accent : colors.borderLight}`,
@@ -1145,11 +1152,22 @@ function PhotoPicker({ team, player, teamMedia, mediaUrls, currentId, onClose, o
                       }}
                     >
                       <div style={{
+                        position: 'relative',
                         width: '100%', aspectRatio: '1 / 1',
                         background: url
                           ? `url(${url}) center/cover`
                           : `linear-gradient(135deg, ${team.color}30, ${team.color}10)`,
-                      }} />
+                      }}>
+                        {syncBadge && (
+                          <span style={{
+                            position: 'absolute', top: 4, left: 4,
+                            padding: '2px 5px', borderRadius: 4,
+                            background: syncBadge.bg, color: '#fff',
+                            fontFamily: fonts.condensed, fontSize: 9, fontWeight: 700,
+                            letterSpacing: 0.6, lineHeight: 1.2,
+                          }}>{syncBadge.label}</span>
+                        )}
+                      </div>
                       <div style={{
                         padding: '4px 6px', fontSize: 10, fontFamily: fonts.condensed,
                         color: colors.text, textAlign: 'left',
@@ -1834,6 +1852,21 @@ export default function PlayerPage() {
   // media here, just the names → slugs mapping for the nav links.
   const [teammates, setTeammates] = useState([]);
 
+  // v5.2.0: on a fresh device the cloud hydrate (login) is still downloading
+  // media blobs when this page first mounts, so the avatar can resolve blank.
+  // Re-read the local media pool when the hydrate completes — that flows
+  // through the avatar effect below and fills in the newly-arrived headshot,
+  // without blocking first paint on the whole blob pull.
+  useEffect(() => {
+    if (!team?.id) return undefined;
+    return onHydrated(async () => {
+      try {
+        const all = await getAllMedia();
+        setAllMediaPool(all || []);
+      } catch { /* keep the existing pool */ }
+    });
+  }, [team?.id]);
+
   useEffect(() => {
     let cancel = false;
     if (!team?.id) return;
@@ -1997,6 +2030,33 @@ export default function PlayerPage() {
     if (!team?.id || !player?.lastName) return;
     setSavingPhoto(true);
     try {
+      // v5.2.0 sync-gate: never pin a photo whose image blob isn't confirmed
+      // in cloud storage. A pin (profile_media_id) that points at a local-only
+      // media row renders on THIS device but is blank on every other one — the
+      // exact "photos don't show on a new device" bug. If the chosen media
+      // isn't cloud-synced yet, push it up now and re-check; only proceed once
+      // the blob is confirmed. (mediaId === null is a reset — skip the gate.)
+      if (mediaId) {
+        const pool = [...(media || []), ...(teamMedia || []), ...(allMediaPool || [])];
+        let chosen = pool.find(m => m?.id === mediaId) || null;
+        if (!chosen || !chosen.cloudSyncedAt) {
+          const resynced = await resyncMedia(mediaId);
+          chosen = resynced || chosen;
+          if (!chosen || !chosen.cloudSyncedAt) {
+            toast.error("Photo can’t be pinned yet — its image hasn’t reached the cloud", {
+              detail: String(chosen?.cloudSyncError || 'Re-upload it from Files, then try again.').slice(0, 140),
+            });
+            return; // finally clears savingPhoto; picker stays open to pick another
+          }
+          // Blob is now cloud-side — reflect the freshly-stamped record in the
+          // pools so the picker badge clears and re-picks are instant.
+          const stamp = (list) => list.map(m => m.id === mediaId
+            ? { ...m, cloudSyncedAt: chosen.cloudSyncedAt, cloudSyncError: null, cloudBlobMissing: false }
+            : m);
+          setTeamMedia(stamp);
+          setAllMediaPool(stamp);
+        }
+      }
       const result = await upsertManualPlayer({
         team: team.id,
         lastName: player.lastName,
@@ -2030,7 +2090,7 @@ export default function PlayerPage() {
     } finally {
       setSavingPhoto(false);
     }
-  }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast]);
+  }, [team?.id, player?.lastName, player?.firstInitial, player?.firstName, player?.num, toast, media, teamMedia, allMediaPool]);
 
   // Persist pan/zoom offsets to manual_players. Same upsert path as the
   // photo picker — mapPlayerToRow on cloud-sync.js translates camelCase →
