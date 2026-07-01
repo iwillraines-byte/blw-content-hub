@@ -630,6 +630,32 @@ export default async function handler(req, res) {
       payload.owner_id = user.id;
     }
 
+    // v5.2.0: referential-integrity guard for profile photo pins. A
+    // manual_players.profile_media_id MUST point at a media row that has a
+    // blob in storage — otherwise the pin renders blank on every device that
+    // didn't originate the upload (the core "photos vanish on a new device"
+    // bug). Reject the pin when the referenced media row is absent or has no
+    // storage_path. Runs ONLY when the payload carries a non-null
+    // profile_media_id, so positioning-only saves (offset/zoom) and unpins
+    // (profile_media_id: null) are never blocked. The client sync-gate
+    // (choosePhoto) already prevents this in the happy path; this is the
+    // server-side backstop against a racing or bypassed client.
+    if (kind === 'manual-player' && payload.profile_media_id) {
+      const { data: mediaRow, error: mediaErr } = await sb
+        .from('media').select('id, storage_path').eq('id', payload.profile_media_id).maybeSingle();
+      if (mediaErr) {
+        res.status(500).json({ error: 'profile photo validation failed', detail: mediaErr.message });
+        return;
+      }
+      if (!mediaRow || !mediaRow.storage_path) {
+        res.status(409).json({
+          error: 'profile_media_id references media not in cloud storage',
+          detail: `Media ${String(payload.profile_media_id).slice(0, 8)}… ${mediaRow ? 'has no stored blob' : 'is not in the cloud'}. Re-upload the photo, then retry.`,
+        });
+        return;
+      }
+    }
+
     // Requests: ALWAYS overwrite requester_user_id + requester_email
     // for athletes (so they can't impersonate someone else's request).
     // For staff, fall back to the JWT identity when the client didn't

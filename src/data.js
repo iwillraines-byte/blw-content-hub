@@ -73,13 +73,42 @@ export const TEAMS = [
 // (/teams/sd-orcas) still find the team. Pages can detect a legacy-slug
 // arrival by comparing the resolved team.slug to the URL param and
 // issue a redirect to the canonical URL — see TeamPage.jsx + PlayerPage.jsx.
-export const getTeam = (id) => TEAMS.find(t =>
-  t.id === id ||
-  t.slug === id ||
-  t.apiAbbr === id ||
-  (t.legacySlugs && t.legacySlugs.includes(id)) ||
-  (t.legacyIds && t.legacyIds.includes(id))
-);
+// v5.2.0: cloud team-branding override. The master Media/Global-settings
+// console can override a team's colors league-wide via the `team-branding`
+// app_settings key; the merged values then flow through EVERY getTeam()
+// consumer (team pages, chips, theming) on every account. Empty by default →
+// zero behavior change until an override is set and hydrated on login.
+let _teamBrandingOverride = {};
+let _mergedTeamCache = new Map();
+const BRANDING_FIELDS = ['color', 'accent', 'dark'];
+export function applyTeamBrandingOverride(map) {
+  _teamBrandingOverride = (map && typeof map === 'object') ? map : {};
+  _mergedTeamCache = new Map(); // invalidate merged objects so consumers re-read
+}
+export function getTeamBrandingOverride() { return _teamBrandingOverride; }
+
+export const getTeam = (id) => {
+  const base = TEAMS.find(t =>
+    t.id === id ||
+    t.slug === id ||
+    t.apiAbbr === id ||
+    (t.legacySlugs && t.legacySlugs.includes(id)) ||
+    (t.legacyIds && t.legacyIds.includes(id))
+  );
+  if (!base) return base;
+  const ov = _teamBrandingOverride[base.id];
+  if (!ov) return base;
+  // Cache the merged object per team id so identity stays stable across calls
+  // (memoization/deps elsewhere compare team.color, not identity, but this
+  // avoids a fresh object on every call).
+  if (_mergedTeamCache.has(base.id)) return _mergedTeamCache.get(base.id);
+  const merged = { ...base };
+  for (const f of BRANDING_FIELDS) {
+    if (ov[f] && /^#[0-9a-fA-F]{6}$/.test(String(ov[f]))) merged[f] = ov[f];
+  }
+  _mergedTeamCache.set(base.id, merged);
+  return merged;
+};
 
 // v4.17.0: canonical team id resolver. Old Supabase rows, media filenames,
 // and localStorage values may still say 'SDO' — run any team id read from

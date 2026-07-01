@@ -21,6 +21,8 @@ import PlayerTradesCard from './PlayerTradesCard';
 import RosterDiagnosticCard from './RosterDiagnosticCard';
 import RawApiInspectorCard from './RawApiInspectorCard';
 import MediaUsageCard from './MediaUsageCard';
+import MediaConsoleCard from './MediaConsoleCard';
+import GlobalSettingsCard from './GlobalSettingsCard';
 
 // Hero headlines — master_admin only. Custom lines (optionally tagged with a
 // team + player) that rotate in the dashboard hero alongside the live content
@@ -205,6 +207,12 @@ export default function Settings() {
 
       {/* People admin — master_admin only. */}
       {isMaster && <PeopleAdminCard />}
+
+      {/* v5.2.0 — master-only global consoles: media health/repair + player
+          photo grid + team branding, and the settings that reach every
+          account (team colors, monthly targets). */}
+      {isMaster && <MediaConsoleCard />}
+      {isMaster && <GlobalSettingsCard />}
 
       {/* Player bio import — master_admin only. Pulls a published Google
           Sheet CSV into manual_players so player pages show vitals. */}

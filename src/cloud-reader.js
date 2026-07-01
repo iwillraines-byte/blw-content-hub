@@ -244,6 +244,33 @@ export function lastHydratedAt() {
   } catch { return 0; }
 }
 
+// ─── Hydration-complete signal (v5.2.0) ──────────────────────────────────────
+// A fresh device renders pages before the login hydrate finishes (it's
+// fire-and-forget in App.jsx), so an avatar can resolve blank because its media
+// blob hasn't been downloaded yet. Rather than block first paint on the whole
+// blob pull, consumers observe this signal and RE-DERIVE once media has landed:
+//   hydrationState() → 'idle' | 'running' | 'done'
+//   whenFirstHydrated() → promise that resolves after the first hydrate settles
+//   onHydrated(cb) → subscribe to every hydrate completion; returns unsubscribe
+let _hydrationState = 'idle';
+let _firstHydrateResolve;
+const _firstHydratePromise = new Promise((res) => { _firstHydrateResolve = res; });
+const _hydrateListeners = new Set();
+
+export function hydrationState() { return _hydrationState; }
+export function whenFirstHydrated() { return _firstHydratePromise; }
+export function onHydrated(cb) {
+  if (typeof cb !== 'function') return () => {};
+  _hydrateListeners.add(cb);
+  return () => _hydrateListeners.delete(cb);
+}
+function settleFirstHydrate() { try { _firstHydrateResolve?.(); } catch { /* noop */ } }
+function markHydrationDone() {
+  _hydrationState = 'done';
+  settleFirstHydrate();
+  for (const cb of _hydrateListeners) { try { cb(); } catch { /* noop */ } }
+}
+
 async function fetchKind(kind) {
   // Phase 5c: cloud-sync now requires a JWT. authedFetch attaches it from
   // the active session; if there's no session we'll get a 401 which the
@@ -263,11 +290,14 @@ async function blobFromSignedUrl(url) {
 // Pulls every kind from the cloud and mirrors into local stores. Returns a
 // summary report — counts of records hydrated per kind, plus any errors.
 export async function refreshFromCloud({ force = false } = {}) {
-  if (!supabaseConfigured) return { skipped: 'not-configured' };
+  // Never leave a first-hydrate waiter hanging: a skip means there's nothing
+  // new to wait for (no cloud, or a hydrate already ran within the window).
+  if (!supabaseConfigured) { settleFirstHydrate(); return { skipped: 'not-configured' }; }
   if (!force) {
     const since = Date.now() - lastHydratedAt();
-    if (since < HYDRATE_MIN_INTERVAL_MS) return { skipped: 'recent', sinceMs: since };
+    if (since < HYDRATE_MIN_INTERVAL_MS) { settleFirstHydrate(); return { skipped: 'recent', sinceMs: since }; }
   }
+  _hydrationState = 'running';
 
   const report = {
     media: { fetched: 0, newBlobs: 0, errors: [] },
@@ -442,6 +472,7 @@ export async function refreshFromCloud({ force = false } = {}) {
   }
 
   try { localStorage.setItem(LS_HYDRATED_AT, String(Date.now())); } catch {}
+  markHydrationDone();
   return report;
 }
 
