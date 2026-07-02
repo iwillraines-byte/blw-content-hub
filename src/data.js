@@ -944,6 +944,162 @@ export async function fetchPlayoffOdds() {
   return _oddsCache;
 }
 
+// ─── Clinch / elimination status (exact, brute-forced) ──────────────────────
+// Late in the season the remaining slate is small enough to enumerate EVERY
+// win/loss outcome, so teams can be labeled Clinched / Eliminated / Alive for
+// real instead of leaning on Monte-Carlo odds. A win/loss outcome fully
+// determines win% AND head-to-head (H2H only depends on who beat whom), so the
+// only BLW tiebreaker left unresolved by an enumerated outcome is runs against
+// (which needs actual scores). We resolve that conservatively per team:
+//   Clinched   → inside the top `spots` in EVERY outcome even if it LOSES every
+//                runs-against tie (worst case) → a guaranteed berth.
+//   Eliminated → outside it in EVERY outcome even if it WINS every runs-against
+//                tie (best case) → mathematically gone.
+//   Alive      → anything in between.
+// This never over-claims (a team clinched via a locked RA edge just reads
+// "Alive"), matching the app's honest-labels stance. Returns null when the
+// remaining slate is too large to enumerate, so the caller falls back to odds.
+
+// Like rankWithTiebreakers, but STOPS at head-to-head: returns ordered "tiers",
+// best first, where each tier is a set of teams that win% + head-to-head can't
+// separate (a residual tie the real standings would send to runs against).
+function rankTiers(items, winsOver) {
+  const tiers = [];
+  const resolve = (group) => {
+    if (group.length === 1) { tiers.push([group[0]]); return; }
+    const pct = new Map();
+    let anyGames = false;
+    for (const i of group) {
+      let wins = 0, dec = 0;
+      for (const j of group) {
+        if (j === i) continue;
+        const wij = winsOver(i, j) || 0, wji = winsOver(j, i) || 0;
+        wins += wij; dec += wij + wji;
+      }
+      if (dec > 0) anyGames = true;
+      pct.set(i, dec > 0 ? wins / dec : -1);
+    }
+    const vals = group.map(i => pct.get(i));
+    if (!anyGames || vals.every(v => v === vals[0])) { tiers.push([...group]); return; }
+    const sorted = [...group].sort((i, j) => pct.get(j) - pct.get(i));
+    let s = 0;
+    while (s < sorted.length) {
+      let e = s + 1;
+      while (e < sorted.length && pct.get(sorted[e]) === pct.get(sorted[s])) e++;
+      const sub = sorted.slice(s, e);
+      if (sub.length === 1) tiers.push([sub[0]]); else resolve(sub);
+      s = e;
+    }
+  };
+  const order = items.map((_, i) => i).sort((a, b) => items[b].pct - items[a].pct);
+  let s = 0;
+  while (s < order.length) {
+    let e = s + 1;
+    while (e < order.length && items[order[e]].pct === items[order[s]].pct) e++;
+    resolve(order.slice(s, e));
+    s = e;
+  }
+  return tiers;
+}
+
+// Map teamId → { status: 'clinched'|'eliminated'|'alive', bestRank, worstRank }.
+// `maxRemaining` caps the enumeration (2^R): 16 → 65k outcomes, sub-second.
+export function computeClinchStatus(games, { spots = PLAYOFF_SPOTS, maxRemaining = 16 } = {}) {
+  const teams = computeStandings(games).ordered;
+  const N = teams.length;
+  if (!N) return null;
+  const idx = new Map(teams.map((r, i) => [r.teamId, i]));
+  const baseW = teams.map(r => r.w);
+  const baseL = teams.map(r => r.l);
+
+  // Head-to-head from completed games (same source as the live standings).
+  const baseH2H = new Int32Array(N * N);
+  for (const g of (games || [])) {
+    if (g.status !== 'SUBMITTED') continue;
+    if ((g.dateTime || '').slice(0, 10) < SEASON_START) continue;
+    const hi = idx.get(g.home?.teamId), ai = idx.get(g.away?.teamId);
+    if (hi == null || ai == null) continue;
+    const hs = Number(g.home?.score), as = Number(g.away?.score);
+    if (!Number.isFinite(hs) || !Number.isFinite(as) || hs === as) continue;
+    if (hs > as) baseH2H[hi * N + ai]++; else baseH2H[ai * N + hi]++;
+  }
+
+  // Remaining games = scheduled slots with no SUBMITTED result yet.
+  const playedKeys = new Set();
+  for (const g of (games || [])) {
+    if (g.status === 'SUBMITTED' && g.dateTime) playedKeys.add(g.dateTime.slice(0, 16));
+  }
+  const remaining = [];
+  for (const gd of SCHEDULE) {
+    for (const g of gd.games) {
+      if (playedKeys.has(`${gd.date}T${g.time}`)) continue;
+      const a = idx.get(canonicalTeamId(g.team1));
+      const b = idx.get(canonicalTeamId(g.team2));
+      if (a == null || b == null) continue;
+      remaining.push([a, b]);
+    }
+  }
+  const R = remaining.length;
+  if (R > maxRemaining) return null; // too many combos — caller falls back to odds
+
+  // Season already complete → runs against is fully known, so rank is exact.
+  if (R === 0) {
+    const out = new Map();
+    teams.forEach((r) => out.set(r.teamId, {
+      status: r.rank <= spots ? 'clinched' : 'eliminated', bestRank: r.rank, worstRank: r.rank,
+    }));
+    return out;
+  }
+
+  const bestRank = new Array(N).fill(Infinity);  // most favorable finish (RA ties won)
+  const worstRank = new Array(N).fill(0);        // least favorable finish (RA ties lost)
+  const total = 1 << R;
+  for (let mask = 0; mask < total; mask++) {
+    const w = baseW.slice();
+    const l = baseL.slice();
+    const h2 = Int32Array.from(baseH2H);
+    for (let gi = 0; gi < R; gi++) {
+      const [a, b] = remaining[gi];
+      if (mask & (1 << gi)) { w[a]++; l[b]++; h2[a * N + b]++; }
+      else { w[b]++; l[a]++; h2[b * N + a]++; }
+    }
+    const stat = new Array(N);
+    for (let i = 0; i < N; i++) stat[i] = { pct: (w[i] + l[i]) ? w[i] / (w[i] + l[i]) : 0 };
+    const tiers = rankTiers(stat, (i, j) => h2[i * N + j]);
+    let ahead = 0;
+    for (const tier of tiers) {
+      const G = tier.length;
+      for (const t of tier) {
+        if (ahead + 1 < bestRank[t]) bestRank[t] = ahead + 1;   // best: first within its tier
+        if (ahead + G > worstRank[t]) worstRank[t] = ahead + G; // worst: last within its tier
+      }
+      ahead += G;
+    }
+  }
+
+  const out = new Map();
+  teams.forEach((r, i) => {
+    const status = worstRank[i] <= spots ? 'clinched'
+      : bestRank[i] > spots ? 'eliminated'
+      : 'alive';
+    out.set(r.teamId, { status, bestRank: bestRank[i], worstRank: worstRank[i] });
+  });
+  return out;
+}
+
+let _clinchCache = null;
+let _clinchFetchedAt = 0;
+
+// Cached wrapper mirroring fetchPlayoffOdds(). Returns null when the remaining
+// slate is too large to enumerate — the Schedule page then shows odds instead.
+export async function fetchClinchStatus() {
+  if (_clinchCache && (Date.now() - _clinchFetchedAt) < CACHE_TTL) return _clinchCache;
+  const games = await fetchGames();
+  _clinchCache = computeClinchStatus(games);
+  _clinchFetchedAt = Date.now();
+  return _clinchCache;
+}
+
 // ─── TEAM ROSTER API ────────────────────────────────────────────────────────
 // Fetches the official team roster from /api/teams/:apiTeamId/roster
 // This is the authoritative source for who's on each team — not just players

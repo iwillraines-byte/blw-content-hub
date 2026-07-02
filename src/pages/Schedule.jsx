@@ -23,7 +23,7 @@ import { Link } from 'react-router-dom';
 import { Card, PageHeader, SectionHeading, TeamLogo } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { Icon } from '../icon';
-import { TEAMS, getTeam, getTeamAbbr, fetchGames, scoresByDateTime, fetchStandings, fetchPlayoffOdds, PLAYOFF_SPOTS } from '../data';
+import { TEAMS, getTeam, getTeamAbbr, fetchGames, scoresByDateTime, fetchStandings, fetchPlayoffOdds, fetchClinchStatus, PLAYOFF_SPOTS } from '../data';
 import {
   SCHEDULE,
   getAllGameDays,
@@ -43,11 +43,15 @@ export default function Schedule() {
   const [scores, setScores] = useState(null);
   const [standings, setStandings] = useState(null);
   const [odds, setOdds] = useState(null);
+  // Exact clinch/elimination status when the remaining slate is small enough to
+  // enumerate; null otherwise (→ StandingsTable falls back to the odds column).
+  const [clinch, setClinch] = useState(null);
   useEffect(() => {
-    // All three share fetchGames()' cache, so this is a single network call.
+    // All share fetchGames()' cache, so this is a single network call.
     fetchGames().then(g => setScores(scoresByDateTime(g))).catch(() => {});
     fetchStandings().then(setStandings).catch(() => {});
     fetchPlayoffOdds().then(setOdds).catch(() => {});
+    fetchClinchStatus().then(setClinch).catch(() => {});
   }, []);
 
   // Sort all game days ascending. Past/upcoming split is computed below
@@ -137,9 +141,9 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* Full standings + playoff odds — beneath the schedule. */}
+      {/* Full standings + clinch status (or playoff odds) — beneath the schedule. */}
       <div style={{ marginTop: 20 }}>
-        <StandingsTable standings={standings} odds={odds} />
+        <StandingsTable standings={standings} odds={odds} clinch={clinch} />
       </div>
     </div>
   );
@@ -370,7 +374,16 @@ function oddsColor(o) {
   return colors.textMuted;
 }
 
-function StandingsTable({ standings, odds }) {
+// Exact clinch status → label + color. Clinched green, Alive amber, Eliminated
+// dimmed (the standard "out of it" treatment).
+const CLINCH_LABEL = { clinched: 'Clinched', alive: 'Alive', eliminated: 'Eliminated' };
+function clinchColor(status) {
+  if (status === 'clinched') return colors.successText;
+  if (status === 'alive') return colors.warningText;
+  return colors.textMuted; // eliminated
+}
+
+function StandingsTable({ standings, odds, clinch }) {
   if (!standings || !standings.ordered) {
     return (
       <Card>
@@ -402,12 +415,13 @@ function StandingsTable({ standings, odds }) {
               <th style={th}>RF</th>
               <th style={th}>RA</th>
               <th style={th}>DIFF</th>
-              <th style={{ ...th, minWidth: 76 }}>Playoff</th>
+              <th style={{ ...th, minWidth: 84 }}>{clinch ? 'Status' : 'Playoff'}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => {
               const o = odds ? odds.get(r.teamId) : null;
+              const c = clinch ? clinch.get(r.teamId) : null;
               const t = getTeam(r.teamId);
               return (
                 <Fragment key={r.teamId}>
@@ -439,7 +453,13 @@ function StandingsTable({ standings, odds }) {
                     <td style={{ ...td, fontWeight: 600, color: colors.textSecondary }}>{r.rf}</td>
                     <td style={{ ...td, fontWeight: 600, color: colors.textSecondary }}>{r.ra}</td>
                     <td style={{ ...td, color: r.diffNum > 0 ? colors.successText : r.diffNum < 0 ? colors.dangerText : colors.textSecondary }}>{r.diff}</td>
-                    <td style={{ ...td, color: oddsColor(o) }}>{fmtOdds(o)}</td>
+                    {c ? (
+                      <td style={{ ...td, color: clinchColor(c.status), fontFamily: fonts.condensed, fontWeight: 800, fontSize: 11, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                        {CLINCH_LABEL[c.status]}
+                      </td>
+                    ) : (
+                      <td style={{ ...td, color: oddsColor(o) }}>{fmtOdds(o)}</td>
+                    )}
                   </tr>
                 </Fragment>
               );
@@ -448,7 +468,9 @@ function StandingsTable({ standings, odds }) {
         </table>
       </div>
       <p style={{ fontSize: 11, color: colors.textMuted, margin: '10px 2px 0', lineHeight: 1.5 }}>
-        Playoff odds simulate every remaining game 10,000 times from each team's scoring strength, breaking ties by head-to-head, then fewest runs against (the BLW tiebreaker). Teams whose season is already complete show their locked-in odds.
+        {clinch
+          ? 'Status is exact: every possible outcome of the remaining games is tested against the BLW tiebreakers — win %, then head-to-head, then fewest runs against. Clinched = in the top 6 no matter what; Eliminated = out no matter what; Alive = still in play.'
+          : 'Playoff odds simulate every remaining game 10,000 times from each team’s scoring strength, breaking ties by head-to-head, then fewest runs against (the BLW tiebreaker). Teams whose season is already complete show their locked-in odds.'}
       </p>
     </Card>
   );

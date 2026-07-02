@@ -83,21 +83,23 @@ export const SCHEDULE = [
     ],
   },
   {
+    // Times/order + broadcast corrected to the master's 2026-07-12 schedule
+    // graphic (ESPN+ slate). Same six matchups as before, re-slotted — the
+    // date+time is the key that attaches GSS finals, so the slots must match.
     id: '2026-07-12',
     date: '2026-07-12',
     season: '2026',
     type: 'regular',
     venue: 'Assembly Studios',
     venueCity: 'Atlanta, GA',
-    broadcast: 'YouTube',
-    firstSlateAlso: 'Fubo + regional sports networks',
+    broadcast: 'ESPN+',
     games: [
-      { time: '13:00', team1: 'CHI', team2: 'AZS' },
-      { time: '13:45', team1: 'DAL', team2: 'ATL' },
-      { time: '17:30', team1: 'LV',  team2: 'ATL' },
-      { time: '18:15', team1: 'CHI', team2: 'DAL' },
+      { time: '13:00', team1: 'LV',  team2: 'ATL' },
+      { time: '13:45', team1: 'CHI', team2: 'AZS' },
+      { time: '17:30', team1: 'DAL', team2: 'ATL' },
+      { time: '18:15', team1: 'NYG', team2: 'AZS' },
       { time: '19:00', team1: 'NYG', team2: 'LV' },
-      { time: '19:45', team1: 'NYG', team2: 'AZS' },
+      { time: '19:45', team1: 'CHI', team2: 'DAL' },
     ],
   },
 ];
