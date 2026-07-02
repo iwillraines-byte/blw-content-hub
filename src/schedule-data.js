@@ -83,16 +83,16 @@ export const SCHEDULE = [
     ],
   },
   {
-    // Times/order + broadcast corrected to the master's 2026-07-12 schedule
-    // graphic (ESPN+ slate). Same six matchups as before, re-slotted — the
-    // date+time is the key that attaches GSS finals, so the slots must match.
+    // Times/order corrected to the master's 2026-07-12 schedule graphic. Same
+    // six matchups as before, re-slotted — the date+time is the key that
+    // attaches GSS finals, so the slots must match. No broadcast set for this
+    // day (chip is omitted when broadcast is absent).
     id: '2026-07-12',
     date: '2026-07-12',
     season: '2026',
     type: 'regular',
     venue: 'Assembly Studios',
     venueCity: 'Atlanta, GA',
-    broadcast: 'ESPN+',
     games: [
       { time: '13:00', team1: 'LV',  team2: 'ATL' },
       { time: '13:45', team1: 'CHI', team2: 'AZS' },

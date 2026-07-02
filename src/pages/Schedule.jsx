@@ -250,7 +250,7 @@ function GameDayCard({ gameDay, teamFilter, scores, dimmed = false }) {
         }}>
           {gameDay.venue}{gameDay.venueCity ? ` · ${gameDay.venueCity}` : ''}
         </div>
-        <BroadcastChip text={gameDay.broadcast} primary />
+        {gameDay.broadcast && <BroadcastChip text={gameDay.broadcast} primary />}
         {gameDay.firstSlateAlso && (
           <BroadcastChip text={`First slate also: ${gameDay.firstSlateAlso}`} />
         )}
