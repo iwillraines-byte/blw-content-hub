@@ -25,6 +25,7 @@ export const RELEASES = [
     items: [
       'Found the real reason syncing never finished pulling photos down: the cloud read endpoint never paginated, so once the media library grew past 1000 rows (it reached 1761), every sync request got back the same first 1000 no matter how many times you clicked Sync — the other 761 were permanently unreachable.',
       'The endpoint now pages through the full result set in batches of 1000 until everything is fetched, so a "Sync from cloud" or "Re-download missing blobs" run actually reaches every photo in the library, however large it gets.',
+      'Fixing that surfaced a second cap one layer down — Supabase Storage refuses to sign more than 1000 file URLs in one request. That call is now chunked the same way, so a library over 1000 photos gets every image URL, not a 500 error.',
     ],
   },
   {

@@ -315,11 +315,21 @@ export default async function handler(req, res) {
         const pathCol = STORAGE_PATH_COL[kind] || 'storage_path';
         const paths = records.map(r => r[pathCol]).filter(Boolean);
         if (paths.length > 0) {
-          const { data: signed, error: signErr } = await sb
-            .storage.from(bucket)
-            .createSignedUrls(paths, 60 * 60);
-          if (signErr) throw signErr;
-          const byPath = new Map((signed || []).map(s => [s.path, s.signedUrl]));
+          // v5.2.2: Storage's createSignedUrls rejects a batch over 1000
+          // paths ("body/paths must NOT have more than 1000 items") — the
+          // row-pagination fix above means `paths` can now exceed 1000, so
+          // chunk the signing calls the same way.
+          const SIGN_BATCH = 1000;
+          const signed = [];
+          for (let i = 0; i < paths.length; i += SIGN_BATCH) {
+            const chunk = paths.slice(i, i + SIGN_BATCH);
+            const { data: signedChunk, error: signErr } = await sb
+              .storage.from(bucket)
+              .createSignedUrls(chunk, 60 * 60);
+            if (signErr) throw signErr;
+            signed.push(...(signedChunk || []));
+          }
+          const byPath = new Map(signed.map(s => [s.path, s.signedUrl]));
           records = records.map(r => ({ ...r, signedUrl: byPath.get(r[pathCol]) || null }));
         }
       }
