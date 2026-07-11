@@ -244,7 +244,35 @@ export default async function handler(req, res) {
         const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
         q = q.order('created_at', { ascending: false }).limit(limit);
       }
-      let { data, error } = await q;
+      // v5.2.2: paginate past PostgREST's default row cap (max_rows, 1000
+      // on Supabase by default). Without this, any table that grew past
+      // 1000 rows (media hit 1761) silently truncated on EVERY read —
+      // the client always got back the same first page no matter how many
+      // times it re-synced, so the remaining rows were permanently
+      // unreachable. generate-log already applies its own small `.limit()`
+      // above and doesn't need this. `.order('id')` guarantees a stable
+      // row order across pages — without it Postgres can return rows in a
+      // different order per request, causing skipped/duplicated rows.
+      let data, error;
+      if (kind === 'generate-log') {
+        ({ data, error } = await q);
+      } else {
+        const PAGE_SIZE = 1000;
+        // field-override/ai-usage have no `id` column (composite PK) —
+        // order by the first key column instead so the query doesn't 400.
+        const orderCol = COMPOSITE_PK[kind]?.[0] || 'id';
+        const ordered = q.order(orderCol, { ascending: true });
+        const all = [];
+        let offset = 0;
+        while (true) {
+          const { data: page, error: pageErr } = await ordered.range(offset, offset + PAGE_SIZE - 1);
+          if (pageErr) { error = pageErr; break; }
+          all.push(...(page || []));
+          if (!page || page.length < PAGE_SIZE) break;
+          offset += PAGE_SIZE;
+        }
+        data = all;
+      }
       // v4.5.37: tolerant to the `hidden` column not existing yet on
       // pre-db/011 schemas. Retry once without the hidden filter so
       // the read still works for owners who haven't run the migration.
