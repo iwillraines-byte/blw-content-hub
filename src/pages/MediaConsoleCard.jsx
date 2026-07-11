@@ -21,7 +21,7 @@ import {
 import { getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { refreshFromCloud } from '../cloud-reader';
 import { CANONICAL_ROSTER_2026, TEAMS, getTeam, slugify, playerSlug } from '../data';
-import { Card, SectionHeading, RedButton, OutlineButton } from '../components';
+import { Card, SectionHeading, RedButton, OutlineButton, ProgressBar } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { authedFetch } from '../authed-fetch';
 import { useToast } from '../toast';
@@ -75,6 +75,11 @@ export default function MediaConsoleCard() {
   const [busy, setBusy] = useState(null); // 'repair' | 'redownload' | 'scan' | id
   const [orphans, setOrphans] = useState(null); // null = not scanned yet
   const [repairReport, setRepairReport] = useState(null);
+  // Live progress for the two long-running bulk ops — without these the
+  // buttons just sat on "Repairing…"/"Re-downloading…" for however long a
+  // 700+ photo library takes, with zero indication anything was moving.
+  const [repairProgress, setRepairProgress] = useState(null); // { done, total, record }
+  const [redownloadProgress, setRedownloadProgress] = useState(null); // { kind, phase, done, total }
 
   const load = useCallback(async () => {
     const [m, mp] = await Promise.all([getAllMedia(), getAllManualPlayers()]);
@@ -99,9 +104,9 @@ export default function MediaConsoleCard() {
   }, [media]);
 
   const runRepair = useCallback(async () => {
-    setBusy('repair'); setRepairReport(null);
+    setBusy('repair'); setRepairReport(null); setRepairProgress(null);
     try {
-      const report = await resyncAllLocalOnlyMedia();
+      const report = await resyncAllLocalOnlyMedia({ onProgress: setRepairProgress });
       setRepairReport(report);
       await load();
       toast[report.failed > 0 ? 'error' : 'success'](
@@ -110,18 +115,18 @@ export default function MediaConsoleCard() {
       );
     } catch (e) {
       toast.error('Repair failed', { detail: String(e?.message || e).slice(0, 100) });
-    } finally { setBusy(null); }
+    } finally { setBusy(null); setRepairProgress(null); }
   }, [load, toast]);
 
   const runRedownload = useCallback(async () => {
-    setBusy('redownload');
+    setBusy('redownload'); setRedownloadProgress(null);
     try {
-      await refreshFromCloud({ force: true });
+      await refreshFromCloud({ force: true, onProgress: setRedownloadProgress });
       await load();
       toast.success('Re-pulled media from the cloud');
     } catch (e) {
       toast.error('Re-download failed', { detail: String(e?.message || e).slice(0, 100) });
-    } finally { setBusy(null); }
+    } finally { setBusy(null); setRedownloadProgress(null); }
   }, [load, toast]);
 
   const runScan = useCallback(async () => {
@@ -259,6 +264,22 @@ export default function MediaConsoleCard() {
           {busy === 'scan' ? '⌕ Scanning…' : '⌕ Scan for broken pins'}
         </OutlineButton>
       </div>
+      {busy === 'repair' && repairProgress && repairProgress.total > 0 && (
+        <ProgressBar
+          value={repairProgress.done}
+          max={repairProgress.total}
+          label={`Uploading local-only photos — ${repairProgress.done}/${repairProgress.total}${repairProgress.record ? ` · ${repairProgress.record}` : ''}`}
+          style={{ marginBottom: 8, maxWidth: 420 }}
+        />
+      )}
+      {busy === 'redownload' && redownloadProgress && redownloadProgress.total > 0 && (
+        <ProgressBar
+          value={redownloadProgress.done}
+          max={redownloadProgress.total}
+          label={`${redownloadProgress.phase === 'blobs' ? 'Downloading' : 'Reading'} ${redownloadProgress.kind} — ${redownloadProgress.done}/${redownloadProgress.total}${redownloadProgress.record ? ` · ${redownloadProgress.record}` : ''}`}
+          style={{ marginBottom: 8, maxWidth: 420 }}
+        />
+      )}
       {repairReport && !repairReport.error && (
         <div style={{ fontSize: 11.5, color: repairReport.failed > 0 ? '#92400E' : '#065F46', fontFamily: fonts.condensed, marginBottom: 6 }}>
           {repairReport.total === 0 ? 'All media already in the cloud ✓'

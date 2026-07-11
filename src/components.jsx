@@ -108,6 +108,33 @@ export const Skeleton = ({ width = '100%', height = 16, radius: r = 6, style }) 
   />
 );
 
+// ProgressBar — thin determinate bar for long-running per-item operations
+// (cloud sync/re-download, bulk repair, AI auto-tag). `value`/`max` drive the
+// fill width; pass `label` to render a done/total caption above it.
+export const ProgressBar = ({ value = 0, max = 0, label, style }) => {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  return (
+    <div style={style}>
+      {label && (
+        <div style={{ fontSize: 11, fontFamily: fonts.condensed, color: colors.textSecondary, marginBottom: 4 }}>
+          {label}
+        </div>
+      )}
+      <div style={{ width: '100%', height: 6, borderRadius: 999, background: colors.border, overflow: 'hidden' }}>
+        <div
+          style={{
+            width: `${pct}%`,
+            height: '100%',
+            borderRadius: 999,
+            background: colors.accent,
+            transition: 'width 0.2s ease',
+          }}
+        />
+      </div>
+    </div>
+  );
+};
+
 // CollapsibleCard — Card variant with an expand/collapse chevron and an
 // optional summary line that surfaces when collapsed. Used on Generate
 // to keep the left-column form from growing into a 7-card scroll.

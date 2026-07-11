@@ -289,7 +289,16 @@ async function blobFromSignedUrl(url) {
 
 // Pulls every kind from the cloud and mirrors into local stores. Returns a
 // summary report — counts of records hydrated per kind, plus any errors.
-export async function refreshFromCloud({ force = false } = {}) {
+//
+// `onProgress` (optional) mirrors the cloud-backup.js pattern so the UI can
+// show a live bar instead of a single "syncing…" spinner that sits still for
+// however long a 700+ photo pull takes. Called as:
+//   onProgress({ kind: 'media'|'overlays'|'effects', phase: 'blobs', done, total })
+// Blob downloads for media/overlays/effects were already batched (8-way
+// concurrent) rather than one big sequential pass — this just surfaces that
+// existing progress instead of reporting it only after the fact.
+export async function refreshFromCloud({ force = false, onProgress } = {}) {
+  const report_ = (evt) => { try { onProgress?.(evt); } catch { /* noop */ } };
   // Never leave a first-hydrate waiter hanging: a skip means there's nothing
   // new to wait for (no cloud, or a hydrate already ran within the window).
   if (!supabaseConfigured) { settleFirstHydrate(); return { skipped: 'not-configured' }; }
@@ -336,6 +345,7 @@ export async function refreshFromCloud({ force = false } = {}) {
       const rows = await fetchKind(kind);
       report[reportKey].fetched = rows.length;
       report[reportKey].blobsMissing = 0;
+      report_({ kind: reportKey, phase: 'metadata', done: 0, total: rows.length });
 
       // Step 1 — synchronously stage every record into IDB with
       // metadata + (for existing rows) the existing blob. This guarantees
@@ -364,6 +374,7 @@ export async function refreshFromCloud({ force = false } = {}) {
           report[reportKey].blobsMissing++;
         }
       }
+      report_({ kind: reportKey, phase: 'metadata', done: rows.length, total: rows.length });
 
       // Step 2 — parallel-batched blob download. Concurrency 8: low
       // enough not to thrash the connection, high enough that a 340-
@@ -372,6 +383,8 @@ export async function refreshFromCloud({ force = false } = {}) {
       // cleared.
       const CONCURRENCY = 8;
       let cursor = 0;
+      let blobsDone = 0;
+      report_({ kind: reportKey, phase: 'blobs', done: 0, total: needsBlob.length });
       async function worker() {
         while (cursor < needsBlob.length) {
           const idx = cursor++;
@@ -388,6 +401,9 @@ export async function refreshFromCloud({ force = false } = {}) {
             // Just log the error so the report can surface it.
             report[reportKey].errors.push({ id: r.id, error: err.message });
             report[reportKey].blobsMissing++;
+          } finally {
+            blobsDone++;
+            report_({ kind: reportKey, phase: 'blobs', done: blobsDone, total: needsBlob.length, record: mapped.name });
           }
         }
       }
@@ -473,6 +489,7 @@ export async function refreshFromCloud({ force = false } = {}) {
 
   try { localStorage.setItem(LS_HYDRATED_AT, String(Date.now())); } catch {}
   markHydrationDone();
+  report_({ kind: 'done', report });
   return report;
 }
 

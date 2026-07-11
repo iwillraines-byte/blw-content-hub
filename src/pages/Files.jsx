@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { TEAMS, getTeam } from '../data';
 import { useIsDark } from '../theme-mode';
 import { readableAccent } from '../team-colors';
-import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, inputStyle, selectStyle } from '../components';
+import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, ProgressBar, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
 import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, resyncAllLocalOnlyMedia, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
 import {
@@ -1058,6 +1058,11 @@ export default function Files() {
   // on app mount but with force:true so it runs even if we ran one <10 min ago.
   const [refreshing, setRefreshing] = useState(false);
   const [refreshReport, setRefreshReport] = useState(null);
+  // Live per-photo progress while a cloud pull is in flight — surfaces the
+  // { kind, phase, done, total } events refreshFromCloud now emits instead
+  // of leaving the button on a static "Syncing…" for however long a 700+
+  // photo pull takes.
+  const [refreshProgress, setRefreshProgress] = useState(null);
 
   // Bulk-select state — toggling select mode reveals a checkbox per tile.
   // Tiles gain a border when selected; the click target swaps from "preview"
@@ -1091,8 +1096,9 @@ export default function Files() {
   const runRefresh = useCallback(async () => {
     setRefreshing(true);
     setRefreshReport(null);
+    setRefreshProgress(null);
     try {
-      const report = await refreshFromCloud({ force: true });
+      const report = await refreshFromCloud({ force: true, onProgress: setRefreshProgress });
       setRefreshReport(report);
       // Nudge the stored media list — refreshFromCloud put new records
       // into IDB, but this page read into `storedMedia` state on mount.
@@ -1109,6 +1115,7 @@ export default function Files() {
       setRefreshReport({ error: err.message });
     } finally {
       setRefreshing(false);
+      setRefreshProgress(null);
       setTimeout(() => setRefreshReport(null), 6000);
     }
   }, []);
@@ -1119,11 +1126,13 @@ export default function Files() {
   // fixable without touching code. Reuses resyncAllLocalOnlyMedia (media-store).
   const [repairing, setRepairing] = useState(false);
   const [repairReport, setRepairReport] = useState(null);
+  const [repairProgress, setRepairProgress] = useState(null); // { done, total, synced, failed, record }
   const runRepair = useCallback(async () => {
     setRepairing(true);
     setRepairReport(null);
+    setRepairProgress(null);
     try {
-      const report = await resyncAllLocalOnlyMedia();
+      const report = await resyncAllLocalOnlyMedia({ onProgress: setRepairProgress });
       setRepairReport(report);
       // Reflect freshly-stamped cloudSyncedAt in the on-screen list.
       const media = await getAllMedia();
@@ -1132,6 +1141,7 @@ export default function Files() {
       setRepairReport({ error: err.message });
     } finally {
       setRepairing(false);
+      setRepairProgress(null);
     }
   }, []);
 
@@ -1709,6 +1719,14 @@ export default function Files() {
             >
               {refreshing ? '↻ Refreshing…' : '↻ Refresh from cloud'}
             </OutlineButton>
+            {refreshProgress && refreshProgress.total > 0 && (
+              <ProgressBar
+                value={refreshProgress.done}
+                max={refreshProgress.total}
+                label={`${refreshProgress.phase === 'blobs' ? 'Downloading' : 'Reading'} ${refreshProgress.kind} — ${refreshProgress.done}/${refreshProgress.total}${refreshProgress.record ? ` · ${refreshProgress.record}` : ''}`}
+                style={{ marginTop: 2, marginBottom: 2 }}
+              />
+            )}
             <OutlineButton
               onClick={runRepair}
               disabled={repairing}
@@ -1717,6 +1735,14 @@ export default function Files() {
             >
               {repairing ? '⛑ Repairing…' : '⛑ Repair unsynced media'}
             </OutlineButton>
+            {repairProgress && repairProgress.total > 0 && (
+              <ProgressBar
+                value={repairProgress.done}
+                max={repairProgress.total}
+                label={`Uploading local-only photos — ${repairProgress.done}/${repairProgress.total}${repairProgress.record ? ` · ${repairProgress.record}` : ''}`}
+                style={{ marginTop: 2, marginBottom: 2 }}
+              />
+            )}
             {repairReport && (
               <div style={{ fontSize: 11, fontFamily: fonts.condensed, textAlign: 'center', lineHeight: 1.5 }}>
                 {repairReport.error ? (
@@ -1826,6 +1852,14 @@ export default function Files() {
                 )}
                 {' '}Hit Sync to pull the rest down.
               </div>
+              {refreshing && refreshProgress && refreshProgress.total > 0 && (
+                <ProgressBar
+                  value={refreshProgress.done}
+                  max={refreshProgress.total}
+                  label={`${refreshProgress.phase === 'blobs' ? 'Downloading' : 'Reading'} ${refreshProgress.kind} — ${refreshProgress.done}/${refreshProgress.total}`}
+                  style={{ marginTop: 8, maxWidth: 360 }}
+                />
+              )}
             </div>
             <RedButton
               onClick={runRefresh}

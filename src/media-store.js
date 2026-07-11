@@ -303,17 +303,26 @@ export async function resyncMedia(id) {
 // record and re-syncs anything missing cloudSyncedAt. Sequential by
 // design so a flaky network on one record doesn't take down the
 // rest. Returns a summary the caller can surface in a toast.
-export async function resyncAllLocalOnlyMedia() {
+//
+// `onProgress` (optional) fires after every record — sequential means a
+// library with hundreds of local-only photos can take a while, and without
+// this the caller had no way to show anything but a static spinner for the
+// whole run.
+export async function resyncAllLocalOnlyMedia({ onProgress } = {}) {
   const all = await getAllMedia();
   const localOnly = all.filter(m => !m.cloudSyncedAt && m.blob);
-  let synced = 0, failed = 0;
+  const total = localOnly.length;
+  let synced = 0, failed = 0, done = 0;
   const errors = [];
+  try { onProgress?.({ done, total, synced, failed }); } catch { /* noop */ }
   for (const record of localOnly) {
     const result = await syncMediaRecordToCloud(record);
     if (result?.ok) synced++;
     else { failed++; errors.push({ id: record.id, name: record.name, error: record.cloudSyncError }); }
+    done++;
+    try { onProgress?.({ done, total, synced, failed, record: record.name }); } catch { /* noop */ }
   }
-  return { total: localOnly.length, synced, failed, errors };
+  return { total, synced, failed, errors };
 }
 
 export async function getAllMedia() {
