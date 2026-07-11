@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '5.2.1',
+    date: '2026-07-11',
+    kind: 'patch',
+    summary: 'v5.2.1 — live progress bars while photos sync or repair from the cloud',
+    items: [
+      'Syncing/re-downloading media from the cloud and repairing local-only photos used to just show a static "Syncing…"/"Repairing…" label for as long as the whole library took — no way to tell it was working versus stuck. Both now show a live progress bar with a running count and the current filename.',
+      'Applies everywhere those actions live: the Files page "Sync N from cloud" banner and Refresh/Repair buttons, and the master Media Console\'s "Repair unsynced media" / "Re-download missing blobs" buttons in Settings.',
+    ],
+  },
+  {
     version: '5.2.0',
     date: '2026-06-30',
     kind: 'minor',
