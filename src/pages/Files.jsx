@@ -5,7 +5,7 @@ import { useIsDark } from '../theme-mode';
 import { readableAccent } from '../team-colors';
 import { Card, PageHeader, SectionHeading, Label, RedButton, OutlineButton, TeamChip, ProgressBar, inputStyle, selectStyle } from '../components';
 import { colors, fonts, radius } from '../theme';
-import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, resyncAllLocalOnlyMedia, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
+import { saveMedia, getAllMedia, deleteMedia, updateMedia, blobToObjectURL, resyncAllLocalOnlyMedia, findDuplicateMedia, TEAM_SCOPE_TYPES, LEAGUE_SCOPE_TYPES, LEAGUE_TEAM_CODE, buildLeagueFilename } from '../media-store';
 import {
   getApiKey, getSavedFolders, saveFolder, removeFolder, renameFolder, pushDriveToCloud,
   extractFolderId, listFolderFiles, downloadFileAsBlob,
@@ -1248,7 +1248,7 @@ export default function Files() {
 
   const handleFiles = useCallback(async (fileList) => {
     const compressOn = getCompressPreference();
-    let totalOriginal = 0, totalFinal = 0, savedFiles = 0;
+    let totalOriginal = 0, totalFinal = 0, savedFiles = 0, dupCount = 0;
     for (const file of fileList) {
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
       // Compress images on the way in. Videos and pass-through types
@@ -1271,10 +1271,19 @@ export default function Files() {
           blobToSave = file;
         }
       }
+      // v5.2.3: content dedupe — byte-identical images already in the
+      // library are skipped instead of saved (and uploaded) again.
+      try {
+        const dup = await findDuplicateMedia(blobToSave);
+        if (dup) { dupCount++; continue; }
+      } catch { /* dedupe is best-effort — never block an upload */ }
       const record = await saveMedia({ name: file.name, blob: blobToSave, width, height });
       const url = blobToObjectURL(blobToSave);
       setStoredMedia(prev => [record, ...prev]);
       setThumbUrls(prev => ({ ...prev, [record.id]: url }));
+    }
+    if (dupCount > 0) {
+      toast.warn(`Skipped ${dupCount} duplicate${dupCount === 1 ? '' : 's'}`, { detail: 'Byte-identical images are already in the library.' });
     }
     if (savedFiles > 0) {
       const saved = totalOriginal - totalFinal;
@@ -1308,24 +1317,36 @@ export default function Files() {
     if (ids.length === 0) return;
     const snapshots = ids.map(id => storedMedia.find(m => m.id === id)).filter(Boolean);
     if (snapshots.length === 0) return;
+    // v5.2.3: deleteMedia is now cloud-first — only drop tiles whose cloud
+    // row is confirmed gone, so a refused/failed delete doesn't leave a
+    // ghost that resurrects on the next hydrate.
+    const deletedIds = new Set();
     for (const id of ids) {
-      try { await deleteMedia(id); } catch {}
+      try {
+        const res = await deleteMedia(id);
+        if (res?.ok) deletedIds.add(id);
+      } catch {}
     }
-    setStoredMedia(prev => prev.filter(m => !selectedIds.has(m.id)));
+    if (deletedIds.size < ids.length) {
+      toast.error(`${ids.length - deletedIds.size} delete${ids.length - deletedIds.size === 1 ? '' : 's'} failed`, { detail: 'Those files were left in place — try again.' });
+    }
+    setStoredMedia(prev => prev.filter(m => !deletedIds.has(m.id)));
     setThumbUrls(prev => {
       const n = { ...prev };
-      for (const id of ids) { if (n[id]) URL.revokeObjectURL(n[id]); delete n[id]; }
+      for (const id of deletedIds) { if (n[id]) URL.revokeObjectURL(n[id]); delete n[id]; }
       return n;
     });
     clearBulkSelection();
     setSelectMode(false);
-    toast.info(`Deleted ${snapshots.length} file${snapshots.length === 1 ? '' : 's'}`, {
+    if (deletedIds.size === 0) return;
+    const deletedSnapshots = snapshots.filter(s => deletedIds.has(s.id));
+    toast.info(`Deleted ${deletedSnapshots.length} file${deletedSnapshots.length === 1 ? '' : 's'}`, {
       duration: 10000,
       action: {
         label: 'UNDO ALL',
         onClick: async () => {
           const restored = [];
-          for (const s of snapshots) {
+          for (const s of deletedSnapshots) {
             try {
               const r = await saveMedia({
                 name: s.name, blob: s.blob, width: s.width, height: s.height, source: s.source || 'local',
@@ -1350,7 +1371,11 @@ export default function Files() {
     // is preserved in memory — if the user doesn't undo within the toast's
     // lifetime, it's garbage-collected along with the closure.
     const snapshot = storedMedia.find(m => m.id === id);
-    await deleteMedia(id);
+    const res = await deleteMedia(id);
+    if (res && res.ok === false) {
+      toast.error('Delete failed', { detail: String(res.error || '').slice(0, 120) || 'The cloud copy could not be removed — file left in place.' });
+      return;
+    }
     setStoredMedia(prev => prev.filter(m => m.id !== id));
     if (thumbUrls[id]) URL.revokeObjectURL(thumbUrls[id]);
     setThumbUrls(prev => { const n = { ...prev }; delete n[id]; return n; });

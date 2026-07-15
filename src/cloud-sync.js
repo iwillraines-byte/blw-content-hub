@@ -744,6 +744,15 @@ export const cloudAwait = {
       blob: base64 ? { base64, mime: fit.blob?.type || record.imageBlob?.type || 'image/png' } : null,
     });
   },
+  // v5.2.3: awaitable media delete. The fire-and-forget cloud.deleteMedia
+  // can't tell the caller the server REFUSED (403 role gate) — the local
+  // copy would vanish while the cloud row survived and resurrected on the
+  // next hydrate. Callers that need the outcome (athlete self-deletes,
+  // the player-page gallery) await this instead.
+  async deleteMedia(id) {
+    if (!supabaseConfigured || !id) return { skipped: true };
+    return postSync({ kind: 'media', action: 'delete', id });
+  },
   async syncRequest(record) {
     if (!supabaseConfigured || !record?.id) return { skipped: true };
     return postSync({ kind: 'request', action: 'upsert', record: mapRequestToRow(record) });

@@ -219,7 +219,7 @@ function openDB() {
 // Contract: returns the local record. Inspect `record.cloudSyncedAt`
 // (truthy = visible to other admins) and `record.cloudSyncError`
 // (truthy = stuck local, retry-able) to know what really happened.
-export async function saveMedia({ name, blob, width, height, driveFileId, source }) {
+export async function saveMedia({ name, blob, width, height, driveFileId, source, ownerId }) {
   const db = await openDB();
   const id = crypto.randomUUID();
   const parsed = parseFilename(name);
@@ -236,6 +236,11 @@ export async function saveMedia({ name, blob, width, height, driveFileId, source
     createdAt: Date.now(),
     driveFileId: driveFileId || null,
     source: source || 'local',
+    // v5.2.3: local uploader stamp so "can I delete this?" gating works
+    // immediately, before the cloud round-trip. The SERVER stamp (from the
+    // verified JWT) remains authoritative — this is display-only and gets
+    // overwritten by the cloud value on the next hydrate.
+    ownerId: ownerId || null,
     cloudSyncedAt: null,
     cloudSyncError: null,
   };
@@ -363,14 +368,57 @@ export async function updateMedia(id, updates) {
   });
 }
 
+// v5.2.3: delete is now CLOUD-FIRST and awaited. The old shape deleted the
+// local IDB row then fired the cloud delete without reading the response —
+// if the server refused (403 role gate: an athlete deleting someone else's
+// photo) the local copy vanished while the cloud row survived, so the photo
+// "came back" on the next hydrate. Now: ask the cloud first; only remove the
+// local copy once the cloud row is confirmed gone (or was never there).
+// Returns { ok, error } — a refused delete leaves local state untouched so
+// the caller can toast the reason.
 export async function deleteMedia(id) {
+  const result = await cloudAwait.deleteMedia(id);
+  // ok        → cloud row + storage blob removed.
+  // skipped   → no cloud configured; local-only library, delete freely.
+  // 404       → row was never synced up; nothing in the cloud to protect.
+  const cloudGone = result?.ok || result?.skipped || result?.status === 404;
+  if (!cloudGone) {
+    return { ok: false, error: result?.error || 'cloud delete failed' };
+  }
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).delete(id);
-    tx.oncomplete = () => { cloud.deleteMedia(id); resolve(); };
+    tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+  return { ok: true };
+}
+
+// ─── Duplicate detection (v5.2.3) ───────────────────────────────────────────
+// "Is this exact image already in the library?" — compares byte size first
+// (cheap), then SHA-256 only on size matches (rare), so a 1700-photo library
+// costs one getAll + usually zero hashes. Returns the existing record or
+// null. Content-based, so it catches the same file re-dropped under any
+// name, player, or asset type.
+async function hashBlob(blob) {
+  const buf = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function findDuplicateMedia(blob) {
+  if (!blob?.size) return null;
+  const all = await getAllMedia();
+  const sameSize = all.filter(m => m.blob && m.blob.size === blob.size);
+  if (sameSize.length === 0) return null;
+  const want = await hashBlob(blob);
+  for (const m of sameSize) {
+    try {
+      if (await hashBlob(m.blob) === want) return m;
+    } catch { /* unreadable blob — not a match */ }
+  }
+  return null;
 }
 
 // ─── Player-Media Matching ──────────────────────────────────────────────────

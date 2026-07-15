@@ -28,7 +28,7 @@
 
 import { useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
-import { saveMedia, blobToObjectURL, buildPlayerFilename, buildTeamFilename } from './media-store';
+import { saveMedia, findDuplicateMedia, blobToObjectURL, buildPlayerFilename, buildTeamFilename } from './media-store';
 import { compressImageBlob, getCompressPreference } from './image-compress';
 import { useToast } from './toast';
 import { useAuth, isFanRole } from './auth';
@@ -61,7 +61,7 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
   // and should never trigger an upload pipeline. Other roles pass through
   // unchanged. We render {children} either way so the page itself still
   // works for fans; only the upload affordances are disabled.
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const uploadBlocked = isFanRole(role);
 
   // v4.5.29: imperative handle so a parent can trigger the asset-type
@@ -156,7 +156,8 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
     const playerLastName = (player?.lastName || '').toUpperCase();
     const playerFI = (player?.firstInitial || (player?.firstName || '').charAt(0) || '').toUpperCase();
     const playerNum = player?.num || '';
-    let okCount = 0, failCount = 0;
+    let okCount = 0, failCount = 0, dupCount = 0;
+    let lastDupName = '';
     const savedRecords = [];
     for (const file of pickerFiles) {
       try {
@@ -170,6 +171,18 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
             height = result.height;
           } catch { /* fall back to original */ }
         }
+        // v5.2.3: content dedupe. The same photo dropped twice (or re-added
+        // after someone else already uploaded it) used to create a second
+        // record + a second cloud blob every time. Byte-identical images are
+        // skipped, whatever name/player/type they were saved under. Checked
+        // per-file inside the loop, so a double-selected file within ONE drop
+        // also dedupes (the first copy is in IDB by the time the second is
+        // checked). Soft-fails open: a hashing error must never block an
+        // upload.
+        try {
+          const dup = await findDuplicateMedia(blobToSave);
+          if (dup) { dupCount++; lastDupName = dup.name; continue; }
+        } catch { /* dedupe is best-effort */ }
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
         const filename = player
           ? buildPlayerFilename({
@@ -191,6 +204,9 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
           width,
           height,
           source: 'page-drop',
+          // Uploader stamp — lets the gallery's delete gating work for
+          // athletes immediately (server re-stamps authoritatively).
+          ownerId: user?.id || null,
         });
         savedRecords.push(record);
         okCount++;
@@ -205,9 +221,17 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
       const subject = player ? player.name || playerLastName : team.name;
       toast.success(
         `Added ${okCount} photo${okCount === 1 ? '' : 's'}`,
-        { detail: `Tagged as ${assetType} for ${subject}.` }
+        {
+          detail: `Tagged as ${assetType} for ${subject}.`
+            + (dupCount > 0 ? ` ${dupCount} duplicate${dupCount === 1 ? '' : 's'} skipped.` : ''),
+        }
       );
       if (onUploaded) onUploaded(savedRecords);
+    } else if (dupCount > 0 && failCount === 0) {
+      toast.warn(
+        `Already in the library`,
+        { detail: `${dupCount === 1 ? 'This photo is' : `All ${dupCount} photos are`} already uploaded${lastDupName ? ` (${lastDupName})` : ''} — nothing added.` }
+      );
     }
     if (failCount > 0) {
       toast.error(
@@ -215,7 +239,7 @@ export const PageDropZone = forwardRef(function PageDropZone({ team, player = nu
         { detail: 'See console for details.' }
       );
     }
-  }, [pickerFiles, team, player, toast, onUploaded]);
+  }, [pickerFiles, team, player, toast, onUploaded, user?.id]);
 
   // Build the dragover overlay JSX (rendered via portal so it always
   // sits at the top of the stacking context).

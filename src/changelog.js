@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '5.2.3',
+    date: '2026-07-15',
+    kind: 'minor',
+    summary: 'v5.2.3 — delete photos right from the player page + automatic duplicate blocking',
+    items: [
+      'Player-page galleries now have a × button on every photo tile. Staff can delete any photo; athletes can delete the photos they uploaded themselves (and only those — the server enforces ownership, so no one can remove a teammate\'s or admin\'s uploads).',
+      'Deletes are now cloud-first everywhere: the cloud copy is confirmed gone before the local one is removed, so a refused or failed delete can\'t leave a ghost photo that reappears on the next sync. Every delete still offers an 8-second UNDO.',
+      'Deleting a photo that\'s pinned as the profile picture automatically unpins it, so the avatar falls back gracefully instead of rendering blank on other devices.',
+      'Duplicate uploads are now blocked by content, not filename: dropping a byte-identical image (on a player page, team page, or the Files page) is detected and skipped with a toast, no matter what it was named or who uploaded the original.',
+    ],
+  },
+  {
     version: '5.2.2',
     date: '2026-07-11',
     kind: 'patch',

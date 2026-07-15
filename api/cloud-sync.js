@@ -78,10 +78,12 @@ const ATHLETE_WRITABLE = {
   'generate-log':   'team',
   'manual-player':  'team',
 };
-// Kinds athletes are allowed to DELETE. Athletes can only delete their own
-// generate-log records (their own generation history). They cannot delete
-// media, overlays, requests, etc.
-const ATHLETE_DELETABLE = new Set(['generate-log']);
+// Kinds athletes are allowed to DELETE. Athletes can delete their own
+// generate-log records (their own generation history) and — v5.2.3 — media
+// they uploaded themselves (owner_id === auth.uid(), strictly; see the
+// ownership check in the delete path). They cannot delete overlays,
+// requests, or anyone else's uploads.
+const ATHLETE_DELETABLE = new Set(['generate-log', 'media']);
 
 const BLOB_KINDS = new Set(['media', 'overlay', 'effect', 'generate-log']);
 const BUCKET_FOR = {
@@ -632,7 +634,12 @@ export default async function handler(req, res) {
           }
           if (!own) { res.status(404).json({ error: 'Record not found' }); return; }
           const ownsByUser = own.owner_id && own.owner_id === user.id;
-          const ownsByTeam = !own.owner_id && own.team && own.team === userTeamId;
+          // Team fallback covers legacy generate-log rows that predate
+          // owner_id stamping. Media NEVER falls back to team — a legacy
+          // (unstamped) media row was uploaded by an admin, and an athlete
+          // must not be able to delete teammates' or staff's photos just
+          // because they share a team code.
+          const ownsByTeam = kind !== 'media' && !own.owner_id && own.team && own.team === userTeamId;
           if (!ownsByUser && !ownsByTeam) {
             res.status(403).json({ error: 'Athletes can only delete their own records' });
             return;

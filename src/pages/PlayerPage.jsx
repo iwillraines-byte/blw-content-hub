@@ -9,7 +9,7 @@ import { PageDropZone } from '../page-drop-zone';
 import { colors, fonts, radius, shadows } from '../theme';
 import { Icon } from '../icon';
 import { timeAgo } from '../format-time';
-import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL, resyncMedia } from '../media-store';
+import { findPlayerMedia, findTeamMedia, getAllMedia, resolvePlayerAvatar, blobToObjectURL, resyncMedia, deleteMedia, saveMedia } from '../media-store';
 import { PreviewLightbox, usePhotoLightbox } from '../preview-lightbox';
 import { getManualPlayersByTeam, getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { TierBadge } from '../tier-badges';
@@ -224,7 +224,12 @@ function ExpandableMediaGrid({ items, defaultCap = 10, renderItem }) {
   );
 }
 
-function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls, onTileClick }) {
+// v5.2.3: `canDelete(m)` + `onDelete(m)` add a per-tile ⌫ affordance —
+// staff can prune any photo, athletes only their own uploads (mirrors the
+// server-side owner gate in /api/cloud-sync). Both optional; absent = the
+// read-only tile everyone had before.
+function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls, onTileClick, canDelete, onDelete }) {
+  const [deletingId, setDeletingId] = useState(null);
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, color: colors.textMuted, letterSpacing: 1, marginBottom: 6 }}>
@@ -237,10 +242,12 @@ function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls, onTileClick 
             key={m.id}
             onClick={onTileClick ? () => onTileClick(visible, i) : undefined}
             style={{
+              position: 'relative',
               borderRadius: radius.base, overflow: 'hidden',
               border: `1px solid ${colors.borderLight}`,
               cursor: onTileClick ? 'zoom-in' : 'default',
               transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+              opacity: deletingId === m.id ? 0.45 : 1,
             }}
             onMouseEnter={onTileClick ? (e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; } : undefined}
             onMouseLeave={onTileClick ? (e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
@@ -249,6 +256,28 @@ function ExpandablePlayerMediaGroup({ type, items, team, mediaUrls, onTileClick 
               width: '100%', height: 120,
               background: mediaUrls[m.id] ? `url(${mediaUrls[m.id]}) center/cover` : `linear-gradient(135deg, ${team.color}22, ${team.color}08)`,
             }} />
+            {canDelete?.(m) && onDelete && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (deletingId) return;
+                  setDeletingId(m.id);
+                  try { await onDelete(m); } finally { setDeletingId(null); }
+                }}
+                disabled={deletingId === m.id}
+                title={`Delete ${m.name}`}
+                aria-label={`Delete ${m.name}`}
+                style={{
+                  position: 'absolute', top: 6, right: 6,
+                  width: 24, height: 24, borderRadius: '50%',
+                  background: 'rgba(17,24,39,0.65)', color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.35)',
+                  cursor: deletingId === m.id ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, lineHeight: 1, padding: 0,
+                }}
+              >×</button>
+            )}
             <div style={{
               padding: 6, fontSize: 10, fontFamily: fonts.condensed,
               color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -2319,6 +2348,69 @@ export default function PlayerPage() {
     setAllMediaPool(prev => [...records, ...prev]);
   }, []);
 
+  // v5.2.3: gallery delete. Staff can delete any photo; athletes only their
+  // own uploads (m.ownerId === their user id — the server enforces the same
+  // rule, this just hides dead-end buttons). deleteMedia is cloud-first: a
+  // refused delete (403) leaves everything intact and we toast the reason.
+  const canDeleteMedia = useCallback((m) => {
+    if (isAdmin) return true;
+    if (isAthlete) return !!(m?.ownerId && user?.id && m.ownerId === user.id);
+    return false;
+  }, [isAdmin, isAthlete, user?.id]);
+
+  const handleDeleteMedia = useCallback(async (m) => {
+    let res;
+    try {
+      res = await deleteMedia(m.id);
+    } catch (err) {
+      res = { ok: false, error: err?.message };
+    }
+    if (!res?.ok) {
+      toast.error('Delete failed', { detail: String(res?.error || 'The cloud copy could not be removed — photo left in place.').slice(0, 120) });
+      return;
+    }
+    const drop = (list) => list.filter(x => x.id !== m.id);
+    setMedia(drop);
+    setAllMediaPool(drop);
+    setTeamMedia(drop);
+    // If the deleted photo was the pinned profile photo, unpin it too —
+    // otherwise profile_media_id points at nothing and the avatar renders
+    // blank on every device (the exact broken-pin bug v5.2.0 fixed).
+    if (player?.profileMediaId === m.id && team?.id && player?.lastName) {
+      try {
+        await upsertManualPlayer({
+          team: team.id,
+          lastName: player.lastName,
+          firstInitial: player.firstInitial,
+          firstName: player.firstName,
+          num: player.num,
+          updates: { profile_media_id: null },
+          awaitCloud: true,
+        });
+        setPlayer(prev => prev ? { ...prev, profileMediaId: null } : prev);
+      } catch { /* the broken-pin scanner in Media Console catches strays */ }
+    }
+    toast.info(`Deleted ${m.name}`, {
+      duration: 8000,
+      action: {
+        label: 'UNDO',
+        onClick: async () => {
+          try {
+            const restored = await saveMedia({
+              name: m.name, blob: m.blob, width: m.width, height: m.height,
+              source: m.source || 'local', ownerId: m.ownerId || user?.id || null,
+            });
+            setMedia(prev => [restored, ...prev]);
+            setAllMediaPool(prev => [restored, ...prev]);
+            toast.success('Restored');
+          } catch (err) {
+            toast.error('Couldn\'t restore', { detail: String(err?.message || '').slice(0, 120) });
+          }
+        },
+      },
+    });
+  }, [toast, user?.id, player?.profileMediaId, player?.lastName, player?.firstInitial, player?.firstName, player?.num, team?.id]);
+
   // v4.5.29: ref + hidden file input pair so the gallery's "+ Add
   // photo" button can trigger the same asset-type picker the drag-drop
   // path uses. Avoids duplicating the save logic.
@@ -2904,6 +2996,8 @@ export default function PlayerPage() {
             team={team}
             mediaUrls={mediaUrls}
             onTileClick={(visibleItems, i) => photoLightbox.openAt(visibleItems, i)}
+            canDelete={canDeleteMedia}
+            onDelete={handleDeleteMedia}
           />
         ))}
       </Card>
