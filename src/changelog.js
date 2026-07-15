@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.2.4',
+    date: '2026-07-15',
+    kind: 'patch',
+    summary: 'v5.2.4 — teams were missing most of their games; standings and schedules now see the full season',
+    items: [
+      'The league data feed pages its game list 25 at a time, and the app was only ever reading the first page — 25 of 151 games. Standings, team schedules, playoff odds, and game counts were all being computed from a sixth of the season, which is why teams appeared to be missing games. The app now pulls every page until the full season is loaded.',
+      'Atlanta\'s pre-rename games (recorded under the old San Diego code) were being discarded as non-league games; they now attribute to the Ballers correctly in game history.',
+      'Note on player stats: a few players (James Lee, Justin Lee, James Kline, Spencer Foss) have no current-season batting rows in the Grand Slam Systems feed itself — the app displays everything the league feed provides, so those need to be corrected upstream in GSS.',
+    ],
+  },
+  {
     version: '5.2.3',
     date: '2026-07-15',
     kind: 'minor',

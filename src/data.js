@@ -575,13 +575,32 @@ let _gamesFetchedAt = 0;
 export async function fetchGames() {
   if (_gamesCache && (Date.now() - _gamesFetchedAt) < CACHE_TTL) return _gamesCache;
   try {
-    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/games?showAll=true`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const items = Array.isArray(data?.items) ? data.items : [];
+    // v5.2.4: /games is PAGINATED and ignores ?showAll=true (that flag only
+    // works on the stats endpoints). The old request silently got page 1 —
+    // 25 of 151 games — so standings, schedules, and team game counts were
+    // all computed from a sixth of the season. Ask for a big page, then
+    // defensively follow `next` in case the season ever outgrows it.
+    const PAGE_SIZE = 500;
+    const items = [];
+    let page = 1;
+    for (;;) {
+      const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/games?pageSize=${PAGE_SIZE}&page=${page}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const batch = Array.isArray(data?.items) ? data.items : [];
+      items.push(...batch);
+      if (!data?.next || batch.length === 0 || page >= 20) break;
+      page++;
+    }
 
     const abbrToId = new Map();
     for (const t of TEAMS) abbrToId.set((t.apiAbbr || '').toUpperCase(), t.id);
+    // v5.2.4: also honor legacy API codes (TEAM_MAP carries 'SD' → 'ATL'
+    // from the Orcas→Ballers rename). The stats path already went through
+    // mapTeamAbbr; games built its own map from current apiAbbrs only, so
+    // every pre-rename game fell out as "non-BLW" and vanished from the
+    // franchise's history.
+    for (const [api, id] of Object.entries(TEAM_MAP)) abbrToId.set(api.toUpperCase(), id);
 
     _gamesCache = items.map(g => ({
       id: g.id,
