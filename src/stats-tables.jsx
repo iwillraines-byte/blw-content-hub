@@ -506,8 +506,8 @@ export function PitchingTable({
               <SortHeader label="HR"     sortKey="hrAllowed"   currentSort={sort} setSort={setSort} />
               <SortHeader label="ERA"    sortKey="era"         currentSort={sort} setSort={setSort} />
               <SortHeader label="WHIP"   sortKey="whip"        currentSort={sort} setSort={setSort} />
-              <SortHeader label="K/4"    sortKey="k4"          currentSort={sort} setSort={setSort} />
-              <SortHeader label="BB/4"   sortKey="bb4"         currentSort={sort} setSort={setSort} />
+              <SortHeader label="K/3"    sortKey="k4"          currentSort={sort} setSort={setSort} />
+              <SortHeader label="BB/3"   sortKey="bb4"         currentSort={sort} setSort={setSort} />
               {/* FIP is the marquee — anchored at the end so the eye lands
                   on it last and the table reads "results, then quality." */}
               <SortHeader label="FIP"    sortKey="fip"         currentSort={sort} setSort={setSort} />

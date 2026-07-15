@@ -82,7 +82,7 @@ const PITCHING_COLOR_COLS = {
   hits: 'lower', runs: 'lower', bb: 'lower', hrAllowed: 'lower',
   k: 'higher',
   era: 'lower', whip: 'lower', fip: 'lower',
-  k4: 'higher', bb4: 'lower',
+  k4: 'higher', bb4: 'lower', h3: 'lower',
   eraPlus: 'higher', pwar: 'higher',
 };
 
@@ -351,8 +351,12 @@ const BATTING_LEADER_STATS = [
   { label: 'WRC+', key: 'wrcPlus',  dir: 'desc', fmt: v => Math.round(v) },
   { label: 'OPS+', key: 'ops_plus', dir: 'desc', fmt: v => Math.round(v) },
   { label: 'AVG',  key: 'avg',      dir: 'desc', fmt: v => v.toFixed(3).replace(/^0/, '') },
+  { label: 'OBP',  key: 'obp',      dir: 'desc', fmt: v => v.toFixed(3).replace(/^0/, '') },
+  { label: 'SLG',  key: 'slg',      dir: 'desc', fmt: v => v.toFixed(3).replace(/^0/, '') },
+  { label: 'H',    key: 'hits',     dir: 'desc', fmt: v => v },
   { label: 'HR',   key: 'hr',       dir: 'desc', fmt: v => v },
   { label: 'RBI',  key: 'rbi',      dir: 'desc', fmt: v => v },
+  { label: 'BB%',  key: 'bbPct',    dir: 'desc', fmt: v => `${v.toFixed(1)}%` },
 ];
 const PITCHING_LEADER_STATS = [
   { label: 'pWAR', key: 'pwar',    dir: 'desc', fmt: v => v.toFixed(1) },
@@ -361,6 +365,10 @@ const PITCHING_LEADER_STATS = [
   { label: 'FIP',  key: 'fip',     dir: 'asc',  fmt: v => v.toFixed(2) },
   { label: 'K',    key: 'k',       dir: 'desc', fmt: v => v },
   { label: 'WHIP', key: 'whip',    dir: 'asc',  fmt: v => v.toFixed(2) },
+  { label: 'K/3',  key: 'k4',      dir: 'desc', fmt: v => v.toFixed(2) },
+  { label: 'BB/3', key: 'bb4',     dir: 'asc',  fmt: v => v.toFixed(2) },
+  { label: 'H/3',  key: 'h3',      dir: 'asc',  fmt: v => v.toFixed(2) },
+  { label: 'W',    key: 'w',       dir: 'desc', fmt: v => v },
 ];
 
 function LeadersBoard({ rows, stats }) {
@@ -847,8 +855,9 @@ export default function GameCenter() {
                   <SortHeader label="ERA+"   sortKey="eraPlus"  currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="WHIP"   sortKey="whip"     currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="FIP"    sortKey="fip"      currentSort={pitchingSort} setSort={setPitchingSort} />
-                  <SortHeader label="K/4"    sortKey="k4"       currentSort={pitchingSort} setSort={setPitchingSort} />
-                  <SortHeader label="BB/4"   sortKey="bb4"      currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="K/3"    sortKey="k4"       currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="BB/3"   sortKey="bb4"      currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="H/3"    sortKey="h3"       currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="pWAR"   sortKey="pwar"     currentSort={pitchingSort} setSort={setPitchingSort} />
                 </tr>
               </thead>
@@ -875,11 +884,12 @@ export default function GameCenter() {
                     <td title={titleForCell(pitchingPercentiles, 'fip', p)}       style={{ ...cellFor(pitchingSort, 'fip'),       background: bgForCell(pitchingPercentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
                     <td title={titleForCell(pitchingPercentiles, 'k4', p)}        style={{ ...cellFor(pitchingSort, 'k4'),        background: bgForCell(pitchingPercentiles, 'k4', p) }}>{p.k4}</td>
                     <td title={titleForCell(pitchingPercentiles, 'bb4', p)}       style={{ ...cellFor(pitchingSort, 'bb4'),       background: bgForCell(pitchingPercentiles, 'bb4', p) }}>{p.bb4}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'h3', p)}        style={{ ...cellFor(pitchingSort, 'h3'),        background: bgForCell(pitchingPercentiles, 'h3', p) }}>{p.h3 != null ? p.h3.toFixed(2) : '—'}</td>
                     <td title={titleForCell(pitchingPercentiles, 'pwar', p)}      style={{ ...cellFor(pitchingSort, 'pwar'),      background: bgForCell(pitchingPercentiles, 'pwar', p) }}>{p.pwar != null ? p.pwar.toFixed(1) : '—'}</td>
                   </tr>
                 ))}
                 {filteredPitching.length === 0 && (
-                  <tr><td colSpan={21} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{pitchingSearch}"</td></tr>
+                  <tr><td colSpan={22} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{pitchingSearch}"</td></tr>
                 )}
               </tbody>
             </table>

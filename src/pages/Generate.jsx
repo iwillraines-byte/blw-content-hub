@@ -141,7 +141,7 @@ function DragOverlay({ fields, hiddenFields, customFields, canvasW, canvasH, sca
 // when the recommendation leans on a top-15% stat — a "worth posting" hint.
 //
 // The percentile calc is the same direction-aware one used on the Game Center
-// tables: for lower-is-better stats (K, ERA, FIP, WHIP, BB/4), "top" means
+// tables: for lower-is-better stats (K, ERA, FIP, WHIP, BB/3), "top" means
 // the player's value is low vs the league. So a pitcher with FIP 0.25 still
 // gets tagged "Top 5%" even though 0.25 is numerically small.
 function percentileOfValue(values, target, lowerIsBetter = false) {
@@ -195,7 +195,7 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
 
     recs.push({
       label: 'Dominance',
-      value: `${typeof pitcher.fip === 'number' ? pitcher.fip.toFixed(2) : pitcher.fip} FIP · ${pitcher.k4} K/4`,
+      value: `${typeof pitcher.fip === 'number' ? pitcher.fip.toFixed(2) : pitcher.fip} FIP · ${pitcher.k4} K/3`,
       badge: pctBadge(fipPct) || pctBadge(k4Pct),
     });
     recs.push({
@@ -205,7 +205,7 @@ function buildRecommendations(player, batter, pitcher, battingPool, pitchingPool
     });
     recs.push({
       label: 'Strikeout',
-      value: `${pitcher.k} K · ${pitcher.k4} K/4 · ${pitcher.ip} IP`,
+      value: `${pitcher.k} K · ${pitcher.k4} K/3 · ${pitcher.ip} IP`,
       badge: pctBadge(k4Pct),
     });
   }
@@ -1046,7 +1046,7 @@ export default function Generate() {
     const statLine = batter
       ? `${batter.ops_plus} OPS+ | ${batter.avg} AVG | ${batter.hr} HR | ${batter.obp} OBP`
       : pitcher
-        ? `${pitcher.fip.toFixed(2)} FIP | ${pitcher.ip} IP | ${pitcher.w} W | ${pitcher.k4} K/4`
+        ? `${pitcher.fip.toFixed(2)} FIP | ${pitcher.ip} IP | ${pitcher.w} W | ${pitcher.k4} K/3`
         : '';
 
     // Per-template field shape:
@@ -1068,7 +1068,7 @@ export default function Generate() {
       // numbers as a starting point; the user wipes and replaces
       // with the actual game performance via the form fields.
       //   batter  → HR · AVG · OPS+
-      //   pitcher → IP · K/4 · W
+      //   pitcher → IP · K/3 · W
       //   neither → empty (user types the game stats by hand)
       const box = batter
         ? { statBox1: String(batter.hr ?? ''), statBox2: String(batter.avg ?? ''), statBox3: String(batter.ops_plus ?? '') }

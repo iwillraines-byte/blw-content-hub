@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '5.3.1',
+    date: '2026-07-15',
+    kind: 'patch',
+    summary: 'v5.3.1 — accurate historical teams in career stats, /3 rate naming, and expanded leader boards',
+    items: [
+      'Career stats now show the team a player actually played for in each season — e.g. Cael Foreman\'s 2025 season correctly reads OTR (On The Rise) instead of his current ATL. The active season still shows the player\'s current club.',
+      'Pitching rate stats are named for BLW\'s 3-inning games everywhere: K/3, BB/3 (and HR/3) replace the old /4 labels across the stats tables, player pages, stat cards, and Generate.',
+      'New pitching stat: H/3 — hits allowed per 3 innings — added to the pitching table with percentile shading.',
+      'Leader boards expanded: batting adds H, OBP, SLG, and BB% (10 boards total); pitching adds K/3, BB/3, H/3, and Wins (10 boards total).',
+    ],
+  },
+  {
     version: '5.3.0',
     date: '2026-07-15',
     kind: 'minor',

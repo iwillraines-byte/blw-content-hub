@@ -418,7 +418,7 @@ export const TEMPLATE_TYPES = {
 export const STAT_CARD_TYPES = [
   { id: 'hitting-stats',       label: 'Hitting · Stats',       icon: '⚾', hint: 'AVG / OPS+ / HR / OBP / SLG / OPS / RBI / PA' },
   { id: 'hitting-percentiles', label: 'Hitting · Percentiles', icon: '◑', hint: 'Savant-style bubble bars across BLW batters' },
-  { id: 'pitching-stats',      label: 'Pitching · Stats',      icon: '↗', hint: 'ERA / FIP / IP / W-L / K/4 / WHIP' },
+  { id: 'pitching-stats',      label: 'Pitching · Stats',      icon: '↗', hint: 'ERA / FIP / IP / W-L / K/3 / WHIP' },
   { id: 'pitching-percentiles',label: 'Pitching · Percentiles',icon: '◐', hint: 'Savant-style bubble bars across BLW pitchers' },
 ];
 

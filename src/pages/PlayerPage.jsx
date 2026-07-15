@@ -337,7 +337,7 @@ function buildStatLine(player) {
   if (player.pitching) {
     const p = player.pitching;
     const fip = typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip;
-    return `FIP ${fip} | IP ${p.ip} | W ${p.w} | K/4 ${p.k4}`;
+    return `FIP ${fip} | IP ${p.ip} | W ${p.w} | K/3 ${p.k4}`;
   }
   return '';
 }
@@ -374,7 +374,7 @@ function rankWithTie(list, playerName, statKey, direction = 'desc', toNumber = p
 
 // Innings-pitched string ("4.2" = 4⅔, i.e. 4 innings + 2 outs) → decimal
 // innings. The /3 constant matches the app's IP convention; it's only used
-// for monotonic rate ranking (HR/4 etc.), so the exact divisor never affects
+// for monotonic rate ranking (HR/3 etc.), so the exact divisor never affects
 // the resulting percentile.
 function ipToInnings(ip) {
   const s = String(ip ?? '').trim();
@@ -512,7 +512,7 @@ function SeasonStatsSubCard({ team, label, tiles }) {
               }}>{t.label}</div>
               {/* Stat value font size auto-shrinks for longer numbers
                   (3.50 fits at 34, 12.45 needs to drop) so pitching
-                  ERAs / WHIPs / K/4 ratios never overflow the tile.
+                  ERAs / WHIPs / K/3 ratios never overflow the tile.
                   Lookup table is cheaper than a measure pass and the
                   result is identical at every viewport. Letter-spacing
                   also dialed down at smaller sizes to keep numbers
@@ -565,7 +565,7 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
   const pitchingTiles = [
     { label: 'ERA',  value: player.pitching?.era,  rank: pitchingRanks?.era?.rank,  tied: pitchingRanks?.era?.tied,  total: pTotal },
     { label: 'IP',   value: player.pitching?.ip,   rank: pitchingRanks?.ip?.rank,   tied: pitchingRanks?.ip?.tied,   total: pTotal },
-    { label: 'K/4',  value: player.pitching?.k4,   rank: pitchingRanks?.k4?.rank,   tied: pitchingRanks?.k4?.tied,   total: pTotal, highlight: true },
+    { label: 'K/3',  value: player.pitching?.k4,   rank: pitchingRanks?.k4?.rank,   tied: pitchingRanks?.k4?.tied,   total: pTotal, highlight: true },
     { label: 'WHIP', value: player.pitching?.whip, rank: pitchingRanks?.whip?.rank, tied: pitchingRanks?.whip?.tied, total: pTotal },
   ];
 
@@ -868,9 +868,9 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
     { label: 'WHIP', value: player.pitching.whip, percentile: percentileFor(pitchingLeaders, pn, 'whip', 'asc', parseFloat) },
     { label: 'IP',   value: player.pitching.ip,   percentile: percentileFor(pitchingLeaders, pn, 'ip',   'desc', parseFloat) },
     { label: 'K',    value: player.pitching.k,    percentile: percentileFor(pitchingLeaders, pn, 'k',    'desc', Number) },
-    { label: 'K/4',  value: player.pitching.k4,   percentile: percentileFor(pitchingLeaders, pn, 'k4',   'desc', parseFloat) },
+    { label: 'K/3',  value: player.pitching.k4,   percentile: percentileFor(pitchingLeaders, pn, 'k4',   'desc', parseFloat) },
     { label: 'BB',   value: player.pitching.bb,   percentile: percentileFor(pitchingLeaders, pn, 'bb',   'asc', Number) },
-    { label: 'BB/4', value: player.pitching.bb4,  percentile: percentileFor(pitchingLeaders, pn, 'bb4',  'asc', parseFloat) },
+    { label: 'BB/3', value: player.pitching.bb4,  percentile: percentileFor(pitchingLeaders, pn, 'bb4',  'asc', parseFloat) },
     { label: 'FIP',  value: typeof player.pitching.fip === 'number' ? player.pitching.fip.toFixed(2) : player.pitching.fip, percentile: percentileFor(pitchingLeaders, pn, 'fip', 'asc', parseFloat) },
     { label: 'K:BB', value: player.pitching.kbb || formatRatio(player.pitching.k, player.pitching.bb), percentile: derivedPercentileFor(pitchingLeaders, pn, (r) => safeRatio(r.k, r.bb), 'desc') },
   ] : null;
@@ -884,15 +884,15 @@ function LeagueStandingCard({ player, team, battingLeaders, pitchingLeaders, bTo
     { label: 'HR/PA', percentile: derivedPercentileFor(battingLeaders, pn, (r) => safeRate(r.hr, r.pa), 'desc') },
   ] : null;
 
-  // Pitching radar — clockwise from the top: ERA, WHIP, K/4, BB/4, HR/4, FIP
+  // Pitching radar — clockwise from the top: ERA, WHIP, K/3, BB/3, HR/3, FIP
   // (per-4-innings rate axes so the shape reads as rate quality, not volume).
-  // HR/4 has no leaderboard field, so it's derived from HR allowed / innings.
+  // HR/3 has no leaderboard field, so it's derived from HR allowed / innings.
   const pitAxes = hasPit ? [
     { label: 'ERA',  percentile: percentileFor(pitchingLeaders, pn, 'era', 'asc', parseFloat) },
     { label: 'WHIP', percentile: percentileFor(pitchingLeaders, pn, 'whip', 'asc', parseFloat) },
-    { label: 'K/4',  percentile: percentileFor(pitchingLeaders, pn, 'k4', 'desc', parseFloat) },
-    { label: 'BB/4', percentile: percentileFor(pitchingLeaders, pn, 'bb4', 'asc', parseFloat) },
-    { label: 'HR/4', percentile: derivedPercentileFor(pitchingLeaders, pn, (r) => {
+    { label: 'K/3',  percentile: percentileFor(pitchingLeaders, pn, 'k4', 'desc', parseFloat) },
+    { label: 'BB/3', percentile: percentileFor(pitchingLeaders, pn, 'bb4', 'asc', parseFloat) },
+    { label: 'HR/3', percentile: derivedPercentileFor(pitchingLeaders, pn, (r) => {
         const inn = ipToInnings(r.ip);
         return inn > 0 ? (Number(r.hrAllowed) || 0) / inn : NaN;
       }, 'asc') },

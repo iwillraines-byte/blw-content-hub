@@ -289,6 +289,15 @@ function transformPitching(apiData) {
     // v5.3.0: ProWiffleball's new sabermetrics (see transformBatting).
     eraPlus: p.eraPlus ?? null,
     pwar: p.pwar ?? null,
+    // v5.3.1: hits allowed per 3 innings (one BLW game) — derived client-
+    // side since the feed doesn't carry it. IP strings use baseball thirds
+    // ("12.1" = 12 1/3), so convert to outs (9 outs = 3 innings) first.
+    h3: (() => {
+      const [w, f] = String(p.inningsPitched ?? '0').split('.');
+      const outs = (parseInt(w, 10) || 0) * 3 + Math.min(2, parseInt(f, 10) || 0);
+      if (outs <= 0 || p.hits == null) return null;
+      return (p.hits / outs) * 9;
+    })(),
     currentRank: p.currentRank,
     previousRank: p.previousRank,
   }));
@@ -607,9 +616,14 @@ export async function fetchSeasonStats(seasonId) {
   ]);
   const batData = batRes.ok ? await batRes.json() : null;
   const pitData = pitRes.ok ? await pitRes.json() : null;
+  // v5.3.1: NO canonical bake here. _bakeCanonical overwrites the row's team
+  // with the player's CURRENT team — correct for live leaderboards, wrong for
+  // history (Cael Foreman's 2025 season was for OTR, not ATL). Career rows
+  // keep the team code the API recorded for that season; name matching in
+  // fetchPlayerCareer handles aliases itself.
   const out = {
-    batting: batData?.statistics ? _bakeCanonical(transformBatting(batData)) : [],
-    pitching: pitData?.statistics ? _bakeCanonical(transformPitching(pitData)) : [],
+    batting: batData?.statistics ? transformBatting(batData) : [],
+    pitching: pitData?.statistics ? transformPitching(pitData) : [],
   };
   _seasonStatsCache.set(seasonId, out);
   return out;
@@ -629,7 +643,15 @@ export async function fetchPlayerCareer(playerName) {
         const aliased = NAME_ALIASES[_normName(r.name || '')] || r.name || '';
         return _normName(aliased) === norm;
       }) || null;
-      return { year: s.year, isActive: !!s.isActive, batting: findRow(batting), pitching: findRow(pitching) };
+      // Historical seasons keep the API's recorded team; the ACTIVE season
+      // shows the canonical current team (live rows are sometimes tagged to
+      // stale codes — the same quirk the leaderboards correct for).
+      const fixTeam = (row) => {
+        if (!row || !s.isActive) return row;
+        const canonTeam = canonicalTeamOf(NAME_ALIASES[_normName(row.name || '')] || row.name);
+        return canonTeam ? { ...row, team: canonTeam } : row;
+      };
+      return { year: s.year, isActive: !!s.isActive, batting: fixTeam(findRow(batting)), pitching: fixTeam(findRow(pitching)) };
     } catch {
       return { year: s.year, isActive: !!s.isActive, batting: null, pitching: null };
     }
@@ -2387,7 +2409,7 @@ export function generateContentSuggestions(batting, pitching, rankings) {
       headline: `${fipLeader.name} has a ${fipVal} FIP — pitching dominance`,
       description: 'The best pitcher in the league deserves a spotlight card',
       team: fipLeader.team, templateId: 'player-stat',
-      prefill: { playerName: fipLeader.name, number: fipLeader.num, statLine: `FIP ${fipVal} | IP ${fipLeader.ip} | K/4 ${fipLeader.k4} | W-L ${fipLeader.w}-${fipLeader.l}` },
+      prefill: { playerName: fipLeader.name, number: fipLeader.num, statLine: `FIP ${fipVal} | IP ${fipLeader.ip} | K/3 ${fipLeader.k4} | W-L ${fipLeader.w}-${fipLeader.l}` },
     });
   }
 
@@ -2416,7 +2438,7 @@ export function generateContentSuggestions(batting, pitching, rankings) {
       headline: `${undefeated.name} is ${undefeated.w}-0 — undefeated spotlight`,
       description: 'Perfect record on the mound — highlight the achievement',
       team: undefeated.team, templateId: 'player-stat',
-      prefill: { playerName: undefeated.name, number: undefeated.num, statLine: `W-L ${undefeated.w}-0 | FIP ${fipVal} | IP ${undefeated.ip} | K/4 ${undefeated.k4}` },
+      prefill: { playerName: undefeated.name, number: undefeated.num, statLine: `W-L ${undefeated.w}-0 | FIP ${fipVal} | IP ${undefeated.ip} | K/3 ${undefeated.k4}` },
     });
   }
 

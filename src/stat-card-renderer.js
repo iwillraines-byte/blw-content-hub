@@ -233,7 +233,7 @@ function pitchingRawCells(player, leaders) {
   return [
     { label: 'ERA', value: p.era ?? '—', ...rankAndPercentile(list, player.name, 'era', 'asc', parseFloat) },
     { label: 'IP', value: p.ip ?? '—', ...rankAndPercentile(list, player.name, 'ip', 'desc', parseFloat) },
-    { label: 'K/4', value: p.k4 ?? '—', ...rankAndPercentile(list, player.name, 'k4', 'desc', parseFloat) },
+    { label: 'K/3', value: p.k4 ?? '—', ...rankAndPercentile(list, player.name, 'k4', 'desc', parseFloat) },
     {
       label: 'FIP',
       value: typeof p.fip === 'number' ? p.fip.toFixed(2) : (p.fip ?? '—'),
@@ -275,7 +275,7 @@ function hittingPercentileRows(player, battingLeaders) {
 function pitchingPercentileRows(player, pitchingLeaders) {
   const p = player.pitching || {};
   return [
-    // ERA / WHIP / BB / BB/4 are "lower is better" — direction 'asc'
+    // ERA / WHIP / BB / BB/3 are "lower is better" — direction 'asc'
     // so the bubble at 95 means elite, not "worst ERA in BLW".
     { label: 'ERA',  value: p.era ?? '—',
       percentile: percentileFor(pitchingLeaders, player.name, 'era',  'asc', parseFloat) },
@@ -285,11 +285,11 @@ function pitchingPercentileRows(player, pitchingLeaders) {
       percentile: percentileFor(pitchingLeaders, player.name, 'ip',   'desc', parseFloat) },
     { label: 'K',    value: p.k ?? '—',
       percentile: percentileFor(pitchingLeaders, player.name, 'k',    'desc', Number) },
-    { label: 'K/4',  value: p.k4 ?? '—',
+    { label: 'K/3',  value: p.k4 ?? '—',
       percentile: percentileFor(pitchingLeaders, player.name, 'k4',   'desc', parseFloat) },
     { label: 'BB',   value: p.bb ?? '—',
       percentile: percentileFor(pitchingLeaders, player.name, 'bb',   'asc', Number) },
-    { label: 'BB/4', value: p.bb4 ?? '—',
+    { label: 'BB/3', value: p.bb4 ?? '—',
       percentile: percentileFor(pitchingLeaders, player.name, 'bb4',  'asc', parseFloat) },
     { label: 'FIP',  value: typeof p.fip === 'number' ? p.fip.toFixed(2) : (p.fip ?? '—'),
       percentile: percentileFor(pitchingLeaders, player.name, 'fip',  'asc', parseFloat) },
