@@ -74,6 +74,7 @@ const BATTING_COLOR_COLS = {
   bb: 'higher', bbPct: 'higher', // walks = higher is better
   k: 'lower', kPct: 'lower',     // strikeouts = lower is better for a hitter
   avg: 'higher', obp: 'higher', slg: 'higher', ops: 'higher', ops_plus: 'higher',
+  wrcPlus: 'higher', bwar: 'higher',
 };
 
 const PITCHING_COLOR_COLS = {
@@ -82,6 +83,7 @@ const PITCHING_COLOR_COLS = {
   k: 'higher',
   era: 'lower', whip: 'lower', fip: 'lower',
   k4: 'higher', bb4: 'lower',
+  eraPlus: 'higher', pwar: 'higher',
 };
 
 // Compute per-player percentile for every configured column, across the full
@@ -340,6 +342,102 @@ function NoStatsToggle({ count, expanded, onToggle, kind }) {
   );
 }
 
+// ─── Top-10 leaders board (v5.3.0) ──────────────────────────────────────────
+// One compact card per headline stat, ten rows each, rendered above the full
+// table. Config: { label, key, dir ('desc'|'asc'), fmt } — leaders are pulled
+// from the same canonical stat rows the table uses, so names/teams match.
+const BATTING_LEADER_STATS = [
+  { label: 'bWAR', key: 'bwar',     dir: 'desc', fmt: v => v.toFixed(1) },
+  { label: 'WRC+', key: 'wrcPlus',  dir: 'desc', fmt: v => Math.round(v) },
+  { label: 'OPS+', key: 'ops_plus', dir: 'desc', fmt: v => Math.round(v) },
+  { label: 'AVG',  key: 'avg',      dir: 'desc', fmt: v => v.toFixed(3).replace(/^0/, '') },
+  { label: 'HR',   key: 'hr',       dir: 'desc', fmt: v => v },
+  { label: 'RBI',  key: 'rbi',      dir: 'desc', fmt: v => v },
+];
+const PITCHING_LEADER_STATS = [
+  { label: 'pWAR', key: 'pwar',    dir: 'desc', fmt: v => v.toFixed(1) },
+  { label: 'ERA+', key: 'eraPlus', dir: 'desc', fmt: v => Math.round(v) },
+  { label: 'ERA',  key: 'era',     dir: 'asc',  fmt: v => v.toFixed(2) },
+  { label: 'FIP',  key: 'fip',     dir: 'asc',  fmt: v => v.toFixed(2) },
+  { label: 'K',    key: 'k',       dir: 'desc', fmt: v => v },
+  { label: 'WHIP', key: 'whip',    dir: 'asc',  fmt: v => v.toFixed(2) },
+];
+
+function LeadersBoard({ rows, stats }) {
+  const boards = useMemo(() => stats.map(s => {
+    const ranked = rows
+      .map(r => ({ row: r, v: parseFloat(r[s.key]) }))
+      .filter(x => !isNaN(x.v))
+      .sort((a, b) => s.dir === 'asc' ? a.v - b.v : b.v - a.v)
+      .slice(0, 10);
+    return { ...s, ranked };
+  }), [rows, stats]);
+  if (rows.length === 0) return null;
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+      gap: 10,
+    }}>
+      {boards.map(b => (
+        <Card key={b.key} style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{
+            padding: '8px 12px', background: colors.bg,
+            borderBottom: `1px solid ${colors.borderLight}`,
+            fontFamily: fonts.condensed, fontSize: 11, fontWeight: 800,
+            letterSpacing: 0.8, color: colors.text, textTransform: 'uppercase',
+          }}>
+            {b.label} leaders
+          </div>
+          <div style={{ padding: '4px 0' }}>
+            {b.ranked.map((x, i) => {
+              const t = getTeam(x.row.team);
+              const first = i === 0;
+              return (
+                <div key={x.row.playerId ?? x.row.name} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: first ? '6px 12px' : '3px 12px',
+                  background: first ? colors.redLight : 'transparent',
+                }}>
+                  <span style={{
+                    width: 16, textAlign: 'right', flexShrink: 0,
+                    fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                    color: colors.textMuted, fontVariantNumeric: 'tabular-nums',
+                  }}>{i + 1}</span>
+                  {t ? (
+                    <Link
+                      to={`/teams/${t.slug}/players/${playerSlug({ name: x.row.name })}`}
+                      style={{
+                        flex: 1, minWidth: 0, textDecoration: 'none',
+                        color: colors.text, fontSize: first ? 13 : 12,
+                        fontWeight: first ? 800 : 600,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {x.row.name}
+                      <span style={{ color: colors.textMuted, fontWeight: 600, fontSize: 10, marginLeft: 5 }}>{x.row.team}</span>
+                    </Link>
+                  ) : (
+                    <span style={{ flex: 1, minWidth: 0, fontSize: first ? 13 : 12, fontWeight: first ? 800 : 600, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {x.row.name}
+                      <span style={{ color: colors.textMuted, fontWeight: 600, fontSize: 10, marginLeft: 5 }}>{x.row.team}</span>
+                    </span>
+                  )}
+                  <span style={{
+                    fontFamily: fonts.condensed, fontVariantNumeric: 'tabular-nums',
+                    fontSize: first ? 14 : 12, fontWeight: 800,
+                    color: first ? colors.red : colors.text, flexShrink: 0,
+                  }}>{b.fmt(x.v)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function GameCenter() {
   const [tab, setTab] = useState('batting');
   const [batting, setBatting] = useState([]);
@@ -359,8 +457,10 @@ export default function GameCenter() {
   const [playersTeamFilter, setPlayersTeamFilter] = useState('ALL');
   const [playersFilter, setPlayersFilter] = useState('all'); // all | missing-media | missing-jersey
 
-  const [battingSort, setBattingSort] = useState({ key: 'ops_plus', dir: 'desc' });
-  const [pitchingSort, setPitchingSort] = useState({ key: 'fip', dir: 'asc' });
+  // v5.3.0: WAR is the flagship stat now that the feed computes it —
+  // batting defaults to bWAR, pitching to pWAR (both descending).
+  const [battingSort, setBattingSort] = useState({ key: 'bwar', dir: 'desc' });
+  const [pitchingSort, setPitchingSort] = useState({ key: 'pwar', dir: 'desc' });
   const [rankingsSort, setRankingsSort] = useState({ key: 'compositePoints', dir: 'desc' });
   const [playersSort, setPlayersSort] = useState({ key: 'team', dir: 'asc' });
   // How many ranking rows to show. Bumps by RANKINGS_PAGE_SIZE on
@@ -608,9 +708,11 @@ export default function GameCenter() {
 
       {/* Batting */}
       {!loading && tab === 'batting' && (
+        <>
+        <LeadersBoard rows={batting} stats={BATTING_LEADER_STATS} />
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <SectionHeading style={{ margin: 0 }}>Batting leaders</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>Full batting stats</SectionHeading>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <ProWiffleBallBlurb />
               <input
@@ -651,6 +753,8 @@ export default function GameCenter() {
                   <SortHeader label="SLG"    sortKey="slg"         currentSort={battingSort} setSort={setBattingSort} />
                   <SortHeader label="OPS"    sortKey="ops"         currentSort={battingSort} setSort={setBattingSort} />
                   <SortHeader label="OPS+"   sortKey="ops_plus"    currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="WRC+"   sortKey="wrcPlus"     currentSort={battingSort} setSort={setBattingSort} />
+                  <SortHeader label="bWAR"   sortKey="bwar"        currentSort={battingSort} setSort={setBattingSort} />
                 </tr>
               </thead>
               <tbody>
@@ -678,10 +782,12 @@ export default function GameCenter() {
                     <td title={titleForCell(battingPercentiles, 'slg', p)}      style={{ ...cellFor(battingSort, 'slg'),      background: bgForCell(battingPercentiles, 'slg', p) }}>{p.slg}</td>
                     <td title={titleForCell(battingPercentiles, 'ops', p)}      style={{ ...cellFor(battingSort, 'ops'),      background: bgForCell(battingPercentiles, 'ops', p) }}>{p.ops}</td>
                     <td title={titleForCell(battingPercentiles, 'ops_plus', p)} style={{ ...cellFor(battingSort, 'ops_plus'), background: bgForCell(battingPercentiles, 'ops_plus', p) }}>{p.ops_plus}</td>
+                    <td title={titleForCell(battingPercentiles, 'wrcPlus', p)}  style={{ ...cellFor(battingSort, 'wrcPlus'),  background: bgForCell(battingPercentiles, 'wrcPlus', p) }}>{p.wrcPlus != null ? Math.round(p.wrcPlus) : '—'}</td>
+                    <td title={titleForCell(battingPercentiles, 'bwar', p)}     style={{ ...cellFor(battingSort, 'bwar'),     background: bgForCell(battingPercentiles, 'bwar', p) }}>{p.bwar != null ? p.bwar.toFixed(1) : '—'}</td>
                   </tr>
                 ))}
                 {filteredBatting.length === 0 && (
-                  <tr><td colSpan={22} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{battingSearch}"</td></tr>
+                  <tr><td colSpan={24} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{battingSearch}"</td></tr>
                 )}
               </tbody>
             </table>
@@ -695,13 +801,16 @@ export default function GameCenter() {
             />
           )}
         </Card>
+        </>
       )}
 
       {/* Pitching */}
       {!loading && tab === 'pitching' && (
+        <>
+        <LeadersBoard rows={pitching} stats={PITCHING_LEADER_STATS} />
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <SectionHeading style={{ margin: 0 }}>Pitching leaders</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>Full pitching stats</SectionHeading>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <ProWiffleBallBlurb />
               <input
@@ -735,10 +844,12 @@ export default function GameCenter() {
                   <SortHeader label="K"      sortKey="k"        currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="HR"     sortKey="hrAllowed" currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="ERA"    sortKey="era"      currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="ERA+"   sortKey="eraPlus"  currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="WHIP"   sortKey="whip"     currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="FIP"    sortKey="fip"      currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="K/4"    sortKey="k4"       currentSort={pitchingSort} setSort={setPitchingSort} />
                   <SortHeader label="BB/4"   sortKey="bb4"      currentSort={pitchingSort} setSort={setPitchingSort} />
+                  <SortHeader label="pWAR"   sortKey="pwar"     currentSort={pitchingSort} setSort={setPitchingSort} />
                 </tr>
               </thead>
               <tbody>
@@ -759,14 +870,16 @@ export default function GameCenter() {
                     <td title={titleForCell(pitchingPercentiles, 'k', p)}         style={{ ...cellFor(pitchingSort, 'k'),         background: bgForCell(pitchingPercentiles, 'k', p) }}>{p.k ?? '—'}</td>
                     <td title={titleForCell(pitchingPercentiles, 'hrAllowed', p)} style={{ ...cellFor(pitchingSort, 'hrAllowed'), background: bgForCell(pitchingPercentiles, 'hrAllowed', p) }}>{p.hrAllowed ?? '—'}</td>
                     <td title={titleForCell(pitchingPercentiles, 'era', p)}       style={{ ...cellFor(pitchingSort, 'era'),       background: bgForCell(pitchingPercentiles, 'era', p) }}>{p.era}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'eraPlus', p)}   style={{ ...cellFor(pitchingSort, 'eraPlus'),   background: bgForCell(pitchingPercentiles, 'eraPlus', p) }}>{p.eraPlus != null ? Math.round(p.eraPlus) : '—'}</td>
                     <td title={titleForCell(pitchingPercentiles, 'whip', p)}      style={{ ...cellFor(pitchingSort, 'whip'),      background: bgForCell(pitchingPercentiles, 'whip', p) }}>{p.whip}</td>
                     <td title={titleForCell(pitchingPercentiles, 'fip', p)}       style={{ ...cellFor(pitchingSort, 'fip'),       background: bgForCell(pitchingPercentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
                     <td title={titleForCell(pitchingPercentiles, 'k4', p)}        style={{ ...cellFor(pitchingSort, 'k4'),        background: bgForCell(pitchingPercentiles, 'k4', p) }}>{p.k4}</td>
                     <td title={titleForCell(pitchingPercentiles, 'bb4', p)}       style={{ ...cellFor(pitchingSort, 'bb4'),       background: bgForCell(pitchingPercentiles, 'bb4', p) }}>{p.bb4}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'pwar', p)}      style={{ ...cellFor(pitchingSort, 'pwar'),      background: bgForCell(pitchingPercentiles, 'pwar', p) }}>{p.pwar != null ? p.pwar.toFixed(1) : '—'}</td>
                   </tr>
                 ))}
                 {filteredPitching.length === 0 && (
-                  <tr><td colSpan={19} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{pitchingSearch}"</td></tr>
+                  <tr><td colSpan={21} style={{ padding: 30, textAlign: 'center', color: colors.textMuted }}>No players match "{pitchingSearch}"</td></tr>
                 )}
               </tbody>
             </table>
@@ -780,6 +893,7 @@ export default function GameCenter() {
             />
           )}
         </Card>
+        </>
       )}
 
       {/* Rankings */}

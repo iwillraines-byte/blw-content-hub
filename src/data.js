@@ -188,6 +188,8 @@ export function invalidateLeagueCaches() {
   _rosterCache.clear();
   _lastFetch = 0;
   _oddsCache = null;
+  _seasonsCache = null;
+  _seasonStatsCache.clear();
 }
 
 // ─── LIVE API FETCH FUNCTIONS ───────────────────────────────────────────────
@@ -235,6 +237,10 @@ function transformBatting(apiData) {
     kPct: p.strikeoutPercentage || 0,
     bbPct: p.walkPercentage || 0,
     risp: (p.risp || 0).toFixed(3),
+    // v5.3.0: ProWiffleball's new sabermetrics. Null when the feed hasn't
+    // computed them so tables can render '—' instead of a fake 0.
+    bwar: p.bwar ?? null,
+    wrcPlus: p.wrcPlus ?? null,
     currentRank: p.currentRank,
     previousRank: p.previousRank,
   }));
@@ -280,6 +286,9 @@ function transformPitching(apiData) {
     babip: p.babip != null ? p.babip.toFixed(3) : '.000',
     shutouts: p.shutouts || 0,
     gbPct: p.gbPercentage || 0,
+    // v5.3.0: ProWiffleball's new sabermetrics (see transformBatting).
+    eraPlus: p.eraPlus ?? null,
+    pwar: p.pwar ?? null,
     currentRank: p.currentRank,
     previousRank: p.previousRank,
   }));
@@ -560,6 +569,72 @@ export async function fetchAllData() {
     fetchRankings(),
   ]);
   return { batting, pitching, rankings };
+}
+
+// ─── CAREER / PER-SEASON STATS (v5.3.0) ─────────────────────────────────────
+// GSS models seasons behind `/leagues/{id}/seasons` → [{ id, year, isActive }]
+// and the stats endpoints accept `?seasonId=` (NOT ?season= or ?year= — those
+// are silently ignored; verified against prod: seasonId=5 returns the real
+// 2025 lines). Career view = one stats pull per season, matched to the player
+// by canonical name.
+
+let _seasonsCache = null;
+const _seasonStatsCache = new Map(); // seasonId → { batting, pitching }
+
+export async function fetchSeasons() {
+  if (_seasonsCache) return _seasonsCache;
+  try {
+    const res = await fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/seasons`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _seasonsCache = (Array.isArray(data) ? data : [])
+      .filter(s => s && s.id != null && s.year != null)
+      .sort((a, b) => b.year - a.year); // newest first
+    return _seasonsCache;
+  } catch (e) {
+    console.warn('[fetchSeasons] failed', e);
+    return [];
+  }
+}
+
+// One season's full batting + pitching lines, transformed + canonical-baked
+// so names match the roster (same pipeline as the current-season leaders).
+export async function fetchSeasonStats(seasonId) {
+  if (_seasonStatsCache.has(seasonId)) return _seasonStatsCache.get(seasonId);
+  const [batRes, pitRes] = await Promise.all([
+    fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/batting-stats?showAll=true&seasonId=${seasonId}`),
+    fetch(`${GSS_BASE}/leagues/${BLW_LEAGUE_ID}/pitching-stats?showAll=true&seasonId=${seasonId}`),
+  ]);
+  const batData = batRes.ok ? await batRes.json() : null;
+  const pitData = pitRes.ok ? await pitRes.json() : null;
+  const out = {
+    batting: batData?.statistics ? _bakeCanonical(transformBatting(batData)) : [],
+    pitching: pitData?.statistics ? _bakeCanonical(transformPitching(pitData)) : [],
+  };
+  _seasonStatsCache.set(seasonId, out);
+  return out;
+}
+
+// Career view for one player: [{ year, batting|null, pitching|null }] newest
+// first, matched by canonical name. Seasons where the player has neither a
+// batting nor a pitching line are omitted.
+export async function fetchPlayerCareer(playerName) {
+  const norm = _normName(NAME_ALIASES[_normName(playerName || '')] || playerName || '');
+  if (!norm) return [];
+  const seasons = await fetchSeasons();
+  const perSeason = await Promise.all(seasons.map(async (s) => {
+    try {
+      const { batting, pitching } = await fetchSeasonStats(s.id);
+      const findRow = (rows) => rows.find(r => {
+        const aliased = NAME_ALIASES[_normName(r.name || '')] || r.name || '';
+        return _normName(aliased) === norm;
+      }) || null;
+      return { year: s.year, isActive: !!s.isActive, batting: findRow(batting), pitching: findRow(pitching) };
+    } catch {
+      return { year: s.year, isActive: !!s.isActive, batting: null, pitching: null };
+    }
+  }));
+  return perSeason.filter(s => s.batting || s.pitching);
 }
 
 // ─── LEAGUE SCHEDULE ────────────────────────────────────────────────────────

@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.3.0',
+    date: '2026-07-15',
+    kind: 'minor',
+    summary: 'v5.3.0 — WAR-era stats: bWAR/WRC+/ERA+/pWAR, Top-10 leader boards, and career stats on every player page',
+    items: [
+      'ProWiffleball\'s new sabermetrics are in: batting tables gain WRC+ and bWAR, pitching tables gain ERA+ and pWAR — with the same Savant-style percentile shading as every other column. Both tables now default-sort by WAR (bWAR for batting, pWAR for pitching).',
+      'ProWiffle Stats now opens with Top-10 leader boards above the full tables — batting: bWAR, WRC+, OPS+, AVG, HR, RBI; pitching: pWAR, ERA+, ERA, FIP, K, WHIP. Every name links to the player\'s page.',
+      'Every player page gets a Career stats section: one row per season played (the feed carries full 2025 + 2026 splits) plus a computed CAREER totals row — counting stats summed, rate stats weighted by PA or IP, WAR summed. Batting and pitching break out separately, and the pitching block only shows for players who\'ve actually pitched.',
+    ],
+  },
+  {
     version: '5.2.4',
     date: '2026-07-15',
     kind: 'patch',

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchOpwrHistory, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS } from '../data';
-import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, PositionedAvatar } from '../components';
+import { getTeam, getPlayerByTeamLastName, fetchAllData, fetchOpwrHistory, fetchTeamRosterFromApi, getTeamRoster, playerSlug, TEAMS, fetchPlayerCareer } from '../data';
+import { Card, SectionHeading, Label, RedButton, OutlineButton, TeamLogo, PositionedAvatar, Skeleton } from '../components';
 import { ContentIdeasSection } from '../content-ideas-section';
 import { getRecentFeedback } from '../idea-feedback-store';
 import { PageDropZone } from '../page-drop-zone';
@@ -595,6 +595,206 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
         <SeasonStatsSubCard team={team} label={pitchingLabel} tiles={pitchingTiles} />
       )}
     </div>
+  );
+}
+
+// ─── Career stats card (v5.3.0) ──────────────────────────────────────────────
+// Per-season batting + pitching lines (one row per year, newest first) with a
+// computed CAREER totals row. Season data comes from fetchPlayerCareer()
+// (GSS `?seasonId=` splits); totals sum counting stats and weight rate/index
+// stats by PA (batting) or IP (pitching) so the career line is honest.
+
+// Innings-pitched strings use baseball thirds ("12.1" = 12⅓). Sum in outs.
+const ipToThirds = (ip) => {
+  const [w, f] = String(ip ?? '0').split('.');
+  return (parseInt(w, 10) || 0) * 3 + Math.min(2, parseInt(f, 10) || 0);
+};
+const thirdsToIp = (n) => `${Math.floor(n / 3)}.${n % 3}`;
+const wavg = (pairs) => {
+  let num = 0, den = 0;
+  for (const [v, w] of pairs) {
+    const x = parseFloat(v);
+    if (!isNaN(x) && w > 0) { num += x * w; den += w; }
+  }
+  return den > 0 ? num / den : null;
+};
+const trim0 = (s) => String(s).replace(/^0\./, '.');
+
+function CareerStatsCard({ player }) {
+  const [seasons, setSeasons] = useState(null); // null = loading
+  useEffect(() => {
+    let alive = true;
+    setSeasons(null);
+    fetchPlayerCareer(player?.name || '')
+      .then(rows => { if (alive) setSeasons(rows); })
+      .catch(() => { if (alive) setSeasons([]); });
+    return () => { alive = false; };
+  }, [player?.name]);
+
+  const batSeasons = (seasons || []).filter(s => s.batting);
+  const pitSeasons = (seasons || []).filter(s => s.pitching);
+
+  const batTotals = useMemo(() => {
+    if (batSeasons.length === 0) return null;
+    const rows = batSeasons.map(s => s.batting);
+    const sum = (k) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+    const g = sum('games'), pa = sum('pa'), ab = sum('ab'), h = sum('hits'),
+      tb = sum('tb'), bb = sum('bb'), hr = sum('hr'), rbi = sum('rbi'), k = sum('k'), runs = sum('runs');
+    const avg = ab > 0 ? h / ab : 0;
+    const obp = pa > 0 ? (h + bb) / pa : 0;
+    const slg = ab > 0 ? tb / ab : 0;
+    return {
+      g, pa, ab, h, hr, rbi, bb, k, runs,
+      avg: avg.toFixed(3), obp: obp.toFixed(3), slg: slg.toFixed(3), ops: (obp + slg).toFixed(3),
+      opsPlus: wavg(rows.map(r => [r.ops_plus, Number(r.pa) || 0])),
+      wrcPlus: wavg(rows.map(r => [r.wrcPlus, Number(r.pa) || 0])),
+      bwar: rows.reduce((a, r) => a + (Number(r.bwar) || 0), 0),
+    };
+  }, [batSeasons]);
+
+  const pitTotals = useMemo(() => {
+    if (pitSeasons.length === 0) return null;
+    const rows = pitSeasons.map(s => s.pitching);
+    const sum = (k) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+    const thirds = rows.reduce((a, r) => a + ipToThirds(r.ip), 0);
+    return {
+      g: sum('games'), w: sum('w'), l: sum('l'), sv: sum('saves'), k: sum('k'), bb: sum('bb'),
+      ip: thirdsToIp(thirds),
+      era: wavg(rows.map(r => [r.era, ipToThirds(r.ip)])),
+      whip: wavg(rows.map(r => [r.whip, ipToThirds(r.ip)])),
+      fip: wavg(rows.map(r => [r.fip, ipToThirds(r.ip)])),
+      eraPlus: wavg(rows.map(r => [r.eraPlus, ipToThirds(r.ip)])),
+      pwar: rows.reduce((a, r) => a + (Number(r.pwar) || 0), 0),
+    };
+  }, [pitSeasons]);
+
+  if (seasons && seasons.length === 0) return null; // no career data anywhere
+
+  const th = {
+    padding: '7px 10px', textAlign: 'right', fontFamily: fonts.condensed,
+    fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: colors.textSecondary,
+    textTransform: 'uppercase', whiteSpace: 'nowrap',
+  };
+  const td = (bold) => ({
+    padding: '7px 10px', textAlign: 'right', fontSize: 12.5,
+    fontWeight: bold ? 800 : 600, color: colors.text,
+    fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+  });
+  const left = { textAlign: 'left' };
+  const fmt1 = (v) => v != null ? Number(v).toFixed(1) : '—';
+  const fmt2 = (v) => v != null ? Number(v).toFixed(2) : '—';
+  const fmtInt = (v) => v != null ? Math.round(v) : '—';
+
+  const sectionLabel = (text) => (
+    <div style={{
+      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+      color: colors.textMuted, letterSpacing: 1, margin: '2px 0 4px',
+      textTransform: 'uppercase',
+    }}>{text}</div>
+  );
+
+  return (
+    <Card>
+      <SectionHeading style={{ margin: '0 0 10px', fontFamily: fonts.heading, fontSize: 16, fontWeight: 700, letterSpacing: 0 }}>
+        Career stats
+      </SectionHeading>
+      {seasons === null && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} height={16} />)}
+        </div>
+      )}
+      {seasons !== null && batSeasons.length > 0 && (
+        <div style={{ marginBottom: pitSeasons.length > 0 ? 16 : 0 }}>
+          {sectionLabel(`Batting · ${batSeasons.length} season${batSeasons.length === 1 ? '' : 's'}`)}
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: colors.bg }}>
+                  <th style={{ ...th, ...left }}>Year</th>
+                  <th style={{ ...th, ...left }}>Team</th>
+                  <th style={th}>G</th><th style={th}>PA</th><th style={th}>AB</th>
+                  <th style={th}>R</th><th style={th}>H</th><th style={th}>HR</th><th style={th}>RBI</th>
+                  <th style={th}>BB</th><th style={th}>K</th>
+                  <th style={th}>AVG</th><th style={th}>OBP</th><th style={th}>SLG</th><th style={th}>OPS</th>
+                  <th style={th}>OPS+</th><th style={th}>WRC+</th><th style={th}>bWAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batSeasons.map(s => {
+                  const b = s.batting;
+                  return (
+                    <tr key={s.year} style={{ borderBottom: `1px solid ${colors.divider}` }}>
+                      <td style={{ ...td(false), ...left }}>{s.year}</td>
+                      <td style={{ ...td(false), ...left, color: colors.textSecondary }}>{b.team || '—'}</td>
+                      <td style={td(false)}>{b.games ?? '—'}</td><td style={td(false)}>{b.pa ?? '—'}</td><td style={td(false)}>{b.ab ?? '—'}</td>
+                      <td style={td(false)}>{b.runs ?? '—'}</td><td style={td(false)}>{b.hits ?? '—'}</td><td style={td(false)}>{b.hr}</td><td style={td(false)}>{b.rbi}</td>
+                      <td style={td(false)}>{b.bb ?? '—'}</td><td style={td(false)}>{b.k ?? '—'}</td>
+                      <td style={td(false)}>{trim0(b.avg)}</td><td style={td(false)}>{trim0(b.obp)}</td><td style={td(false)}>{trim0(b.slg)}</td><td style={td(false)}>{trim0(b.ops)}</td>
+                      <td style={td(false)}>{b.ops_plus ?? '—'}</td><td style={td(false)}>{fmtInt(b.wrcPlus)}</td><td style={td(false)}>{b.bwar != null ? b.bwar.toFixed(1) : '—'}</td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ borderTop: `2px solid ${colors.border}`, background: colors.bg }}>
+                  <td style={{ ...td(true), ...left }} colSpan={2}>CAREER</td>
+                  <td style={td(true)}>{batTotals.g}</td><td style={td(true)}>{batTotals.pa}</td><td style={td(true)}>{batTotals.ab}</td>
+                  <td style={td(true)}>{batTotals.runs}</td><td style={td(true)}>{batTotals.h}</td><td style={td(true)}>{batTotals.hr}</td><td style={td(true)}>{batTotals.rbi}</td>
+                  <td style={td(true)}>{batTotals.bb}</td><td style={td(true)}>{batTotals.k}</td>
+                  <td style={td(true)}>{trim0(batTotals.avg)}</td><td style={td(true)}>{trim0(batTotals.obp)}</td><td style={td(true)}>{trim0(batTotals.slg)}</td><td style={td(true)}>{trim0(batTotals.ops)}</td>
+                  <td style={td(true)}>{fmtInt(batTotals.opsPlus)}</td><td style={td(true)}>{fmtInt(batTotals.wrcPlus)}</td><td style={td(true)}>{fmt1(batTotals.bwar)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {seasons !== null && pitSeasons.length > 0 && (
+        <div>
+          {sectionLabel(`Pitching · ${pitSeasons.length} season${pitSeasons.length === 1 ? '' : 's'}`)}
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tnum" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: colors.bg }}>
+                  <th style={{ ...th, ...left }}>Year</th>
+                  <th style={{ ...th, ...left }}>Team</th>
+                  <th style={th}>G</th><th style={th}>IP</th>
+                  <th style={th}>W</th><th style={th}>L</th><th style={th}>SV</th>
+                  <th style={th}>K</th><th style={th}>BB</th>
+                  <th style={th}>ERA</th><th style={th}>ERA+</th><th style={th}>WHIP</th><th style={th}>FIP</th>
+                  <th style={th}>pWAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pitSeasons.map(s => {
+                  const p = s.pitching;
+                  return (
+                    <tr key={s.year} style={{ borderBottom: `1px solid ${colors.divider}` }}>
+                      <td style={{ ...td(false), ...left }}>{s.year}</td>
+                      <td style={{ ...td(false), ...left, color: colors.textSecondary }}>{p.team || '—'}</td>
+                      <td style={td(false)}>{p.games ?? '—'}</td><td style={td(false)}>{p.ip}</td>
+                      <td style={td(false)}>{p.w}</td><td style={td(false)}>{p.l}</td><td style={td(false)}>{p.saves ?? 0}</td>
+                      <td style={td(false)}>{p.k ?? '—'}</td><td style={td(false)}>{p.bb ?? '—'}</td>
+                      <td style={td(false)}>{p.era}</td><td style={td(false)}>{fmtInt(p.eraPlus)}</td><td style={td(false)}>{p.whip}</td><td style={td(false)}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
+                      <td style={td(false)}>{p.pwar != null ? p.pwar.toFixed(1) : '—'}</td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ borderTop: `2px solid ${colors.border}`, background: colors.bg }}>
+                  <td style={{ ...td(true), ...left }} colSpan={2}>CAREER</td>
+                  <td style={td(true)}>{pitTotals.g}</td><td style={td(true)}>{pitTotals.ip}</td>
+                  <td style={td(true)}>{pitTotals.w}</td><td style={td(true)}>{pitTotals.l}</td><td style={td(true)}>{pitTotals.sv}</td>
+                  <td style={td(true)}>{pitTotals.k}</td><td style={td(true)}>{pitTotals.bb}</td>
+                  <td style={td(true)}>{fmt2(pitTotals.era)}</td><td style={td(true)}>{fmtInt(pitTotals.eraPlus)}</td><td style={td(true)}>{fmt2(pitTotals.whip)}</td><td style={td(true)}>{fmt2(pitTotals.fip)}</td>
+                  <td style={td(true)}>{fmt1(pitTotals.pwar)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      <div style={{ marginTop: 10, fontSize: 10.5, fontFamily: fonts.condensed, color: colors.textMuted, letterSpacing: 0.3 }}>
+        Career rate stats are weighted by PA (batting) and IP (pitching); WAR totals are summed. Source: Grand Slam Systems season splits.
+      </div>
+    </Card>
   );
 }
 
@@ -2849,6 +3049,10 @@ export default function PlayerPage() {
         bTotal={bTotal}
         pTotal={pTotal}
       />
+
+      {/* Career stats — per-season splits + career totals (v5.3.0). Keyed
+          on player name so navigating between players re-fetches. */}
+      <CareerStatsCard key={`career-${player.name}`} player={player} />
 
       {/* Recent posts featuring this player — pulled from the global
           generate-log so users can see at a glance what content has
