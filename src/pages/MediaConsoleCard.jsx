@@ -20,6 +20,7 @@ import {
 } from '../media-store';
 import { getAllManualPlayers, upsertManualPlayer } from '../player-store';
 import { refreshFromCloud } from '../cloud-reader';
+import { buildZip } from '../zip-store';
 import { CANONICAL_ROSTER_2026, TEAMS, getTeam, slugify, playerSlug } from '../data';
 import { Card, SectionHeading, RedButton, OutlineButton, ProgressBar } from '../components';
 import { colors, fonts, radius } from '../theme';
@@ -225,6 +226,51 @@ export default function MediaConsoleCard() {
   }, [rosterHealth]);
   useEffect(() => () => { Object.values(avatarUrls).forEach(u => { try { URL.revokeObjectURL(u); } catch {} }); }, [avatarUrls]);
 
+  // v5.3.2: mass-export — one resolved photo per canonical player, zipped.
+  // Uses the same rosterHealth avatar resolution the photo grid shows, so
+  // what you see is exactly what exports. Players with no resolvable photo
+  // are skipped and reported.
+  const runExport = useCallback(async () => {
+    setBusy('export');
+    try {
+      const extFor = (blob) => {
+        const t = blob?.type || '';
+        if (t.includes('png')) return 'png';
+        if (t.includes('webp')) return 'webp';
+        return 'jpg';
+      };
+      const files = [];
+      const missing = [];
+      const seen = new Set();
+      for (const r of rosterHealth) {
+        if (!r.avatar?.blob) { missing.push(r.c.name); continue; }
+        const FI = r.firstName.charAt(0).toUpperCase();
+        let name = `${r.c.team}_${r.c.num || '00'}_${FI}.${r.lastName.toUpperCase()}.${extFor(r.avatar.blob)}`;
+        // Cousin pairs share team+initial+lastname — never silently overwrite.
+        while (seen.has(name)) name = name.replace(/(\.[a-z]+)$/, `_${files.length}$1`);
+        seen.add(name);
+        files.push({ name, blob: r.avatar.blob });
+      }
+      if (files.length === 0) {
+        toast.warn('No photos to export', { detail: 'No player has a resolvable photo on this device yet — run a cloud sync first.' });
+        return;
+      }
+      const zip = await buildZip(files);
+      const url = URL.createObjectURL(zip);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `blw-player-photos-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      toast.success(`Exported ${files.length} player photo${files.length === 1 ? '' : 's'}`,
+        missing.length > 0 ? { detail: `${missing.length} without a photo skipped: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? '…' : ''}` } : undefined);
+    } catch (e) {
+      toast.error('Export failed', { detail: String(e?.message || e).slice(0, 100) });
+    } finally { setBusy(null); }
+  }, [rosterHealth, toast]);
+
   const rosterProblems = rosterHealth.filter(r => r.health === 'blank' || r.health === 'missing' || r.health === 'cloud-missing').length;
 
   // ── Team branding assets ────────────────────────────────────────────────────
@@ -262,6 +308,14 @@ export default function MediaConsoleCard() {
         </OutlineButton>
         <OutlineButton onClick={runScan} disabled={!!busy} style={{ padding: '7px 14px', fontSize: 12 }}>
           {busy === 'scan' ? '⌕ Scanning…' : '⌕ Scan for broken pins'}
+        </OutlineButton>
+        <OutlineButton
+          onClick={runExport}
+          disabled={!!busy || !loaded}
+          title="Download a ZIP with each player's resolved photo (pinned or best auto-match), named TEAM_##_F.LASTNAME"
+          style={{ padding: '7px 14px', fontSize: 12 }}
+        >
+          {busy === 'export' ? '⬇ Zipping…' : '⬇ Export player photos (ZIP)'}
         </OutlineButton>
       </div>
       {busy === 'repair' && repairProgress && repairProgress.total > 0 && (

@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '5.3.2',
+    date: '2026-07-17',
+    kind: 'minor',
+    summary: 'v5.3.2 — one-click export of every player\'s photo as a ZIP',
+    items: [
+      'Settings → Media Console gains "Export player photos (ZIP)": downloads a single archive containing each player\'s resolved photo — the pinned profile picture when one is set, otherwise the same best auto-match the app shows everywhere. Files are named TEAM_##_F.LASTNAME so they drop straight into any workflow.',
+      'Players with no resolvable photo on the device are skipped and listed in the confirmation toast, so you know exactly who still needs a picture before a full-league export.',
+    ],
+  },
+  {
     version: '5.3.1',
     date: '2026-07-15',
     kind: 'patch',
