@@ -1,3 +1,23 @@
+// v5.4.0: these tables default to sorting on a league-adjusted metric (OPS+ for
+// batting, FIP for pitching), but those don't exist for a postseason or total
+// split — the league computes them upstream and the per-game logs don't carry
+// them. Without this the table would sort by a column reading '—' on every row
+// and appear broken. Falls back to the closest unadjusted stat, and only while
+// the column is genuinely empty, so the regular season is untouched.
+const BATTING_SORT_FALLBACK = { key: 'ops', dir: 'desc' };
+const PITCHING_SORT_FALLBACK = { key: 'era', dir: 'asc' };
+
+function useSortFallback(rows, sort, setSort, fallback) {
+  const key = sort.key;
+  useEffect(() => {
+    if (!rows?.length || key === fallback.key) return;
+    const hasAny = rows.some(r => r[key] != null && r[key] !== '—');
+    if (!hasAny) setSort(fallback);
+    // `fallback` and `setSort` are stable at every call site.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, key]);
+}
+
 // ─── Reusable stats table components ─────────────────────────────────────────
 // Extracted so team pages, the dashboard, and the Game Center can all render
 // the same full-fidelity batting / pitching tables with percentile shading,
@@ -8,7 +28,7 @@
 // doesn't shift a player's percentile) plus optional props for variants
 // (compact, search-less, legend-less, top-N limit, custom title).
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getTeam, playerSlug } from './data';
 import { Card, SectionHeading, TeamChip, inputStyle } from './components';
@@ -339,6 +359,7 @@ export function BattingTable({
 }) {
   const [sort, setSort] = useState(defaultSort);
   const [search, setSearch] = useState('');
+  useSortFallback(rows, sort, setSort, BATTING_SORT_FALLBACK);
 
   // Percentiles compute against `populationRows` if provided (e.g. the full
   // league when showing a team-filtered or top-N view). Falls back to `rows`.
@@ -427,7 +448,7 @@ export function BattingTable({
                 <td title={titleForCell(percentiles, 'obp', p)}      style={{ ...cellFor(sort, 'obp'),      background: bgForCell(percentiles, 'obp', p) }}>{p.obp}</td>
                 <td title={titleForCell(percentiles, 'slg', p)}      style={{ ...cellFor(sort, 'slg'),      background: bgForCell(percentiles, 'slg', p) }}>{p.slg}</td>
                 <td title={titleForCell(percentiles, 'ops', p)}      style={{ ...cellFor(sort, 'ops'),      background: bgForCell(percentiles, 'ops', p) }}>{p.ops}</td>
-                <td title={titleForCell(percentiles, 'ops_plus', p)} style={{ ...cellFor(sort, 'ops_plus'), background: bgForCell(percentiles, 'ops_plus', p) }}>{p.ops_plus}</td>
+                <td title={titleForCell(percentiles, 'ops_plus', p)} style={{ ...cellFor(sort, 'ops_plus'), background: bgForCell(percentiles, 'ops_plus', p) }}>{p.ops_plus ?? '—'}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
@@ -456,6 +477,7 @@ export function PitchingTable({
 }) {
   const [sort, setSort] = useState(defaultSort);
   const [search, setSearch] = useState('');
+  useSortFallback(rows, sort, setSort, PITCHING_SORT_FALLBACK);
 
   const percentiles = useMemo(() => computePercentiles(populationRows || rows, PITCHING_COLOR_COLS), [populationRows, rows]);
 
@@ -534,7 +556,7 @@ export function PitchingTable({
                 <td title={titleForCell(percentiles, 'whip', p)}      style={{ ...cellFor(sort, 'whip'),      background: bgForCell(percentiles, 'whip', p) }}>{p.whip}</td>
                 <td title={titleForCell(percentiles, 'k4', p)}        style={{ ...cellFor(sort, 'k4'),        background: bgForCell(percentiles, 'k4', p) }}>{p.k4}</td>
                 <td title={titleForCell(percentiles, 'bb4', p)}       style={{ ...cellFor(sort, 'bb4'),       background: bgForCell(percentiles, 'bb4', p) }}>{p.bb4}</td>
-                <td title={titleForCell(percentiles, 'fip', p)}       style={{ ...cellFor(sort, 'fip'),       background: bgForCell(percentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
+                <td title={titleForCell(percentiles, 'fip', p)}       style={{ ...cellFor(sort, 'fip'),       background: bgForCell(percentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : (p.fip ?? '—')}</td>
               </tr>
             ))}
             {filtered.length === 0 && (

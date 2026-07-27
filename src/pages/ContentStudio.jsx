@@ -6,6 +6,8 @@ import { Card, PageHeader, SectionHeading, TeamLogo, Skeleton } from '../compone
 import { Icon } from '../icon';
 import { HeroBand } from '../dashboard-hero';
 import { BattingTable, PitchingTable } from '../stats-tables';
+import { fetchSplitLeaders } from '../splits';
+import SplitToggle from '../split-toggle';
 import { colors, fonts, radius } from '../theme';
 import { timeAgo } from '../format-time';
 import { getRequests, saveRequests, countByStatus, oldestPendingDays, embedIdeaInNote, buildGenerateLinkFromIdea } from '../requests-store';
@@ -52,6 +54,18 @@ export default function ContentStudio() {
   // dashboard. Shares the same fetchAllData() call so nothing hits twice.
   const [batting, setBatting] = useState([]);
   const [pitching, setPitching] = useState([]);
+  // Season split for the Stats Leaders tables. Owns batting/pitching outright
+  // so the main loader can't race it back to the regular season.
+  const [split, setSplit] = useState('regular');
+  useEffect(() => {
+    let cancel = false;
+    fetchSplitLeaders(split).then(({ batting: b, pitching: p }) => {
+      if (cancel) return;
+      setBatting(applyCanonicalToStats(b || []));
+      setPitching(applyCanonicalToStats(p || []));
+    }).catch(() => { /* keep whatever's loaded */ });
+    return () => { cancel = true; };
+  }, [split]);
   const [rankings, setRankings] = useState([]);
   // Scope for new generations + the displayed list. null = league-wide.
   // Setting a team locks the next Generate batch to that team AND filters
@@ -178,9 +192,10 @@ export default function ContentStudio() {
       // team they had stats under previously.
       const bCanon = applyCanonicalToStats(b || []);
       const pCanon = applyCanonicalToStats(p || []);
+      // Content suggestions stay on the regular season regardless of the
+      // table toggle — they're prompts for post ideas, and a full-season line
+      // is the stable thing to write copy from.
       setSuggestions(generateContentSuggestions(bCanon, pCanon, r));
-      setBatting(bCanon);
-      setPitching(pCanon);
       setRankings(r || []);
       setDataLoaded(true);
     });
@@ -904,11 +919,14 @@ export default function ContentStudio() {
           computed across the full BLW population. A teaser of the Game Center. */}
       {dataLoaded && (batting.length > 0 || pitching.length > 0) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <SectionHeading style={{ margin: 0 }}>Stats Leaders</SectionHeading>
-            <Link to="/game-center" style={{ fontSize: 12, fontFamily: fonts.condensed, fontWeight: 700, color: colors.red, textDecoration: 'none' }}>
-              View full leaderboards →
-            </Link>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <SplitToggle value={split} onChange={setSplit} size="sm" ariaLabel="Stats leaders split" />
+              <Link to="/game-center" style={{ fontSize: 12, fontFamily: fonts.condensed, fontWeight: 700, color: colors.red, textDecoration: 'none' }}>
+                View full leaderboards →
+              </Link>
+            </div>
           </div>
           {batting.length > 0 && (
             <BattingTable

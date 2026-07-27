@@ -26,6 +26,8 @@ import IdeaCard from '../idea-card';
 import { buildGenerateLinkFromIdea } from '../requests-store';
 import { stashIdeaForGenerate } from '../idea-context-store';
 import { useIsDark } from '../theme-mode';
+import { fetchPlayerSplits, fetchLeagueSplits, rankWithin, splitLabel } from '../splits';
+import SplitToggle from '../split-toggle';
 
 // Team primaries (e.g. Atlanta navy #021E42) are tuned for light surfaces and
 // vanish on dark charcoal, so accent-bearing chrome swaps to the lighter
@@ -551,30 +553,54 @@ function SeasonStatsSubCard({ team, label, tiles }) {
 // as two stacked sub-cards in the same flex slot. For single-role players,
 // renders just one. The wrapper enforces flex sizing so the column behavior
 // is identical regardless of how many sub-cards live inside.
-function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pTotal }) {
+// `batting`/`pitching` are the lines for the ACTIVE split — the regular-season
+// leaderboard row, or a game-log-derived postseason/total aggregate. The
+// player's own role (does he bat? does he pitch?) still comes from `player`, so
+// a two-way player who didn't pitch in the playoffs keeps both sub-cards and
+// shows an empty pitching line instead of silently losing a card on toggle.
+function SeasonStatsCard({
+  player, team, batting, pitching, battingRanks, pitchingRanks, bTotal, pTotal,
+  split = 'regular', onSplit = null, splitAvailable = null, splitsLoaded = false,
+}) {
   const hasBatting = !!player.batting;
   const hasPitching = !!player.pitching;
+  const isRegular = split === 'regular';
+  // A non-regular split with no line yet is either still loading or genuinely
+  // empty — those need different copy, so they're distinguished here.
+  const pending = !isRegular && !splitsLoaded;
 
   const battingTiles = [
-    { label: 'AVG',  value: player.batting?.avg,      rank: battingRanks?.avg?.rank,      tied: battingRanks?.avg?.tied,      total: bTotal },
-    { label: 'HR',   value: player.batting?.hr,       rank: battingRanks?.hr?.rank,       tied: battingRanks?.hr?.tied,       total: bTotal },
-    { label: 'RBI',  value: player.batting?.rbi,      rank: battingRanks?.rbi?.rank,      tied: battingRanks?.rbi?.tied,      total: bTotal },
-    { label: 'OPS+', value: player.batting?.ops_plus, rank: battingRanks?.ops_plus?.rank, tied: battingRanks?.ops_plus?.tied, total: bTotal, highlight: true },
+    { label: 'AVG',  value: batting?.avg,      rank: battingRanks?.avg?.rank,      tied: battingRanks?.avg?.tied,      total: bTotal },
+    { label: 'HR',   value: batting?.hr,       rank: battingRanks?.hr?.rank,       tied: battingRanks?.hr?.tied,       total: bTotal },
+    { label: 'RBI',  value: batting?.rbi,      rank: battingRanks?.rbi?.rank,      tied: battingRanks?.rbi?.tied,      total: bTotal },
+    { label: 'OPS+', value: batting?.ops_plus, rank: battingRanks?.ops_plus?.rank, tied: battingRanks?.ops_plus?.tied, total: bTotal, highlight: true },
   ];
 
   const pitchingTiles = [
-    { label: 'ERA',  value: player.pitching?.era,  rank: pitchingRanks?.era?.rank,  tied: pitchingRanks?.era?.tied,  total: pTotal },
-    { label: 'IP',   value: player.pitching?.ip,   rank: pitchingRanks?.ip?.rank,   tied: pitchingRanks?.ip?.tied,   total: pTotal },
-    { label: 'K/3',  value: player.pitching?.k4,   rank: pitchingRanks?.k4?.rank,   tied: pitchingRanks?.k4?.tied,   total: pTotal, highlight: true },
-    { label: 'WHIP', value: player.pitching?.whip, rank: pitchingRanks?.whip?.rank, tied: pitchingRanks?.whip?.tied, total: pTotal },
+    { label: 'ERA',  value: pitching?.era,  rank: pitchingRanks?.era?.rank,  tied: pitchingRanks?.era?.tied,  total: pTotal },
+    { label: 'IP',   value: pitching?.ip,   rank: pitchingRanks?.ip?.rank,   tied: pitchingRanks?.ip?.tied,   total: pTotal },
+    { label: 'K/3',  value: pitching?.k4,   rank: pitchingRanks?.k4?.rank,   tied: pitchingRanks?.k4?.tied,   total: pTotal, highlight: true },
+    { label: 'WHIP', value: pitching?.whip, rank: pitchingRanks?.whip?.rank, tied: pitchingRanks?.whip?.tied, total: pTotal },
   ];
 
   // Single-role: original visual carries over with the original label.
   // Two-way: split the labels so each card is unambiguous about which
   // role it's reporting.
   const isTwoWay = hasBatting && hasPitching;
-  const battingLabel = isTwoWay ? '2026 Batting' : '2026 Season Stats';
-  const pitchingLabel = isTwoWay ? '2026 Pitching' : '2026 Season Stats';
+  const prefix = isRegular ? '2026' : `2026 ${splitLabel(split)}`;
+  const battingLabel = isTwoWay ? `${prefix} Batting` : (isRegular ? '2026 Season Stats' : `${prefix} Batting`);
+  const pitchingLabel = isTwoWay ? `${prefix} Pitching` : (isRegular ? '2026 Season Stats' : `${prefix} Pitching`);
+
+  const emptyNote = (what) => (
+    <div style={{
+      border: `1px solid ${colors.borderLight}`, borderRadius: radius.base,
+      padding: '12px 10px', textAlign: 'center',
+      fontFamily: fonts.condensed, fontSize: 10.5, fontWeight: 700,
+      letterSpacing: 0.4, textTransform: 'uppercase', color: colors.textMuted,
+    }}>
+      {pending ? 'Loading split…' : `No ${splitLabel(split).toLowerCase()} ${what}`}
+    </div>
+  );
 
   return (
     <div style={{
@@ -588,11 +614,26 @@ function SeasonStatsCard({ player, team, battingRanks, pitchingRanks, bTotal, pT
       flexDirection: 'column',
       gap: 8,
     }}>
-      {hasBatting && (
-        <SeasonStatsSubCard team={team} label={battingLabel} tiles={battingTiles} />
+      {onSplit && (hasBatting || hasPitching) && (
+        <SplitToggle
+          value={split}
+          onChange={onSplit}
+          available={splitAvailable}
+          size="sm"
+          ariaLabel="Season split"
+          style={{ alignSelf: 'flex-start' }}
+        />
       )}
-      {hasPitching && (
-        <SeasonStatsSubCard team={team} label={pitchingLabel} tiles={pitchingTiles} />
+      {hasBatting && (batting
+        ? <SeasonStatsSubCard team={team} label={battingLabel} tiles={battingTiles} />
+        : emptyNote('at-bats'))}
+      {hasPitching && (pitching
+        ? <SeasonStatsSubCard team={team} label={pitchingLabel} tiles={pitchingTiles} />
+        : emptyNote('innings'))}
+      {!isRegular && (batting || pitching) && (
+        <div style={{ fontSize: 10, color: colors.textMuted, lineHeight: 1.45, padding: '0 2px' }}>
+          Built from per-game logs. OPS+ is league-adjusted upstream and isn’t available per split.
+        </div>
       )}
     </div>
   );
@@ -1534,7 +1575,7 @@ function ExtrasDropdown({ instagramHandle, funFacts }) {
   );
 }
 
-function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, onGenerate, generating = false, canEditPhoto, onEditPhoto, onAdjustPhoto, isMaster = false, onEditInfo = null, canEditInfo = false, prevPlayer = null, nextPlayer = null }) {
+function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, profileZoom, playerRank, battingRanks, pitchingRanks, bTotal, pTotal, split = 'regular', onSplit = null, splitAvailable = null, splitBatting = null, splitPitching = null, splitsLoaded = false, onGenerate, generating = false, canEditPhoto, onEditPhoto, onAdjustPhoto, isMaster = false, onEditInfo = null, canEditInfo = false, prevPlayer = null, nextPlayer = null }) {
   // Vitals — pull from whatever the merged player object carries. All optional.
   const v = player.vitals || {};
   const height = formatHeight(v.heightIn);
@@ -1898,8 +1939,11 @@ function PlayerHero({ player, team, avatarUrl, profileOffsetX, profileOffsetY, p
             former vitals column folded into the identity meta line above. */}
         <SeasonStatsCard
           player={player} team={team}
+          batting={splitBatting} pitching={splitPitching}
           battingRanks={battingRanks} pitchingRanks={pitchingRanks}
           bTotal={bTotal} pTotal={pTotal}
+          split={split} onSplit={onSplit}
+          splitAvailable={splitAvailable} splitsLoaded={splitsLoaded}
         />
 
       </div>
@@ -2081,6 +2125,16 @@ export default function PlayerPage() {
   // media here, just the names → slugs mapping for the nav links.
   const [teammates, setTeammates] = useState([]);
 
+  // ─── Season split (v5.4.0) ───────────────────────────────────────────────
+  // The league leaderboards this page is built on are REGULAR SEASON ONLY —
+  // they never absorb playoff lines. `playerSplits` re-derives this player's
+  // batting + pitching from their per-game logs, which are the one feed that
+  // flags postseason games. `leagueSplits` is only needed to rank a non-
+  // regular split against the rest of the league, so it loads on demand.
+  const [split, setSplit] = useState('regular');
+  const [playerSplits, setPlayerSplits] = useState(null);
+  const [leagueSplits, setLeagueSplits] = useState(null);
+
   // v5.2.0: on a fresh device the cloud hydrate (login) is still downloading
   // media blobs when this page first mounts, so the avatar can resolve blank.
   // Re-read the local media pool when the hydrate completes — that flows
@@ -2095,6 +2149,36 @@ export default function PlayerPage() {
       } catch { /* keep the existing pool */ }
     });
   }, [team?.id]);
+
+  // The GSS player id, whichever stat line carries it.
+  const gssPlayerId = player?.batting?.playerId ?? player?.pitching?.playerId ?? player?.ranking?.playerId ?? null;
+
+  // Pull this player's game logs (two small requests). Also resets the toggle
+  // when the route swaps to a teammate — PlayerPage replaces `player` in place
+  // rather than remounting, so without this the new player would inherit the
+  // previous one's split and stale lines.
+  useEffect(() => {
+    setSplit('regular');
+    setPlayerSplits(null);
+    if (gssPlayerId == null) return undefined;
+    let cancel = false;
+    fetchPlayerSplits(gssPlayerId)
+      .then(r => { if (!cancel) setPlayerSplits(r); })
+      .catch(() => { /* toggle stays on regular season */ });
+    return () => { cancel = true; };
+  }, [gssPlayerId]);
+
+  // Ranks for a postseason/total split have to be computed against the same
+  // split league-wide, which means everyone's logs. Only worth it once the
+  // user actually leaves the regular-season view.
+  useEffect(() => {
+    if (split === 'regular' || leagueSplits) return undefined;
+    let cancel = false;
+    fetchLeagueSplits()
+      .then(r => { if (!cancel && r?.players?.length) setLeagueSplits(r); })
+      .catch(() => { /* values still render, ranks show '—' */ });
+    return () => { cancel = true; };
+  }, [split, leagueSplits]);
 
   useEffect(() => {
     let cancel = false;
@@ -2787,10 +2871,11 @@ export default function PlayerPage() {
 
   // ─── Per-stat league-rank lookups ────────────────────────────────────────
   // Rank this player against all BLW batters/pitchers for each displayed stat
-  const bTotal = battingLeaders.length;
-  const pTotal = pitchingLeaders.length;
+  const isRegularSplit = split === 'regular';
+  const bTotalReg = battingLeaders.length;
+  const pTotalReg = pitchingLeaders.length;
   const pn = player.name;
-  const battingRanks = player.batting ? {
+  const regBattingRanks = player.batting ? {
     avg:      rankWithTie(battingLeaders, pn, 'avg',      'desc', parseFloat),
     hits:     rankWithTie(battingLeaders, pn, 'hits',     'desc', Number),
     hr:       rankWithTie(battingLeaders, pn, 'hr',       'desc', Number),
@@ -2798,7 +2883,7 @@ export default function PlayerPage() {
     obp:      rankWithTie(battingLeaders, pn, 'obp',      'desc', parseFloat),
     ops_plus: rankWithTie(battingLeaders, pn, 'ops_plus', 'desc', Number),
   } : null;
-  const pitchingRanks = player.pitching ? {
+  const regPitchingRanks = player.pitching ? {
     era:  rankWithTie(pitchingLeaders, pn, 'era',  'asc',  parseFloat),
     whip: rankWithTie(pitchingLeaders, pn, 'whip', 'asc',  parseFloat),
     k4:   rankWithTie(pitchingLeaders, pn, 'k4',   'desc', parseFloat),
@@ -2808,6 +2893,57 @@ export default function PlayerPage() {
     // renders only when this is non-null, so a missing rank just hides
     // the bar without breaking layout.
     ip:   rankWithTie(pitchingLeaders, pn, 'ip',   'desc', parseFloat),
+  } : null;
+
+  // Ranks for a non-regular split have to be recomputed against the SAME split
+  // league-wide — a postseason AVG means nothing against regular-season peers.
+  // NOT memoized: this sits below the component's early returns, so a hook here
+  // would change the hook count between renders. It's ~70 rows × a handful of
+  // stats, which is cheaper than the render it feeds.
+  const splitRanks = (() => {
+    if (isRegularSplit || !leagueSplits?.players?.length || gssPlayerId == null) return null;
+    const column = (kind, key) => leagueSplits.players
+      .map(p => ({ playerId: p.playerId, value: p[kind]?.[split]?.[key] }))
+      .filter(r => r.value != null);
+    const rank = (kind, key, opts) => rankWithin(column(kind, key), gssPlayerId, opts);
+    const count = (kind) => leagueSplits.players.filter(p => p[kind]?.[split]).length;
+    return {
+      batting: {
+        avg: rank('batting', 'avg'),
+        hits: rank('batting', 'hits'),
+        hr: rank('batting', 'hr'),
+        rbi: rank('batting', 'rbi'),
+        obp: rank('batting', 'obp'),
+        ops_plus: null,   // league-adjusted upstream — not derivable per split
+      },
+      pitching: {
+        era:  rank('pitching', 'era',  { lowerIsBetter: true }),
+        whip: rank('pitching', 'whip', { lowerIsBetter: true }),
+        k4:   rank('pitching', 'k4'),
+        bb4:  rank('pitching', 'bb4',  { lowerIsBetter: true }),
+        // Rank innings on the outs count, not the "2.1" display string.
+        ip:   rank('pitching', 'outs'),
+      },
+      bTotal: count('batting'),
+      pTotal: count('pitching'),
+    };
+  })();
+
+  // Regular season keeps the league leaderboard row — it carries OPS+, wRC+
+  // and bWAR, which are computed upstream and can't be rebuilt from game logs.
+  const heroBatting  = isRegularSplit ? player.batting  : (playerSplits?.batting?.[split]  || null);
+  const heroPitching = isRegularSplit ? player.pitching : (playerSplits?.pitching?.[split] || null);
+  const battingRanks  = isRegularSplit ? regBattingRanks  : (splitRanks?.batting  || null);
+  const pitchingRanks = isRegularSplit ? regPitchingRanks : (splitRanks?.pitching || null);
+  const bTotal = isRegularSplit ? bTotalReg : (splitRanks?.bTotal || 0);
+  const pTotal = isRegularSplit ? pTotalReg : (splitRanks?.pTotal || 0);
+
+  // Grey out a split this player has no games in, rather than letting them
+  // click through to an empty card.
+  const splitAvailable = playerSplits ? {
+    regular: true,
+    postseason: !!(playerSplits.batting.postseason || playerSplits.pitching.postseason),
+    total: true,
   } : null;
 
   // The hero tier badge reflects BLW-internal standing (1..70), matching the
@@ -2866,6 +3002,12 @@ export default function PlayerPage() {
           pitchingRanks={pitchingRanks}
           bTotal={bTotal}
           pTotal={pTotal}
+          split={split}
+          onSplit={setSplit}
+          splitAvailable={splitAvailable}
+          splitBatting={heroBatting}
+          splitPitching={heroPitching}
+          splitsLoaded={!!playerSplits}
           onGenerate={generateIdea}
           generating={generatingIdea}
           canEditPhoto={isMaster}

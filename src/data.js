@@ -466,6 +466,18 @@ function _filterToBlwRoster(rows) {
   });
 }
 
+// Put arbitrary stat rows through the SAME pipeline the live leaderboards use:
+// canonical name + team overlay → drop anyone not on the canonical 70 → collapse
+// alias duplicates → sort → renumber 1..N. Exported for the split layer
+// (src/splits.js), which builds leaderboards out of per-game logs and must end
+// up with rows indistinguishable from the regular-season ones — same display
+// names ("Myc Witty", not "Mychal Witty Jr."), same roster filter, same ranks.
+export function canonicalizeStatRows(rows, sortFn) {
+  if (!Array.isArray(rows)) return [];
+  const baked = _dedupByCanonical(_filterToBlwRoster(_bakeCanonical(rows)));
+  return _renumberRank(sortFn ? baked.slice().sort(sortFn) : baked);
+}
+
 function _dedupByCanonical(rows) {
   const out = [];
   const seen = new Set();
@@ -745,6 +757,43 @@ export function gamesForTeam(games, teamId) {
 // game counts the GSS stats endpoint itself reports.
 export const SEASON_START = '2026-06-07';
 
+// ─── Regular season vs postseason (v5.4.0) ──────────────────────────────────
+// GSS serves postseason games in the SAME /games feed as the regular season,
+// with nothing on the game object marking them (tournamentId is null, status is
+// the same SUBMITTED). Before this, every playoff game counted toward the
+// regular-season standings — Dallas showed 10 games played against a 6-game
+// regular season, and its record, run diff and rank were all inflated.
+//
+// The schedule doc is the source of truth for which SLATES are postseason:
+// a game day tagged `type: 'postseason'` in schedule-data.js contributes its
+// date here. That keeps the split declarative and in one place, alongside the
+// round labels the Schedule page renders.
+//
+// Cross-check: the league's own per-player game logs carry an `isPlayoff` flag
+// (see src/splits.js), and the ids they mark match exactly the games on these
+// dates. `fetchLeagueSplits()` exposes that set if a consumer wants to verify
+// against the feed rather than the schedule doc.
+export const POSTSEASON_DATES = new Set(
+  SCHEDULE.filter(d => d.type === 'postseason' && d.date).map(d => d.date)
+);
+export const isPostseasonDate = (dateStr) => POSTSEASON_DATES.has(dateStr);
+export const isPostseasonGame = (g) => isPostseasonDate((g?.dateTime || '').slice(0, 10));
+
+// Regular-season slates only — used by the playoff-odds and clinch models,
+// which project the REGULAR season and must not treat a playoff game (or an
+// unplayed championship slot) as a remaining regular-season game.
+const regularSeasonSlates = () => SCHEDULE.filter(d => d.type !== 'postseason');
+
+// Does a game count toward the given scope? 'regular' (default) excludes
+// postseason dates, 'postseason' keeps only those, 'total' keeps both.
+function inScope(g, scope) {
+  const date = (g?.dateTime || '').slice(0, 10);
+  if (date < SEASON_START) return false;   // preseason exhibitions
+  if (scope === 'total') return true;
+  const post = isPostseasonDate(date);
+  return scope === 'postseason' ? post : !post;
+}
+
 // Build W-L / pct / run-diff for every BLW team from a games array (the output
 // of fetchGames()). Only SUBMITTED games between two BLW teams on/after
 // SEASON_START count. Returns a Map keyed by teamId → standing row, with an
@@ -815,7 +864,9 @@ export function rankWithTiebreakers(items, winsOver) {
   return out;
 }
 
-export function computeStandings(games) {
+// `scope` selects which games count: 'regular' (the official 2026 standings —
+// the default every existing caller gets), 'postseason', or 'total'.
+export function computeStandings(games, { scope = 'regular' } = {}) {
   const acc = new Map();
   for (const t of TEAMS) acc.set(t.id, { teamId: t.id, apiTeamId: t.apiTeamId, w: 0, l: 0, gp: 0, rf: 0, ra: 0 });
 
@@ -832,8 +883,7 @@ export function computeStandings(games) {
     if (g.status !== 'SUBMITTED') continue;
     const hId = g.home?.teamId, aId = g.away?.teamId;
     if (!hId || !aId || !acc.has(hId) || !acc.has(aId)) continue; // both must be BLW
-    const date = (g.dateTime || '').slice(0, 10);
-    if (date < SEASON_START) continue;
+    if (!inScope(g, scope)) continue;
     const hs = Number(g.home.score), as = Number(g.away.score);
     if (!Number.isFinite(hs) || !Number.isFinite(as)) continue;
     const H = acc.get(hId), A = acc.get(aId);
@@ -868,25 +918,28 @@ export function computeStandings(games) {
   return map;
 }
 
-let _standingsCache = null;
-let _standingsFetchedAt = 0;
+const _standingsCache = new Map();  // scope → { map, fetchedAt }
 
 // Cached async: fetch games then compute live standings. The Map it returns
 // carries `.ordered` (ranked rows). On feed failure, computeStandings([]) still
 // returns a valid all-0-0 map rather than throwing.
-export async function fetchStandings() {
-  if (_standingsCache && (Date.now() - _standingsFetchedAt) < CACHE_TTL) return _standingsCache;
+// `scope` defaults to 'regular' — "the 2026 standings" means the regular
+// season everywhere in the app (team pages, ticker, AI context, search hints).
+export async function fetchStandings(scope = 'regular') {
+  const hit = _standingsCache.get(scope);
+  if (hit && (Date.now() - hit.fetchedAt) < CACHE_TTL) return hit.map;
   const games = await fetchGames();
-  _standingsCache = computeStandings(games);
-  _standingsFetchedAt = Date.now();
-  return _standingsCache;
+  const map = computeStandings(games, { scope });
+  _standingsCache.set(scope, { map, fetchedAt: Date.now() });
+  return map;
 }
 
 // Synchronous accessor for consumers that can't await (quick-switcher hint,
-// etc). Returns the live standing if the cache is warm, else null so the caller
-// can fall back to the team's baked record.
+// etc). Returns the live REGULAR-season standing if the cache is warm, else
+// null so the caller can fall back to the team's baked record.
 export function cachedStanding(teamId) {
-  return _standingsCache ? _standingsCache.get(teamId) || null : null;
+  const hit = _standingsCache.get('regular');
+  return hit ? hit.map.get(teamId) || null : null;
 }
 
 // Merge live standings over a team object: returns { ...team, record, pct,
@@ -953,8 +1006,7 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
   const baseH2H = new Int32Array(N * N);
   for (const g of (games || [])) {
     if (g.status !== 'SUBMITTED') continue;
-    const date = (g.dateTime || '').slice(0, 10);
-    if (date < SEASON_START) continue;
+    if (!inScope(g, 'regular')) continue;
     const hi = idx.get(g.home?.teamId), ai = idx.get(g.away?.teamId);
     if (hi == null || ai == null) continue;
     const hs = Number(g.home?.score), as = Number(g.away?.score);
@@ -994,7 +1046,7 @@ export function computePlayoffOdds(games, { spots = PLAYOFF_SPOTS, sims = 10000 
     if (g.status === 'SUBMITTED' && g.dateTime) playedKeys.add(g.dateTime.slice(0, 16));
   }
   const remaining = [];
-  for (const gd of SCHEDULE) {
+  for (const gd of regularSeasonSlates()) {
     for (const g of gd.games) {
       if (playedKeys.has(`${gd.date}T${g.time}`)) continue;
       const a = idx.get(canonicalTeamId(g.team1));
@@ -1132,7 +1184,7 @@ export function computeClinchStatus(games, { spots = PLAYOFF_SPOTS, maxRemaining
   const baseH2H = new Int32Array(N * N);
   for (const g of (games || [])) {
     if (g.status !== 'SUBMITTED') continue;
-    if ((g.dateTime || '').slice(0, 10) < SEASON_START) continue;
+    if (!inScope(g, 'regular')) continue;
     const hi = idx.get(g.home?.teamId), ai = idx.get(g.away?.teamId);
     if (hi == null || ai == null) continue;
     const hs = Number(g.home?.score), as = Number(g.away?.score);
@@ -1146,7 +1198,7 @@ export function computeClinchStatus(games, { spots = PLAYOFF_SPOTS, maxRemaining
     if (g.status === 'SUBMITTED' && g.dateTime) playedKeys.add(g.dateTime.slice(0, 16));
   }
   const remaining = [];
-  for (const gd of SCHEDULE) {
+  for (const gd of regularSeasonSlates()) {
     for (const g of gd.games) {
       if (playedKeys.has(`${gd.date}T${g.time}`)) continue;
       const a = idx.get(canonicalTeamId(g.team1));

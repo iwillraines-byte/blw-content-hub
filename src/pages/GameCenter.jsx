@@ -6,6 +6,22 @@ import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
 import { getAllManualPlayers } from '../player-store';
 import { ProWiffleBallBlurb } from '../stats-tables';
+import { fetchSplitLeaders, splitLabel } from '../splits';
+import SplitToggle from '../split-toggle';
+
+// Apply canonical-team override + name resolution to a leaderboard entry.
+// Stats stay (they're tied to the player); the team field is overridden so
+// traded/renamed players show under their real team. Module-level so both the
+// rankings loader and the split-aware leaderboard loader share one definition.
+function overlayCanonical(player) {
+  const canonical = resolveCanonicalName(player.name || '');
+  const canonTeam = canonicalTeamOf(canonical);
+  return {
+    ...player,
+    name: canonical || player.name,
+    team: canonTeam || player.team,
+  };
+}
 
 // Helper: render a sortable header
 // SortHeader — the column whose sortKey matches the current sort becomes red.
@@ -379,7 +395,10 @@ function LeadersBoard({ rows, stats }) {
       .sort((a, b) => s.dir === 'asc' ? a.v - b.v : b.v - a.v)
       .slice(0, 10);
     return { ...s, ranked };
-  }), [rows, stats]);
+    // Drop boards with nothing to show. On a postseason/total split the
+    // league-adjusted stats (OPS+, wRC+, bWAR, ERA+, FIP) are null for every
+    // player, which would otherwise render as empty titled cards.
+  }).filter(b => b.ranked.length > 0), [rows, stats]);
   if (rows.length === 0) return null;
   return (
     <div style={{
@@ -452,9 +471,18 @@ export default function GameCenter() {
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Which slice of 2026 every table on this page reports. Drives the
+  // leaderboards, the leader boards, and the standings tab together — the
+  // whole page reads one split at a time so numbers can't disagree.
+  const [split, setSplit] = useState('regular');
+
   // Live standings (W-L / pct / run diff) computed from the GSS games feed.
   const [standings, setStandings] = useState(null);
-  useEffect(() => { fetchStandings().then(setStandings).catch(() => {}); }, []);
+  useEffect(() => {
+    let cancel = false;
+    fetchStandings(split).then(s => { if (!cancel) setStandings(s); }).catch(() => {});
+    return () => { cancel = true; };
+  }, [split]);
 
   const [players, setPlayers] = useState([]);
 
@@ -485,7 +513,7 @@ export default function GameCenter() {
   const RANKINGS_PAGE_SIZE = 50;
 
   useEffect(() => {
-    Promise.all([fetchAllData(), fetchAllRosters()]).then(([{ batting: b, pitching: p, rankings: r }, allRosters]) => {
+    Promise.all([fetchAllData(), fetchAllRosters()]).then(([{ rankings: r }, allRosters]) => {
       // Build playerId → team lookup from rosters so rankings can display team logos
       const idToTeam = new Map();
       const nameToTeam = new Map();
@@ -493,18 +521,6 @@ export default function GameCenter() {
         if (rp.playerId) idToTeam.set(rp.playerId, rp.team);
         if (rp.name) nameToTeam.set(rp.name.toLowerCase(), rp.team);
       }
-      // Apply canonical-team override + name resolution to every leaderboard
-      // entry. Stats stay (they're tied to the player); the team field is
-      // overridden so traded/renamed players show under their real team.
-      const overlayCanonical = (player) => {
-        const canonical = resolveCanonicalName(player.name || '');
-        const canonTeam = canonicalTeamOf(canonical);
-        return {
-          ...player,
-          name: canonical || player.name,
-          team: canonTeam || player.team,
-        };
-      };
       const rWithTeam = r.map(p => {
         const canonical = resolveCanonicalName(p.name || '');
         const canonTeam = canonicalTeamOf(canonical);
@@ -518,6 +534,19 @@ export default function GameCenter() {
         };
       });
 
+      setRankings(rWithTeam);
+    });
+  }, []);
+
+  // v5.4.0: leaderboards are split-aware. Regular season returns the live
+  // boards verbatim (they carry OPS+/wRC+/bWAR/ERA+/FIP); postseason and total
+  // are rebuilt from per-game logs. Keyed on `split` so switching the toggle
+  // reloads the tables in place.
+  useEffect(() => {
+    let cancel = false;
+    setLoading(true);
+    fetchSplitLeaders(split).then(({ batting: b, pitching: p }) => {
+      if (cancel) return;
       // Pad batting + pitching with canonical roster players who haven't
       // recorded stats anywhere yet (no batting AND no pitching). A
       // pitcher who appears in the pitching table shouldn't be padded
@@ -551,10 +580,21 @@ export default function GameCenter() {
       setPitching(pitCanonical);
       setNoStatsBatting(noStatsBattingRows);
       setNoStatsPitching(noStatsPitchingRows);
-      setRankings(rWithTeam);
+      // These tables default to sorting on bWAR / pWAR, which the league
+      // computes upstream and the per-game logs don't carry. On a split those
+      // columns are all '—', so sorting by them looks broken — move to the
+      // closest unadjusted stat. Switching back restores the WAR sort.
+      if (split === 'regular') {
+        setBattingSort({ key: 'bwar', dir: 'desc' });
+        setPitchingSort({ key: 'pwar', dir: 'desc' });
+      } else {
+        setBattingSort({ key: 'ops', dir: 'desc' });
+        setPitchingSort({ key: 'era', dir: 'asc' });
+      }
       setLoading(false);
-    });
-  }, []);
+    }).catch(() => { if (!cancel) setLoading(false); });
+    return () => { cancel = true; };
+  }, [split]);
 
   // Load Players tab data only when accessed (and refresh when tab is opened)
   useEffect(() => {
@@ -686,14 +726,29 @@ export default function GameCenter() {
         </div>
       </Card>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button onClick={() => setTab('batting')} style={tabStyle(tab === 'batting')}>Batting</button>
-        <button onClick={() => setTab('pitching')} style={tabStyle(tab === 'pitching')}>Pitching</button>
-        <button onClick={() => setTab('rankings')} style={tabStyle(tab === 'rankings')}>Player Rankings</button>
-        <button onClick={() => setTab('players')} style={tabStyle(tab === 'players')}>Players</button>
-        <button onClick={() => setTab('standings')} style={tabStyle(tab === 'standings')}>Standings</button>
+      {/* Tabs. The split toggle sits alongside them and applies to the three
+          tabs that report 2026 performance. Player Rankings is the global OPWR
+          board (all leagues, all time) and Players is a roster directory —
+          neither has a season split, so the toggle is hidden on those. */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button onClick={() => setTab('batting')} style={tabStyle(tab === 'batting')}>Batting</button>
+          <button onClick={() => setTab('pitching')} style={tabStyle(tab === 'pitching')}>Pitching</button>
+          <button onClick={() => setTab('rankings')} style={tabStyle(tab === 'rankings')}>Player Rankings</button>
+          <button onClick={() => setTab('players')} style={tabStyle(tab === 'players')}>Players</button>
+          <button onClick={() => setTab('standings')} style={tabStyle(tab === 'standings')}>Standings</button>
+        </div>
+        {(tab === 'batting' || tab === 'pitching' || tab === 'standings') && (
+          <SplitToggle value={split} onChange={setSplit} ariaLabel="Season split" />
+        )}
       </div>
+
+      {(tab === 'batting' || tab === 'pitching') && split !== 'regular' && (
+        <p style={{ fontSize: 11, color: colors.textMuted, margin: '2px 2px -4px', lineHeight: 1.5 }}>
+          {splitLabel(split)} totals, rebuilt from each player’s per-game logs. OPS+, wRC+, bWAR, ERA+ and FIP are
+          league-adjusted upstream and can’t be recomputed for a split, so those columns read “—”.
+        </p>
+      )}
 
       {loading && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -789,7 +844,7 @@ export default function GameCenter() {
                     <td title={titleForCell(battingPercentiles, 'obp', p)}      style={{ ...cellFor(battingSort, 'obp'),      background: bgForCell(battingPercentiles, 'obp', p) }}>{p.obp}</td>
                     <td title={titleForCell(battingPercentiles, 'slg', p)}      style={{ ...cellFor(battingSort, 'slg'),      background: bgForCell(battingPercentiles, 'slg', p) }}>{p.slg}</td>
                     <td title={titleForCell(battingPercentiles, 'ops', p)}      style={{ ...cellFor(battingSort, 'ops'),      background: bgForCell(battingPercentiles, 'ops', p) }}>{p.ops}</td>
-                    <td title={titleForCell(battingPercentiles, 'ops_plus', p)} style={{ ...cellFor(battingSort, 'ops_plus'), background: bgForCell(battingPercentiles, 'ops_plus', p) }}>{p.ops_plus}</td>
+                    <td title={titleForCell(battingPercentiles, 'ops_plus', p)} style={{ ...cellFor(battingSort, 'ops_plus'), background: bgForCell(battingPercentiles, 'ops_plus', p) }}>{p.ops_plus ?? '—'}</td>
                     <td title={titleForCell(battingPercentiles, 'wrcPlus', p)}  style={{ ...cellFor(battingSort, 'wrcPlus'),  background: bgForCell(battingPercentiles, 'wrcPlus', p) }}>{p.wrcPlus != null ? Math.round(p.wrcPlus) : '—'}</td>
                     <td title={titleForCell(battingPercentiles, 'bwar', p)}     style={{ ...cellFor(battingSort, 'bwar'),     background: bgForCell(battingPercentiles, 'bwar', p) }}>{p.bwar != null ? p.bwar.toFixed(1) : '—'}</td>
                   </tr>
@@ -881,7 +936,7 @@ export default function GameCenter() {
                     <td title={titleForCell(pitchingPercentiles, 'era', p)}       style={{ ...cellFor(pitchingSort, 'era'),       background: bgForCell(pitchingPercentiles, 'era', p) }}>{p.era}</td>
                     <td title={titleForCell(pitchingPercentiles, 'eraPlus', p)}   style={{ ...cellFor(pitchingSort, 'eraPlus'),   background: bgForCell(pitchingPercentiles, 'eraPlus', p) }}>{p.eraPlus != null ? Math.round(p.eraPlus) : '—'}</td>
                     <td title={titleForCell(pitchingPercentiles, 'whip', p)}      style={{ ...cellFor(pitchingSort, 'whip'),      background: bgForCell(pitchingPercentiles, 'whip', p) }}>{p.whip}</td>
-                    <td title={titleForCell(pitchingPercentiles, 'fip', p)}       style={{ ...cellFor(pitchingSort, 'fip'),       background: bgForCell(pitchingPercentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : p.fip}</td>
+                    <td title={titleForCell(pitchingPercentiles, 'fip', p)}       style={{ ...cellFor(pitchingSort, 'fip'),       background: bgForCell(pitchingPercentiles, 'fip', p) }}>{typeof p.fip === 'number' ? p.fip.toFixed(2) : (p.fip ?? '—')}</td>
                     <td title={titleForCell(pitchingPercentiles, 'k4', p)}        style={{ ...cellFor(pitchingSort, 'k4'),        background: bgForCell(pitchingPercentiles, 'k4', p) }}>{p.k4}</td>
                     <td title={titleForCell(pitchingPercentiles, 'bb4', p)}       style={{ ...cellFor(pitchingSort, 'bb4'),       background: bgForCell(pitchingPercentiles, 'bb4', p) }}>{p.bb4}</td>
                     <td title={titleForCell(pitchingPercentiles, 'h3', p)}        style={{ ...cellFor(pitchingSort, 'h3'),        background: bgForCell(pitchingPercentiles, 'h3', p) }}>{p.h3 != null ? p.h3.toFixed(2) : '—'}</td>
@@ -1095,7 +1150,9 @@ export default function GameCenter() {
       {!loading && tab === 'standings' && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}` }}>
-            <SectionHeading style={{ margin: 0 }}>2026 BLW standings</SectionHeading>
+            <SectionHeading style={{ margin: 0 }}>
+              {split === 'regular' ? '2026 BLW standings' : `2026 BLW ${splitLabel(split).toLowerCase()} records`}
+            </SectionHeading>
           </div>
           <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
             <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1111,7 +1168,13 @@ export default function GameCenter() {
                 </tr>
               </thead>
               <tbody>
-                {(standings?.ordered || TEAMS).map((row, i) => {
+                {/* Outside the regular season a team that never played isn't
+                    0-0, it's simply not in the field — drop it rather than
+                    ranking four eliminated teams inside a six-team bracket. */}
+                {(standings?.ordered
+                  ? (split === 'regular' ? standings.ordered : standings.ordered.filter(r => r.gp > 0))
+                  : TEAMS
+                ).map((row, i) => {
                   const t = teamWithStanding(getTeam(row.teamId || row.id), standings);
                   const [w, l] = (t.record || '0-0').split('-');
                   // Average composite = mean compositePoints across ranked players on this team

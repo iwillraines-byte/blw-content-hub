@@ -17,8 +17,11 @@ export default async function handler(req, res) {
   // v5 (audit): this proxy is intentionally unauthenticated — it serves
   // public league stats and its callers (src/data.js) fetch without a JWT.
   // To stop it being abused as a general relay, constrain it to the only
-  // GSS read paths the app actually requests: leagues/*, rankings/*, teams/*.
-  if (!/^(leagues|rankings|teams)\//.test(path) || path.includes('..')) {
+  // GSS read paths the app actually requests: leagues/*, rankings/*, teams/*,
+  // and (v5.4.0) gamelogs/* — the per-player game logs are the only feed that
+  // flags postseason games, so they back every regular/postseason/total split
+  // (see src/splits.js). Same public, read-only stat data as the rest.
+  if (!/^(leagues|rankings|teams|gamelogs)\//.test(path) || path.includes('..')) {
     res.status(400).json({ error: 'Unsupported path' });
     return;
   }

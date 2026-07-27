@@ -98,11 +98,61 @@ export const SCHEDULE = [
       { time: '13:45', team1: 'CHI', team2: 'AZS' },
       { time: '17:30', team1: 'DAL', team2: 'ATL' },
       { time: '18:15', team1: 'NYG', team2: 'AZS' },
-      { time: '19:00', team1: 'NYG', team2: 'LV' },
-      { time: '19:45', team1: 'CHI', team2: 'DAL' },
+      // v5.4.0: these two slots were swapped relative to the GSS feed, so
+      // neither final attached and the page still showed them as upcoming
+      // (CHI 3–0 DAL is the 7:00 game, NYG 2–0 LV the 7:45). The date+time key
+      // is what binds a scheduled slot to its result — a slot in the wrong
+      // order silently reads as an unplayed game forever.
+      { time: '19:00', team1: 'CHI', team2: 'DAL' },
+      { time: '19:45', team1: 'NYG', team2: 'LV' },
+    ],
+  },
+  {
+    // ─── POSTSEASON ─────────────────────────────────────────────────────────
+    // v5.4.0. `type: 'postseason'` is load-bearing, not decoration: data.js
+    // derives POSTSEASON_DATES from it, and that is what keeps these games out
+    // of the regular-season standings, playoff odds and clinch model. Before
+    // this slate was tagged, the eight games below were counting as regular-
+    // season results (Dallas read 10 GP against a 6-game regular season).
+    //
+    // Format: six teams. LAN and NYG earned byes; the other four met in
+    // play-ins, and each play-in winner then played the bye team in a
+    // best-of-three semifinal. Times/orders are taken from the GSS feed, since
+    // `date + time` is the key the live final scores attach on.
+    id: '2026-07-26',
+    date: '2026-07-26',
+    season: '2026',
+    type: 'postseason',
+    venue: 'Assembly Studios',
+    venueCity: 'Atlanta, GA',
+    games: [
+      { time: '13:00', team1: 'DAL', team2: 'PHI', round: 'Play-in' },
+      { time: '13:45', team1: 'DAL', team2: 'LAN', round: 'Semifinal', gameNo: 1 },
+      { time: '14:30', team1: 'LAN', team2: 'DAL', round: 'Semifinal', gameNo: 2 },
+      { time: '15:15', team1: 'DAL', team2: 'LAN', round: 'Semifinal', gameNo: 3 },
+      { time: '17:30', team1: 'CHI', team2: 'LV',  round: 'Play-in' },
+      { time: '18:15', team1: 'CHI', team2: 'NYG', round: 'Semifinal', gameNo: 1 },
+      { time: '19:00', team1: 'NYG', team2: 'CHI', round: 'Semifinal', gameNo: 2 },
+      { time: '19:45', team1: 'CHI', team2: 'NYG', round: 'Semifinal', gameNo: 3 },
     ],
   },
 ];
+
+// The championship is set but not yet scheduled. It is deliberately NOT a
+// SCHEDULE row: every entry there needs a real date, and a placeholder one
+// would be treated as a playable slot by the odds/clinch models and by the
+// score-attachment key. The Schedule page renders this as its own "up next"
+// strip instead. Give it a `date` + `time` and move it into the 2026-07-26
+// postseason slate (or a new postseason slate) once the date is announced.
+export const POSTSEASON_FINAL = {
+  season: '2026',
+  round: 'Championship',
+  team1: 'DAL',   // beat LAN 2-1 in the semifinal
+  team2: 'NYG',   // beat CHI 2-1 in the semifinal
+  date: null,     // TBA
+  venue: 'Assembly Studios',
+  venueCity: 'Atlanta, GA',
+};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

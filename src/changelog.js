@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '5.4.0',
+    date: '2026-07-27',
+    kind: 'minor',
+    summary: 'v5.4.0 — regular season / postseason / total splits, and the postseason on the schedule',
+    items: [
+      'Every 2026 stat can now be read three ways. A Regular season / Postseason / Total toggle sits on the ProWiffle Stats page (batting, pitching, leader boards and standings), the player page stat tiles, team pages (team stats, roster cards and stat tables together), the Schedule page, and the dashboard Stats Leaders — so you can see what a player or team did in the playoffs, in the regular season, or across the whole year, and every surface agrees.',
+      'Fixed a real scoring error: the July 26 postseason games were counting toward the regular-season standings. Dallas showed 10 games played against a 6-game regular season, and every playoff team\'s record, run differential and rank was inflated. Standings, playoff odds, and clinch status are now regular season only, and they match the league\'s published standings exactly.',
+      'The July 26 postseason slate is on the schedule with round labels — the two play-in games and both best-of-three semifinals, each game tagged with its round and series game number.',
+      'Fixed the July 12 evening games: the 7:00 and 7:45 slots were listed in the wrong order, so those two finals never attached and the games still showed as upcoming. Chicago 3–0 Dallas and New York 2–0 Las Vegas now display correctly.',
+      'A "Team stats" table on the Schedule page shows every team\'s batting and pitching totals for whichever split you pick, sorted by OPS or ERA.',
+      'The championship — Dallas vs New York, both 2–1 semifinal winners — is flagged at the top of the schedule as still to be scheduled, and is excluded from every record and stat until it\'s played.',
+      'Splits are built from the league\'s own per-game logs, which are the only place the feed marks a game as postseason. Regular-season totals reconcile exactly against the league\'s published team stats. OPS+, wRC+, bWAR, ERA+ and FIP are league-adjusted upstream and can\'t be recomputed per split, so they show "—" outside the regular-season view rather than a made-up number — and tables that normally sort by one of those fall back to OPS or ERA instead of sorting an empty column.',
+    ],
+  },
+  {
     version: '5.3.2',
     date: '2026-07-17',
     kind: 'minor',

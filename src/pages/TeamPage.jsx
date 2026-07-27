@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { TEAMS, getTeam, slugify, playerSlug, fetchAllData, fetchTeamRosterFromApi, fetchGames, BATTING_LEADERS, PITCHING_LEADERS, isOnActiveRoster, canonicalTeamOf, canonicalNumOf, resolveCanonicalName, CANONICAL_ROSTER_2026, applyCanonicalToStats, computeStandings, teamWithStanding } from '../data';
 import { BattingTable, PitchingTable } from '../stats-tables';
+import { fetchSplitLeaders } from '../splits';
+import SplitToggle from '../split-toggle';
 import { formatPostName } from '../template-config';
 import { TierBadge } from '../tier-badges';
 import { ContentCalendar } from '../content-calendar';
@@ -492,6 +494,19 @@ export default function TeamPage() {
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
   const [games, setGames] = useState([]);
+  // Season split for every stat surface on this page. Swapping it replaces the
+  // batting/pitching arrays the team-stats card, roster trios and stat tables
+  // all read from, so they can never disagree with each other.
+  const [split, setSplit] = useState('regular');
+  useEffect(() => {
+    let cancel = false;
+    fetchSplitLeaders(split).then(({ batting: b, pitching: p }) => {
+      if (cancel) return;
+      setBatting(b || []);
+      setPitching(p || []);
+    }).catch(() => { /* keep whatever's loaded */ });
+    return () => { cancel = true; };
+  }, [split]);
   // Live standing for this team, computed from the loaded games feed. Falls
   // back to the team's baked record until games arrive. Drives the RECORD /
   // PCT / DIFF tiles and the rank badge so they reflect the current season.
@@ -881,8 +896,9 @@ export default function TeamPage() {
       const manualList = allManual.filter(p => p.team === team.id);
       setMedia(teamMedia);
       setManualPlayers(manualList);
-      setBatting(liveData?.batting || []);
-      setPitching(liveData?.pitching || []);
+      // batting/pitching are owned by the split effect above — setting them
+      // here too would race it and silently snap a postseason view back to the
+      // regular season whenever this loader re-ran (e.g. on a team change).
       setRankings(liveData?.rankings || []);
       setGames(gameList || []);
 
@@ -1357,6 +1373,24 @@ export default function TeamPage() {
           accent={team.color}
         />
       )}
+
+      {/* v5.4.0: one split control governs EVERYTHING statistical below it —
+          the team stats card, the roster card stat trios, and the batting /
+          pitching tables. Placed above them rather than inside a single card so
+          its reach is obvious; the record in the hero above deliberately stays
+          on the regular season, which is what a season record means. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{
+          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
+          letterSpacing: 1, textTransform: 'uppercase', color: colors.textMuted,
+        }}>2026 stats below</span>
+        <SplitToggle value={split} onChange={setSplit} ariaLabel="Team stats split" />
+        {split !== 'regular' && (
+          <span style={{ fontSize: 11, color: colors.textMuted }}>
+            Rebuilt from per-game logs — league-adjusted metrics (OPS+, wRC+, ERA+, FIP) read “—”.
+          </span>
+        )}
+      </div>
 
       {/* Team stats — two-column Batting | Pitching, each metric with its
           league rank as an ordinal. Named "<Mascot> Team Stats". */}
