@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '5.5.0',
+    date: '2026-08-01',
+    kind: 'minor',
+    summary: 'v5.5.0 — master-only player value rankings, and the championship on the schedule',
+    items: [
+      'New master-only "Value Rankings" tab on the ProWiffle Stats page: all 70 rostered players scored on batting and pitching production into a single BVS index, where 100 is league average and 15 points is one standard deviation (like OPS+, and not capped). Regular-season production is weighted double a postseason game per plate appearance, and players who both hit and pitch get a small bonus scaled by their lighter workload.',
+      'The ranking shows its working — every input is a visible column (batting contribution, pitching contribution, two-way bonus, weighted PA and IP, and the regressed rates actually used), so the number can be argued with rather than taken on faith.',
+      'Small samples are handled explicitly: every player is padded with 20 plate appearances of league-average production before rates are computed, so a 2-for-3 cameo can\'t top a full six-game season. The two players with no lines in the feed are shown as unrated rather than scored as average.',
+      'Added the championship — New York 5, Dallas 0 — to the schedule as a postseason game. It was landing in the feed untagged, which meant it was counting toward the regular-season standings and would have shown New York at 7-0 in a six-game regular season.',
+    ],
+  },
+  {
     version: '5.4.0',
     date: '2026-07-27',
     kind: 'minor',

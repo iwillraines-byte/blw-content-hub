@@ -6,8 +6,13 @@ import { colors, fonts, radius } from '../theme';
 import { getAllMedia } from '../media-store';
 import { getAllManualPlayers } from '../player-store';
 import { ProWiffleBallBlurb } from '../stats-tables';
-import { fetchSplitLeaders, splitLabel } from '../splits';
+import { fetchSplitLeaders, splitLabel, fetchRosterSplits } from '../splits';
 import SplitToggle from '../split-toggle';
+import { useAuth } from '../auth';
+import {
+  computePlayerRankings, rankingContext,
+  POST_WEIGHT, PRIOR_PA, PRIOR_OUTS, TWO_WAY_BONUS,
+} from '../player-rankings';
 
 // Apply canonical-team override + name resolution to a leaderboard entry.
 // Stats stay (they're tied to the player); the team field is overridden so
@@ -387,6 +392,137 @@ const PITCHING_LEADER_STATS = [
   { label: 'W',    key: 'w',       dir: 'desc', fmt: v => v },
 ];
 
+// ─── Value Rankings panel (master only) ─────────────────────────────────────
+// Deliberately shows its working: every component that feeds the composite is
+// a visible column, so the number can be argued with rather than trusted.
+// Scoring lives in src/player-rankings.js — read the header there before
+// changing any constant.
+
+function ValueRankingsPanel({ rows, loading, failed }) {
+  const num = { textAlign: 'right', fontFamily: fonts.mono, fontVariantNumeric: 'tabular-nums' };
+  const th = { ...num, padding: '8px 6px', fontFamily: fonts.condensed, fontWeight: 700, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.2, whiteSpace: 'nowrap' };
+  const td = { ...num, padding: '7px 6px', fontSize: 12, fontWeight: 500, color: colors.text, whiteSpace: 'nowrap' };
+
+  const shell = (body) => (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ padding: '16px 18px', borderBottom: `1px solid ${colors.border}` }}>
+        <SectionHeading style={{ margin: 0 }}>2026 player value rankings</SectionHeading>
+        <div style={{ fontSize: 11.5, color: colors.textSecondary, marginTop: 6, lineHeight: 1.55, maxWidth: 780 }}>
+          All 70 rostered players scored on batting and pitching production only.
+          BVS is an index like OPS+: <strong>100 is league average, 15 points is one standard deviation</strong>, and it isn’t capped.
+        </div>
+      </div>
+      {body}
+    </Card>
+  );
+
+  if (failed) return shell(<div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>Couldn’t load game logs. Refresh to try again.</div>);
+  if (loading || !rows) return shell(<div style={{ padding: 30, textAlign: 'center', color: colors.textMuted, fontSize: 13 }}>Scoring every player’s game logs…</div>);
+
+  const ctx = rankingContext(rows);
+  const fmt = (v, d = 2) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(d));
+
+  return shell(
+    <>
+      <div style={{ overflow: 'auto', maxHeight: '72vh' }}>
+        <table className="tnum stat-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+          <thead>
+            <tr style={{ background: colors.bg }}>
+              <th style={{ ...th, textAlign: 'center', position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>#</th>
+              <th style={{ ...th, textAlign: 'left', position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>Player</th>
+              <th style={{ ...th, textAlign: 'left', position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>Team</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>BVS</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>Bat</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>Pitch</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>2-Way</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>PA</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>OPS*</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>IP</th>
+              <th style={{ ...th, position: 'sticky', top: 0, zIndex: 2, background: colors.bg }}>R/3*</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const t = getTeam(r.team);
+              return (
+                <tr key={`${r.team}-${r.name}`} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${colors.borderLight}` : 'none', opacity: r.rated ? 1 : 0.55 }}>
+                  <td style={{ ...td, textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{r.rank ?? '—'}</td>
+                  <td style={{ ...td, textAlign: 'left', fontWeight: 700, whiteSpace: 'normal' }}>
+                    {t ? (
+                      <Link to={`/teams/${t.slug}/players/${playerSlug({ name: r.name })}`} style={{ color: colors.text, textDecoration: 'none', borderBottom: `1px dotted ${colors.border}` }}>
+                        {r.name}
+                      </Link>
+                    ) : r.name}
+                  </td>
+                  <td style={{ ...td, textAlign: 'left' }}>{t ? <TeamChip teamId={r.team} small withLogo /> : r.team}</td>
+                  <td style={{ ...td, fontWeight: 800, fontSize: 14, color: r.rated ? colors.red : colors.textMuted }}>{r.rated ? fmt(r.bvs, 1) : '—'}</td>
+                  <td style={td}>{r.bat.pa > 0 ? fmt(r.batScore) : '—'}</td>
+                  <td style={td}>{r.pit.outs > 0 ? fmt(r.pitScore) : '—'}</td>
+                  <td style={{ ...td, color: r.twoWay > 0 ? colors.text : colors.textMuted }}>{r.twoWay > 0 ? fmt(r.twoWay) : '—'}</td>
+                  <td style={{ ...td, color: colors.textSecondary }}>{fmt(r.bat.pa, 1)}</td>
+                  <td style={{ ...td, color: colors.textSecondary }}>{r.opsAdj == null ? '—' : fmt(r.opsAdj, 3).replace(/^0/, '')}</td>
+                  <td style={{ ...td, color: colors.textSecondary }}>{fmt(r.pit.outs / 3, 1)}</td>
+                  <td style={{ ...td, color: colors.textSecondary }}>{r.r3Adj == null ? '—' : fmt(r.r3Adj)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ padding: '14px 18px 16px', borderTop: `1px solid ${colors.border}`, fontSize: 11.5, color: colors.textMuted, lineHeight: 1.6 }}>
+        <div style={{
+          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+          textTransform: 'uppercase', color: colors.textSecondary, marginBottom: 8,
+        }}>How the score works</div>
+
+        {/* The formula, stated outright. Everything above is derived from
+            exactly these five lines — no hidden terms, no per-player fudge. */}
+        <pre style={{
+          margin: '0 0 10px', padding: '12px 14px',
+          background: colors.bg, border: `1px solid ${colors.borderLight}`, borderRadius: radius.base,
+          fontFamily: fonts.mono, fontSize: 11, lineHeight: 1.75, color: colors.text,
+          overflowX: 'auto', whiteSpace: 'pre',
+        }}>
+{`BVS   = 100 + 15 × ( Bat + Pitch + ${TWO_WAY_BONUS} × TwoWay )
+
+Bat   = ( OPS* − leagueOPS ) × PA        ÷ SD(all batters)
+Pitch = ( leagueR3 − R3* )   × IP ÷ 3    ÷ SD(all pitchers)
+TwoWay= min( PA ÷ medianPA , IP ÷ medianIP )   capped at 1
+
+totals: regular-season game × 1.0,  postseason game × ${POST_WEIGHT}
+OPS*  : totals + ${PRIOR_PA} PA of league-average hitting, then rate
+R3*   : totals + ${PRIOR_OUTS} outs of league-average pitching, then rate
+        (R3 = runs allowed per 3 innings — one BLW game)`}
+        </pre>
+
+        <div style={{ marginBottom: 6 }}>
+          <strong style={{ color: colors.textSecondary }}>Why those pieces.</strong>{' '}
+          The season is 6 games at roughly 3 plate appearances each, so raw rates are mostly noise — that’s what the
+          {' '}{PRIOR_PA}-PA padding fixes: a 2-for-3 cameo lands near average, a full season barely moves.
+          Multiplying by PA (and innings) means being good counts for more the more you did it.
+          Dividing each side by <em>its own</em> standard deviation is what makes hitting and pitching comparable —
+          there’s no honest fixed exchange rate between an OPS point and a run in a 3-inning game, so the score doesn’t invent one.
+          The two-way term uses your <em>smaller</em> workload, so one token inning earns almost nothing.
+        </div>
+        <div style={{ marginBottom: 6 }}>
+          <strong style={{ color: colors.textSecondary }}>Reading the columns.</strong>{' '}
+          BVS is an index like OPS+ — 100 is average, 15 is one standard deviation, no ceiling.
+          Bat and Pitch are contributions in standard deviations, where <em>0 means contributed nothing on that side</em>, not “average”.
+          PA and IP are postseason-weighted, so they read lower than raw counts. OPS* and R/3* are the regressed rates the score actually used.
+        </div>
+        <div>
+          <strong style={{ color: colors.textSecondary }}>What it isn’t.</strong>{' '}
+          Fielding, baserunning and situational leverage aren’t in the feed, so this is an offence-and-pitching score, not a total-player score.
+          Six games is short even after regression — read it as tiers, since adjacent ranks aren’t meaningfully different.
+          A bat-only player can’t outrank an equally good two-way player by construction; that’s a deliberate choice, not a finding.
+          {' '}{ctx.rated} of {rows.length} players are rated ({ctx.twoWay} two-way, {ctx.battersOnly} batting only, {ctx.pitchersOnly} pitching only)
+          {ctx.unrated > 0 ? `; ${ctx.unrated} have no lines in the feed at all and are left unrated rather than scored as average` : ''}.
+        </div>
+      </div>
+    </>
+  );
+}
+
 function LeadersBoard({ rows, stats }) {
   const boards = useMemo(() => stats.map(s => {
     const ranked = rows
@@ -471,6 +607,27 @@ export default function GameCenter() {
   const [pitching, setPitching] = useState([]);
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
+  // v5.5.0: the composite value ranking is master-only. Note this is a
+  // VISIBILITY gate, not a security boundary — every input is public league
+  // stat data already served by this page. It's here because the ranking is an
+  // internal evaluation tool, not something to publish to athletes.
+  const { role } = useAuth();
+  const isMaster = role === 'master_admin';
+  const [bvsRows, setBvsRows] = useState(null);
+  const [bvsLoading, setBvsLoading] = useState(false);
+  const [bvsError, setBvsError] = useState(false);
+
+  const loadRankings = () => {
+    setTab('bvs');
+    if (bvsRows || bvsLoading) return;
+    setBvsLoading(true);
+    setBvsError(false);
+    fetchRosterSplits()
+      .then(players => setBvsRows(computePlayerRankings(players)))
+      .catch(() => setBvsError(true))
+      .finally(() => setBvsLoading(false));
+  };
+
   // Which slice of 2026 every table on this page reports. Drives the
   // leaderboards, the leader boards, and the standings tab together — the
   // whole page reads one split at a time so numbers can't disagree.
@@ -737,6 +894,21 @@ export default function GameCenter() {
           <button onClick={() => setTab('rankings')} style={tabStyle(tab === 'rankings')}>Player Rankings</button>
           <button onClick={() => setTab('players')} style={tabStyle(tab === 'players')}>Players</button>
           <button onClick={() => setTab('standings')} style={tabStyle(tab === 'standings')}>Standings</button>
+          {isMaster && (
+            <button
+              onClick={loadRankings}
+              style={{ ...tabStyle(tab === 'bvs'), display: 'inline-flex', alignItems: 'center', gap: 7 }}
+              title="Composite value ranking of all 70 rostered players — master only"
+            >
+              Value Rankings
+              <span style={{
+                fontFamily: fonts.condensed, fontSize: 8.5, fontWeight: 800,
+                letterSpacing: 0.8, color: colors.textMuted,
+                border: `1px solid ${colors.borderLight}`, borderRadius: radius.sm,
+                padding: '1px 4px',
+              }}>MASTER</span>
+            </button>
+          )}
         </div>
         {(tab === 'batting' || tab === 'pitching' || tab === 'standings') && (
           <SplitToggle value={split} onChange={setSplit} ariaLabel="Season split" />
@@ -1144,6 +1316,12 @@ export default function GameCenter() {
             </table>
           </div>
         </Card>
+      )}
+
+      {/* Value Rankings — master only. Double-gated on isMaster so the panel
+          can't render even if `tab` were somehow set to 'bvs' another way. */}
+      {isMaster && tab === 'bvs' && (
+        <ValueRankingsPanel rows={bvsRows} loading={bvsLoading} failed={bvsError} />
       )}
 
       {/* Standings */}

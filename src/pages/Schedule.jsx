@@ -28,7 +28,6 @@ import { fetchLeagueSplits, splitLabel } from '../splits';
 import SplitToggle from '../split-toggle';
 import {
   SCHEDULE,
-  POSTSEASON_FINAL,
   getAllGameDays,
   formatGameTime,
   formatGameDayDate,
@@ -105,12 +104,6 @@ export default function Schedule() {
   // How far each team got, worked out from the postseason results themselves.
   const postseasonResults = useMemo(() => computePostseasonResults(scores), [scores]);
 
-  // Only show the championship strip while it's genuinely pending, and only
-  // when it isn't filtered out by the team chip.
-  const showFinal = !!POSTSEASON_FINAL
-    && !POSTSEASON_FINAL.date
-    && (!teamFilter || POSTSEASON_FINAL.team1 === teamFilter || POSTSEASON_FINAL.team2 === teamFilter);
-
   const regularDays = SCHEDULE.filter(d => d.season === CURRENT_SEASON && d.type !== 'postseason').length;
   const postDays = SCHEDULE.filter(d => d.season === CURRENT_SEASON && d.type === 'postseason').length;
 
@@ -154,10 +147,6 @@ export default function Schedule() {
           </div>
         </Card>
       )}
-
-      {/* Championship is decided but unscheduled — surfaced above the played
-          slates so the season doesn't look finished when it isn't. */}
-      {showFinal && <ChampionshipStrip final={POSTSEASON_FINAL} />}
 
       {/* PAST group — only renders if there are past days AND the user
           isn't currently filtered to only-future. */}
@@ -268,41 +257,6 @@ function scoreFor(scores, date, g) {
   if (raw.homeId === g.team1 && raw.awayId === g.team2) return { s1: raw.homeScore, s2: raw.awayScore };
   if (raw.awayId === g.team1 && raw.homeId === g.team2) return { s1: raw.awayScore, s2: raw.homeScore };
   return null;
-}
-
-// ─── Championship "up next" strip ──────────────────────────────────────────
-
-function ChampionshipStrip({ final }) {
-  const t1 = getTeam(final.team1);
-  const t2 = getTeam(final.team2);
-  return (
-    <Card style={{ marginBottom: 14, borderColor: colors.red }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{
-          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800, letterSpacing: 1,
-          textTransform: 'uppercase', color: colors.red,
-        }}>{final.round}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <TeamSlot teamId={final.team1} />
-          <span style={{
-            fontFamily: fonts.condensed, fontSize: 10, fontWeight: 800,
-            color: colors.textMuted, letterSpacing: 1,
-          }}>VS</span>
-          <TeamSlot teamId={final.team2} />
-        </div>
-        <span style={{
-          fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
-          color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase',
-        }}>
-          Date TBA · {final.venue}
-        </span>
-      </div>
-      <p style={{ fontSize: 11, color: colors.textMuted, margin: '8px 2px 0', lineHeight: 1.5 }}>
-        {t1?.name || final.team1} and {t2?.name || final.team2} both won their semifinal series 2–1.
-        The championship isn’t on the schedule yet, so it isn’t counted in any record or stat split below.
-      </p>
-    </Card>
-  );
 }
 
 // ─── Filter chip — team-tinted with active/inactive states ─────────────────

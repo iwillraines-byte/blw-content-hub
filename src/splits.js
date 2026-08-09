@@ -26,7 +26,7 @@
 // honestly, so they are null outside the regular-season split and the UI
 // renders '—' rather than a fabricated number.
 
-import { TEAMS, fetchBattingLeaders, fetchPitchingLeaders, fetchAllRosters, canonicalizeStatRows } from './data';
+import { TEAMS, fetchBattingLeaders, fetchPitchingLeaders, fetchAllRosters, canonicalizeStatRows, CANONICAL_ROSTER_2026 } from './data';
 
 const GSS_BASE = '/api/gss';
 const BLW_LEAGUE_ID = 3;
@@ -412,6 +412,43 @@ export async function fetchSplitLeaders(split = DEFAULT_SPLIT) {
     batting: canonicalizeStatRows(rowsFor('batting'), byOps),
     pitching: canonicalizeStatRows(rowsFor('pitching'), byEra),
   };
+}
+
+// ─── The canonical 70, with splits attached ─────────────────────────────────
+// Exactly one row per player on CANONICAL_ROSTER_2026, in roster order, each
+// carrying its batting/pitching splits. Players the feed has no lines for at
+// all (upstream GSS gaps) still get a row, with null splits, so a consumer
+// that must cover the whole roster — the value ranking — can show them as
+// unrated instead of silently dropping them and reporting on 68 of 70.
+
+const EMPTY_SPLITS = { regular: null, postseason: null, total: null };
+
+export async function fetchRosterSplits() {
+  const { players } = await fetchLeagueSplits();
+  // Canonicalize names + drop anyone not on the roster, using the same
+  // pipeline as the leaderboards. The split objects ride along untouched.
+  const canon = canonicalizeStatRows(players.map(p => ({
+    playerId: p.playerId,
+    name: p.name,
+    team: p.team,
+    batting: p.batting,
+    pitching: p.pitching,
+  })));
+  const byName = new Map(canon.map(p => [String(p.name || '').toLowerCase(), p]));
+
+  return CANONICAL_ROSTER_2026.map(c => {
+    const hit = byName.get(String(c.name || '').toLowerCase());
+    return {
+      playerId: hit?.playerId ?? null,
+      name: c.name,
+      // The canonical roster is the authority on team + jersey number,
+      // not whatever team the stat feed last tagged the player under.
+      team: c.team,
+      num: c.num || '',
+      batting: hit?.batting || EMPTY_SPLITS,
+      pitching: hit?.pitching || EMPTY_SPLITS,
+    };
+  });
 }
 
 // ─── Ranking within a split ─────────────────────────────────────────────────

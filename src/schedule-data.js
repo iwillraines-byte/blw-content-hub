@@ -136,23 +136,25 @@ export const SCHEDULE = [
       { time: '19:45', team1: 'CHI', team2: 'NYG', round: 'Semifinal', gameNo: 3 },
     ],
   },
+  {
+    // Championship. NYG beat DAL 5-0 for the 2026 title.
+    //
+    // This slate MUST stay tagged `type: 'postseason'` — data.js derives
+    // POSTSEASON_DATES from that tag, and it is the only thing keeping this
+    // game out of the regular-season standings. Untagged, New York reads 7-0
+    // in a 6-game regular season.
+    id: '2026-08-07',
+    date: '2026-08-07',
+    season: '2026',
+    type: 'postseason',
+    venue: 'Assembly Studios',
+    venueCity: 'Atlanta, GA',
+    games: [
+      { time: '15:00', team1: 'DAL', team2: 'NYG', round: 'Championship' },
+    ],
+  },
 ];
 
-// The championship is set but not yet scheduled. It is deliberately NOT a
-// SCHEDULE row: every entry there needs a real date, and a placeholder one
-// would be treated as a playable slot by the odds/clinch models and by the
-// score-attachment key. The Schedule page renders this as its own "up next"
-// strip instead. Give it a `date` + `time` and move it into the 2026-07-26
-// postseason slate (or a new postseason slate) once the date is announced.
-export const POSTSEASON_FINAL = {
-  season: '2026',
-  round: 'Championship',
-  team1: 'DAL',   // beat LAN 2-1 in the semifinal
-  team2: 'NYG',   // beat CHI 2-1 in the semifinal
-  date: null,     // TBA
-  venue: 'Assembly Studios',
-  venueCity: 'Atlanta, GA',
-};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
