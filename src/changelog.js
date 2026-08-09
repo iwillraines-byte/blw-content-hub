@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.5.1',
+    date: '2026-08-01',
+    kind: 'patch',
+    summary: 'v5.5.1 — value rankings gain a qualifying line',
+    items: [
+      'Player value rankings now require a minimum body of work before a player holds a rank: 10 weighted plate appearances or 3.0 innings pitched (one complete BLW game). It\'s an either/or checked per discipline, so a pitcher who barely bats still qualifies on innings rather than being judged on a combined total he was never going to reach.',
+      'Players below the line keep their BVS and stay sorted by it beneath a "qualifying line" divider — they just don\'t hold a rank against someone with twice the sample. 54 of 70 players qualify, 14 fall below the line, and 2 didn\'t play at all.',
+      'Qualification is a ranking filter only — it changes no scores. League baselines and standard deviations still include every player who took the field, so the numbers above and below the line are computed identically.',
+    ],
+  },
+  {
     version: '5.5.0',
     date: '2026-08-01',
     kind: 'minor',

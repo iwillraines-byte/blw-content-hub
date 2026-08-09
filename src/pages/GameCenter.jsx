@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAllData, fetchAllRosters, getAllPlayersDirectory, TEAMS, getTeam, slugify, playerSlug, API_CONFIG, canonicalTeamOf, resolveCanonicalName, CANONICAL_ROSTER_2026, fetchStandings, teamWithStanding } from '../data';
 import { Card, PageHeader, SectionHeading, TeamChip, TeamLogo, FreeAgentChip, OutlineButton, Skeleton, inputStyle, selectStyle } from '../components';
@@ -11,7 +11,7 @@ import SplitToggle from '../split-toggle';
 import { useAuth } from '../auth';
 import {
   computePlayerRankings, rankingContext,
-  POST_WEIGHT, PRIOR_PA, PRIOR_OUTS, TWO_WAY_BONUS,
+  POST_WEIGHT, PRIOR_PA, PRIOR_OUTS, TWO_WAY_BONUS, QUALIFY_PA, QUALIFY_OUTS,
 } from '../player-rankings';
 
 // Apply canonical-team override + name resolution to a leaderboard entry.
@@ -444,8 +444,25 @@ function ValueRankingsPanel({ rows, loading, failed }) {
           <tbody>
             {rows.map((r, i) => {
               const t = getTeam(r.team);
+              // Divider at the point the ranked field ends — same treatment as
+              // the playoff line on the standings table.
+              const firstUnqualified = r.rated && !r.qualified && (i === 0 || rows[i - 1].qualified);
               return (
-                <tr key={`${r.team}-${r.name}`} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${colors.borderLight}` : 'none', opacity: r.rated ? 1 : 0.55 }}>
+                <Fragment key={`${r.team}-${r.name}`}>
+                {firstUnqualified && (
+                  <tr aria-hidden="true">
+                    <td colSpan={11} style={{ padding: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px' }}>
+                        <div style={{ flex: 1, height: 1, background: colors.border }} />
+                        <span style={{ fontFamily: fonts.condensed, fontSize: 9, fontWeight: 800, letterSpacing: 1, color: colors.textMuted, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                          Qualifying line · under {QUALIFY_PA} PA and {(QUALIFY_OUTS / 3).toFixed(1)} IP
+                        </span>
+                        <div style={{ flex: 1, height: 1, background: colors.border }} />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                <tr style={{ borderBottom: i < rows.length - 1 ? `1px solid ${colors.borderLight}` : 'none', opacity: r.rated ? (r.qualified ? 1 : 0.75) : 0.55 }}>
                   <td style={{ ...td, textAlign: 'center', color: colors.textMuted, fontWeight: 700 }}>{r.rank ?? '—'}</td>
                   <td style={{ ...td, textAlign: 'left', fontWeight: 700, whiteSpace: 'normal' }}>
                     {t ? (
@@ -464,6 +481,7 @@ function ValueRankingsPanel({ rows, loading, failed }) {
                   <td style={{ ...td, color: colors.textSecondary }}>{fmt(r.pit.outs / 3, 1)}</td>
                   <td style={{ ...td, color: colors.textSecondary }}>{r.r3Adj == null ? '—' : fmt(r.r3Adj)}</td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>
@@ -492,7 +510,9 @@ TwoWay= min( PA ÷ medianPA , IP ÷ medianIP )   capped at 1
 totals: regular-season game × 1.0,  postseason game × ${POST_WEIGHT}
 OPS*  : totals + ${PRIOR_PA} PA of league-average hitting, then rate
 R3*   : totals + ${PRIOR_OUTS} outs of league-average pitching, then rate
-        (R3 = runs allowed per 3 innings — one BLW game)`}
+        (R3 = runs allowed per 3 innings — one BLW game)
+
+ranked : PA ≥ ${QUALIFY_PA}  OR  IP ≥ ${(QUALIFY_OUTS / 3).toFixed(1)}   (scored either way)`}
         </pre>
 
         <div style={{ marginBottom: 6 }}>
@@ -510,13 +530,22 @@ R3*   : totals + ${PRIOR_OUTS} outs of league-average pitching, then rate
           Bat and Pitch are contributions in standard deviations, where <em>0 means contributed nothing on that side</em>, not “average”.
           PA and IP are postseason-weighted, so they read lower than raw counts. OPS* and R/3* are the regressed rates the score actually used.
         </div>
+        <div style={{ marginBottom: 6 }}>
+          <strong style={{ color: colors.textSecondary }}>Who gets a rank.</strong>{' '}
+          Everyone is scored, but a rank number needs a real body of work: {QUALIFY_PA} weighted plate appearances <em>or</em> {(QUALIFY_OUTS / 3).toFixed(1)} innings
+          — one complete BLW game on the mound. It’s an <em>either/or</em> checked per discipline on purpose, so a pitcher who barely bats still qualifies on innings
+          rather than being judged on a combined total he was never going to accumulate.
+          Below the line players keep their BVS and stay sorted by it, they just don’t hold a rank against someone with twice the sample.
+          Qualification changes nothing about the scoring — the league baselines and standard deviations still include every participant.
+        </div>
         <div>
           <strong style={{ color: colors.textSecondary }}>What it isn’t.</strong>{' '}
           Fielding, baserunning and situational leverage aren’t in the feed, so this is an offence-and-pitching score, not a total-player score.
           Six games is short even after regression — read it as tiers, since adjacent ranks aren’t meaningfully different.
           A bat-only player can’t outrank an equally good two-way player by construction; that’s a deliberate choice, not a finding.
-          {' '}{ctx.rated} of {rows.length} players are rated ({ctx.twoWay} two-way, {ctx.battersOnly} batting only, {ctx.pitchersOnly} pitching only)
-          {ctx.unrated > 0 ? `; ${ctx.unrated} have no lines in the feed at all and are left unrated rather than scored as average` : ''}.
+          {' '}{ctx.qualified} of {rows.length} players are ranked ({ctx.twoWay} two-way, {ctx.battersOnly} batting only, {ctx.pitchersOnly} pitching only)
+          {ctx.unqualified > 0 ? `; ${ctx.unqualified} scored but below the qualifying line` : ''}
+          {ctx.unrated > 0 ? `; ${ctx.unrated} didn’t play at all and are left unrated rather than scored as average` : ''}.
         </div>
       </div>
     </>

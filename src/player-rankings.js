@@ -73,6 +73,26 @@ export const PRIOR_OUTS = 9;   // 3 innings = one complete BLW start
 // weak two-way player over a strong specialist. "Slightly more value."
 export const TWO_WAY_BONUS = 0.25;
 
+// ── Qualification (v5.6.0) ──
+// A player is RANKED only after clearing a minimum workload in at least one
+// discipline. This is the batting-title convention: everyone still gets a
+// score, but a number built on 2 plate appearances doesn't get a rank next to
+// a player who took 25.
+//
+// Deliberately an OR, evaluated per discipline. A pitcher who barely bats
+// (James Kline: 1 PA, 4.3 IP) is a normal-workload PITCHER, not a thin sample
+// — judging him on combined PA+outs would wrongly exclude him. Clearing either
+// bar means there's a real body of work to judge.
+//
+// Bars are set off the live distribution: 10 PA sits just above the batter
+// 25th percentile (8) against a median of 16, and 3.0 IP is one complete BLW
+// game, just under the pitcher median of 4.0. Together they leave 14 of 68
+// unqualified — none of whom currently rank above 30th anyway, because the
+// regression above is already doing most of this work. The threshold mostly
+// makes that honest rather than changing the order.
+export const QUALIFY_PA = 10;
+export const QUALIFY_OUTS = 9;   // 3.0 IP
+
 // Display scale, mirroring OPS+/wRC+ so the numbers read familiarly:
 // 100 = league average, 15 points = one standard deviation. NOT capped at 100.
 export const BVS_MEAN = 100;
@@ -218,15 +238,23 @@ export function computePlayerRankings(players) {
     // unrated. Scoring them 0 would place them mid-table, above genuinely poor
     // performers, which would be wrong.
     r.rated = r.bat.pa > 0 || r.pit.outs > 0;
+    // Qualification is a RANKING filter, not a scoring change: BVS is computed
+    // identically for everyone, and the league baselines + standard deviations
+    // still include every participant. Only the rank column is withheld.
+    r.qualified = r.rated && (r.bat.pa >= QUALIFY_PA || r.pit.outs >= QUALIFY_OUTS);
     r.total = r.batScore + r.pitScore + TWO_WAY_BONUS * r.twoWay;
     r.bvs = r.rated ? BVS_MEAN + BVS_SCALE * r.total : null;
   }
 
+  // Three tiers: ranked qualifiers, then scored-but-unqualified (still ordered
+  // by score, so the section is informative), then unrated.
   rows.sort((a, b) => {
-    if (a.rated !== b.rated) return a.rated ? -1 : 1;   // unrated always last
+    if (a.rated !== b.rated) return a.rated ? -1 : 1;
+    if (a.qualified !== b.qualified) return a.qualified ? -1 : 1;
     return b.total - a.total;
   });
-  rows.forEach((r, i) => { r.rank = r.rated ? i + 1 : null; });
+  let rank = 0;
+  rows.forEach(r => { r.rank = r.qualified ? ++rank : null; });
 
   return rows;
 }
@@ -235,11 +263,14 @@ export function computePlayerRankings(players) {
 // the baseline they were computed from rather than taken on faith.
 export function rankingContext(rows) {
   const rated = rows.filter(r => r.rated);
+  const qualified = rows.filter(r => r.qualified);
   return {
     rated: rated.length,
     unrated: rows.length - rated.length,
-    twoWay: rated.filter(r => r.bat.pa > 0 && r.pit.outs > 0).length,
-    battersOnly: rated.filter(r => r.bat.pa > 0 && r.pit.outs === 0).length,
-    pitchersOnly: rated.filter(r => r.bat.pa === 0 && r.pit.outs > 0).length,
+    qualified: qualified.length,
+    unqualified: rated.length - qualified.length,
+    twoWay: qualified.filter(r => r.bat.pa > 0 && r.pit.outs > 0).length,
+    battersOnly: qualified.filter(r => r.bat.pa > 0 && r.pit.outs === 0).length,
+    pitchersOnly: qualified.filter(r => r.bat.pa === 0 && r.pit.outs > 0).length,
   };
 }
