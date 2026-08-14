@@ -415,10 +415,13 @@ export const TEMPLATE_TYPES = {
 // v4.5.31: stat-card sub-types. Surfaced as a 4-button picker in the
 // Studio UI when the 'stat-card' template is active. Each renders the
 // player's data with the card design defined in stat-card-renderer.js.
+// v5.6.0: the raw cards' four columns are no longer fixed — the hints
+// name the defaults, and "Card Layout" below the picker swaps any of
+// the four for another stat from the catalog in stat-card-stats.js.
 export const STAT_CARD_TYPES = [
-  { id: 'hitting-stats',       label: 'Hitting · Stats',       icon: '⚾', hint: 'AVG / OPS+ / HR / OBP / SLG / OPS / RBI / PA' },
+  { id: 'hitting-stats',       label: 'Hitting · Stats',       icon: '⚾', hint: 'Four columns — AVG / HR / RBI / OPS+ by default' },
   { id: 'hitting-percentiles', label: 'Hitting · Percentiles', icon: '◑', hint: 'Savant-style bubble bars across BLW batters' },
-  { id: 'pitching-stats',      label: 'Pitching · Stats',      icon: '↗', hint: 'ERA / FIP / IP / W-L / K/3 / WHIP' },
+  { id: 'pitching-stats',      label: 'Pitching · Stats',      icon: '↗', hint: 'Four columns — ERA / IP / K/3 / FIP by default' },
   { id: 'pitching-percentiles',label: 'Pitching · Percentiles',icon: '◐', hint: 'Savant-style bubble bars across BLW pitchers' },
 ];
 

@@ -15,6 +15,12 @@
 // so quality stays crisp at any export resolution.
 
 import { percentileFor, derivedPercentileFor } from './percentile-bubble';
+import {
+  SEASON_LABEL,
+  findStat,
+  normalizeStatKeys,
+  defaultHeaderLabel,
+} from './stat-card-stats';
 
 // v4.5.33: bypass FONT_MAP and reference the MVP theme stack directly.
 // FONT_MAP is keyed for the legacy Bebas Neue / Barlow stack; the
@@ -101,10 +107,10 @@ function safeRatio(num, denom) {
   return n / d;
 }
 
-// Year label for the gradient header. We don't have a season state
-// passed in — hardcode the current BLW season year for now (master
-// can edit this string when we ship 2027).
-const SEASON_LABEL = '2026';
+// Year label for the gradient header lives in stat-card-stats.js now —
+// it seeds the DEFAULT header text, which Studio lets the user rewrite
+// per card type. Re-exported here so existing importers keep working.
+export { SEASON_LABEL };
 
 // ─── prowiffleball.com logo loader (v4.5.48) ────────────────────────────────
 // Drawn into both card headers as a "stats source" credit. The SVG at
@@ -202,10 +208,14 @@ function drawProwiffleLogoInHeader(ctx, color, headerX, headerY, headerW, header
 // Cells/rows include rank info ("#32 / 64") so the viewer sees
 // instantly where the player slots in BLW-wide.
 
-function rankAndPercentile(list, playerName, key, direction = 'desc', toNumber = parseFloat) {
+// Rank + percentile of one player within `list`, where `valueOf(row)`
+// pulls the comparable number off each leaderboard row. Rows the stat
+// doesn't apply to (null value) drop out of the population entirely, so
+// e.g. HR/PA ranks only against hitters who actually have PAs.
+function rankAndPercentileBy(list, playerName, valueOf, direction = 'desc') {
   if (!Array.isArray(list) || !list.length) return { rank: null, total: 0, percentile: null };
   const rows = list
-    .map(r => ({ name: r?.name || '', value: toNumber(r?.[key]) }))
+    .map(r => ({ name: r?.name || '', value: valueOf(r) }))
     .filter(r => r.name && Number.isFinite(r.value));
   if (!rows.length) return { rank: null, total: 0, percentile: null };
   rows.sort((a, b) => direction === 'asc' ? a.value - b.value : b.value - a.value);
@@ -216,31 +226,25 @@ function rankAndPercentile(list, playerName, key, direction = 'desc', toNumber =
   return { rank, total: rows.length, percentile };
 }
 
-function hittingRawCells(player, leaders) {
-  const b = player.batting || {};
-  const list = leaders?.batting || [];
-  return [
-    { label: 'AVG', value: b.avg ?? '—', ...rankAndPercentile(list, player.name, 'avg', 'desc', parseFloat) },
-    { label: 'HR', value: b.hr ?? '—', ...rankAndPercentile(list, player.name, 'hr', 'desc', Number) },
-    { label: 'RBI', value: b.rbi ?? '—', ...rankAndPercentile(list, player.name, 'rbi', 'desc', Number) },
-    { label: 'OPS+', value: b.ops_plus ?? '—', highlight: true, ...rankAndPercentile(list, player.name, 'ops_plus', 'desc', Number) },
-  ];
-}
-
-function pitchingRawCells(player, leaders) {
-  const p = player.pitching || {};
-  const list = leaders?.pitching || [];
-  return [
-    { label: 'ERA', value: p.era ?? '—', ...rankAndPercentile(list, player.name, 'era', 'asc', parseFloat) },
-    { label: 'IP', value: p.ip ?? '—', ...rankAndPercentile(list, player.name, 'ip', 'desc', parseFloat) },
-    { label: 'K/3', value: p.k4 ?? '—', ...rankAndPercentile(list, player.name, 'k4', 'desc', parseFloat) },
-    {
-      label: 'FIP',
-      value: typeof p.fip === 'number' ? p.fip.toFixed(2) : (p.fip ?? '—'),
-      highlight: true,
-      ...rankAndPercentile(list, player.name, 'fip', 'asc', parseFloat),
-    },
-  ];
+// v5.6.0: the raw card's four columns are now driven by `statKeys` —
+// any four entries from the batting/pitching catalog, in any order —
+// instead of a fixed AVG/HR/RBI/OPS+ (or ERA/IP/K3/FIP) set. Slot 4
+// keeps the "headline" treatment: team-accent value and accent bar.
+function rawCells(cardType, player, leaders, statKeys) {
+  const isPitching = cardType === 'pitching-stats';
+  const row = (isPitching ? player.pitching : player.batting) || {};
+  const list = (isPitching ? leaders?.pitching : leaders?.batting) || [];
+  return normalizeStatKeys(cardType, statKeys).map((id, i) => {
+    const stat = findStat(cardType, id);
+    if (!stat) return { label: '—', value: '—', rank: null, total: 0, percentile: null };
+    const cell = {
+      label: stat.label,
+      value: stat.value(row),
+      highlight: i === 3,
+    };
+    if (stat.rankable === false) return { ...cell, rank: null, total: 0, percentile: null };
+    return { ...cell, ...rankAndPercentileBy(list, player.name, stat.num, stat.dir) };
+  });
 }
 
 // v4.5.33: full 9-row sets matching the player page exactly. Same
@@ -364,12 +368,16 @@ function renderRawCard(ctx, { box, team, headerLabel, cells }) {
   // string + logo zone don't overlap on the platform-typical card
   // widths the eye reads them as two distinct elements rather than
   // a left-justified compromise.
+  //
+  // v5.6.0: `headerLabel` is now the COMPLETE header string (season
+  // included) rather than just the "BATTING"/"PITCHING" suffix, because
+  // Studio lets the user rewrite the whole line. The season prefix
+  // lives in the default that renderStatCard falls back to.
   ctx.fillStyle = '#FFFFFF';
   ctx.font = `700 ${Math.round(headerH * 0.50)}px ${cond}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const headerText = `${SEASON_LABEL} ${headerLabel}`.toUpperCase();
-  ctx.fillText(headerText, x + w / 2, y + headerH / 2);
+  ctx.fillText(String(headerLabel).toUpperCase(), x + w / 2, y + headerH / 2);
 
   // v4.5.48: prowiffleball.com wordmark on the right side of the
   // dark gradient header. White-on-transparent SVG renders as-is
@@ -575,33 +583,34 @@ function renderPercentileCard(ctx, { box, team, headerLabel, totalLabel, rows, p
 }
 
 // ─── Public entry point ────────────────────────────────────────────────────
-// cardType: 'hitting-stats' | 'hitting-percentiles' | 'pitching-stats' | 'pitching-percentiles'
-// player:   { name, lastName, firstName, num, team, batting?, pitching? }
-// box:      { x, y, w, h }    — where to draw the card on the canvas
-// team:     TEAMS entry (color, dark, name)
-// leaders:  { batting: [...], pitching: [...] } — for percentile lookups
+// cardType:    'hitting-stats' | 'hitting-percentiles' | 'pitching-stats' | 'pitching-percentiles'
+// player:      { name, lastName, firstName, num, team, batting?, pitching? }
+// box:         { x, y, w, h }    — where to draw the card on the canvas
+// team:        TEAMS entry (color, dark, name)
+// leaders:     { batting: [...], pitching: [...] } — for percentile lookups
+// statKeys:    (v5.6.0, raw cards only) four ids from the stat catalog in
+//              stat-card-stats.js. Omit for the classic default four.
+// headerLabel: (v5.6.0) full replacement for the card's top line, e.g.
+//              "2026 Postseason". Omit for the per-card-type default.
 
-export function renderStatCard(ctx, { cardType, player, box, team, leaders }) {
+export function renderStatCard(ctx, { cardType, player, box, team, leaders, statKeys, headerLabel }) {
   if (!player || !box || !cardType) return;
   const battingLeaders = leaders?.batting || [];
   const pitchingLeaders = leaders?.pitching || [];
+  const title = (typeof headerLabel === 'string' && headerLabel.trim())
+    ? headerLabel.trim()
+    : defaultHeaderLabel(cardType);
 
-  if (cardType === 'hitting-stats') {
+  if (cardType === 'hitting-stats' || cardType === 'pitching-stats') {
     renderRawCard(ctx, {
       box, team,
-      headerLabel: 'BATTING',
-      cells: hittingRawCells(player, leaders),
-    });
-  } else if (cardType === 'pitching-stats') {
-    renderRawCard(ctx, {
-      box, team,
-      headerLabel: 'PITCHING',
-      cells: pitchingRawCells(player, leaders),
+      headerLabel: title,
+      cells: rawCells(cardType, player, leaders, statKeys),
     });
   } else if (cardType === 'hitting-percentiles') {
     renderPercentileCard(ctx, {
       box, team,
-      headerLabel: 'BLW Batting Percentile Rankings',
+      headerLabel: title,
       totalLabel: `Across ${battingLeaders.length} BLW batters`,
       rows: hittingPercentileRows(player, battingLeaders),
       playerName: player.name,
@@ -609,7 +618,7 @@ export function renderStatCard(ctx, { cardType, player, box, team, leaders }) {
   } else if (cardType === 'pitching-percentiles') {
     renderPercentileCard(ctx, {
       box, team,
-      headerLabel: 'BLW Pitching Percentile Rankings',
+      headerLabel: title,
       totalLabel: `Across ${pitchingLeaders.length} BLW pitchers`,
       rows: pitchingPercentileRows(player, pitchingLeaders),
       playerName: player.name,

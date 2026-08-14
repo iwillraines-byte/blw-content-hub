@@ -18,6 +18,20 @@
 
 export const RELEASES = [
   {
+    version: '5.6.0',
+    date: '2026-08-13',
+    kind: 'minor',
+    summary: 'v5.6.0 — pick the four stats on a Studio stat card, and rewrite its header',
+    items: [
+      'The Studio stat card\'s four columns are no longer fixed. A new "Card Layout" panel under the stat card type picker lets you set each of the four slots to any stat the league feed carries — 28 batting options (rate stats, counting stats, ISO, BABIP, RISP, wRC+, bWAR, and per-plate-appearance rates) and 24 pitching options (ERA+, WHIP, FIP, pWAR, K:BB, per-3-inning rates, W-L, and the rest). A contact hitter and a slugger no longer get the identical card.',
+      'Slot 4 is still the headline column the renderer prints in the team color, so put the stat the post is actually about there. Picking a stat that already sits in another slot swaps the two rather than showing it twice.',
+      'The header line — "2026 Batting" / "2026 Pitching" — is now an editable text field, and it replaces the whole line including the season, so a card can read "2026 Postseason", "Career", or anything else. Percentile cards get the same header field; their nine rows stay fixed.',
+      'League rank and the mini bar under each column follow whichever stat you picked, including which direction is good — a card showing ERA or K% ranks low-is-better, the same as the player page does.',
+      'Both the four stats and the header are remembered per card type in your browser, so a pitching card set to lead with K/3 stays that way between visits. RESET puts the active card type back to its defaults.',
+      'Rate stats on the card now print the baseball way — AVG reads ".294", not "0.294", and the same goes for OBP, SLG, OPS, ISO, BABIP, RISP and the per-plate-appearance rates. Anything that reaches 1.000 keeps its whole number (SLG "1.059"), and ERA, WHIP and FIP keep their leading zero because that\'s how those are always written.',
+    ],
+  },
+  {
     version: '5.5.1',
     date: '2026-08-01',
     kind: 'patch',

@@ -7,6 +7,7 @@ import { colors, fonts, radius } from '../theme';
 import { TeamThemeScope } from '../team-theme';
 import { TEMPLATE_TYPES, FONT_MAP, STAT_CARD_TYPES, getFieldConfig, formatPostName } from '../template-config';
 import { renderStatCard as statCardRender, defaultCardBox, ensureProwiffleLogoReady, renderStandingsCard, defaultStandingsBox } from '../stat-card-renderer';
+import { statOptionsFor, defaultStatKeys, defaultHeaderLabel, loadStatCardPrefs, saveStatCardPrefs, RAW_CARD_TYPES } from '../stat-card-stats';
 import { getOverlays, saveOverlay, deleteOverlay, getEffects, saveEffect, deleteEffect, blobToImage as overlayBlobToImage, resyncOverlay, resyncAllLocalOnlyOverlays } from '../overlay-store';
 import { findPlayerMedia, findTeamMedia, blobToObjectURL } from '../media-store';
 import { BUILT_IN_EFFECTS, getBuiltInEffect } from '../effects-config';
@@ -789,6 +790,56 @@ export default function Generate() {
   // the template changes so a fresh stat-card always opens with hitting.
   const [statCardType, setStatCardType] = useState('hitting-stats');
 
+  // v5.6.0: which four stats the raw card shows, and what its top line
+  // reads. Both are per-card-type so flipping between Batting and
+  // Pitching keeps each one's setup, and both persist to localStorage —
+  // a designer who has decided their pitching card leads with K/3
+  // shouldn't have to rebuild that on every visit.
+  const [statCardPrefs, setStatCardPrefs] = useState(() => loadStatCardPrefs());
+  useEffect(() => { saveStatCardPrefs(statCardPrefs); }, [statCardPrefs]);
+
+  // Memoized so the statCard payload keeps a stable identity — the
+  // fallback allocates a fresh array, which would otherwise redraw the
+  // canvas on every unrelated re-render.
+  const activeStatKeys = useMemo(
+    () => statCardPrefs.statKeys[statCardType] || defaultStatKeys(statCardType),
+    [statCardPrefs, statCardType],
+  );
+  const activeHeaderLabel = statCardPrefs.headers[statCardType] ?? '';
+
+  // Slot index → stat id. Picking a stat already sitting in another slot
+  // swaps the two rather than duplicating it — a card showing HR twice
+  // is never what was meant.
+  const setStatSlot = (slot, statId) => {
+    setStatCardPrefs(prev => {
+      const current = prev.statKeys[statCardType] || defaultStatKeys(statCardType);
+      const next = current.slice();
+      const dupe = next.indexOf(statId);
+      if (dupe >= 0 && dupe !== slot) next[dupe] = next[slot];
+      next[slot] = statId;
+      return { ...prev, statKeys: { ...prev.statKeys, [statCardType]: next } };
+    });
+  };
+
+  const setHeaderLabel = (text) => {
+    setStatCardPrefs(prev => {
+      const headers = { ...prev.headers };
+      if (text && text.trim()) headers[statCardType] = text;
+      else delete headers[statCardType];
+      return { ...prev, headers };
+    });
+  };
+
+  const resetStatCardLayout = () => {
+    setStatCardPrefs(prev => {
+      const headers = { ...prev.headers };
+      delete headers[statCardType];
+      const statKeys = { ...prev.statKeys };
+      if (RAW_CARD_TYPES.includes(statCardType)) statKeys[statCardType] = defaultStatKeys(statCardType);
+      return { statKeys, headers };
+    });
+  };
+
   useEffect(() => {
     fetchAllData().then(({ batting, pitching }) => {
       setLiveBatting(batting || []);
@@ -1116,8 +1167,13 @@ export default function Generate() {
       box: defaultCardBox(customPlatform, statCardType),
       team: customTeamObj,
       leaders: { batting: battingPool, pitching: pitchingPool },
+      // v5.6.0 — user-chosen four stats + rewritten header. Both fall
+      // back inside the renderer when empty, so an untouched card looks
+      // exactly like it did before this shipped.
+      statKeys: activeStatKeys,
+      headerLabel: activeHeaderLabel,
     };
-  }, [customType, selectedPlayer, liveBatting, livePitching, customTeam, customPlatform, statCardType]);
+  }, [customType, selectedPlayer, liveBatting, livePitching, customTeam, customPlatform, statCardType, activeStatKeys, activeHeaderLabel]);
 
   // v4.16.0: standings-card payload — mirrors statCardOption. Spotlight
   // row follows the team picker so "post the standings from LAN's POV"
@@ -2326,6 +2382,73 @@ export default function Generate() {
                     }}>
                       Pick a player above to populate the card.
                     </div>
+                  )}
+                </Card>
+              )}
+
+              {/* v5.6.0: Card layout — which four stats the raw card
+                  shows and what its top line reads. The four columns
+                  used to be hardcoded (AVG/HR/RBI/OPS+ and
+                  ERA/IP/K3/FIP), which meant a contact hitter and a
+                  slugger got the identical card. Slot 4 is the
+                  headline column — the renderer paints it in the team
+                  accent, so put the stat you're posting ABOUT there.
+                  Percentile cards keep their fixed 9 rows; only the
+                  header is editable for them. */}
+              {customTypeObj?.rendersStatCard && (
+                <Card>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Label style={{ marginBottom: 0 }}>Card Layout</Label>
+                    <button onClick={resetStatCardLayout} style={{
+                      background: colors.bg, border: `1px solid ${colors.border}`,
+                      color: colors.textSecondary, borderRadius: radius.sm, padding: '3px 10px',
+                      fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    }}>RESET</button>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ ...labelStyle, textTransform: 'none', fontWeight: 700, marginBottom: 3 }}>Header text</div>
+                    <input
+                      type="text"
+                      value={activeHeaderLabel}
+                      onChange={e => setHeaderLabel(e.target.value)}
+                      placeholder={defaultHeaderLabel(statCardType)}
+                      style={{ ...inputStyle, marginTop: 0 }}
+                    />
+                    <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginTop: 4, fontStyle: 'italic' }}>
+                      Replaces the whole line — season included. Leave blank for “{defaultHeaderLabel(statCardType)}”.
+                    </div>
+                  </div>
+
+                  {RAW_CARD_TYPES.includes(statCardType) && (
+                    <>
+                      <div style={{ ...labelStyle, textTransform: 'none', fontWeight: 700, marginBottom: 3 }}>Stats shown</div>
+                      <div style={{ fontSize: 10, color: colors.textMuted, fontFamily: fonts.condensed, marginBottom: 8, fontStyle: 'italic' }}>
+                        Four columns, left to right. Slot 4 prints in the team color — lead with the stat the post is about.
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                        {activeStatKeys.map((statId, slot) => (
+                          <div key={slot}>
+                            <div style={{
+                              fontFamily: fonts.condensed, fontSize: 10, fontWeight: 700,
+                              letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 3,
+                              color: slot === 3 ? (customTeamObj?.color || colors.accent) : colors.textMuted,
+                            }}>
+                              Slot {slot + 1}{slot === 3 ? ' · headline' : ''}
+                            </div>
+                            <select
+                              value={statId}
+                              onChange={e => setStatSlot(slot, e.target.value)}
+                              style={{ ...selectStyle, marginTop: 0, fontSize: 12 }}
+                            >
+                              {statOptionsFor(statCardType).map(s => (
+                                <option key={s.id} value={s.id}>{s.label} — {s.hint}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </Card>
               )}
