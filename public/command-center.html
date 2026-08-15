@@ -248,6 +248,37 @@
   .pstat{text-align:right} .pstat b{font-size:13px} .pstat .k{font-size:9px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em;margin-top:1px}
   .pheat{font-size:15px;font-weight:700;min-width:34px;text-align:right}
   @media(max-width:760px){.pinfo{min-width:118px}.pstats{display:none}}
+  .emvhead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;padding-bottom:13px;border-bottom:1px solid var(--line)}
+  .emvtot{font-weight:600;font-size:38px;letter-spacing:-.025em;line-height:1;color:var(--pos)}
+  .emvsub{font-size:11px;color:var(--ink-2);letter-spacing:.05em;text-transform:uppercase;margin-top:6px}
+  .emvsplit{display:flex;gap:16px;flex-wrap:wrap}
+  .emvsplit .e{display:flex;flex-direction:column}
+  .emvsplit .e b{font-size:16px;font-weight:600}
+  .emvsplit .e span{font-size:10.5px;color:var(--ink-2);display:flex;align-items:center;gap:5px;margin-top:2px}
+  .emvsplit .e i{width:8px;height:8px;border-radius:2px}
+  .emvgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px 20px;margin-top:14px}
+  .sl{display:flex;flex-direction:column;gap:5px}
+  .sl .slh{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:var(--ink-2)}
+  .sl .slh b{color:var(--ink);font-size:13px;font-weight:600}
+  .sl .slh .nm{display:flex;align-items:center;gap:6px}
+  .sl .slh .nm i{width:8px;height:8px;border-radius:2px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;background:rgba(255,255,255,.10);outline:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;background:var(--ink);border:2px solid var(--bg);box-shadow:0 0 0 1px var(--line-2);cursor:pointer;transition:.15s}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+  input[type=range]:focus-visible{outline:2px solid var(--pos);outline-offset:3px}
+  .emvrow{display:flex;align-items:center;gap:11px;padding:8px 5px;border-radius:9px;cursor:pointer;transition:.15s}
+  .emvrow:hover{background:rgba(255,255,255,.04)}
+  .emvrow:focus-visible{outline:2px solid var(--pos)}
+  .emvrow .logowrap{width:30px;height:30px;border-radius:9px;padding:2px}
+  .emvrow .badge{font-size:11px}
+  .emvname{font-size:12.5px;font-weight:600;min-width:152px}
+  .emvname .es{font-size:10.5px;color:var(--ink-2);font-weight:500;margin-top:1px}
+  .emvtrack{flex:1;height:11px;border-radius:5px;overflow:hidden;background:rgba(255,255,255,.05);min-width:60px}
+  .emvfill{height:100%;display:flex;width:0;border-radius:5px;overflow:hidden;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .emvfill span{height:100%}
+  .emvval{font-size:14px;font-weight:700;min-width:96px;text-align:right}
+  .emvval .ep{font-size:10px;color:var(--ink-2);font-weight:500;display:block;margin-top:1px}
+  @media(max-width:900px){.emvgrid{grid-template-columns:1fr}.emvname{min-width:112px}}
 </style>
 </head>
 <body>
@@ -313,6 +344,18 @@
 
     <div class="section-title"><span>Player Heat Index</span><span class="rule"></span></div>
     <div class="panel"><div class="head"><div class="t">Who is driving your traffic</div><div class="meta" id="playerMeta">attributed by caption mentions</div></div><div id="playerBoard" style="margin-top:8px"></div></div>
+
+    <div class="section-title"><span>Earned media value</span><span class="rule"></span></div>
+    <div class="panel">
+      <div class="emvhead">
+        <div><div class="emvtot" id="emvTotal">$0</div><div class="emvsub" id="emvSub">total EMV</div></div>
+        <div class="emvsplit" id="emvSplit"></div>
+        <button class="btn" id="emvReset">Reset to Socialpruf defaults</button>
+      </div>
+      <div class="emvgrid" id="emvSliders"></div>
+      <div class="fc-note" id="emvNote"></div>
+    </div>
+    <div class="panel" style="margin-top:12px"><div class="head"><div class="t">EMV by team</div><div class="meta">reach + interactions + followers + saves/shares</div></div><div id="emvTeams" style="margin-top:8px"></div></div>
 
     <div class="section-title"><span>Roster</span><span class="rule"></span></div>
     <div class="roster" id="roster"></div>
@@ -472,7 +515,7 @@ async function load(q,fresh){
 function render(){
   const c=$("#content"); c.classList.add("dim");
   setTimeout(()=>{ destroyCharts();
-    renderDigest(); renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderHeat(); renderWatch(); renderPlayers(); renderRoster(); renderChips(); renderForecast(); renderRecs();
+    renderDigest(); renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderHeat(); renderWatch(); renderPlayers(); renderEMV(); renderRoster(); renderChips(); renderForecast(); renderRecs();
     c.classList.remove("dim");
   },120);
 }
@@ -808,6 +851,74 @@ function openPlayer(i){
       return `<a class="lbcard" href="${esc(it.link||'#')}" target="_blank" rel="noopener" style="--accent:${p.accent}"><div class="lbthumb">${thumb}<span class="lbnet">${NET[it.network]||""} · ${capw(it.type)}</span></div><div class="lbbody"><div class="lbmet"><b>${fmt(it.interactions)}</b> int <span class="e">· ${fmt(it.impressions)} reach</span></div><div class="lbcap">${(it.date||"").slice(0,10)}</div></div></a>`;
     }).join("")+`</div>`;
   openModal(body);
+}
+
+const EMV_KEY="blw-emv-rates-v1";
+const EMV_DEFAULTS={cpm:{ig:20,tt:20,fb:20},per:{ig:0.25,tt:0.25,fb:0.25},fol:1.00,ss:1.25};
+const CSEG={reach:"#5B8DEF",inter:"#FFB13C",fol:"#7CF1A8",ss:"#FF6FCF"};
+function emvRates(){
+  try{const r=JSON.parse(localStorage.getItem(EMV_KEY)); if(r&&r.cpm&&r.per) return r;}catch(e){}
+  return JSON.parse(JSON.stringify(EMV_DEFAULTS));
+}
+function emvSave(r){ try{localStorage.setItem(EMV_KEY,JSON.stringify(r));}catch(e){} }
+const usd=v=>{v=Number(v)||0;const a=Math.abs(v);return a>=1e6?"$"+(v/1e6).toFixed(2)+"M":a>=1e3?"$"+(v/1e3).toFixed(1)+"k":"$"+v.toFixed(0);};
+const usdFull=v=>"$"+Math.round(Number(v)||0).toLocaleString();
+function folGainByPlat(t){
+  const o={ig:0,tt:0,fb:0};
+  for(const n of ["ig","tt","fb"]){ const s=(t.seriesByPlatform.followers[n]||[]).filter(x=>x.v>0); if(s.length>1) o[n]=s[s.length-1].v-s[0].v; }
+  return o;
+}
+function emvTeam(t,R){
+  let reach=0,inter=0;
+  for(const n of ["ig","tt","fb"]){
+    reach+=((t.impressionsByPlatform&&t.impressionsByPlatform[n])||0)/1000*R.cpm[n];
+    inter+=((t.byPlatform.interactions&&t.byPlatform.interactions[n])||0)*R.per[n];
+  }
+  const g=folGainByPlat(t); const gains=Math.max(0,g.ig+g.tt+g.fb);
+  const fol=gains*R.fol;
+  const ss=((t.saves||0)+(t.shares||0))*R.ss;
+  return {reach,inter,fol,ss,total:reach+inter+fol+ss,gains};
+}
+function renderEMV(){
+  const d=STATE.data; if(!d||!$("#emvSliders")) return;
+  let R=emvRates();
+  const sl=(label,color,val,min,max,step,pfx,key)=>`<div class="sl"><div class="slh"><span class="nm">${color?`<i style="background:${color}"></i>`:""}${label}</span><b id="lbl_${key}">${pfx}${val.toFixed(2)}</b></div><input type="range" id="sld_${key}" min="${min}" max="${max}" step="${step}" value="${val}" aria-label="${label}"></div>`;
+  $("#emvSliders").innerHTML=
+    ["ig","tt","fb"].map(n=>sl(PNAME[n]+" CPM (per 1k impressions)",PCOL[n],R.cpm[n],0,50,0.5,"$","cpm_"+n)).join("")+
+    ["ig","tt","fb"].map(n=>sl(PNAME[n]+" per interaction",PCOL[n],R.per[n],0,3,0.05,"$","per_"+n)).join("")+
+    sl("Per new follower",CSEG.fol,R.fol,0,5,0.05,"$","fol")+
+    sl("Saves + shares premium",CSEG.ss,R.ss,0,5,0.05,"$","ss");
+  const paint=()=>{
+    const rows=d.teams.map(t=>({t,e:emvTeam(t,R)})).sort((a,b)=>b.e.total-a.e.total);
+    const tot=rows.reduce((a,b)=>a+b.e.total,0);
+    const agg=rows.reduce((a,b)=>({reach:a.reach+b.e.reach,inter:a.inter+b.e.inter,fol:a.fol+b.e.fol,ss:a.ss+b.e.ss}),{reach:0,inter:0,fol:0,ss:0});
+    const el=$("#emvTotal"); if(el){ el.dataset.v=tot; el.textContent=usdFull(tot); }
+    $("#emvSub").textContent="total EMV · "+d.label;
+    $("#emvSplit").innerHTML=[["Reach","reach"],["Interactions","inter"],["Followers","fol"],["Saves + shares","ss"]]
+      .map(([n,k])=>`<div class="e"><b>${usd(agg[k])}</b><span><i style="background:${CSEG[k]}"></i>${n}</span></div>`).join("");
+    const mx=rows.length?rows[0].e.total:1;
+    $("#emvTeams").innerHTML=rows.map(r=>{
+      const w=k=>r.e.total>0?(r.e[k]/r.e.total*100):0;
+      const scale=mx>0?r.e.total/mx:0;
+      return `<div class="emvrow" data-id="${r.t.blogId}" tabindex="0" role="button">${logoHTML(r.t)}
+        <div class="emvname">${esc(r.t.name)}<div class="es">${fmt(r.t.impressions||0)} imp · ${fmt(r.t.interactions)} int · ${signed(r.e.gains)} fol</div></div>
+        <div class="emvtrack"><div class="emvfill" data-w="${Math.max(4,scale*100)}%">${["reach","inter","fol","ss"].map(k=>`<span style="width:${w(k)}%;background:${CSEG[k]}"></span>`).join("")}</div></div>
+        <div class="emvval">${usdFull(r.e.total)}<span class="ep">${tot>0?(r.e.total/tot*100).toFixed(1):0}% of league</span></div></div>`;
+    }).join("");
+    const set=()=>document.querySelectorAll("#emvTeams .emvfill").forEach(s=>s.style.width=s.dataset.w);
+    REDUCE?set():requestAnimationFrame(set);
+    document.querySelectorAll("#emvTeams .emvrow").forEach(el2=>{const go=()=>openTeamModal(+el2.dataset.id,"views");el2.onclick=go;el2.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
+    const avg=d.totals.content?tot/d.totals.content:0;
+    $("#emvNote").innerHTML=`Socialpruf's published benchmark is <b>$20 CPM, $0.25 per like, $1.25 per comment</b>, which is where these sliders start. Metricool reports interactions as one combined number rather than splitting likes and comments, so the per-interaction rate defaults to the conservative $0.25 like value; raise it toward $1.25 if your comment volume is high. Followers and the saves/shares premium are additions beyond Socialpruf's formula, and the premium stacks on top of interactions since a share already counts as one. At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts. Rates save to this browser.`;
+  };
+  const bind=(key,obj,prop)=>{
+    const s=document.getElementById("sld_"+key), l=document.getElementById("lbl_"+key); if(!s) return;
+    s.addEventListener("input",()=>{const v=parseFloat(s.value); if(prop)obj[prop]=v; l.textContent="$"+v.toFixed(2); paint(); emvSave(R);});
+  };
+  ["ig","tt","fb"].forEach(n=>{bind("cpm_"+n,R.cpm,n);bind("per_"+n,R.per,n);});
+  bind("fol",R,"fol"); bind("ss",R,"ss");
+  const rb=$("#emvReset"); if(rb) rb.onclick=()=>{ R=JSON.parse(JSON.stringify(EMV_DEFAULTS)); emvSave(R); renderEMV(); };
+  paint();
 }
 
 /* ============ MODALS ============ */
