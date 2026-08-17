@@ -174,3 +174,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: String(e?.message || e) });
   }
 }
+
+// Deployment marker: 2026-08-17T16:41:15Z — ensures the EMV embed build is the production tip.
