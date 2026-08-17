@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>BLW Earned Media Value</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0A0B0D;--panel:#141519;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.14);
+    --ink:#EDEDE7;--ink-2:#A6AAB2;--ink-3:#878B94;--pos:#7CF1A8;--blw:#7CF1A8;--teams:#5B8DEF;
+    --display:"Helvetica Neue","Helvetica",Arial,sans-serif;--body:"Hanken Grotesk",system-ui,sans-serif;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;
+    font-variant-numeric:tabular-nums;padding:14px;line-height:1.4}
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .head h1{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+  .head .meta{font-size:10.5px;color:var(--ink-3)}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:14px;display:flex;flex-direction:column}
+  .card .wl{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+  .card .ws{font-size:10px;color:var(--ink-3);margin-top:2px}
+  .card .tot{font-family:var(--display);font-weight:700;font-size:30px;letter-spacing:-.02em;color:var(--pos);margin-top:8px;line-height:1}
+  .card .pm{font-size:10px;color:var(--ink-3);margin-top:4px}
+  .split{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:11px;background:rgba(255,255,255,.05)}
+  .split span{height:100%}
+  .legend{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap}
+  .legend div{display:flex;flex-direction:column;gap:1px}
+  .legend b{font-size:13px;font-weight:600}
+  .legend em{font-style:normal;font-size:9.5px;color:var(--ink-2);display:flex;align-items:center;gap:4px}
+  .legend i{width:7px;height:7px;border-radius:2px}
+  .brk{margin-top:12px;border-top:1px solid var(--line);padding-top:9px;display:flex;flex-direction:column;gap:5px}
+  .brk .bt{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:1px}
+  .row{display:flex;align-items:center;gap:7px;font-size:11px}
+  .row i{width:7px;height:7px;border-radius:2px;flex:none}
+  .row .nm{color:var(--ink-2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .vl{font-weight:600;font-variant-numeric:tabular-nums}
+  .foot{margin-top:12px;font-size:9.5px;color:var(--ink-3);line-height:1.5}
+  .err{background:rgba(255,138,138,.08);border:1px solid rgba(255,138,138,.3);color:#ffd6d6;
+    border-radius:11px;padding:14px;font-size:12px}
+  .sk{opacity:.45}
+  @media(max-width:820px){.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>BLW Earned Media Value</h1>
+  <div class="meta" id="meta">loading...</div>
+</div>
+<div id="root"><div class="cards">
+  <div class="card sk"><div class="wl">Month to date</div><div class="tot">$0</div></div>
+  <div class="card sk"><div class="wl">Last month</div><div class="tot">$0</div></div>
+  <div class="card sk"><div class="wl">Last 3 months</div><div class="tot">$0</div></div>
+</div></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const usd = v => "$" + Math.round(Number(v)||0).toLocaleString();
+const fmt = n => { n=Number(n)||0; const a=Math.abs(n);
+  return a>=1e6?(n/1e6).toFixed(1)+"M":a>=1e3?(n/1e3).toFixed(0)+"k":String(Math.round(n)); };
+const esc = s => String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+
+function card(w){
+  const t=w.totals, pctBlw=t.emv>0?(t.blwEmv/t.emv*100):0;
+  const rows=(w.teams||[]).filter(x=>x.emv>0).map(x=>
+    `<div class="row"><i style="background:${x.accent}"></i><span class="nm">${esc(x.name.split(" ").slice(0,2).join(" "))}</span><span class="vl">${usd(x.emv)}</span></div>`
+  ).join("") || `<div class="row" style="color:var(--ink-3)">No team posts in this window</div>`;
+  return `<div class="card">
+    <div class="wl">${esc(w.label)}</div><div class="ws">${esc(w.sub)}</div>
+    <div class="tot">${usd(t.emv)}</div>
+    <div class="pm">${fmt(t.views)} views · ${t.posts} posts</div>
+    <div class="split"><span style="width:${pctBlw}%;background:var(--blw)"></span><span style="width:${100-pctBlw}%;background:var(--teams)"></span></div>
+    <div class="legend">
+      <div><b>${usd(t.blwEmv)}</b><em><i style="background:var(--blw)"></i>BLW page</em></div>
+      <div><b>${usd(t.teamsEmv)}</b><em><i style="background:var(--teams)"></i>Team pages</em></div>
+    </div>
+    <div class="brk"><div class="bt">By team page</div>${rows}</div>
+  </div>`;
+}
+
+async function load(){
+  const key=new URLSearchParams(location.search).get("key");
+  if(!key){ $("#root").innerHTML=`<div class="err"><b>Missing key.</b> This page needs <code>?key=…</code> appended to the URL.</div>`; $("#meta").textContent=""; return; }
+  try{
+    const r=await fetch("/api/emv-public?key="+encodeURIComponent(key));
+    if(r.status===403){ $("#root").innerHTML=`<div class="err"><b>Invalid key.</b> Check the value against EMV_EMBED_KEY in Vercel.</div>`; $("#meta").textContent=""; return; }
+    if(!r.ok) throw new Error("Server returned "+r.status);
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    $("#root").innerHTML=`<div class="cards">`+d.windows.map(card).join("")+`</div>
+      <div class="foot">Socialpruf basis: (views / 1000) x $${d.rates.cpm} CPM + interactions x $${d.rates.perInteraction}.
+      Views are per-post counts for posts published inside each window. BLW league page is reported separately from team pages, so no view is counted twice.</div>`;
+    $("#meta").textContent="updated "+new Date(d.generatedAt).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+  }catch(e){
+    $("#root").innerHTML=`<div class="err"><b>Couldn't load EMV.</b> ${esc(e.message)}</div>`;
+    $("#meta").textContent="";
+  }
+}
+load();
+setInterval(load, 15*60*1000);
+</script>
+</body>
+</html>

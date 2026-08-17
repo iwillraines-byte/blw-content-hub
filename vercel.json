@@ -1,7 +1,20 @@
 {
   "rewrites": [
-    { "source": "/api/gss/:path*", "destination": "/api/gss?path=:path*" },
-    { "source": "/command-center", "destination": "/command-center.html" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/gss/:path*",
+      "destination": "/api/gss?path=:path*"
+    },
+    {
+      "source": "/command-center",
+      "destination": "/command-center.html"
+    },
+    {
+      "source": "/emv-embed",
+      "destination": "/emv-embed.html"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ]
 }
