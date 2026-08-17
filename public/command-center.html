@@ -279,6 +279,17 @@
   .emvval{font-size:14px;font-weight:700;min-width:96px;text-align:right}
   .emvval .ep{font-size:10px;color:var(--ink-2);font-weight:500;display:block;margin-top:1px}
   @media(max-width:900px){.emvgrid{grid-template-columns:1fr}.emvname{min-width:112px}}
+  .blwrow{display:flex;align-items:center;gap:11px;padding:7px 5px;border-radius:9px;transition:.15s}
+  .blwrow:hover{background:rgba(255,255,255,.04)}
+  .blwname{font-size:12.5px;font-weight:600;min-width:186px;display:flex;align-items:center;gap:8px}
+  .blwname i{width:9px;height:9px;border-radius:3px;flex:none}
+  .blwname .bs{font-size:10px;color:var(--ink-3);font-weight:500}
+  .blwtrack{flex:1;height:9px;border-radius:5px;overflow:hidden;background:rgba(255,255,255,.05);min-width:50px}
+  .blwfill{height:100%;width:0;border-radius:5px;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .blwnum{font-size:12px;color:var(--ink-2);min-width:86px;text-align:right}
+  .blwval{font-size:13.5px;font-weight:700;min-width:88px;text-align:right}
+  .viachip{font-size:9px;letter-spacing:.03em;padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.06);color:var(--ink-2)}
+  .nyflag{font-size:9px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:5px;background:rgba(124,241,168,.15);color:var(--pos)}
 </style>
 </head>
 <body>
@@ -356,6 +367,16 @@
       <div class="fc-note" id="emvNote"></div>
     </div>
     <div class="panel" style="margin-top:12px"><div class="head"><div class="t">EMV by team</div><div class="meta">reach + interactions + followers + saves/shares</div></div><div id="emvTeams" style="margin-top:8px"></div></div>
+
+    <div class="section-title"><span>BLW league page</span><span class="rule"></span></div>
+    <div class="panel">
+      <div class="emvhead">
+        <div><div class="emvtot" id="blwEmv">$0</div><div class="emvsub" id="blwSub">BLW page EMV</div></div>
+        <div class="emvsplit" id="blwStats"></div>
+      </div>
+      <div id="blwAttr" style="margin-top:12px"></div>
+      <div class="fc-note" id="blwNote"></div>
+    </div>
 
     <div class="section-title"><span>Roster</span><span class="rule"></span></div>
     <div class="roster" id="roster"></div>
@@ -908,6 +929,7 @@ function renderEMV(){
     const set=()=>document.querySelectorAll("#emvTeams .emvfill").forEach(s=>s.style.width=s.dataset.w);
     REDUCE?set():requestAnimationFrame(set);
     document.querySelectorAll("#emvTeams .emvrow").forEach(el2=>{const go=()=>openTeamModal(+el2.dataset.id,"views");el2.onclick=go;el2.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
+    renderBLW(R);
     const avg=d.totals.content?tot/d.totals.content:0;
     $("#emvNote").innerHTML=`Matches Socialpruf's formula: <b>(views / 1000) x CPM + interactions</b>, starting from their published benchmark of <b>$20 CPM, $0.25 per like, $1.25 per comment</b>. <b>On "views":</b> this is the per-post view count for posts published in this window, which Metricool returns under the field name "impressions". It is the same number Socialpruf means by views. It is deliberately not the ${fmt(d.totals.views)} in the Views charts above, which is an account-level total that also counts views on older posts and would overstate EMV by about ${d.totals.impressions?(d.totals.views/d.totals.impressions).toFixed(1):"5"}x. Metricool reports interactions as one combined number rather than splitting likes and comments, so the per-interaction rate defaults to the conservative $0.25 like value; raise it toward $1.25 if your comment volume is high. Followers and the saves/shares premium are additions beyond Socialpruf's formula, and the premium stacks on top of interactions since a share already counts as one. At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts. Rates save to this browser.`;
   };
@@ -919,6 +941,33 @@ function renderEMV(){
   bind("fol",R,"fol"); bind("ss",R,"ss");
   const rb=$("#emvReset"); if(rb) rb.onclick=()=>{ R=JSON.parse(JSON.stringify(EMV_DEFAULTS)); emvSave(R); renderEMV(); };
   paint();
+}
+
+function renderBLW(R){
+  const d=STATE.data, b=d&&d.blw; if(!b||!$("#blwAttr")) return;
+  R=R||emvRates();
+  const cpm=(R.cpm.ig+R.cpm.tt+R.cpm.fb)/3, per=(R.per.ig+R.per.tt+R.per.fb)/3;
+  const emvOf=(views,inter)=>views/1000*cpm+inter*per;
+  const total=emvOf(b.impressions,b.interactions);
+  const el=$("#blwEmv"); if(el) el.textContent=usdFull(total);
+  $("#blwSub").textContent="BLW page EMV · "+d.label;
+  $("#blwStats").innerHTML=[["Views",fmt(b.impressions)],["Interactions",fmt(b.interactions)],["Posts",b.contentCount],["Eng rate",(b.engagementRatePost||0).toFixed(1)+"%"]]
+    .map(([k,v])=>`<div class="e"><b>${v}</b><span>${k}</span></div>`).join("");
+  const accent={}; d.teams.forEach(t=>accent[t.name]=t.accent);
+  const rows=(b.attribution||[]).map(a=>({...a,emv:emvOf(a.impressions,a.interactions),accent:accent[a.team]||"#7CF1A8"}));
+  const mx=rows.length?Math.max(...rows.map(r=>r.impressions)):1;
+  $("#blwAttr").innerHTML=rows.map(r=>{
+    const ny=r.team.indexOf("New York")===0;
+    const via=[["handle",r.via.handle],["name",r.via.name],["player",r.via.player]].filter(x=>x[1]>0).map(x=>x[1]+" "+x[0]).join(" · ");
+    return `<div class="blwrow"><div class="blwname"><i style="background:${r.accent}"></i>${esc(r.team.split(" ").slice(0,2).join(" "))}${ny?' <span class="nyflag">YOURS</span>':''}<span class="bs">${r.posts}p</span></div>
+      <div class="blwtrack"><div class="blwfill" data-w="${Math.max(3,Math.round(r.impressions/mx*100))}%" style="background:${r.accent}"></div></div>
+      <div class="blwnum">${fmt(r.impressions)} views</div><div class="blwval">${usdFull(r.emv)}</div>
+      <span class="viachip" title="how this post was matched">${via||"-"}</span></div>`;
+  }).join("");
+  const set=()=>document.querySelectorAll("#blwAttr .blwfill").forEach(s=>s.style.width=s.dataset.w);
+  REDUCE?set():requestAnimationFrame(set);
+  const pctUn=b.contentCount?Math.round(b.unattributed/b.contentCount*100):0;
+  $("#blwNote").innerHTML=`Content posted on the <b>@${esc((b.handles&&b.handles.instagram)||"blwwiffleball")}</b> league page, credited to teams by caption signals: an @handle mention, the team name, or a rostered player's name. A post naming two teams credits both, so the rows can sum to more than the page total. <b>${b.unattributed} of ${b.contentCount} posts (${pctUn}%)</b> carry no team signal and are not credited to anyone; that is ${fmt(b.unattributedImpressions)} views sitting uncredited. Instagram's collaborator field would close that gap and needs the Graph API. Kept separate from team totals on purpose so team-vs-team comparisons stay clean and no view is counted twice. EMV uses the average of your per-platform rates ($${cpm.toFixed(2)} CPM, $${per.toFixed(2)} per interaction) since this page is Instagram only.`;
 }
 
 /* ============ MODALS ============ */

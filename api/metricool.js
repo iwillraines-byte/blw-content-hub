@@ -36,6 +36,41 @@ const ROSTER = {
   6200089: ["Tommy Hernandez","Cam Smith","Jeremy Adams","Jackson Albers","John Paul Gunn","Mike Stiles","Sean Hornberger"],
   6201828: ["Josh Wheeler","Dominic Citrowske","Chandler Melton","Kaiden Rice","Spencer Foss","Brody Livingston","Jimmy Cole"],
 };
+const BLW_BRAND = { blogId: 6532945, name: "BLW League Page", accent: "#7CF1A8", handle: "blwwiffleball" };
+// Attribution for BLW-league-page posts. New York has no tracked account of its own
+// but is included because league-page content is where its reach lives.
+const ATTR_HANDLES = {
+  arizonasaguaros: "Arizona Saguaros", "arizona.saguaros": "Arizona Saguaros",
+  sdorcasblw: "Atlanta Ballers", atlantaballers: "Atlanta Ballers",
+  harborhawksblw: "Boston Harbor Hawks", "boston.harbor.haw": "Boston Harbor Hawks",
+  thechicagobats: "Chicago Bats", chicagobatsblw: "Chicago Bats",
+  dallaspandasblw: "Dallas Pandas", dallaspandas: "Dallas Pandas",
+  lvscorpionsblw: "Las Vegas Scorpions",
+  lanaturalsblw: "Los Angeles Naturals",
+  miamimirageblw: "Miami Mirage",
+  philadelphiawiffleclub: "Philadelphia Wiffle Club", phillywiffleclubblw: "Philadelphia Wiffle Club",
+};
+const ATTR_WORDS = {
+  "Arizona Saguaros": ["arizona", "saguaro"],
+  "Atlanta Ballers": ["atlanta", "baller"],
+  "Boston Harbor Hawks": ["boston", "harbor hawk"],
+  "Chicago Bats": ["chicago", "bats"],
+  "Dallas Pandas": ["dallas", "panda"],
+  "Las Vegas Scorpions": ["vegas", "scorpion"],
+  "Los Angeles Naturals": ["los angeles", "naturals"],
+  "Miami Mirage": ["miami", "mirage"],
+  "New York Green Apples": ["new york", "green apple"],
+  "Philadelphia Wiffle Club": ["philadelphia", "philly", "wiffle club"],
+};
+const ATTR_ROSTER = {
+  "Arizona Saguaros": ROSTER[6201154], "Boston Harbor Hawks": ROSTER[6201165],
+  "Chicago Bats": ROSTER[6201157], "Dallas Pandas": ROSTER[6201149],
+  "Las Vegas Scorpions": ROSTER[6201166], "Los Angeles Naturals": ROSTER[6201159],
+  "Miami Mirage": ROSTER[6200089], "Philadelphia Wiffle Club": ROSTER[6201828],
+  "Atlanta Ballers": ["Brett Caladie","Torin Roth","Jack Roth","Brandon Crone","Trevor Bauer","Cael Foreman","Connor Smith"],
+  "New York Green Apples": ["Will Smithey","Gus Skibbe","Brendan Dudas","Reid Werner","Tyler Flakne","Sam Skibbe","James Kline"],
+};
+const ACCENT_BY_NAME = {};
 const SUFFIX = /\b(jr|sr|ii|iii|iv)\b/g;
 const normText = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(SUFFIX, " ").replace(/\s+/g, " ").trim();
 const PLAYER_PAT = (() => {
@@ -160,6 +195,56 @@ async function loadProfiles(api) {
     }
   }
   return prof;
+}
+
+function attributePost(text) {
+  const t = " " + String(text || "").toLowerCase().replace(/\s+/g, " ") + " ";
+  const found = new Map(); // name -> how
+  for (const [hh, nm] of Object.entries(ATTR_HANDLES)) if (t.includes("@" + hh)) found.set(nm, "handle");
+  for (const [nm, ws] of Object.entries(ATTR_WORDS)) if (!found.has(nm) && ws.some(w => t.includes(w))) found.set(nm, "name");
+  for (const [nm, arr] of Object.entries(ATTR_ROSTER)) {
+    if (found.has(nm) || !arr) continue;
+    for (const pl of arr) { const f = String(pl).toLowerCase().replace(/[^a-z ]/g, ""); if (f.length > 5 && t.includes(" " + f + " ")) { found.set(nm, "player"); break; } }
+  }
+  return [...found.entries()].map(([team, via]) => ({ team, via }));
+}
+
+async function buildBLW(from, to, profiles, api) {
+  const b = BLW_BRAND.blogId;
+  const resp = await api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ });
+  const posts = (resp && Array.isArray(resp.data)) ? resp.data : [];
+  const fmt = {}, agg = {};
+  let imp = 0, inter = 0, engSum = 0;
+  const ranked = [];
+  let unattributed = 0, unattImp = 0;
+  for (const p of posts) {
+    const m = p.metrics || {};
+    const i = Math.round(m.IMPRESSIONS || 0), x = Math.round(m.INTERACTIONS || 0), e = Number(m.ENGAGEMENT) || 0;
+    const ty = String(p.type || "OTHER").toUpperCase();
+    const dt = (p.publicationDate || {}).dateTime || "";
+    imp += i; inter += x; engSum += e;
+    fmt[ty] = fmt[ty] || { count: 0, inter: 0, imp: 0, engSum: 0 };
+    fmt[ty].count += 1; fmt[ty].inter += x; fmt[ty].imp += i; fmt[ty].engSum += e;
+    const hits = attributePost(p.text);
+    if (!hits.length) { unattributed += 1; unattImp += i; }
+    for (const hh of hits) {
+      const a = agg[hh.team] || (agg[hh.team] = { team: hh.team, posts: 0, impressions: 0, interactions: 0, engSum: 0, via: { handle: 0, name: 0, player: 0 } });
+      a.posts += 1; a.impressions += i; a.interactions += x; a.engSum += e; a.via[hh.via] += 1;
+    }
+    ranked.push({ network: p.network, type: ty, text: (p.text || "").slice(0, 140), link: p.link, picture: p.picture || null, date: dt, impressions: i, interactions: x, engagement: round(e, 2), teams: hits.map(z => z.team) });
+  }
+  ranked.sort((a, b2) => (b2.interactions - a.interactions) || (b2.impressions - a.impressions));
+  const attribution = Object.values(agg).map(a => ({ team: a.team, posts: a.posts, impressions: a.impressions, interactions: a.interactions, engAvg: round(a.engSum / a.posts, 2), via: a.via })).sort((a, b2) => b2.impressions - a.impressions);
+  const prof = profiles[b] || {};
+  const formatBreakdown = Object.entries(fmt).map(([type, f]) => ({ type, count: f.count, interactions: f.inter, impressions: f.imp, avgInteractions: round(f.inter / f.count, 1), avgEngagement: round(f.engSum / f.count, 2) })).sort((a, b2) => b2.avgInteractions - a.avgInteractions);
+  return {
+    blogId: b, name: BLW_BRAND.name, accent: BLW_BRAND.accent, picture: prof.picture || null,
+    handles: prof.handles || { instagram: BLW_BRAND.handle },
+    contentCount: posts.length, impressions: imp, interactions: inter,
+    engagementRatePost: posts.length ? round(engSum / posts.length, 2) : 0,
+    attribution, unattributed, unattributedImpressions: unattImp,
+    formatBreakdown, topPosts: ranked.slice(0, 12),
+  };
 }
 
 async function buildTeam(t, from, to, profiles, api, tl) {
@@ -332,7 +417,10 @@ export async function compute(days, rng, token, userId) {
   const { from, to, label } = windowRange(days, rng);
   const { api, timeline } = makeApi(token, userId);
   const profiles = await loadProfiles(api);
-  const teams = await Promise.all(TEAMS.map(t => buildTeam(t, from, to, profiles, api, timeline)));
+  const [teams, blw] = await Promise.all([
+    Promise.all(TEAMS.map(t => buildTeam(t, from, to, profiles, api, timeline))),
+    buildBLW(from, to, profiles, api),
+  ]);
   teams.forEach(tm => { tm.mom = tm.followersNow ? round(tm.netNew / tm.followersNow * 100, 1) : 0; });
 
   const sd = key => teams.map(tm => Object.fromEntries(tm.series[key].map(p => [p.d, p.v])));
@@ -385,7 +473,7 @@ export async function compute(days, rng, token, userId) {
       engagementRate: engRate, impressions: sum(teams.map(t => t.impressions)),
       saves: sum(teams.map(t => t.saves)), shares: sum(teams.map(t => t.shares)),
     },
-    leaderboard, formatBreakdown, watch: watchLeague, playerLeaderboard, rosterCoverage,
+    leaderboard, formatBreakdown, watch: watchLeague, playerLeaderboard, rosterCoverage, blw,
     engRateByPlatform, impressionsByPlatform: impByPlat, savesByPlatform: savesByPlat, sharesByPlatform: sharesByPlat,
     totalsByPlatform: totals_platform,
     network: {
