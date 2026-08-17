@@ -884,7 +884,7 @@ function renderEMV(){
   let R=emvRates();
   const sl=(label,color,val,min,max,step,pfx,key)=>`<div class="sl"><div class="slh"><span class="nm">${color?`<i style="background:${color}"></i>`:""}${label}</span><b id="lbl_${key}">${pfx}${val.toFixed(2)}</b></div><input type="range" id="sld_${key}" min="${min}" max="${max}" step="${step}" value="${val}" aria-label="${label}"></div>`;
   $("#emvSliders").innerHTML=
-    ["ig","tt","fb"].map(n=>sl(PNAME[n]+" CPM (per 1k impressions)",PCOL[n],R.cpm[n],0,50,0.5,"$","cpm_"+n)).join("")+
+    ["ig","tt","fb"].map(n=>sl(PNAME[n]+" CPM (per 1k views)",PCOL[n],R.cpm[n],0,50,0.5,"$","cpm_"+n)).join("")+
     ["ig","tt","fb"].map(n=>sl(PNAME[n]+" per interaction",PCOL[n],R.per[n],0,3,0.05,"$","per_"+n)).join("")+
     sl("Per new follower",CSEG.fol,R.fol,0,5,0.05,"$","fol")+
     sl("Saves + shares premium",CSEG.ss,R.ss,0,5,0.05,"$","ss");
@@ -894,14 +894,14 @@ function renderEMV(){
     const agg=rows.reduce((a,b)=>({reach:a.reach+b.e.reach,inter:a.inter+b.e.inter,fol:a.fol+b.e.fol,ss:a.ss+b.e.ss}),{reach:0,inter:0,fol:0,ss:0});
     const el=$("#emvTotal"); if(el){ el.dataset.v=tot; el.textContent=usdFull(tot); }
     $("#emvSub").textContent="total EMV · "+d.label;
-    $("#emvSplit").innerHTML=[["Reach","reach"],["Interactions","inter"],["Followers","fol"],["Saves + shares","ss"]]
+    $("#emvSplit").innerHTML=[["Views","reach"],["Interactions","inter"],["Followers","fol"],["Saves + shares","ss"]]
       .map(([n,k])=>`<div class="e"><b>${usd(agg[k])}</b><span><i style="background:${CSEG[k]}"></i>${n}</span></div>`).join("");
     const mx=rows.length?rows[0].e.total:1;
     $("#emvTeams").innerHTML=rows.map(r=>{
       const w=k=>r.e.total>0?(r.e[k]/r.e.total*100):0;
       const scale=mx>0?r.e.total/mx:0;
       return `<div class="emvrow" data-id="${r.t.blogId}" tabindex="0" role="button">${logoHTML(r.t)}
-        <div class="emvname">${esc(r.t.name)}<div class="es">${fmt(r.t.impressions||0)} imp · ${fmt(r.t.interactions)} int · ${signed(r.e.gains)} fol</div></div>
+        <div class="emvname">${esc(r.t.name)}<div class="es">${fmt(r.t.impressions||0)} views · ${fmt(r.t.interactions)} int · ${signed(r.e.gains)} fol</div></div>
         <div class="emvtrack"><div class="emvfill" data-w="${Math.max(4,scale*100)}%">${["reach","inter","fol","ss"].map(k=>`<span style="width:${w(k)}%;background:${CSEG[k]}"></span>`).join("")}</div></div>
         <div class="emvval">${usdFull(r.e.total)}<span class="ep">${tot>0?(r.e.total/tot*100).toFixed(1):0}% of league</span></div></div>`;
     }).join("");
@@ -909,7 +909,7 @@ function renderEMV(){
     REDUCE?set():requestAnimationFrame(set);
     document.querySelectorAll("#emvTeams .emvrow").forEach(el2=>{const go=()=>openTeamModal(+el2.dataset.id,"views");el2.onclick=go;el2.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
     const avg=d.totals.content?tot/d.totals.content:0;
-    $("#emvNote").innerHTML=`Socialpruf's published benchmark is <b>$20 CPM, $0.25 per like, $1.25 per comment</b>, which is where these sliders start. Metricool reports interactions as one combined number rather than splitting likes and comments, so the per-interaction rate defaults to the conservative $0.25 like value; raise it toward $1.25 if your comment volume is high. Followers and the saves/shares premium are additions beyond Socialpruf's formula, and the premium stacks on top of interactions since a share already counts as one. At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts. Rates save to this browser.`;
+    $("#emvNote").innerHTML=`Matches Socialpruf's formula: <b>(views / 1000) x CPM + interactions</b>, starting from their published benchmark of <b>$20 CPM, $0.25 per like, $1.25 per comment</b>. <b>On "views":</b> this is the per-post view count for posts published in this window, which Metricool returns under the field name "impressions". It is the same number Socialpruf means by views. It is deliberately not the ${fmt(d.totals.views)} in the Views charts above, which is an account-level total that also counts views on older posts and would overstate EMV by about ${d.totals.impressions?(d.totals.views/d.totals.impressions).toFixed(1):"5"}x. Metricool reports interactions as one combined number rather than splitting likes and comments, so the per-interaction rate defaults to the conservative $0.25 like value; raise it toward $1.25 if your comment volume is high. Followers and the saves/shares premium are additions beyond Socialpruf's formula, and the premium stacks on top of interactions since a share already counts as one. At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts. Rates save to this browser.`;
   };
   const bind=(key,obj,prop)=>{
     const s=document.getElementById("sld_"+key), l=document.getElementById("lbl_"+key); if(!s) return;
