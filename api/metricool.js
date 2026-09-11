@@ -118,8 +118,18 @@ function tzParts(d) {
 const isoUTC = d => d.toISOString().replace(/\.\d{3}Z$/, "+00:00");
 const monLabel = (y, m) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", year: "numeric" }).format(new Date(Date.UTC(y, m - 1, 15)));
 
-function windowRange(days, rng) {
+function windowRange(days, rng, custom) {
   const now = new Date();
+  if (rng === "custom" && custom && /^\d{4}-\d{2}-\d{2}$/.test(custom.from) && /^\d{4}-\d{2}-\d{2}$/.test(custom.to)) {
+    const [fy, fm, fd] = custom.from.split("-").map(Number);
+    const [ty, tm, td] = custom.to.split("-").map(Number);
+    const offS = offsetStr(new Date(Date.UTC(fy, fm - 1, fd, 6)));
+    const offE = offsetStr(new Date(Date.UTC(ty, tm - 1, td, 6)));
+    const fmtD = (y, m, d) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(Date.UTC(y, m - 1, d)));
+    const sameYear = fy === ty;
+    const label = fmtD(fy, fm, fd) + (sameYear ? "" : ", " + fy) + " to " + fmtD(ty, tm, td) + ", " + ty;
+    return { from: `${custom.from}T00:00:00${offS}`, to: `${custom.to}T23:59:59${offE}`, label };
+  }
   if (rng === "mtd") {
     const p = tzParts(now);
     const off = offsetStr(new Date(Date.UTC(p.y, p.m - 1, 1, 6)));
@@ -413,8 +423,8 @@ function buildInsights(teams, label) {
   return out;
 }
 
-export async function compute(days, rng, token, userId) {
-  const { from, to, label } = windowRange(days, rng);
+export async function compute(days, rng, token, userId, custom) {
+  const { from, to, label } = windowRange(days, rng, custom);
   const { api, timeline } = makeApi(token, userId);
   const profiles = await loadProfiles(api);
   const [teams, blw] = await Promise.all([
@@ -505,7 +515,12 @@ export default async function handler(req, res) {
     const q = req.query || {};
     const rng = q.range || null;
     const days = rng ? null : (parseInt(q.days, 10) || 30);
-    const data = await compute(days, rng, token, userId);
+    const custom = rng === "custom" ? { from: String(q.from || ""), to: String(q.to || "") } : null;
+    if (rng === "custom" && !(custom.from && custom.to)) {
+      res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" });
+      return;
+    }
+    const data = await compute(days, rng, token, userId, custom);
     res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     res.setHeader("Content-Type", "application/json");
     res.status(200).send(JSON.stringify(data));

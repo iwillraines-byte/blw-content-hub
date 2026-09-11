@@ -289,6 +289,18 @@
   .blwnum{font-size:12px;color:var(--ink-2);min-width:86px;text-align:right}
   .blwval{font-size:13.5px;font-weight:700;min-width:88px;text-align:right}
   .viachip{font-size:9px;letter-spacing:.03em;padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.06);color:var(--ink-2)}
+  .rangewrap{position:relative;display:inline-block}
+  .rangepop{position:absolute;top:calc(100% + 7px);right:0;z-index:40;background:#121317;border:1px solid var(--line-2);
+    border-radius:12px;padding:13px;display:none;box-shadow:0 12px 34px rgba(0,0,0,.5);min-width:252px}
+  .rangepop.on{display:block}
+  .rangepop label{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:4px}
+  .rangepop input[type=date]{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line-2);color:var(--ink);
+    font-family:var(--body);font-size:12.5px;padding:7px 9px;border-radius:8px;margin-bottom:9px;color-scheme:dark}
+  .rangepop input[type=date]:focus-visible{outline:2px solid var(--pos)}
+  .rangepop .ra{display:flex;gap:7px;margin-top:3px}
+  .rangepop .ra .btn{flex:1;text-align:center}
+  .rangepop .rerr{font-size:10.5px;color:var(--neg);margin-top:7px;display:none}
+  .rangepop .rerr.on{display:block}
 </style>
 </head>
 <body>
@@ -316,6 +328,15 @@
       <div class="tab" data-q="days=90">90D</div>
       <div class="tab" data-q="range=mtd">Month to date</div>
       <div class="tab" data-q="range=prev_month">Last month</div>
+      <div class="rangewrap">
+        <div class="tab" id="customTab" tabindex="0" role="button">Custom</div>
+        <div class="rangepop" id="rangePop">
+          <label for="rangeFrom">From</label><input type="date" id="rangeFrom">
+          <label for="rangeTo">To</label><input type="date" id="rangeTo">
+          <div class="ra"><button class="btn" id="rangeApply">Apply</button><button class="btn" id="rangeCancel">Cancel</button></div>
+          <div class="rerr" id="rangeErr"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -552,7 +573,7 @@ function renderHero(){
   const interSpark=(d.network.interactionsByPlatform?["ig","tt","fb"].reduce((acc,k)=>{ (d.network.interactionsByPlatform[k]||[]).forEach(p=>{acc[p.d]=(acc[p.d]||0)+p.v}); return acc; },{}):{});
   const interArr=Object.keys(interSpark).sort().map(k=>interSpark[k]);
   const cards=[
-    {key:"followers",label:"Total followers",val:t.followers,accent:"#7CF1A8",spark:d.network.followers.map(p=>p.v),delta:folDelta,deltaLabel:"vs start of window"},
+    {key:"followers",label:"Total followers",val:t.followers,accent:"#7CF1A8",spark:d.network.followers.map(p=>p.v),delta:folDelta,deltaLabel:signed(d.network.netNew.reduce((a,b)=>a+b.v,0))+" this window"},
     {key:"views",label:"Views ("+d.label+")",val:t.views,accent:"#5B8DEF",spark:d.network.views.map(p=>p.v),sub:"IG + TikTok + FB"},
     {key:"interactions",label:"Interactions ("+d.label+")",val:t.interactions,accent:"#FFB13C",spark:interArr,sub:"likes, comments, shares"},
     {key:"posts",label:"Posts ("+d.label+")",val:t.content,accent:"#FF6FCF",spark:d.network.netNew.map(p=>Math.abs(p.v)),sub:"shipped across teams",alert:postsAlert}
@@ -617,7 +638,7 @@ function renderRoster(){
     return `<div class="team" data-id="${t.blogId}" tabindex="0" role="button" style="animation:rise .55s ${i*.04}s backwards">
       <div class="top">${logoHTML(t)}
         <div class="who"><div class="name">${esc(t.name)}</div><div class="handle">${handle}</div><div class="plats">${plats}</div></div>
-        <div class="mom" style="background:${up?'rgba(124,241,168,.12)':'rgba(255,138,138,.12)'};color:${up?'var(--pos)':'var(--neg)'}">${up?'▲':'▼'} ${Math.abs(t.mom).toFixed(1)}%</div>
+        <div class="mom" style="background:${up?'rgba(124,241,168,.12)':'rgba(255,138,138,.12)'};color:${up?'var(--pos)':'var(--neg)'}">${up?'▲':'▼'} ${signed(t.netNew)} <span style="opacity:.7">(${Math.abs(t.mom).toFixed(1)}%)</span></div>
       </div>
       <div class="stats">
         <div class="stat"><div class="n" data-v="0" data-to="${t.followersNow}">0</div><div class="k">Followers</div></div>
@@ -1049,10 +1070,11 @@ function drawFollowersDrill(isolate){
   const ctl=document.getElementById("drillCtl"); if(ctl) ctl.style.display = isolate?"flex":"none";
 }
 
-function gchip(label,color,value,deltaPct){
+function gchip(label,color,value,deltaPct,gain){
   let dd="";
   if(deltaPct!==null && deltaPct!==undefined){ const cls=deltaPct>0?"up":deltaPct<0?"down":"flat"; dd=`<div class="gd ${cls}">${deltaPct>0?"▲":deltaPct<0?"▼":"•"} ${Math.abs(deltaPct).toFixed(1)}%</div>`; }
-  return `<div class="gchip"><div class="gh"><i style="background:${color}"></i>${label}</div><div class="gv">${value}</div>${dd}</div>`;
+  const gn=(gain===null||gain===undefined)?"":`<div class="gd" style="color:var(--ink-2)">${signed(gain)} followers</div>`;
+  return `<div class="gchip"><div class="gh"><i style="background:${color}"></i>${label}</div><div class="gv">${value}</div>${dd}${gn}</div>`;
 }
 
 function openTeamModal(id, initial){
@@ -1103,7 +1125,7 @@ function openTeamModal(id, initial){
       const gained={ig:diffSeries(sp.ig||[]),tt:diffSeries(sp.tt||[]),fb:diffSeries(sp.fb||[])};
       const setChips=mode=>{ chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[];
         if(mode==='gained'){ const g=gained[k]; const tot=g.reduce((a,b)=>a+b.v,0); const per=g.length?tot/g.length:0; return gchip(PNAME[k]+" gained",PCOL[k],signed(tot),null).replace('</div></div>',`</div><div class="gd ${per>=0?'flat':'down'}" style="color:var(--ink-2)">${(per>=0?'+':'')+per.toFixed(0)}/day avg</div></div>`); }
-        const cur=s.length?s[s.length-1].v:0; return gchip(PNAME[k],PCOL[k],fmtFull(cur),growthPct(s)); }).join("")+`</div>`; };
+        const cur=s.length?s[s.length-1].v:0; const nz=s.filter(x=>x.v>0); const gained=nz.length>1?nz[nz.length-1].v-nz[0].v:0; return gchip(PNAME[k],PCOL[k],fmtFull(cur),growthPct(s),gained); }).join("")+`</div>`; };
       setChips('total');
       bodyEl.innerHTML=`<div class="mtoggle" id="folSub" style="margin-top:10px"><div class="mt active" data-f="total">Total over time</div><div class="mt" data-f="gained">Gained / day</div></div>`+chartHTML;
       const drawFol=mode=>{ destroyModalCharts(); setChips(mode);
@@ -1147,7 +1169,31 @@ function openTeamModal(id, initial){
   draw(initial);
 }
 
-$("#tfTabs").querySelectorAll(".tab").forEach(tab=>{ tab.setAttribute("tabindex","0"); tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); load(tab.dataset.q,false); }; tab.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();tab.click();} }; });
+(function(){
+  const pop=$("#rangePop"), tb=$("#customTab"), f=$("#rangeFrom"), t=$("#rangeTo"), err=$("#rangeErr");
+  if(!pop||!tb) return;
+  const today=new Date().toISOString().slice(0,10);
+  f.max=today; t.max=today;
+  if(!f.value){ const d=new Date(Date.now()-29*86400000); f.value=d.toISOString().slice(0,10); t.value=today; }
+  const close=()=>pop.classList.remove("on");
+  tb.onclick=e=>{ e.stopPropagation(); pop.classList.toggle("on"); };
+  tb.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();tb.click();} };
+  pop.onclick=e=>e.stopPropagation();
+  document.addEventListener("click",close);
+  $("#rangeCancel").onclick=close;
+  $("#rangeApply").onclick=()=>{
+    const a=f.value,b=t.value;
+    err.classList.remove("on");
+    if(!a||!b){ err.textContent="Pick both dates."; err.classList.add("on"); return; }
+    if(a>b){ err.textContent="From must be on or before To."; err.classList.add("on"); return; }
+    if(b>today){ err.textContent="To cannot be in the future."; err.classList.add("on"); return; }
+    close();
+    $("#tfTabs").querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    tb.classList.add("active");
+    load("range=custom&from="+a+"&to="+b,false);
+  };
+})();
+$("#tfTabs").querySelectorAll(".tab:not(#customTab)").forEach(tab=>{ tab.setAttribute("tabindex","0"); tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); load(tab.dataset.q,false); }; tab.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();tab.click();} }; });
 $("#refreshBtn").onclick=()=>{ const b=$("#refreshBtn"); b.classList.add("spin"); load(STATE.q,true).finally(()=>b.classList.remove("spin")); };
 function tick(){ $("#clock").textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
 setInterval(tick,1000); tick();
