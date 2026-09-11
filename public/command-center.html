@@ -135,6 +135,10 @@
   .dbar{flex:1;height:8px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden}
   .dbar > span{display:block;height:100%;width:0;border-radius:5px;transition:width .85s cubic-bezier(.2,.7,.2,1)}
   .dval{font-size:13px;font-weight:600;min-width:62px;text-align:right}
+  .dspan{font-size:11.5px;color:var(--ink-2);min-width:132px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .dspan b{color:var(--ink);font-weight:600}
+  .dspan i{font-style:normal;opacity:.45;margin:0 5px}
+  @media(max-width:620px){.dspan{display:none}}
   .pcounts{display:flex;gap:13px;margin-left:auto}
   .pcounts .pc{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;min-width:40px}
   .pcounts .pc i{width:8px;height:8px;border-radius:2px}
@@ -1008,7 +1012,8 @@ function platLineChart(canvasId, byPlatform, opts){
 function openDrill(metric){
   const d=STATE.data;
   const titleMap={followers:"Followers gained per day",views:"Views",interactions:"Interactions",posts:"Posts"};
-  const teams=[...d.teams].sort((a,b)=>val(metric,b)-val(metric,a));
+  const rank=t=>metric==='followers'?(t.netNew||0):val(metric,t);
+  const teams=[...d.teams].sort((a,b)=>rank(b)-rank(a));
   const totalVal = metric==='posts'?d.totals.content:d.totals[metric];
 
   if(metric==='posts'){
@@ -1035,10 +1040,12 @@ function openDrill(metric){
     body+=`<div class="drill-ctl" id="drillCtl" style="display:none">Showing one team. <span class="reset" id="drillReset">Show all teams</span></div>`;
   }
   body+=`<div class="chart-box" style="height:250px;margin-top:10px"><canvas id="drillMain"></canvas></div>`;
-  body+=`<div class="modal-sub" style="margin-top:14px">${metric==='followers'?'Click a team to isolate just its daily growth':'By team (click to open the team)'}</div>`;
-  const maxV=val(metric,teams[0])||1;
-  body+=`<div class="drill-list">`+teams.map(t=>{ const v=val(metric,t); const pct=Math.max(2,Math.round(v/maxV*100));
-    return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}<div class="dname">${esc(t.name)}</div><div class="dbar"><span data-w="${pct}%" style="background:${t.accent}"></span></div><div class="dval">${metric==='followers'?signed(t.netNew):fmtFull(v)}</div></div>`;
+  body+=`<div class="modal-sub" style="margin-top:14px">${metric==='followers'?'Start and end follower counts for this range. Click a team to isolate just its daily growth':'By team (click to open the team)'}</div>`;
+  const maxV=Math.max(1,...teams.map(t=>Math.abs(rank(t))));
+  body+=`<div class="drill-list">`+teams.map(t=>{ const v=rank(t); const pct=Math.max(2,Math.round(Math.abs(v)/maxV*100));
+    const span=metric==='followers'
+      ? `<div class="dspan">${fmtFull(Math.max(0,(t.followersNow||0)-(t.netNew||0)))}<i>to</i><b>${fmtFull(t.followersNow||0)}</b></div>` : "";
+    return `<div class="drow" data-id="${t.blogId}">${logoHTML(t)}<div class="dname">${esc(t.name)}</div><div class="dbar"><span data-w="${pct}%" style="background:${v<0?'var(--neg)':t.accent}"></span></div>${span}<div class="dval" style="${v<0?'color:var(--neg)':''}">${metric==='followers'?signed(t.netNew):fmtFull(v)}</div></div>`;
   }).join("")+`</div>`;
   openModal(body);
   STATE.drillIsolate=null;
