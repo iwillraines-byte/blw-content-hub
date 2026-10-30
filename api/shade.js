@@ -462,3 +462,7 @@ export default async function handler(req, res) {
 }
 
 export const config = { api: { bodyParser: { sizeLimit: '2mb' } } };
+
+// Shared with api/_cc-ideas.js (Command Center post ideas), which reads Shade
+// to suggest real assets for each idea. Read-only use; no writes.
+export { SHADE_BASE, DRIVE_ID, FIELD, KNOWN_COLLECTIONS, TEAM_TO_SHADE, getOptionMaps, metaValue, previewUrlOf, shadeHeaders };

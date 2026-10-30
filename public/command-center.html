@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- Official Supabase client, pinned to the version BLW Studio ships. It shares the
+     blw-auth-v1 session with the app and refreshes it when it has expired. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.104.0/dist/umd/supabase.js"></script>
 <style>
   :root{
     --bg:#0A0B0D; --panel:rgba(20,21,25,0.66); --line:rgba(255,255,255,0.07); --line-2:rgba(255,255,255,0.12);
@@ -305,6 +308,91 @@
   .rangepop .ra .btn{flex:1;text-align:center}
   .rangepop .rerr{font-size:10.5px;color:var(--neg);margin-top:7px;display:none}
   .rangepop .rerr.on{display:block}
+
+  /* ── v2: scope switch, scheduled feed, WIFFLE view, ideas, data check ── */
+  .ctl-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .hero.three{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:1080px){.hero.three{grid-template-columns:1fr 1fr}}
+  @media(max-width:620px){.hero.three{grid-template-columns:1fr}}
+  .lblogo{position:absolute;right:7px;bottom:7px;width:28px;height:28px;border-radius:8px;overflow:hidden;background:#16171b;box-shadow:0 0 0 2px var(--accent,#555),0 2px 8px rgba(0,0,0,.5);display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:9.5px;color:#0A0B0D}
+  .lblogo,.lbteam .mini,.schip .sl0,.spost .sb .sl0{position:relative}
+  .lblogo img,.lbteam .mini img,.schip .sl0 img,.spost .sb .sl0 img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#16171b}
+  .li{font-family:var(--display);font-weight:700;font-size:8px;color:#0A0B0D;display:grid;place-items:center;width:100%;height:100%;letter-spacing:-.02em}
+  .lbteam{display:flex;align-items:center;gap:6px}
+  .lbteam .mini{width:15px;height:15px;border-radius:4px;overflow:hidden;flex:none;background:#16171b}
+  .lbteam .mini img{width:100%;height:100%;object-fit:cover;display:block}
+  .schedbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}
+  .schedchips{display:flex;gap:6px;flex-wrap:wrap}
+  .schip{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-2);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:5px 9px;cursor:pointer;transition:.16s;white-space:nowrap}
+  .schip.on{background:rgba(255,255,255,.11);color:var(--ink);border-color:var(--line-2)}
+  .schip:focus-visible{outline:2px solid var(--pos)}
+  .schip .sl0{width:16px;height:16px;border-radius:4px;overflow:hidden;background:#16171b;flex:none}
+  .schip .sl0 img{width:100%;height:100%;object-fit:cover;display:block}
+  .schedmeta{font-size:11px;color:var(--ink-2)}
+  .schedgap{font-size:11.5px;color:#ffdca0;background:rgba(255,192,76,.08);border:1px solid rgba(255,192,76,.25);border-radius:10px;padding:8px 11px;margin-top:10px;line-height:1.5}
+  .schedcols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:10px;margin-top:10px;overflow-x:auto;padding-bottom:4px}
+  .sday{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:10px;min-height:120px;display:flex;flex-direction:column}
+  .sday.today{border-color:var(--line-2)}
+  .sdayh{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);padding-bottom:7px;border-bottom:1px solid var(--line)}
+  .sdayh b{color:var(--ink);font-weight:700}
+  .slist{display:flex;flex-direction:column;gap:7px;margin-top:8px;max-height:250px;overflow:auto}
+  .spost{display:flex;flex-direction:column;gap:6px;background:rgba(255,255,255,.025);border:1px solid var(--line);border-left:2px solid var(--accent,#555);border-radius:10px;padding:8px}
+  .spost .st{display:flex;align-items:center;gap:7px;font-size:11px}
+  .spost .st b{font-size:12px}
+  .spost .st .rel{color:var(--ink-3);margin-left:auto;font-size:10px}
+  .spost .sb{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;min-width:0}
+  .spost .sb span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spost .sb .sl0{width:18px;height:18px;border-radius:5px;overflow:hidden;background:#16171b;flex:none}
+  .spost .sb .sl0 img{width:100%;height:100%;object-fit:cover;display:block}
+  .spost .sn{display:flex;gap:4px;flex-wrap:wrap}
+  .spost .sn i{font-style:normal;font-size:9px;font-weight:700;letter-spacing:.03em;padding:2px 5px;border-radius:5px;color:#0A0B0D}
+  .spost .sn .ty{background:rgba(255,255,255,.08);color:var(--ink-2)}
+  .spost .sn .warn{background:var(--warn)}
+  .spost .sbody{display:flex;gap:7px;align-items:flex-start}
+  .spost .sthumb{width:46px;height:46px;flex:none;font-size:8px;border-radius:7px;overflow:hidden;background:#15161a;display:grid;place-items:center;color:var(--ink-3);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+  .spost .sthumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .spost .sx{font-size:10.5px;color:var(--ink-2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-width:0}
+  .sempty{font-size:11px;color:var(--ink-3);margin-top:10px}
+  .wnote{font-size:12px;color:var(--ink-2);margin-top:12px;line-height:1.55}
+  .wroster{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px;margin-top:12px}
+  .netbadge{position:absolute;right:-4px;bottom:-4px;font-size:8px;font-weight:800;letter-spacing:.03em;padding:2px 4px;border-radius:5px;color:#0A0B0D}
+  .logowrap.rel{position:relative}
+  .logowrap.rel .badge{position:relative;overflow:hidden}
+  .logowrap.rel .badge img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+  .logowrap.rel .badge .li{font-size:10px}
+  .ideabar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}
+  .ideastat{font-size:11px;color:var(--ink-2);margin-top:8px;line-height:1.5}
+  .ideastat b{color:var(--ink)}
+  .ideas{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px}
+  @media(max-width:1080px){.ideas{grid-template-columns:1fr}}
+  .idea{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 15px;display:flex;flex-direction:column;gap:8px}
+  .idea .ih{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .idea .it{font-weight:700;font-size:14px;line-height:1.3}
+  .idea .tags{display:flex;gap:5px;flex-wrap:wrap}
+  .idea .tags span{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:6px;background:rgba(255,255,255,.07);color:var(--ink-2);white-space:nowrap}
+  .idea .why{font-size:12px;color:var(--ink);line-height:1.45}
+  .idea .why em{font-style:normal;color:var(--ink-2);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-right:6px}
+  .idea .hook{font-size:12px;color:var(--ink);background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;line-height:1.4}
+  .idea ol{margin:0 0 0 18px;font-size:11.5px;color:var(--ink-2);line-height:1.5}
+  .idea .cap{font-size:11.5px;color:var(--ink-2);white-space:pre-wrap;line-height:1.45;border-top:1px solid var(--line);padding-top:8px}
+  .idea .assets{display:flex;gap:8px;flex-wrap:wrap}
+  .idea .asset{display:flex;gap:7px;align-items:center;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;padding:5px;max-width:100%}
+  .idea .asset .at{width:44px;height:44px;border-radius:6px;overflow:hidden;background:#15161a;flex:none;display:grid;place-items:center;font-size:8.5px;color:var(--ink-3)}
+  .idea .asset .at img{width:100%;height:100%;object-fit:cover;display:block}
+  .idea .asset .an{font-size:10.5px;line-height:1.3;min-width:0}
+  .idea .asset .an b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+  .idea .asset .an span{color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+  .idea .anote{font-size:11px;color:var(--ink-2);line-height:1.45}
+  .idea .sig{display:flex;gap:5px;flex-wrap:wrap}
+  .idea .sig span{font-size:10px;color:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+  .idea .ifoot{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10.5px;color:var(--ink-3)}
+  .idea .copy{font-size:10.5px;padding:5px 9px}
+  .audit{margin-top:12px}
+  .audit summary{cursor:pointer;font-size:12px;color:var(--ink-2)}
+  .audit table{width:100%;border-collapse:collapse;margin-top:10px;font-size:11.5px}
+  .audit td,.audit th{padding:5px 8px;border-top:1px solid var(--line);text-align:left;color:var(--ink-2)}
+  .audit th{color:var(--ink);font-weight:600}
+  .audit .bad{color:var(--neg);font-weight:700}.audit .good{color:var(--pos);font-weight:700}
 </style>
 </head>
 <body>
@@ -315,7 +403,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <div class="brand"><h1>BLW Brand Command Center</h1><div class="sub">BLW League · 9 Teams</div></div>
+    <div class="brand"><h1>BLW Brand Command Center</h1><div class="sub" id="brandSub">BLW League · 9 Teams</div></div>
     <div class="status">
       <div class="live"><span class="dot" id="dot"></span> <span id="synced">connecting...</span></div>
       <div class="live clock" id="clock"></div>
@@ -325,7 +413,13 @@
   </div>
 
   <div class="controls">
-    <div class="eyebrow">Click any KPI or team to drill in. The whole league at a glance.</div>
+    <div class="ctl-left">
+      <div class="tabs" id="scopeTabs" role="tablist" aria-label="Which brand">
+        <div class="tab active" data-s="league" role="tab" tabindex="0">BLW League</div>
+        <div class="tab" data-s="wiffle" role="tab" tabindex="0">WIFFLE&reg;</div>
+      </div>
+      <div class="eyebrow" id="eyebrow">Click any KPI or team to drill in. The whole league at a glance.</div>
+    </div>
     <div class="tabs" id="tfTabs">
       <div class="tab" data-q="days=7">7D</div>
       <div class="tab active" data-q="days=30">30D</div>
@@ -345,6 +439,14 @@
   </div>
 
   <div class="errbox" id="errbox"></div>
+
+  <div id="schedSection" style="display:none">
+    <div class="section-title"><span>Scheduled &middot; next 7 days</span><span class="rule"></span></div>
+    <div class="schedbar"><div class="schedchips" id="schedChips"></div><div class="schedmeta" id="schedMeta"></div></div>
+    <div id="schedGap"></div>
+    <div class="schedcols" id="schedCols"></div>
+  </div>
+
   <div id="content" class="fade">
     <div id="digest"></div>
     <div class="hero" id="hero"></div>
@@ -416,12 +518,27 @@
     <div class="recs" id="recs"></div>
   </div>
 
+  <div id="wiffleContent" class="fade" style="display:none"></div>
+
+  <div id="ideasSection" style="display:none">
+    <div class="section-title"><span>Post ideas</span><span class="rule"></span></div>
+    <div class="ideabar"><div class="schedchips" id="ideaChips"></div><button class="btn" id="ideaGo">Generate ideas</button></div>
+    <div class="ideastat" id="ideaStat"></div>
+    <div class="ideas" id="ideaList"></div>
+  </div>
+
+  <div id="auditSection" style="display:none"></div>
+
   <div class="foot" id="foot">Live via Metricool API · Created by Savant Media LLC</div>
 </div>
 
 <script>
 const $ = s => document.querySelector(s);
-const STATE = { q: "days=30", data: null, fcTeam: null, charts: {}, modalCharts: [], drillIsolate: null };
+const STATE = { q: "days=30", data: null, fcTeam: null, charts: {}, modalCharts: [], drillIsolate: null,
+  scope: "league", wdata: null, wq: null, sched: null, schedFilter: "all", ideaBrand: null, ideasBusy: false };
+// Post counts are master-admin only. The server strips them for everyone else;
+// this flag just keeps the layout from leaving holes where they used to be.
+const isM = () => !!((STATE.data && STATE.data.viewer && STATE.data.viewer.isMaster) || (STATE.wdata && STATE.wdata.viewer && STATE.wdata.viewer.isMaster) || (STATE.sched && STATE.sched.viewer && STATE.sched.viewer.isMaster));
 const logoCache = {};
 const PCOL = { ig:"#FF6FCF", tt:"#5CE0E0", fb:"#5B8DEF" };
 const PNAME = { ig:"Instagram", tt:"TikTok", fb:"Facebook" };
@@ -515,7 +632,28 @@ function countUp(el,to,dur,f){
 function destroyCharts(){ Object.values(STATE.charts).forEach(c=>{try{c.destroy()}catch(e){}}); STATE.charts={}; }
 function destroyModalCharts(){ STATE.modalCharts.forEach(c=>{try{c.destroy()}catch(e){}}); STATE.modalCharts=[]; }
 
-function getToken(){
+/* ============ AUTH ============
+   Before: this page read the access token straight out of localStorage. Supabase
+   access tokens expire after an hour, and nothing on this standalone page ever
+   refreshed them, so opening or refreshing /command-center a day later sent a
+   dead token and got "Admins only". Now the page runs the official Supabase
+   client against the same blw-auth-v1 session BLW Studio uses. getSession()
+   refreshes an expired token with the stored refresh token (and coordinates
+   with any open BLW Studio tab), and a 401 triggers one forced refresh + retry. */
+let SB = null, SB_TRIED = false;
+async function authClient(){
+  if(SB || SB_TRIED) return SB;
+  SB_TRIED = true;
+  try{
+    const r = await fetch("/api/metricool?view=config");
+    const cfg = r.ok ? await r.json() : {};
+    if(window.supabase && cfg.supabaseUrl && cfg.anonKey){
+      SB = window.supabase.createClient(cfg.supabaseUrl, cfg.anonKey, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:false, flowType:"pkce", storageKey:"blw-auth-v1" } });
+    }
+  }catch(e){}
+  return SB;
+}
+function storedToken(){
   try{
     const cands=["blw-auth-v1"].concat(Object.keys(localStorage));
     for(const k of cands){
@@ -526,28 +664,54 @@ function getToken(){
     }
   }catch(e){} return null;
 }
-function showGate(expired){
-  $("#overlay").classList.remove("on");
-  $("#content").style.display="none";
-  $("#errbox").classList.add("on");
-  $("#errbox").innerHTML = expired
-    ? "<b>Admins only.</b> Your BLW Studio session isn't an admin, or it has expired. Open this page while signed in to BLW Studio as an admin."
-    : "<b>Admins only.</b> Sign in to BLW Studio first, then open /command-center. &nbsp;<a href='/'>Go to BLW Studio &#8594;</a>";
+async function getToken(force){
+  const sb = await authClient();
+  if(sb){
+    try{
+      if(force){ const { data } = await sb.auth.refreshSession(); return (data && data.session && data.session.access_token) || null; }
+      const { data } = await sb.auth.getSession();
+      return (data && data.session && data.session.access_token) || null;
+    }catch(e){ return null; }
+  }
+  return storedToken(); // client library unavailable: old behaviour
 }
+// fetch with the user's token; on 401 refresh once and retry.
+async function apiFetch(url, opts){
+  opts = opts || {};
+  let tok = await getToken(false);
+  if(!tok) return { status: 0, noauth: true };
+  const go = t => fetch(url, { ...opts, headers: { ...(opts.headers||{}), Authorization: "Bearer " + t } });
+  let r = await go(tok);
+  if(r.status === 401){ const t2 = await getToken(true); if(t2) r = await go(t2); }
+  return r;
+}
+function showGate(kind){
+  $("#overlay").classList.remove("on");
+  ["#content","#wiffleContent","#schedSection","#ideasSection","#auditSection"].forEach(sel=>{ const el=$(sel); if(el) el.style.display="none"; });
+  $("#errbox").classList.add("on");
+  $("#errbox").innerHTML = kind==="forbidden"
+    ? "<b>Content team and admins only.</b> Your BLW Studio account doesn't have access to the Command Center. Ask the master admin to update your role."
+    : kind==="expired"
+      ? "<b>Your BLW Studio session has ended.</b> Sign in again and this page will pick it up. &nbsp;<a href='/'>Go to BLW Studio &#8594;</a>"
+      : "<b>Sign in to BLW Studio first,</b> then open /command-center. &nbsp;<a href='/'>Go to BLW Studio &#8594;</a>";
+}
+function gateFor(r){ if(r.noauth){ showGate("signin"); return true; } if(r.status===401){ showGate("expired"); return true; } if(r.status===403){ showGate("forbidden"); return true; } return false; }
+
+function loadCurrent(q, fresh){ return STATE.scope==="wiffle" ? loadWiffle(q, fresh) : load(q, fresh); }
+
 async function load(q,fresh){
   STATE.q=q;
-  const token=getToken();
-  if(!token){ showGate(false); return; }
   $("#content").style.display="";
   $("#overlay").classList.add("on");
   $("#ovmsg").textContent = fresh?"Refreshing from Metricool...":"Pulling live data from Metricool...";
   $("#errbox").classList.remove("on");
   try{
-    const r=await fetch("/api/metricool?"+q+(fresh?("&fresh=1&_="+Date.now()):""),{headers:{Authorization:"Bearer "+token}});
-    if(r.status===401||r.status===403){ showGate(true); return; }
+    const r=await apiFetch("/api/metricool?"+q+(fresh?("&fresh=1&_="+Date.now()):""));
+    if(gateFor(r)) return;
     if(!r.ok) throw new Error("Server returned "+r.status);
     const data=await r.json(); if(data.error) throw new Error(data.error);
-    STATE.data=data; if(!STATE.fcTeam && data.teams.length) STATE.fcTeam=data.teams[0].blogId;
+    STATE.data=data; STATE.lq=q; if(!STATE.fcTeam && data.teams.length) STATE.fcTeam=data.teams[0].blogId;
+    showShared();
     render(); $("#dot").classList.remove("err");
     $("#synced").textContent="LIVE · synced "+new Date(data.generatedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
   }catch(e){
@@ -556,11 +720,12 @@ async function load(q,fresh){
     $("#errbox").innerHTML="<b>Couldn't load data.</b> "+esc(e.message)+". If env vars were just added in Vercel, redeploy, then Refresh.";
   }finally{ $("#overlay").classList.remove("on"); }
 }
+function showShared(){ $("#schedSection").style.display=""; $("#ideasSection").style.display=""; if(!STATE.sched) loadSched(false); renderIdeaChips(); renderAudit(); }
 
 function render(){
   const c=$("#content"); c.classList.add("dim");
   setTimeout(()=>{ destroyCharts();
-    renderDigest(); renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderHeat(); renderWatch(); renderPlayers(); renderEMV(); renderRoster(); renderChips(); renderForecast(); renderRecs();
+    renderDigest(); renderHero(); renderSubstrip(); renderFollowersSplit(); renderVelocity(); renderViews(); renderLegend(); renderLeaderboard(); renderFormats(); renderHeat(); renderWatch(); renderPlayers(); renderEMV(); renderRoster(); renderChips(); renderForecast(); renderRecs(); renderAudit();
     c.classList.remove("dim");
   },120);
 }
@@ -571,9 +736,8 @@ function renderHero(){
   const d=STATE.data, t=d.totals;
   const base=t.followers - d.network.netNew.reduce((a,b)=>a+b.v,0);
   const folDelta=base>0?(t.followers-base)/base*100:0;
-  const lp=leagueParity(d);
   let postsAlert=null;
-  if(lp.gap>0){ const w=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; postsAlert=`${PNAME[w[0]]} ${w[1]} behind`; }
+  if(isM()){ const lp=leagueParity(d); if(lp.gap>0){ const w=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; postsAlert=`${PNAME[w[0]]} ${w[1]} behind`; } }
   const interSpark=(d.network.interactionsByPlatform?["ig","tt","fb"].reduce((acc,k)=>{ (d.network.interactionsByPlatform[k]||[]).forEach(p=>{acc[p.d]=(acc[p.d]||0)+p.v}); return acc; },{}):{});
   const interArr=Object.keys(interSpark).sort().map(k=>interSpark[k]);
   const cards=[
@@ -581,7 +745,8 @@ function renderHero(){
     {key:"views",label:"Views ("+d.label+")",val:t.views,accent:"#5B8DEF",spark:d.network.views.map(p=>p.v),sub:"IG + TikTok + FB"},
     {key:"interactions",label:"Interactions ("+d.label+")",val:t.interactions,accent:"#FFB13C",spark:interArr,sub:"likes, comments, shares"},
     {key:"posts",label:"Posts ("+d.label+")",val:t.content,accent:"#FF6FCF",spark:d.network.netNew.map(p=>Math.abs(p.v)),sub:"shipped across teams",alert:postsAlert}
-  ];
+  ].filter(k=>k.key!=="posts"||isM());
+  $("#hero").classList.toggle("three", cards.length===3);
   $("#hero").innerHTML=cards.map((k,i)=>`
     <div class="kpi" data-metric="${k.key}" tabindex="0" role="button" style="animation-delay:${i*.06}s">
       <div class="accent" style="background:${k.accent}"></div>
@@ -731,7 +896,9 @@ function renderRecs(){
 }
 
 const capw=s=>{s=String(s||"").toLowerCase();return s.charAt(0).toUpperCase()+s.slice(1);};
-const LBNET={instagram:"IG",tiktok:"TikTok",facebook:"FB"};
+const LBNET={instagram:"IG",tiktok:"TikTok",facebook:"FB",twitter:"X",linkedin:"LinkedIn",youtube:"YouTube",threads:"Threads"};
+const NLABEL={instagram:"Instagram",tiktok:"TikTok",facebook:"Facebook",twitter:"X",linkedin:"LinkedIn",youtube:"YouTube",threads:"Threads",pinterest:"Pinterest",bluesky:"Bluesky",gmb:"Google"};
+const NCOL={instagram:"#FF6FCF",tiktok:"#5CE0E0",facebook:"#5B8DEF",twitter:"#D7D9DE",linkedin:"#4FA3FF",youtube:"#FF5A5A",threads:"#B8A6FF",pinterest:"#E60023",bluesky:"#4DA3FF",gmb:"#7CF1A8"};
 const TYPECOL={REEL:"#FF6FCF",VIDEO:"#5CE0E0",CAROUSEL:"#C7F24E",ALBUM:"#9AD1FF",IMAGE:"#FFB13C",STORY:"#C4C9D2",OTHER:"#878B94"};
 
 function renderSubstrip(){
@@ -739,7 +906,7 @@ function renderSubstrip(){
   const cards=[
     {key:"engagement",label:"Engagement rate",accent:"#FFB13C",val:t.engagementRate||0,sub:"avg across all posts",plat:d.engRateByPlatform,pf:v=>(v||0).toFixed(1)+"%",pct:true},
     {key:"impressions",label:"Impressions ("+d.label+")",accent:"#5B8DEF",val:t.impressions||0,sub:"total times posts were shown",plat:d.impressionsByPlatform,pf:fmt},
-    {key:"savesshares",label:"Saves + shares",accent:"#79E6C2",val:ss,sub:(t.saves||0).toLocaleString()+" saves · "+(t.shares||0).toLocaleString()+" shares (IG + TikTok)"}
+    {key:"savesshares",label:"Saves + shares",accent:"#79E6C2",val:ss,sub:(t.saves||0).toLocaleString()+" saves · "+(t.shares||0).toLocaleString()+" shares (IG + TikTok + FB)"}
   ];
   $("#substrip").innerHTML=cards.map(c=>`
     <div class="scard" data-k="${c.key}" tabindex="0" role="button">
@@ -752,47 +919,63 @@ function renderSubstrip(){
   $("#substrip").querySelectorAll(".scard").forEach(el=>{ const go=()=>openStat(el.dataset.k); el.onclick=go; el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}}; });
 }
 
-function renderLeaderboard(){
-  const lb=STATE.data.leaderboard||[]; const host=$("#leaderboard");
-  if(!lb.length){ host.innerHTML=`<div class="fc-note">No posts with measured interactions in this window.</div>`; return; }
-  host.innerHTML=lb.slice(0,12).map((p,i)=>{
-    const init=esc((p.team||"").split(" ").map(w=>w[0]).join("").slice(0,3));
+// Team logo chip for post cards: the brand's Metricool profile picture, or its
+// initials on the team color when there is no picture.
+function logoChip(cls, picture, name, accent){
+  const init=esc(String(name||"").replace(/[^A-Za-z0-9 ]/g,"").split(" ").filter(Boolean).map(w=>w[0]).join("").slice(0,3));
+  return `<span class="${cls}" style="--accent:${accent};background:${accent}" title="${esc(name)}"><span class="li">${init}</span>${picture?`<img src="${esc(picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:""}</span>`;
+}
+function postCards(list, opts){
+  opts=opts||{};
+  return list.map((p,i)=>{
+    const who=opts.who?opts.who(p):{ name:p.team, picture:(STATE.data.teams.find(x=>x.blogId===p.blogId)||{}).picture, accent:p.accent };
+    const init=esc((who.name||"").split(" ").map(w=>w[0]).join("").slice(0,3));
     const thumb=p.picture?`<img src="${esc(p.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="ph" style="display:none">${init}</div>`:`<div class="ph">${init}</div>`;
     const tail=p.engagement?(p.engagement.toFixed(1)+"% eng"):(fmt(p.impressions)+" imp");
-    return `<a class="lbcard" href="${esc(p.link||'#')}" target="_blank" rel="noopener" style="--accent:${p.accent}">
-      <div class="lbthumb">${thumb}<span class="lbrank">#${i+1}</span><span class="lbnet">${LBNET[p.network]||''} · ${capw(p.type)}</span></div>
-      <div class="lbbody"><div class="lbteam" style="color:${p.accent}">${esc(p.team)}</div>
+    return `<a class="lbcard" href="${esc(p.link||'#')}" target="_blank" rel="noopener" style="--accent:${who.accent}">
+      <div class="lbthumb">${thumb}<span class="lbrank">#${i+1}</span><span class="lbnet">${LBNET[p.network]||NLABEL[p.network]||''} · ${capw(p.type)}</span>${logoChip("lblogo",who.picture,who.name,who.accent)}</div>
+      <div class="lbbody"><div class="lbteam" style="color:${who.accent}">${logoChip("mini",who.picture,who.name,who.accent)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(who.label||who.name)}</span></div>
         <div class="lbmet"><b>${fmt(p.interactions)}</b> int <span class="e">· ${tail}</span></div>
         <div class="lbcap">${esc((p.text||"").slice(0,90))||"(no caption)"}</div></div></a>`;
   }).join("");
 }
-
-function renderFormats(){
-  const all=(STATE.data.formatBreakdown||[]).filter(f=>f.count>0);
-  const fb=all.filter(f=>f.count>=2); const host=$("#formatBars");
+function renderLeaderboard(){
+  const lb=STATE.data.leaderboard||[]; const host=$("#leaderboard");
+  if(!lb.length){ host.innerHTML=`<div class="fc-note">No posts with measured interactions in this window.</div>`; return; }
+  host.innerHTML=postCards(lb.slice(0,12));
+}
+// Format bars + mix donut. Masters see post counts; everyone else sees each
+// format's share of posts instead (the server sends no counts to them).
+function renderFormatsInto(list, barsSel, mixId, metaSel){
+  const all=(list||[]).filter(f=>(f.count||f.share||0)>0);
+  const fb=all.filter(f=>f.enough!==undefined?f.enough:f.count>=2); const host=$(barsSel);
   if(!fb.length){ host.innerHTML=`<div class="fc-note">Not enough posts to break down by format.</div>`; }
   else{
     const max=Math.max(...fb.map(f=>f.avgInteractions))||1;
     host.innerHTML=fb.map(f=>{ const c=TYPECOL[f.type]||TYPECOL.OTHER; const w=Math.max(2,Math.round(f.avgInteractions/max*100));
+      const tail=isM()&&f.count!=null?`${f.count} posts`:`${(f.share||0).toFixed(0)}% of posts`;
       return `<div class="fmtrow"><div class="fmtname"><span class="ic" style="background:${c}"></span>${capw(f.type)}</div>
         <div class="fmtbar"><span data-w="${w}%" style="background:${c}"></span></div>
-        <div class="fmtval">${fmt(f.avgInteractions)}<span class="s"> /post · ${f.count} posts</span></div></div>`; }).join("");
+        <div class="fmtval">${fmt(f.avgInteractions)}<span class="s"> /post · ${tail}</span></div></div>`; }).join("");
     if(!REDUCE) requestAnimationFrame(()=>host.querySelectorAll(".fmtbar>span").forEach(el=>el.style.width=el.dataset.w));
     else host.querySelectorAll(".fmtbar>span").forEach(el=>el.style.width=el.dataset.w);
   }
-  if(STATE.charts.formatMix){try{STATE.charts.formatMix.destroy()}catch(e){}}
-  const tot=all.reduce((a,b)=>a+b.count,0);
-  $("#formatMixMeta").textContent=tot+" posts this window";
-  if(all.length) STATE.charts.formatMix=new Chart($("#formatMix"),{type:"doughnut",data:{labels:all.map(f=>capw(f.type)),datasets:[{data:all.map(f=>f.count),backgroundColor:all.map(f=>TYPECOL[f.type]||TYPECOL.OTHER),borderColor:"#0A0B0D",borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:"58%",plugins:{legend:{position:"right",labels:{boxWidth:9,boxHeight:9,font:{size:11},color:"#A6AAB2"}},tooltip:{...TT,callbacks:{label:ctx=>ctx.label+": "+ctx.parsed+" posts"}}},animation:{duration:ANIM}}});
+  if(STATE.charts[mixId]){try{STATE.charts[mixId].destroy()}catch(e){}}
+  const useCount=isM()&&all.every(f=>f.count!=null);
+  const tot=all.reduce((a,b)=>a+(b.count||0),0);
+  $(metaSel).textContent=useCount?(tot+" posts this window"):"share of posts by format";
+  const el=document.getElementById(mixId);
+  if(all.length&&el) STATE.charts[mixId]=new Chart(el,{type:"doughnut",data:{labels:all.map(f=>capw(f.type)),datasets:[{data:all.map(f=>useCount?f.count:f.share),backgroundColor:all.map(f=>TYPECOL[f.type]||TYPECOL.OTHER),borderColor:"#0A0B0D",borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:"58%",plugins:{legend:{position:"right",labels:{boxWidth:9,boxHeight:9,font:{size:11},color:"#A6AAB2"}},tooltip:{...TT,callbacks:{label:ctx=>ctx.label+": "+(useCount?ctx.parsed+" posts":ctx.parsed.toFixed(1)+"% of posts")}}},animation:{duration:ANIM}}});
 }
+function renderFormats(){ renderFormatsInto(STATE.data.formatBreakdown, "#formatBars", "formatMix", "#formatMixMeta"); }
 
 function openStat(kind){
   const d=STATE.data;
   const cfgs={
     engagement:{title:"Engagement rate",sub:"avg interactions per impression · "+d.label,plat:d.engRateByPlatform,pf:v=>(v||0).toFixed(2)+"%",teamVal:t=>t.engagementRatePost||0,fmtv:v=>(v||0).toFixed(2)+"%",note:"Engagement rate normalizes for audience size, so a smaller team posting sharp content can outrank a bigger one. Facebook runs high here because it has few but high-interaction posts."},
     impressions:{title:"Impressions",sub:"total post impressions · "+d.label,plat:d.impressionsByPlatform,pf:fmt,teamVal:t=>t.impressions||0,fmtv:fmtFull,note:"Impressions count how many times posts were shown. It is the most consistent reach signal Metricool returns across all three platforms."},
-    savesshares:{title:"Saves + shares",sub:"high-intent actions · "+d.label,plat:{ig:(d.savesByPlatform.ig+d.sharesByPlatform.ig),tt:d.sharesByPlatform.tt,fb:0},pf:fmt,teamVal:t=>(t.saves||0)+(t.shares||0),fmtv:fmtFull,note:"Saves and shares predict reach better than likes. Instagram and TikTok report them; Facebook does not expose them through the API, so it shows as zero."}
+    savesshares:{title:"Saves + shares",sub:"high-intent actions · "+d.label,plat:{ig:(d.savesByPlatform.ig||0)+(d.sharesByPlatform.ig||0),tt:(d.savesByPlatform.tt||0)+(d.sharesByPlatform.tt||0),fb:(d.savesByPlatform.fb||0)+(d.sharesByPlatform.fb||0)},pf:fmt,teamVal:t=>(t.saves||0)+(t.shares||0),fmtv:fmtFull,note:"Saves and shares predict reach better than likes. Instagram saves now include reels (they were missing before), shares come from Instagram posts and reels, TikTok and Facebook, and they are counted per post where Metricool's post data carries them, the same basis as impressions and EMV."}
   };
   const c=cfgs[kind]; const teams=[...d.teams].sort((a,b)=>c.teamVal(b)-c.teamVal(a)); const max=c.teamVal(teams[0])||1;
   let body=`<div class="modal-title">${c.title} · by team</div><div class="modal-sub">${c.sub}</div>`;
@@ -810,19 +993,20 @@ function renderDigest(){
   const net=d.network.netNew||[]; const yday=net.length?net[net.length-1].v:0; const w7=net.slice(-7).reduce((a,b)=>a+b.v,0);
   const lb=d.leaderboard&&d.leaderboard[0];
   const grower=[...d.teams].sort((a,b)=>b.netNew-a.netNew)[0];
-  const lp=leagueParity(d);
   const weak=[...d.teams].sort((a,b)=>a.mom-b.mom)[0];
   const fbk=(d.formatBreakdown||[]).filter(f=>f.count>=2);
   const topF=fbk[0], img=fbk.find(f=>f.type==="IMAGE");
   const syncT=new Date(d.generatedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
   let bo="";
   if(lb){ const tm=d.teams.find(x=>x.blogId===lb.blogId)||{}; const amp=tm.followersNow?Math.round(lb.impressions/tm.followersNow):0;
+    lb.teamPicture=tm.picture;
     const init=esc((lb.team||"").split(" ").map(w=>w[0]).join("").slice(0,3));
     const thumb=lb.picture?`<img src="${esc(lb.picture)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="dgph" style="display:none">${init}</div>`:`<div class="dgph">${init}</div>`;
-    bo=`<a class="dgbreak" href="${esc(lb.link||'#')}" target="_blank" rel="noopener"><div class="dgthumb">${thumb}</div><div><div class="dglbl">Breakout post</div><div class="dgteam" style="color:${lb.accent}">${esc(lb.team)} · ${LBNET[lb.network]||''} ${capw(lb.type)}</div><div class="dgmet"><b>${fmt(lb.interactions)}</b> interactions${amp?` · reached ~${amp}x its followers`:""}</div></div></a>`;
+    bo=`<a class="dgbreak" href="${esc(lb.link||'#')}" target="_blank" rel="noopener"><div class="dgthumb">${thumb}</div><div><div class="dglbl">Breakout post</div><div class="dgteam lbteam" style="color:${lb.accent}">${logoChip("mini",lb.teamPicture,lb.team,lb.accent)}<span>${esc(lb.team)} · ${LBNET[lb.network]||''} ${capw(lb.type)}</span></div><div class="dgmet"><b>${fmt(lb.interactions)}</b> interactions${amp?` · reached ~${amp}x its followers`:""}</div></div></a>`;
   }
   const alerts=[];
-  if(lp.gap>0){ const wpl=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; alerts.push(`<b>Cross-post gap:</b> ${PNAME[wpl[0]]} is ${wpl[1]} posts behind across the league.`); }
+  if(isM()){ const lp=leagueParity(d); if(lp.gap>0){ const wpl=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; alerts.push(`<b>Cross-post gap:</b> ${PNAME[wpl[0]]} is ${wpl[1]} posts behind across the league.`); } }
+  else if((d.parityBehind||[]).length){ alerts.push(`<b>Cross-post gap:</b> ${d.parityBehind.map(k=>PNAME[k]).join(" and ")} ${d.parityBehind.length>1?"are":"is"} behind across the league.`); }
   if(weak && (weak.netNew<0||weak.mom<1)) alerts.push(`<b>Watch ${esc(weak.name)}:</b> ${weak.netNew<0?signed(weak.netNew)+" followers":"flat growth ("+weak.mom.toFixed(1)+"%)"} this window.`);
   if(!alerts.length) alerts.push("All teams healthy: no cross-post gaps or growth drops flagged.");
   const nudge=(topF&&img&&img.avgInteractions>0)?`<b>${capw(topF.type)}s</b> average ${fmt(topF.avgInteractions)} interactions vs ${fmt(img.avgInteractions)} for static images (${(topF.avgInteractions/img.avgInteractions).toFixed(1)}x). Lead with ${capw(topF.type)}s today.`:(topF?`<b>${capw(topF.type)}s</b> are your top format at ${fmt(topF.avgInteractions)} interactions per post.`:"Keep shipping across all three platforms.");
@@ -873,7 +1057,7 @@ function renderPlayers(){
   host.innerHTML=lb.map((p,i)=>{const w=Math.max(3,Math.round(p.interactions/max*100));
     return `<div class="prow" data-i="${i}" tabindex="0" role="button">
       <div class="prank">${i+1}</div>
-      <div class="pinfo"><div class="pn">${esc(p.name)}</div><div class="ptm"><i style="background:${p.accent}"></i>${esc(p.team.split(" ").slice(0,2).join(" "))} · ${p.posts} posts</div></div>
+      <div class="pinfo"><div class="pn">${esc(p.name)}</div><div class="ptm"><i style="background:${p.accent}"></i>${esc(p.team.split(" ").slice(0,2).join(" "))}${isM()&&p.posts!=null?` · ${p.posts} posts`:""}</div></div>
       <div class="pbar"><span data-w="${w}%" style="background:${p.accent}"></span></div>
       <div class="pstats"><div class="pstat"><b>${fmt(p.interactions)}</b><div class="k">int</div></div><div class="pstat"><b>${fmt(p.impressions)}</b><div class="k">reach</div></div><div class="pstat"><b>${(p.engAvg||0).toFixed(1)}%</b><div class="k">eng</div></div></div>
       <div class="pheat" style="color:${p.accent}">${p.heat}</div></div>`;}).join("")
@@ -888,7 +1072,7 @@ function openPlayer(i){
   const NET={instagram:"IG",tiktok:"TikTok",facebook:"FB"};
   const ini=esc(p.name.split(" ").map(w=>w[0]).join("").slice(0,3));
   let body=`<div class="modal-title"><span style="width:12px;height:12px;border-radius:4px;background:${p.accent};display:inline-block"></span>${esc(p.name)}</div>
-    <div class="modal-sub">${esc(p.team)} · ${p.posts} posts mentioning · heat ${p.heat}/100</div>
+    <div class="modal-sub">${esc(p.team)}${isM()&&p.posts!=null?` · ${p.posts} posts mentioning`:""} · heat ${p.heat}/100</div>
     <div class="gchips" style="margin-top:12px">${gchip("Interactions",p.accent,fmtFull(p.interactions),null)}${gchip("Reach",PCOL.fb,fmtFull(p.impressions),null)}${gchip("Avg engagement",PCOL.ig,(p.engAvg||0).toFixed(2)+"%",null)}${gchip("Reach vs followers",PCOL.tt,(p.amp||0)+"x",null)}</div>
     <div class="modal-sub" style="margin-top:14px">Posts driving ${esc(p.name.split(" ")[0])}'s numbers</div>
     <div class="lbgrid" style="margin-top:10px">`+(p.items||[]).map(it=>{
@@ -955,7 +1139,8 @@ function renderEMV(){
     document.querySelectorAll("#emvTeams .emvrow").forEach(el2=>{const go=()=>openTeamModal(+el2.dataset.id,"views");el2.onclick=go;el2.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
     renderBLW(R);
     const avg=d.totals.content?tot/d.totals.content:0;
-    $("#emvNote").innerHTML=`Matches Socialpruf's formula: <b>(views / 1000) x CPM + interactions</b>, starting from their published benchmark of <b>$20 CPM, $0.25 per like, $1.25 per comment</b>. <b>On "views":</b> this is the per-post view count for posts published in this window, which Metricool returns under the field name "impressions". It is the same number Socialpruf means by views. It is deliberately not the ${fmt(d.totals.views)} in the Views charts above, which is an account-level total that also counts views on older posts and would overstate EMV by about ${d.totals.impressions?(d.totals.views/d.totals.impressions).toFixed(1):"5"}x. Metricool reports interactions as one combined number rather than splitting likes and comments, so the per-interaction rate defaults to the conservative $0.25 like value; raise it toward $1.25 if your comment volume is high. Followers and the saves/shares premium are additions beyond Socialpruf's formula, and the premium stacks on top of interactions since a share already counts as one. At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts. Rates save to this browser.`;
+    const perPost=isM()&&d.totals.content?` At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts.`:"";
+    $("#emvNote").innerHTML=`Matches Socialpruf's formula: <b>(views / 1000) x CPM + interactions</b>, starting from their published benchmark of <b>$20 CPM, $0.25 per like, $1.25 per comment</b>. <b>On "views":</b> this is the per-post view count for posts published in this window, which Metricool returns under the field name "impressions". It is the same number Socialpruf means by views. It is deliberately not the ${fmt(d.totals.views)} in the Views charts above, which is an account-level total that also counts views on older posts and would overstate EMV by about ${d.totals.impressions?(d.totals.views/d.totals.impressions).toFixed(1):"5"}x. Metricool reports interactions as one combined number rather than splitting likes and comments, so the per-interaction rate defaults to the conservative $0.25 like value; raise it toward $1.25 if your comment volume is high. Followers and the saves/shares premium are additions beyond Socialpruf's formula, and the premium stacks on top of interactions since a share already counts as one.${perPost} Rates save to this browser.`;
   };
   const bind=(key,obj,prop)=>{
     const s=document.getElementById("sld_"+key), l=document.getElementById("lbl_"+key); if(!s) return;
@@ -975,22 +1160,23 @@ function renderBLW(R){
   const total=emvOf(b.impressions,b.interactions);
   const el=$("#blwEmv"); if(el) el.textContent=usdFull(total);
   $("#blwSub").textContent="BLW page EMV · "+d.label;
-  $("#blwStats").innerHTML=[["Views",fmt(b.impressions)],["Interactions",fmt(b.interactions)],["Posts",b.contentCount],["Eng rate",(b.engagementRatePost||0).toFixed(1)+"%"]]
+  $("#blwStats").innerHTML=[["Views",fmt(b.impressions)],["Interactions",fmt(b.interactions)],...(isM()&&b.contentCount!=null?[["Posts",b.contentCount]]:[]),["Eng rate",(b.engagementRatePost||0).toFixed(1)+"%"]]
     .map(([k,v])=>`<div class="e"><b>${v}</b><span>${k}</span></div>`).join("");
   const accent={}; d.teams.forEach(t=>accent[t.name]=t.accent);
   const rows=(b.attribution||[]).map(a=>({...a,emv:emvOf(a.impressions,a.interactions),accent:accent[a.team]||"#7CF1A8"}));
   const mx=rows.length?Math.max(...rows.map(r=>r.impressions)):1;
   $("#blwAttr").innerHTML=rows.map(r=>{
     const via=[["handle",r.via.handle],["name",r.via.name],["player",r.via.player]].filter(x=>x[1]>0).map(x=>x[1]+" "+x[0]).join(" · ");
-    return `<div class="blwrow"><div class="blwname"><i style="background:${r.accent}"></i>${esc(r.team.split(" ").slice(0,2).join(" "))}<span class="bs">${r.posts}p</span></div>
+    return `<div class="blwrow"><div class="blwname"><i style="background:${r.accent}"></i>${esc(r.team.split(" ").slice(0,2).join(" "))}${isM()&&r.posts!=null?`<span class="bs">${r.posts}p</span>`:""}</div>
       <div class="blwtrack"><div class="blwfill" data-w="${Math.max(3,Math.round(r.impressions/mx*100))}%" style="background:${r.accent}"></div></div>
       <div class="blwnum">${fmt(r.impressions)} views</div><div class="blwval">${usdFull(r.emv)}</div>
       <span class="viachip" title="how this post was matched">${via||"-"}</span></div>`;
   }).join("");
   const set=()=>document.querySelectorAll("#blwAttr .blwfill").forEach(s=>s.style.width=s.dataset.w);
   REDUCE?set():requestAnimationFrame(set);
-  const pctUn=b.contentCount?Math.round(b.unattributed/b.contentCount*100):0;
-  $("#blwNote").innerHTML=`Content posted on the <b>@${esc((b.handles&&b.handles.instagram)||"blwwiffleball")}</b> league page, credited to teams by caption signals: an @handle mention, the team name, or a rostered player's name. A post naming two teams credits both, so the rows can sum to more than the page total. <b>${b.unattributed} of ${b.contentCount} posts (${pctUn}%)</b> carry no team signal and are not credited to anyone; that is ${fmt(b.unattributedImpressions)} views sitting uncredited. Instagram's collaborator field would close that gap and needs the Graph API. Kept separate from team totals on purpose so team-vs-team comparisons stay clean and no view is counted twice. EMV uses the average of your per-platform rates ($${cpm.toFixed(2)} CPM, $${per.toFixed(2)} per interaction) since this page is Instagram only.`;
+  const pctUn=b.unattributedPct!=null?b.unattributedPct:(b.contentCount?Math.round(b.unattributed/b.contentCount*100):0);
+  const unTxt=isM()&&b.contentCount!=null?`<b>${b.unattributed} of ${b.contentCount} posts (${pctUn}%)</b>`:`<b>${pctUn}% of posts</b>`;
+  $("#blwNote").innerHTML=`Content posted on the <b>@${esc((b.handles&&b.handles.instagram)||"blwwiffleball")}</b> league page, credited to teams by caption signals: an @handle mention, the team name, or a rostered player's name. A post naming two teams credits both, so the rows can sum to more than the page total. ${unTxt} carry no team signal and are not credited to anyone; that is ${fmt(b.unattributedImpressions)} views sitting uncredited. Instagram's collaborator field would close that gap and needs the Graph API. Kept separate from team totals on purpose so team-vs-team comparisons stay clean and no view is counted twice. EMV uses the average of your per-platform rates ($${cpm.toFixed(2)} CPM, $${per.toFixed(2)} per interaction) since this page is Instagram only.`;
 }
 
 /* ============ MODALS ============ */
@@ -1077,6 +1263,26 @@ function drawFollowersDrill(isolate){
   const ctl=document.getElementById("drillCtl"); if(ctl) ctl.style.display = isolate?"flex":"none";
 }
 
+// Stacked follower areas: each layer is one platform (or one WIFFLE account),
+// so the top edge is the brand's total followers. Days a platform didn't
+// report are carried forward from its last known count (and back-filled from
+// its first) so the stack never dips just because one feed skipped a day.
+function stackedFollowers(canvas, layers, emptyMsg){
+  const set=new Set(); layers.forEach(l=>l.series.forEach(p=>set.add(p.d)));
+  const labels=[...set].sort();
+  if(!labels.length){ canvas.parentElement.innerHTML=`<div class="fc-note" style="margin-top:16px">${emptyMsg}</div>`; return null; }
+  const ds=layers.filter(l=>l.series.length).map((l,i)=>{
+    const m=Object.fromEntries(l.series.map(p=>[p.d,p.v]));
+    let first=null; for(const d of labels){ if(d in m){ first=m[d]; break; } }
+    let last=first; const data=labels.map(d=>{ if(d in m) last=m[d]; return last; });
+    return {label:l.label,data,borderColor:l.color,backgroundColor:l.color+"55",borderWidth:1.6,pointRadius:0,pointHoverRadius:4,tension:.3,fill:i===0?"origin":"-1"};
+  });
+  return new Chart(canvas,{type:"line",data:{labels:labels.map(mmdd),datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>ctx.dataset.label+": "+fmtFull(ctx.parsed.y),footer:items=>"Total: "+fmtFull(items.reduce((a,b)=>a+(b.parsed.y||0),0))}}},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{stacked:true,beginAtZero:true,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
+}
+
 function gchip(label,color,value,deltaPct,gain){
   let dd="";
   if(deltaPct!==null && deltaPct!==undefined){ const cls=deltaPct>0?"up":deltaPct<0?"down":"flat"; dd=`<div class="gd ${cls}">${deltaPct>0?"▲":deltaPct<0?"▼":"•"} ${Math.abs(deltaPct).toFixed(1)}%</div>`; }
@@ -1089,13 +1295,13 @@ function openTeamModal(id, initial){
   initial = initial || "followers";
   openModal(`
     <div class="modal-title">${logoHTML(t)}${esc(t.name)}</div>
-    <div class="modal-sub">${esc(t.handles.instagram?'@'+t.handles.instagram:'')} · ${fmtFull(t.followersNow)} followers · ${fmtFull(t.interactions)} interactions · ${t.contentCount} posts (${esc(STATE.data.label)})</div>
+    <div class="modal-sub">${esc(t.handles.instagram?'@'+t.handles.instagram:'')} · ${fmtFull(t.followersNow)} followers · ${fmtFull(t.interactions)} interactions${isM()&&t.contentCount!=null?` · ${t.contentCount} posts`:""} (${esc(STATE.data.label)})</div>
     <div class="mtoggle" id="tmToggle">
       <div class="mt" data-m="followers">Followers</div>
       <div class="mt" data-m="views">Views</div>
       <div class="mt" data-m="interactions">Interactions</div>
       <div class="mt" data-m="engagement">Engagement</div>
-      <div class="mt" data-m="posts">Posts/day</div>
+      ${isM()?'<div class="mt" data-m="posts">Posts/day</div>':''}
       <div class="mt" data-m="crosspost">Cross-post</div>
     </div>
     <div id="tmChips"></div>
@@ -1110,6 +1316,20 @@ function openTeamModal(id, initial){
     const tp=$("#teamParity"), chips=$("#tmChips"), leg=$("#tmPlatLegend"), bodyEl=$("#tmBody");
     tp.style.display="none"; chips.innerHTML=""; leg.innerHTML=""; bodyEl.innerHTML="";
 
+    if(metric==='crosspost' && !isM()){
+      const behind=(t.parity&&t.parity.behind)||[];
+      tp.style.display="block"; tp.className='parity '+(behind.length?'warn':'ok');
+      tp.innerHTML = behind.length
+        ? `&#9888; <b>${esc(t.name)} is uneven.</b> Behind on <b>${behind.map(k=>PNAME[k]).join(" and ")}</b>. Compare the columns to spot what didn't get cross-posted.`
+        : `&#10003; <b>${esc(t.name)} is balanced</b> across Instagram, TikTok and Facebook.`;
+      bodyEl.innerHTML=`<div class="xcols">`+["ig","tt","fb"].map(k=>{ const list=t.postsList[k]||[];
+        return `<div class="xcol"><h5><i style="background:${PCOL[k]}"></i>${PNAME[k]}</h5><div class="xlist">`+
+          (list.length?list.map(p=>{ const dt=(p.date||"").slice(5,10); const txt=esc((p.text||"").slice(0,90))||"(no caption)";
+            return `<div class="xpost"><div class="xd"><span>${dt}</span><span>${fmtFull(p.interactions)} int</span></div>${p.link?`<a href="${esc(p.link)}" target="_blank" rel="noopener">${txt}</a>`:txt}</div>`;
+          }).join(""):`<div class="xpost" style="color:var(--ink-3)">No posts this window</div>`)+`</div></div>`;
+      }).join("")+`</div>`;
+      return;
+    }
     if(metric==='crosspost'){
       const par=parity(t);
       tp.style.display="block"; tp.className='parity '+(par.gap===0?'ok':'warn');
@@ -1132,18 +1352,19 @@ function openTeamModal(id, initial){
       const gained={ig:diffSeries(sp.ig||[]),tt:diffSeries(sp.tt||[]),fb:diffSeries(sp.fb||[])};
       const setChips=mode=>{ chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[];
         if(mode==='gained'){ const g=gained[k]; const tot=g.reduce((a,b)=>a+b.v,0); const per=g.length?tot/g.length:0; return gchip(PNAME[k]+" gained",PCOL[k],signed(tot),null).replace('</div></div>',`</div><div class="gd ${per>=0?'flat':'down'}" style="color:var(--ink-2)">${(per>=0?'+':'')+per.toFixed(0)}/day avg</div></div>`); }
-        const cur=s.length?s[s.length-1].v:0; const nz=s.filter(x=>x.v>0); const gained=nz.length>1?nz[nz.length-1].v-nz[0].v:0; return gchip(PNAME[k],PCOL[k],fmtFull(cur),growthPct(s),gained); }).join("")+`</div>`; };
+        const cur=s.length?s[s.length-1].v:0; const nz=s.filter(x=>x.v>0); const gained=nz.length>1?nz[nz.length-1].v-nz[0].v:0; return gchip(PNAME[k],PCOL[k],fmtFull(cur),growthPct(s),gained); }).join("").replace(/^/, mode==='gained'?'':gchip("Total","#F3F3F1",fmtFull(t.followersNow),growthPct(t.series.followers),t.netNew))+`</div>`; };
       setChips('total');
-      bodyEl.innerHTML=`<div class="mtoggle" id="folSub" style="margin-top:10px"><div class="mt active" data-f="total">Total over time</div><div class="mt" data-f="gained">Gained / day</div></div>`+chartHTML;
+      bodyEl.innerHTML=`<div class="mtoggle" id="folSub" style="margin-top:10px"><div class="mt active" data-f="total">Total followers (stacked)</div><div class="mt" data-f="gained">Gained / day</div></div>`+chartHTML;
       const drawFol=mode=>{ destroyModalCharts(); setChips(mode);
-        const src = mode==='gained' ? gained : sp;
+        if(mode==='total'){ STATE.modalCharts.push(stackedFollowers($("#teamChart"), ["ig","tt","fb"].map(k=>({label:PNAME[k],color:PCOL[k],series:sp[k]||[]})), "No follower data reported for this window.")); return; }
+        const src = gained;
         const a=alignKeys(src,["ig","tt","fb"]);
         const mk=k=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:PCOL[k],borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:.32,fill:false,spanGaps:true});
         const anyData=["ig","tt","fb"].some(k=>(src[k]||[]).length);
         if(!anyData){ $("#teamChart").parentElement.innerHTML=`<div class="fc-note" style="margin-top:16px">No follower data reported for this window.</div>`; return; }
         STATE.modalCharts.push(new Chart($("#teamChart"),{type:"line",data:{labels:a.labels.map(mmdd),datasets:[mk("ig"),mk("tt"),mk("fb")]},
           options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-            plugins:{legend:{display:false},tooltip:{...TT,itemSort:(x,y)=>y.parsed.y-x.parsed.y, callbacks: mode==='gained'?{label:ctx=>ctx.dataset.label+": "+(ctx.parsed.y>=0?"+":"")+fmtFull(ctx.parsed.y)+" followers"}:{}}},
+            plugins:{legend:{display:false},tooltip:{...TT,itemSort:(x,y)=>y.parsed.y-x.parsed.y, callbacks:{label:ctx=>ctx.dataset.label+": "+(ctx.parsed.y>=0?"+":"")+fmtFull(ctx.parsed.y)+" followers"}}},
             scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}}));
       };
       drawFol('total');
@@ -1176,6 +1397,288 @@ function openTeamModal(id, initial){
   draw(initial);
 }
 
+/* ============ WIFFLE® VIEW ============
+   WIFFLE® is kept apart from the team pages. Same reporting, but every
+   connected WIFFLE® social account is its own line instead of a team. */
+async function loadWiffle(q, fresh){
+  STATE.q=q;
+  $("#content").style.display="none";
+  $("#wiffleContent").style.display="";
+  $("#overlay").classList.add("on");
+  $("#ovmsg").textContent=fresh?"Refreshing WIFFLE® from Metricool...":"Pulling WIFFLE® accounts from Metricool...";
+  $("#errbox").classList.remove("on");
+  try{
+    const r=await apiFetch("/api/metricool?view=wiffle&"+q+(fresh?("&fresh=1&_="+Date.now()):""));
+    if(gateFor(r)) return;
+    if(!r.ok) throw new Error("Server returned "+r.status);
+    const data=await r.json(); if(data.error) throw new Error(data.error);
+    STATE.wdata=data; STATE.wq=q;
+    showShared(); renderWiffle(); $("#dot").classList.remove("err");
+    $("#synced").textContent="LIVE · synced "+new Date(data.generatedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
+  }catch(e){
+    $("#dot").classList.add("err"); $("#synced").textContent="connection issue";
+    $("#errbox").classList.add("on");
+    $("#errbox").innerHTML="<b>Couldn't load WIFFLE® data.</b> "+esc(e.message)+".";
+  }finally{ $("#overlay").classList.remove("on"); }
+}
+function accWho(a){ return { name:"WIFFLE® "+a.name, label:a.name+(a.handle?" · @"+String(a.handle).replace(/^@/,""):""), picture:a.picture, accent:a.color }; }
+function accLogo(a, size){
+  const s=size||44;
+  return `<div class="logowrap rel" style="width:${s}px;height:${s}px;box-shadow:inset 0 0 0 2px ${a.color}">${logoChip("badge",a.picture,"WIFFLE",a.color)}<span class="netbadge" style="background:${a.color}">${esc(LBNET[a.network]||a.name)}</span></div>`;
+}
+function renderWiffle(){
+  const w=STATE.wdata, host=$("#wiffleContent"); if(!w) return;
+  destroyCharts();
+  if(!w.configured){
+    const seen=(w.brandsSeen||[]).map(b=>`${esc(b.label||"(no label)")} <span style="opacity:.6">#${esc(String(b.id))}</span>`).join(", ");
+    host.innerHTML=`<div class="section-title"><span>WIFFLE&reg;</span><span class="rule"></span></div>
+      <div class="panel" style="margin-top:12px"><div class="wnote"><b>No WIFFLE&reg; brand found in Metricool.</b> The view looks for a Metricool brand whose name contains "Wiffle" (other than the BLW teams and league page). ${isM()?`To pin it explicitly, add <b>WIFFLE_BLOG_IDS</b> in Vercel with the brand id(s), comma-separated, then redeploy.${seen?`<br><br>Brands visible to this Metricool login: ${seen}`:""}`:"Ask the master admin to connect it."}</div></div>`;
+    return;
+  }
+  const A=w.accounts, T=w.totals, lbl=esc(w.label);
+  const base=T.followers-T.netNew, delta=base>0?T.netNew/base*100:0;
+  const cards=[
+    {label:"Total followers",val:T.followers,accent:"#F3F3F1",spark:w.network.followers.map(p=>p.v),row:`<span class="delta ${delta>0?'up':delta<0?'down':'flat'}">${delta>0?'▲':delta<0?'▼':'•'} ${Math.abs(delta).toFixed(1)}%</span><span class="sub">${signed(T.netNew)} this window</span>`},
+    {label:"Views ("+lbl+")",val:T.views,accent:"#5B8DEF",spark:w.network.views.map(p=>p.v),row:`<span class="sub">account-level, all ${A.length} accounts</span>`},
+    {label:"Interactions ("+lbl+")",val:T.interactions,accent:"#FFB13C",spark:null,row:`<span class="sub">likes, comments, shares</span>`},
+    {label:"Impressions ("+lbl+")",val:T.impressions,accent:"#79E6C2",spark:null,row:`<span class="sub">${isM()&&T.content!=null?T.content+" posts · ":""}${fmtFull((T.saves||0)+(T.shares||0))} saves + shares</span>`},
+  ];
+  host.innerHTML=`
+    <div class="section-title"><span>WIFFLE&reg; &middot; ${A.length} account${A.length===1?"":"s"}</span><span class="rule"></span></div>
+    <div class="hero" id="wHero">${cards.map((k,i)=>`<div class="kpi" style="cursor:default;animation-delay:${i*.06}s"><div class="accent" style="background:${k.accent}"></div><div class="label">${k.label}</div><div class="val" id="wk${i}" data-v="0">0</div><div class="row">${k.row}</div><div class="sparkwrap">${k.spark?`<canvas id="wsp${i}"></canvas>`:""}</div></div>`).join("")}</div>
+    <div class="section-title"><span>Followers over time</span><span class="rule"></span></div>
+    <div class="grid g-2">
+      <div class="panel"><div class="head"><div class="t">Total WIFFLE&reg; followers</div><div class="meta">stacked by account</div></div><div class="chart-box" style="height:260px"><canvas id="wFolStack"></canvas></div></div>
+      <div class="panel"><div class="head"><div class="t">Follower-growth velocity</div><div class="meta">net new / day, by account</div></div><div class="chart-box" style="height:260px"><canvas id="wVel"></canvas></div></div>
+    </div>
+    <div class="legend">${A.map(a=>`<span><i style="background:${a.color}"></i>${esc(a.name)}${a.handle?` · @${esc(String(a.handle).replace(/^@/,""))}`:""}</span>`).join("")}</div>
+    <div class="grid g-2">
+      <div class="panel"><div class="head"><div class="t">Views over time</div><div class="meta">stacked, by account</div></div><div class="chart-box"><canvas id="wViews"></canvas></div></div>
+      <div class="panel"><div class="head"><div class="t">Interactions over time</div><div class="meta">by account, posts published that day</div></div><div class="chart-box"><canvas id="wInter"></canvas></div></div>
+    </div>
+    <div class="section-title"><span>Accounts</span><span class="rule"></span></div>
+    <div class="wroster" id="wRoster"></div>
+    <div class="section-title"><span>Top WIFFLE&reg; posts this window</span><span class="rule"></span></div>
+    <div class="lbgrid" id="wLeader"></div>
+    <div class="section-title"><span>What is working &middot; by format</span><span class="rule"></span></div>
+    <div class="grid g-2">
+      <div class="panel"><div class="head"><div class="t">Average interactions per post</div><div class="meta">by content format</div></div><div id="wFormatBars" style="margin-top:6px"></div></div>
+      <div class="panel"><div class="head"><div class="t">Format mix</div><div class="meta" id="wFormatMeta"></div></div><div class="chart-box" style="height:210px"><canvas id="wFormatMix"></canvas></div></div>
+    </div>
+    <div class="wnote">WIFFLE&reg; numbers are kept out of every BLW league total above. Followers are each account's own count (Instagram followers, TikTok followers, Facebook page follows, X followers, LinkedIn followers, YouTube subscribers).</div>`;
+  cards.forEach((k,i)=>{ countUp($("#wk"+i),k.val,950); if(k.spark&&k.spark.length) miniSpark("wsp"+i,k.spark,k.accent); });
+  STATE.charts.wFolStack=stackedFollowers($("#wFolStack"), A.map(a=>({label:a.name,color:a.color,series:a.series.followers})), "No follower data for this window.");
+  const acctLines=(canvas,key,opts)=>{
+    const set=new Set(); A.forEach(a=>a.series[key].forEach(p=>set.add(p.d))); const labels=[...set].sort();
+    if(!labels.length){ canvas.parentElement.innerHTML=`<div class="fc-note" style="margin-top:16px">No data for this window.</div>`; return null; }
+    const ds=A.map((a,i)=>{ const m=Object.fromEntries(a.series[key].map(p=>[p.d,p.v])); return {label:a.name,data:labels.map(d=>d in m?m[d]:(opts.zero?0:null)),borderColor:a.color,backgroundColor:opts.stacked?a.color+"40":a.color,borderWidth:opts.stacked?1.3:2,pointRadius:0,pointHoverRadius:4,tension:.32,spanGaps:true,fill:opts.stacked?(i===0?"origin":"-1"):false}; });
+    return new Chart(canvas,{type:"line",data:{labels:labels.map(mmdd),datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:{...TT,itemSort:(a,b)=>b.parsed.y-a.parsed.y}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{stacked:!!opts.stacked,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
+  };
+  STATE.charts.wVel=acctLines($("#wVel"),"netNew",{});
+  STATE.charts.wViews=acctLines($("#wViews"),"views",{stacked:true,zero:true});
+  STATE.charts.wInter=acctLines($("#wInter"),"interactions",{zero:true});
+  $("#wRoster").innerHTML=A.map((a,i)=>{ const up=a.netNew>=0;
+    return `<div class="team" data-k="${esc(a.key)}" tabindex="0" role="button" style="animation:rise .55s ${i*.04}s backwards">
+      <div class="top">${accLogo(a)}
+        <div class="who"><div class="name">${esc(a.name)}</div><div class="handle">${a.handle?"@"+esc(String(a.handle).replace(/^@/,"")):esc(a.brandLabel)}</div></div>
+        <div class="mom" style="background:${up?'rgba(124,241,168,.12)':'rgba(255,138,138,.12)'};color:${up?'var(--pos)':'var(--neg)'}">${up?'▲':'▼'} ${signed(a.netNew)} <span style="opacity:.7">(${Math.abs(a.mom).toFixed(1)}%)</span></div></div>
+      <div class="stats"><div class="stat"><div class="n">${fmt(a.followersNow)}</div><div class="k">${a.network==="youtube"?"Subscribers":"Followers"}</div></div><div class="stat"><div class="n">${fmt(a.views)}</div><div class="k">Views</div></div><div class="stat"><div class="n">${fmt(a.interactions)}</div><div class="k">Interactions</div></div></div>
+      <div class="minichart"><canvas id="wmc-${i}"></canvas></div></div>`; }).join("");
+  A.forEach((a,i)=>{ const arr=a.series.followers.map(p=>p.v); miniSpark("wmc-"+i,arr.length?arr:[0,0],a.color); });
+  $("#wRoster").querySelectorAll(".team").forEach(c=>{ const go=()=>openAccountModal(c.dataset.k); c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
+  const lb=w.leaderboard||[];
+  const byKey=Object.fromEntries(A.map(a=>[a.key,a]));
+  $("#wLeader").innerHTML=lb.length?postCards(lb,{who:p=>accWho(byKey[p.accountKey]||{name:p.account,color:p.accent})}):`<div class="fc-note">No WIFFLE&reg; posts with measured interactions in this window.</div>`;
+  renderFormatsInto(w.formatBreakdown,"#wFormatBars","wFormatMix","#wFormatMeta");
+}
+function openAccountModal(key){
+  const a=(STATE.wdata&&STATE.wdata.accounts||[]).find(x=>x.key===key); if(!a) return;
+  openModal(`<div class="modal-title">${accLogo(a,36)}WIFFLE&reg; ${esc(a.name)}</div>
+    <div class="modal-sub">${a.handle?"@"+esc(String(a.handle).replace(/^@/,""))+" · ":""}${fmtFull(a.followersNow)} ${a.network==="youtube"?"subscribers":"followers"} · ${fmtFull(a.interactions)} interactions${isM()&&a.contentCount!=null?` · ${a.contentCount} posts`:""} (${esc(STATE.wdata.label)})</div>
+    <div class="gchips">${gchip("Net new",a.color,signed(a.netNew),a.mom)}${gchip("Views",PCOL.fb,fmtFull(a.views),null)}${gchip("Impressions",PCOL.tt,fmtFull(a.impressions),null)}${gchip("Avg engagement",PCOL.ig,(a.engagementRate||0).toFixed(2)+"%",null)}</div>
+    <div class="mtoggle" id="amToggle"><div class="mt active" data-m="followers">Followers</div><div class="mt" data-m="netNew">Gained / day</div><div class="mt" data-m="views">Views</div><div class="mt" data-m="interactions">Interactions</div></div>
+    <div class="chart-box" style="height:280px;margin-top:8px"><canvas id="acctChart"></canvas></div>
+    ${(a.topPosts||[]).length?`<div class="modal-sub" style="margin-top:14px">Top posts</div><div class="lbgrid" style="margin-top:8px">${postCards(a.topPosts,{who:()=>accWho(a)})}</div>`:""}`);
+  const draw=m=>{ destroyModalCharts(); const s=a.series[m]||[];
+    if(!s.length){ $("#acctChart").parentElement.innerHTML=`<div class="fc-note" style="margin-top:16px">No ${m==="netNew"?"follower":m} data for this account in this window.</div>`; return; }
+    STATE.modalCharts.push(new Chart($("#acctChart"),{type:m==="netNew"?"bar":"line",data:{labels:s.map(p=>mmdd(p.d)),datasets:[{label:a.name,data:s.map(p=>p.v),borderColor:a.color,backgroundColor:m==="netNew"?s.map(p=>p.v<0?"#FF8A8A":a.color+"AA"):a.color+"33",borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:.3,fill:m!=="netNew"}]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{display:false},tooltip:TT},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}}));
+  };
+  $("#amToggle").querySelectorAll(".mt").forEach(b=>b.onclick=()=>{ $("#amToggle").querySelectorAll(".mt").forEach(x=>x.classList.remove("active")); b.classList.add("active"); draw(b.dataset.m); });
+  draw("followers");
+}
+function setScope(sc){
+  if(STATE.scope===sc) return;
+  STATE.scope=sc;
+  $("#scopeTabs").querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.s===sc));
+  $("#brandSub").textContent = sc==="wiffle" ? "WIFFLE® · every account" : "BLW League · 9 Teams";
+  renderAudit();
+  $("#eyebrow").textContent = sc==="wiffle" ? "Every WIFFLE® account on its own line, kept out of the BLW totals." : "Click any KPI or team to drill in. The whole league at a glance.";
+  if(sc==="wiffle"){
+    $("#content").style.display="none"; $("#wiffleContent").style.display="";
+    if(STATE.wdata && STATE.wq===STATE.q) renderWiffle(); else loadWiffle(STATE.q,false);
+    if(!STATE.ideaBrand || STATE.ideaBrand!=="wiffle"){ STATE.ideaBrand="wiffle"; renderIdeaChips(); }
+  }else{
+    $("#wiffleContent").style.display="none"; $("#content").style.display="";
+    if(STATE.data && STATE.data.label && STATE.lq===STATE.q) render(); else load(STATE.q,false);
+    if(STATE.ideaBrand==="wiffle"){ STATE.ideaBrand=null; renderIdeaChips(); }
+  }
+}
+$("#scopeTabs").querySelectorAll(".tab").forEach(t=>{ t.onclick=()=>setScope(t.dataset.s); t.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();setScope(t.dataset.s);} }; });
+
+/* ============ SCHEDULED · NEXT 7 DAYS ============
+   Rolling: the server window is always now -> now + 7 days. The feed re-polls
+   every 5 minutes and re-draws every minute so posts that went out drop off
+   and the "in 3h" labels stay true. */
+const TZC="America/Chicago";
+const dayKey=d=>new Intl.DateTimeFormat("en-CA",{timeZone:TZC,year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+async function loadSched(fresh){
+  try{
+    const r=await apiFetch("/api/metricool?view=scheduled"+(fresh?("&fresh=1&_="+Date.now()):""));
+    if(r.noauth||!r.ok) return;
+    const data=await r.json(); if(data.error) return;
+    STATE.sched=data; renderSched(); renderIdeaChips();
+  }catch(e){}
+}
+function relTime(ms){ const m=Math.round((ms-Date.now())/60000); if(m<1) return "now"; if(m<60) return "in "+m+"m"; const h=Math.round(m/60); if(h<36) return "in "+h+"h"; return "in "+Math.round(h/24)+"d"; }
+function renderSched(){
+  const S=STATE.sched; if(!S) return;
+  const now=Date.now(), end=now+7*86400000;
+  const brands=S.brands||[];
+  const bById=Object.fromEntries(brands.map(b=>[String(b.blogId),b]));
+  const f=STATE.schedFilter;
+  const live=(S.items||[]).filter(it=>{ const t=Date.parse(it.at); return t>=now-5*60000 && t<=end; });
+  const shown=live.filter(it=> f==="all" ? true : f==="teams" ? it.kind==="team" : String(it.blogId)===f || it.kind===f);
+  const chip=(key,label,pic,accent)=>`<span class="schip${f===key?" on":""}" data-f="${esc(key)}" tabindex="0" role="button">${pic!==undefined?logoChip("sl0",pic,label,accent):""}${esc(label)}</span>`;
+  $("#schedChips").innerHTML=chip("all","All brands")+chip("teams","BLW teams")+brands.map(b=>chip(String(b.blogId),b.kind==="team"?b.name.split(" ").slice(-1)[0]:b.name,b.picture,b.accent)).join("");
+  $("#schedChips").querySelectorAll(".schip").forEach(c=>{ const go=()=>{ STATE.schedFilter=c.dataset.f; renderSched(); }; c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
+  $("#schedMeta").textContent="Rolling window · updated "+new Date(S.generatedAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})+(S.errors&&S.errors.length?" · couldn't read "+S.errors.join(", "):"");
+  // Brands with nothing on the calendar for the next 48 hours.
+  const soon=now+48*3600000;
+  const quiet=brands.filter(b=>!live.some(it=>String(it.blogId)===String(b.blogId)&&Date.parse(it.at)<=soon));
+  $("#schedGap").innerHTML=quiet.length&&f==="all"?`<div class="schedgap">&#9888; <b>Nothing scheduled in the next 48 hours:</b> ${quiet.map(b=>esc(b.name)).join(", ")}</div>`:"";
+  const days=[]; for(let t=now;dayKey(new Date(t))<=dayKey(new Date(end));t+=86400000){ const k=dayKey(new Date(t)); if(!days.includes(k)) days.push(k); }
+  const todayK=dayKey(new Date(now)), tomK=dayKey(new Date(now+86400000));
+  $("#schedCols").innerHTML=days.map(k=>{
+    const items=shown.filter(it=>dayKey(new Date(it.at))===k);
+    const d=new Date(k+"T12:00:00");
+    const name=k===todayK?"Today":k===tomK?"Tomorrow":d.toLocaleDateString("en-US",{weekday:"short"});
+    return `<div class="sday${k===todayK?" today":""}"><div class="sdayh"><b>${name}</b><span>${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span></div>
+      <div class="slist">${items.length?items.map(it=>{ const b=bById[String(it.blogId)]||{}; const ms=Date.parse(it.at);
+        return `<div class="spost" style="--accent:${it.accent}">
+          <div class="st"><b>${new Date(ms).toLocaleTimeString("en-US",{timeZone:TZC,hour:"numeric",minute:"2-digit"})}</b><span class="rel">${relTime(ms)}</span></div>
+          <div class="sb">${logoChip("sl0",b.picture,it.brand,it.accent)}<span>${esc(it.brand)}</span></div>
+          <div class="sn">${(it.networks||[]).map(n=>`<i style="background:${NCOL[n]||"#C4C9D2"}">${esc(LBNET[n]||NLABEL[n]||n)}</i>`).join("")}<i class="ty">${esc(capw(it.type))}</i>${it.draft?'<i class="warn">Draft</i>':""}${it.failed?'<i class="warn">Error</i>':""}</div>
+          <div class="sbody">${it.image?`<div class="sthumb"><img src="${esc(it.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.textContent='${it.isVideo?"Video":"Media"}'"></div>`:(it.isVideo?`<div class="sthumb">Video</div>`:"")}
+          <div class="sx">${esc(it.text)||"(no caption)"}</div></div></div>`; }).join(""):`<div class="sempty">Nothing scheduled</div>`}</div></div>`;
+  }).join("");
+}
+setInterval(()=>{ if(STATE.sched && !document.hidden) renderSched(); }, 60000);
+setInterval(()=>{ if(STATE.sched && !document.hidden) loadSched(false); }, 5*60000);
+
+/* ============ POST IDEAS ============ */
+const IDEA_KEY=b=>"cc-ideas-v1:"+b;
+function ideaBrands(){
+  const out=[];
+  const teams=(STATE.data&&STATE.data.teams)||[];
+  const sb=(STATE.sched&&STATE.sched.brands)||[];
+  (teams.length?teams:sb.filter(b=>b.kind==="team")).forEach(t=>out.push({key:String(t.blogId),name:t.name,short:t.name.split(" ").slice(-1)[0],picture:t.picture,accent:t.accent}));
+  const blw=sb.find(b=>b.kind==="league")||(STATE.data&&STATE.data.blw);
+  out.push({key:"blw",name:"BLW League Page",short:"BLW League Page",picture:blw&&blw.picture,accent:"#7CF1A8"});
+  out.push({key:"wiffle",name:"WIFFLE®",short:"WIFFLE®",picture:(STATE.wdata&&STATE.wdata.brands&&STATE.wdata.brands[0]&&STATE.wdata.brands[0].picture)||(sb.find(b=>b.kind==="wiffle")||{}).picture,accent:"#F3F3F1"});
+  return out;
+}
+function renderIdeaChips(){
+  const host=$("#ideaChips"); if(!host) return;
+  const list=ideaBrands(); if(!STATE.ideaBrand) STATE.ideaBrand=STATE.scope==="wiffle"?"wiffle":(list[0]&&list[0].key);
+  host.innerHTML=list.map(b=>`<span class="schip${STATE.ideaBrand===b.key?" on":""}" data-b="${esc(b.key)}" tabindex="0" role="button">${logoChip("sl0",b.picture,b.name,b.accent)}${esc(b.short)}</span>`).join("");
+  host.querySelectorAll(".schip").forEach(c=>{ const go=()=>{ STATE.ideaBrand=c.dataset.b; renderIdeaChips(); }; c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
+  renderIdeas();
+}
+function scheduledFor(key){
+  const S=STATE.sched; if(!S) return [];
+  return (S.items||[]).filter(it=> key==="wiffle"?it.kind==="wiffle": key==="blw"?it.kind==="league": String(it.blogId)===key)
+    .map(it=>({at:new Date(it.at).toLocaleString("en-US",{timeZone:TZC,weekday:"short",hour:"numeric",minute:"2-digit"}),networks:it.networks,text:it.text}));
+}
+function perfFor(key){
+  const d=STATE.data, w=STATE.wdata;
+  const tp=p=>({network:p.network,type:p.type,interactions:p.interactions,impressions:p.impressions,date:(p.date||"").slice(0,10),text:p.text});
+  const fm=list=>(list||[]).filter(f=>f.enough!==false).map(f=>({type:f.type,avgInteractions:f.avgInteractions}));
+  if(key==="wiffle"){
+    if(!w||!w.configured) return {scheduled:scheduledFor(key)};
+    return {window:w.label,followers:w.totals.followers,netNew:w.totals.netNew,mom:w.totals.followers?w.totals.netNew/w.totals.followers*100:0,
+      byPlatform:w.accounts.map(a=>({name:a.name,followers:a.followersNow,views:a.views})),formats:fm(w.formatBreakdown),topPosts:(w.leaderboard||[]).slice(0,5).map(tp),scheduled:scheduledFor(key)};
+  }
+  if(!d) return {scheduled:scheduledFor(key)};
+  if(key==="blw"){ const b=d.blw||{};
+    return {window:d.label,engagementRate:b.engagementRatePost,leagueEngagement:d.totals.engagementRate,formats:fm(b.formatBreakdown),topPosts:(b.topPosts||[]).slice(0,5).map(tp),
+      players:(d.playerLeaderboard||[]).slice(0,6).map(p=>({name:p.name+" ("+p.team+")",interactions:p.interactions})),scheduled:scheduledFor(key)}; }
+  const t=d.teams.find(x=>String(x.blogId)===key); if(!t) return {scheduled:scheduledFor(key)};
+  return {window:d.label,followers:t.followersNow,netNew:t.netNew,mom:t.mom,engagementRate:t.engagementRatePost,leagueEngagement:d.totals.engagementRate,
+    byPlatform:["ig","tt","fb"].map(k=>({name:PNAME[k],followers:t.byPlatform.followers[k],views:t.byPlatform.views[k]})),
+    formats:fm(d.formatBreakdown),topPosts:(t.rankedTop||[]).slice(0,5).map(tp),players:(t.players||[]).slice(0,6).map(p=>({name:p.name,interactions:p.interactions})),scheduled:scheduledFor(key)};
+}
+function renderIdeas(){
+  const key=STATE.ideaBrand, host=$("#ideaList"), stat=$("#ideaStat"); if(!host||!key) return;
+  let cachedIdeas=null; try{ cachedIdeas=JSON.parse(localStorage.getItem(IDEA_KEY(key))||"null"); }catch(e){}
+  $("#ideaGo").textContent=STATE.ideasBusy?"Thinking...":(cachedIdeas?"Regenerate":"Generate ideas");
+  $("#ideaGo").classList.toggle("spin",!!STATE.ideasBusy);
+  if(STATE.ideasBusy){ stat.innerHTML="Reading the league feed, Shade and this brand's numbers, then writing ideas. About 20 to 40 seconds."; return; }
+  if(!cachedIdeas){ host.innerHTML=""; stat.innerHTML=`Ideas are written for one brand at a time from the live league feed (standings, results, leaders), the league notes in BLW Studio, the brand voice, real assets in Shade, this window's performance, and what is already scheduled. Pick a brand and press <b>Generate ideas</b>.`; return; }
+  const src=cachedIdeas.sources||{};
+  const parts=[src.league?"league feed":"<span style='color:var(--warn)'>league feed unavailable</span>", src.leagueNotes?"league notes":null, src.voice?"brand voice":null, src.shadeAssets?`${src.shadeAssets} Shade assets`:(src.shadeNote?`<span style='color:var(--warn)'>Shade: ${esc(src.shadeNote)}</span>`:null), "Metricool performance", src.scheduledConsidered?"7-day schedule":null].filter(Boolean);
+  stat.innerHTML=`<b>${esc(cachedIdeas.brandName)}</b> · written ${new Date(cachedIdeas.generatedAt).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})} · grounded in ${parts.join(", ")}`;
+  host.innerHTML=(cachedIdeas.ideas||[]).map((i,ix)=>`<div class="idea">
+      <div class="ih"><div class="it">${esc(i.title)}</div></div>
+      <div class="tags">${i.format?`<span>${esc(i.format)}</span>`:""}${(i.platforms||[]).map(p=>`<span style="color:${NCOL[p]||"var(--ink-2)"}">${esc(NLABEL[p]||p)}</span>`).join("")}${i.effort?`<span>${esc(i.effort)}</span>`:""}${i.timing?`<span>${esc(i.timing)}</span>`:""}</div>
+      ${i.whyNow?`<div class="why"><em>Why now</em>${esc(i.whyNow)}</div>`:""}
+      ${i.hook?`<div class="hook">${esc(i.hook)}</div>`:""}
+      ${(i.beats||[]).length?`<ol>${i.beats.map(b=>`<li>${esc(b)}</li>`).join("")}</ol>`:""}
+      ${(i.assets||[]).length?`<div class="assets">${i.assets.map(a=>`<div class="asset" title="${esc((a.folder||"")+"/"+a.name)}"><div class="at">${a.previewUrl?`<img src="${esc(a.previewUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:esc(a.kind||"")}</div><div class="an"><b>${esc(a.name)}</b><span>${esc(a.folder||"Shade")}</span></div></div>`).join("")}</div>`:""}
+      ${i.assetNote?`<div class="anote">${esc(i.assetNote)}</div>`:""}
+      ${i.caption?`<div class="cap">${esc(i.caption)}</div>`:""}
+      <div class="ifoot"><div class="sig">${(i.signals||[]).map(x=>`<span>${esc(x)}</span>`).join("")}</div>${i.caption?`<button class="btn copy" data-i="${ix}">Copy caption</button>`:""}</div>
+    </div>`).join("");
+  host.querySelectorAll(".copy").forEach(b=>b.onclick=()=>{ const i=cachedIdeas.ideas[+b.dataset.i]; try{ navigator.clipboard.writeText(i.caption); b.textContent="Copied"; setTimeout(()=>b.textContent="Copy caption",1500); }catch(e){} });
+}
+async function generateIdeasFor(key){
+  if(STATE.ideasBusy) return;
+  STATE.ideasBusy=true; renderIdeas();
+  try{
+    if(key==="wiffle" && !STATE.wdata){ try{ const r=await apiFetch("/api/metricool?view=wiffle&"+STATE.q); if(r.ok){ STATE.wdata=await r.json(); STATE.wq=STATE.q; } }catch(e){} }
+    const r=await apiFetch("/api/metricool?view=ideas",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({brand:key,count:5,perf:perfFor(key)})});
+    if(gateFor(r)) return;
+    const data=await r.json().catch(()=>({error:"Bad response"}));
+    if(!r.ok||data.error) throw new Error(data.error||("Server returned "+r.status));
+    try{ localStorage.setItem(IDEA_KEY(key),JSON.stringify(data)); }catch(e){}
+    STATE.ideasBusy=false; if(STATE.ideaBrand===key) renderIdeas(); else renderIdeas();
+  }catch(e){
+    STATE.ideasBusy=false; renderIdeas();
+    $("#ideaStat").innerHTML=`<span style="color:var(--neg)"><b>Couldn't write ideas.</b> ${esc(e.message)}</span>`;
+  }finally{ STATE.ideasBusy=false; $("#ideaGo").classList.remove("spin"); }
+}
+$("#ideaGo").onclick=()=>{ if(STATE.ideaBrand) generateIdeasFor(STATE.ideaBrand); };
+
+/* ============ DATA CHECK (master only) ============
+   What each Metricool call actually returned, so a wrong metric name shows up
+   here as "0 of 9" instead of a silent zero on the dashboard. */
+function renderAudit(){
+  const host=$("#auditSection"); const a=STATE.data&&STATE.data.dataAudit;
+  if(!host) return;
+  if(!isM()||!a||STATE.scope!=="league"){ host.style.display="none"; host.innerHTML=""; return; }
+  host.style.display="";
+  const n=a.teams||9;
+  const tally=o=>Object.entries(o||{}).map(([k,v])=>`${esc(k)} ×${v}`).join(", ");
+  host.innerHTML=`<div class="section-title"><span>Data check &middot; master only</span><span class="rule"></span></div>
+    <div class="panel audit"><details><summary>Which Metricool metrics came back with data for this window (${esc(STATE.data.label)})</summary>
+      <table><tr><th>Metric</th><th>Teams with data</th></tr>${(a.metrics||[]).map(m=>`<tr><td>${esc(m.key)}</td><td class="${m.withData===0?"bad":m.withData===m.calls?"good":""}">${m.withData} of ${m.calls}</td></tr>`).join("")}</table>
+      <div class="fc-note"><b>Facebook views source:</b> ${tally(a.fbViews)}. <b>Instagram followers metric:</b> ${tally(a.igFollowers)}.<br>
+      <b>Saves source</b> IG: ${tally(a.saves.ig)} · TikTok: ${tally(a.saves.tt)} · FB: ${tally(a.saves.fb)}. <b>Shares source</b> IG: ${tally(a.shares.ig)} · TikTok: ${tally(a.shares.tt)} · FB: ${tally(a.shares.fb)}.<br>
+      <b>Per-post metric fields Metricool returned:</b> ${(a.postMetricKeys||[]).map(esc).join(", ")||"none"}.<br>
+      A metric at 0 of ${n} usually means the metric name or subject is wrong for that network, not that the teams had no activity.</div>
+    </details></div>`;
+}
+
 (function(){
   const pop=$("#rangePop"), tb=$("#customTab"), f=$("#rangeFrom"), t=$("#rangeTo"), err=$("#rangeErr");
   if(!pop||!tb) return;
@@ -1197,14 +1700,14 @@ function openTeamModal(id, initial){
     close();
     $("#tfTabs").querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
     tb.classList.add("active");
-    load("range=custom&from="+a+"&to="+b,false);
+    loadCurrent("range=custom&from="+a+"&to="+b,false);
   };
 })();
-$("#tfTabs").querySelectorAll(".tab:not(#customTab)").forEach(tab=>{ tab.setAttribute("tabindex","0"); tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); load(tab.dataset.q,false); }; tab.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();tab.click();} }; });
-$("#refreshBtn").onclick=()=>{ const b=$("#refreshBtn"); b.classList.add("spin"); load(STATE.q,true).finally(()=>b.classList.remove("spin")); };
+$("#tfTabs").querySelectorAll(".tab:not(#customTab)").forEach(tab=>{ tab.setAttribute("tabindex","0"); tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); loadCurrent(tab.dataset.q,false); }; tab.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();tab.click();} }; });
+$("#refreshBtn").onclick=()=>{ const b=$("#refreshBtn"); b.classList.add("spin"); Promise.all([loadCurrent(STATE.q,true),loadSched(true)]).finally(()=>b.classList.remove("spin")); };
 function tick(){ $("#clock").textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
 setInterval(tick,1000); tick();
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden && STATE.data && !$("#modal").classList.contains("on")) render(); });
+document.addEventListener("visibilitychange",()=>{ if(document.hidden || $("#modal").classList.contains("on")) return; if(STATE.scope==="wiffle"){ if(STATE.wdata) renderWiffle(); } else if(STATE.data) render(); if(STATE.sched) renderSched(); });
 
 const cv=$("#particles"),cx=cv.getContext("2d"); let W,Hh,parts;
 function initP(){ W=cv.width=innerWidth; Hh=cv.height=innerHeight; parts=Array.from({length:Math.min(80,Math.floor(W/18))},()=>({x:Math.random()*W,y:Math.random()*Hh,vx:(Math.random()-.5)*.16,vy:(Math.random()-.5)*.16,r:Math.random()*1.4+.4,a:Math.random()*.35+.1})); }
