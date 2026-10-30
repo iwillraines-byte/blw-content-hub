@@ -18,6 +18,21 @@
 
 export const RELEASES = [
   {
+    version: '5.7.0',
+    date: '2026-10-30',
+    kind: 'minor',
+    summary: 'v5.7.0 — Command Center: WIFFLE® view, 7-day scheduled feed, grounded post ideas, and data fixes',
+    items: [
+      'Fixed the Command Center locking you out with "Admins only" when you reopened or refreshed it a day later. The page now runs the same sign-in client as BLW Studio and refreshes an expired session on its own instead of sending a dead token.',
+      'Post counts and post counters on the Command Center are now master-admin only. For every other role they are removed on the server before the data reaches the browser, and the layout closes up around them (format share shows as a percentage instead).',
+      'New "Scheduled · next 7 days" feed: every brand\'s Metricool planner in one rolling, day-by-day view, with brand logos, platforms, drafts and errors flagged, a filter per brand, and a warning for any brand with nothing scheduled in the next 48 hours.',
+      'New WIFFLE® tab, kept separate from the BLW teams. Each WIFFLE® social account gets its own line: stacked total followers, growth velocity, views and interactions over time, account cards with drill-ins, top posts and format breakdown.',
+      'New "Post ideas" section, per team, the BLW league page or WIFFLE®. Ideas are written from the live league feed (standings, postseason, leaders, OPWR movers), your league notes, the brand voice, real assets found in Shade, this window\'s performance, and what is already scheduled, and they point at the Shade files to use.',
+      'Data fixes: Facebook views no longer double-count reels plays; Instagram saves now include reels (and use the correct posts metric); Instagram reel shares and Facebook shares are now counted; saves and shares come from per-post data when Metricool provides it. A master-only "Data check" panel shows which Metricool metrics returned data.',
+      'The team drill-in followers chart is now stacked by platform so its top edge is the team\'s total followers, and every top post card carries the team logo.',
+    ],
+  },
+  {
     version: '5.6.0',
     date: '2026-08-13',
     kind: 'minor',

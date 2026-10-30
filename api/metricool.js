@@ -1,30 +1,39 @@
 // api/metricool.js — BLW Command Center data API (Vercel serverless function).
 //
-// Pulls live Metricool data server-side and returns computed league metrics.
+// Pulls live Metricool data server-side and returns computed metrics.
 // Secrets come from env vars and are NEVER exposed to the browser:
 //   METRICOOL_TOKEN     (server-only — like SUPABASE_SERVICE_ROLE_KEY)
 //   METRICOOL_USER_ID
+//   WIFFLE_BLOG_IDS     (optional) comma-separated Metricool brand ids for the
+//                       WIFFLE® view. When unset the brand is found by name.
 //
-// Response is cached at the edge for 5 min (s-maxage); the dashboard's
-// Refresh button appends a cache-busting param to force a fresh pull.
+// Views (?view=):
+//   league     (default) the nine BLW team accounts + the BLW league page
+//   wiffle     the WIFFLE® brand, one row per connected social account
+//   scheduled  every brand's scheduled posts for the next 7 days
+//   ideas      POST — AI post ideas for one brand (see api/_cc-ideas.js)
+//   config     PUBLIC — Supabase URL + anon key so the static page can run
+//              the official auth client and refresh its own session
+//
+// Post counts are master-admin only. For every other role they are stripped
+// here, server-side, so they never reach the browser (see redactLeague).
+//
+// Results are cached in this function instance for 5 minutes, keyed by view
+// and query. Responses are private: they vary by role, so no shared CDN cache.
+// The dashboard's Refresh button sends fresh=1 to skip the cache.
 
 import { requireUser, requireRole } from './_supabase.js';
+import { checkRateLimit } from './_rate-limit.js';
+import {
+  TZ, NETMAP, TEAMS, BLW_BRAND, round, sum, sumVals, sumPairs, cap, lastVal, nonEmpty,
+  windowRange, makeApi, dsum, diffs, mergeDicts, carrySum, slist, fmtPairs, loadProfiles,
+  pickMetric, SAVE_KEYS, SHARE_KEYS,
+} from './_cc-core.js';
+import { buildWiffle, redactWiffle } from './_cc-wiffle.js';
+import { buildScheduled } from './_cc-schedule.js';
+import { generateIdeas } from './_cc-ideas.js';
 
-const BASE = "https://app.metricool.com/api";
-const TZ = "America/Chicago";
-const NETMAP = { instagram: "ig", tiktok: "tt", facebook: "fb" };
-
-const TEAMS = [
-  { blogId: 6201154, name: "Arizona Saguaros",         accent: "#C7F24E" },
-  { blogId: 6201162, name: "Atlanta Ballers",          accent: "#9AD1FF" },
-  { blogId: 6201165, name: "Boston Harbor Hawks",      accent: "#DAC79C" },
-  { blogId: 6201157, name: "Chicago Bats",             accent: "#C0162B" },
-  { blogId: 6201149, name: "Dallas Pandas",            accent: "#E8B53A" },
-  { blogId: 6201166, name: "Las Vegas Scorpions",      accent: "#C4C9D2" },
-  { blogId: 6201159, name: "Los Angeles Naturals",     accent: "#2E63E8" },
-  { blogId: 6200089, name: "Miami Mirage",             accent: "#79E6C2" },
-  { blogId: 6201828, name: "Philadelphia Wiffle Club", accent: "#34489E" },
-];
+export const maxDuration = 60;
 
 const ROSTER = {
   6201154: ["Andrew Ledet","Paul Marshall","Will Marshall","Edward Martinez","Brice Clark","Cooper Ruckel","Jackson Richardson"],
@@ -36,7 +45,7 @@ const ROSTER = {
   6200089: ["Tommy Hernandez","Cam Smith","Jeremy Adams","Jackson Albers","John Paul Gunn","Mike Stiles","Sean Hornberger"],
   6201828: ["Josh Wheeler","Dominic Citrowske","Chandler Melton","Kaiden Rice","Spencer Foss","Brody Livingston","Jimmy Cole"],
 };
-const BLW_BRAND = { blogId: 6532945, name: "BLW League Page", accent: "#7CF1A8", handle: "blwwiffleball" };
+export { ROSTER };
 // Attribution for BLW-league-page posts. New York has no tracked account of its own
 // but is included because league-page content is where its reach lives.
 const ATTR_HANDLES = {
@@ -70,7 +79,7 @@ const ATTR_ROSTER = {
   "Atlanta Ballers": ["Brett Caladie","Torin Roth","Jack Roth","Brandon Crone","Trevor Bauer","Cael Foreman","Connor Smith"],
   "New York Green Apples": ["Will Smithey","Gus Skibbe","Brendan Dudas","Reid Werner","Tyler Flakne","Sam Skibbe","James Kline"],
 };
-const ACCENT_BY_NAME = {};
+export { ATTR_ROSTER };
 const SUFFIX = /\b(jr|sr|ii|iii|iv)\b/g;
 const normText = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(SUFFIX, " ").replace(/\s+/g, " ").trim();
 const PLAYER_PAT = (() => {
@@ -89,122 +98,6 @@ function matchPlayers(text, pats) {
   const hits = [];
   for (const p of pats) if (padded.includes(" " + p.full + " ") || collapsed.includes(p.collapsed) || (p.useLast && padded.includes(" " + p.last + " "))) hits.push(p.name);
   return hits;
-}
-
-function round(v, nd = 0) { const f = Math.pow(10, nd); return Math.round((Number(v) || 0) * f) / f; }
-const sum = a => a.reduce((x, y) => x + y, 0);
-const sumVals = d => Object.values(d).reduce((a, b) => a + b, 0);
-const sumPairs = a => a.reduce((x, p) => x + p[1], 0);
-const cap = s => { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); };
-const pad = n => String(n).padStart(2, "0");
-const lastVal = d => { const ks = Object.keys(d).sort(); return ks.length ? d[ks[ks.length - 1]] : 0; };
-
-function offsetStr(d) {
-  try {
-    const v = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "longOffset" })
-      .formatToParts(d).find(p => p.type === "timeZoneName").value;
-    const m = v.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
-    if (!m) return "+00:00";
-    const sign = m[1][0];
-    const hh = pad(Math.abs(parseInt(m[1], 10)));
-    return `${sign}${hh}:${m[2] || "00"}`;
-  } catch (e) { return "+00:00"; }
-}
-function tzParts(d) {
-  const f = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
-  const p = Object.fromEntries(f.formatToParts(d).map(x => [x.type, x.value]));
-  return { y: +p.year, m: +p.month, d: +p.day };
-}
-const isoUTC = d => d.toISOString().replace(/\.\d{3}Z$/, "+00:00");
-const monLabel = (y, m) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", year: "numeric" }).format(new Date(Date.UTC(y, m - 1, 15)));
-
-function windowRange(days, rng, custom) {
-  const now = new Date();
-  if (rng === "custom" && custom && /^\d{4}-\d{2}-\d{2}$/.test(custom.from) && /^\d{4}-\d{2}-\d{2}$/.test(custom.to)) {
-    const [fy, fm, fd] = custom.from.split("-").map(Number);
-    const [ty, tm, td] = custom.to.split("-").map(Number);
-    const offS = offsetStr(new Date(Date.UTC(fy, fm - 1, fd, 6)));
-    const offE = offsetStr(new Date(Date.UTC(ty, tm - 1, td, 6)));
-    const fmtD = (y, m, d) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(Date.UTC(y, m - 1, d)));
-    const sameYear = fy === ty;
-    const label = fmtD(fy, fm, fd) + (sameYear ? "" : ", " + fy) + " to " + fmtD(ty, tm, td) + ", " + ty;
-    return { from: `${custom.from}T00:00:00${offS}`, to: `${custom.to}T23:59:59${offE}`, label };
-  }
-  if (rng === "mtd") {
-    const p = tzParts(now);
-    const off = offsetStr(new Date(Date.UTC(p.y, p.m - 1, 1, 6)));
-    return { from: `${p.y}-${pad(p.m)}-01T00:00:00${off}`, to: isoUTC(now), label: monLabel(p.y, p.m) + " MTD" };
-  }
-  if (rng === "prev_month") {
-    const p = tzParts(now); let py = p.y, pm = p.m - 1; if (pm < 1) { pm = 12; py--; }
-    const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
-    const offS = offsetStr(new Date(Date.UTC(py, pm - 1, 1, 6)));
-    const offE = offsetStr(new Date(Date.UTC(py, pm - 1, lastDay, 6)));
-    return { from: `${py}-${pad(pm)}-01T00:00:00${offS}`, to: `${py}-${pad(pm)}-${pad(lastDay)}T23:59:59${offE}`, label: monLabel(py, pm) };
-  }
-  const d = days || 30;
-  return { from: isoUTC(new Date(Date.now() - d * 86400000)), to: isoUTC(now), label: d + "D" };
-}
-
-function makeApi(token, userId) {
-  async function api(path, blogId, params = {}) {
-    const q = new URLSearchParams({ userId: String(userId) });
-    if (blogId !== "" && blogId != null) q.set("blogId", String(blogId));
-    for (const [k, v] of Object.entries(params)) if (v !== undefined) q.set(k, v);
-    try {
-      const r = await fetch(`${BASE}${path}?${q.toString()}`, { headers: { "X-Mc-Auth": token, "Accept": "application/json" } });
-      if (!r.ok) return { _error: r.status };
-      return await r.json();
-    } catch (e) { return { _error: "ERR", _detail: String(e).slice(0, 200) }; }
-  }
-  async function timeline(blogId, network, metric, from, to, subject) {
-    const d = await api("/v2/analytics/timelines", blogId, { network, metric, from, to, timezone: TZ, subject });
-    const out = {};
-    if (d && d.data && d.data[0] && Array.isArray(d.data[0].values)) {
-      for (const v of d.data[0].values) {
-        const day = (v.dateTime || "").slice(0, 10); const val = Number(v.value);
-        if (day && Number.isFinite(val)) out[day] = val;
-      }
-    }
-    return out;
-  }
-  return { api, timeline };
-}
-
-function dsum(...dicts) { const o = {}; for (const d of dicts) for (const k in d) o[k] = (o[k] || 0) + d[k]; return o; }
-function diffs(cum) { const ks = Object.keys(cum).sort(); const o = {}; for (let i = 1; i < ks.length; i++) o[ks[i]] = cum[ks[i]] - cum[ks[i - 1]]; return o; }
-function mergeDicts(dicts, how) {
-  const keys = new Set(); dicts.forEach(d => Object.keys(d).forEach(k => keys.add(k)));
-  const out = [];
-  [...keys].sort().forEach(day => {
-    const vals = dicts.filter(d => day in d).map(d => d[day]); if (!vals.length) return;
-    out.push([day, how === "mean" ? sum(vals) / vals.length : sum(vals)]);
-  });
-  return out;
-}
-function carrySum(dicts) {
-  const keys = new Set(); dicts.forEach(d => Object.keys(d).forEach(k => keys.add(k)));
-  const last = new Array(dicts.length).fill(null); const out = [];
-  [...keys].sort().forEach(day => {
-    let total = 0, seen = false;
-    dicts.forEach((d, i) => { if (day in d) last[i] = d[day]; if (last[i] != null) { total += last[i]; seen = true; } });
-    if (seen) out.push([day, total]);
-  });
-  return out;
-}
-const slist = (d, nd = 0) => Object.keys(d).sort().map(k => ({ d: k, v: nd ? round(d[k], nd) : Math.round(d[k]) }));
-const fmtPairs = s => s.map(p => ({ d: p[0], v: round(p[1], 2) }));
-
-async function loadProfiles(api) {
-  const data = await api("/admin/simpleProfiles", "", {});
-  const prof = {};
-  if (Array.isArray(data)) {
-    for (const b of data) {
-      const h = {}; for (const net of ["instagram", "tiktok", "facebook"]) if (b[net]) h[net] = b[net];
-      prof[b.id] = { picture: b.picture || null, handles: h };
-    }
-  }
-  return prof;
 }
 
 function attributePost(text) {
@@ -253,31 +146,64 @@ async function buildBLW(from, to, profiles, api) {
     contentCount: posts.length, impressions: imp, interactions: inter,
     engagementRatePost: posts.length ? round(engSum / posts.length, 2) : 0,
     attribution, unattributed, unattributedImpressions: unattImp,
+    unattributedPct: posts.length ? Math.round(unattributed / posts.length * 100) : 0,
     formatBreakdown, topPosts: ranked.slice(0, 12),
   };
 }
 
-async function buildTeam(t, from, to, profiles, api, tl) {
+// Which platforms are behind on cross-posting, by name only. Safe to send to
+// every role (no numbers); the master view still gets the raw counts too.
+function behindOf(counts) {
+  const max = Math.max(counts.ig, counts.tt, counts.fb);
+  if (!max) return [];
+  return ["ig", "tt", "fb"].filter(k => counts[k] < max);
+}
+
+async function buildTeam(t, from, to, profiles, mc) {
   const b = t.blogId;
-  const [ig_f, ig_views, ig_eng, tt_f, tt_views, tt_eng, fb_f, fb_eng, fb_mv, fb_reels, ig_saved, ig_shares, tt_shares, fb_vwatch, fb_vtime, resp] = await Promise.all([
-    tl(b, "instagram", "Followers", from, to, "account"),
+  const { api, timeline: tl, firstTimeline: ft } = mc;
+  const [ig_fR, ig_views, ig_eng, tt_f, tt_viewsR, tt_engR, fb_f, fb_engR, fb_mv,
+    ig_saves_p, ig_saved_r, ig_shares_p, ig_shares_r, tt_sharesR, fb_shares_p,
+    fb_vwatch, fb_vtime, resp] = await Promise.all([
+    // Metricool's catalog spells this "followers"; the original "Followers"
+    // is tried first because it is what this dashboard has always used.
+    ft(b, "instagram", [["Followers", "account"], ["followers", "account"]], from, to),
     tl(b, "instagram", "views", from, to, "account"),
     tl(b, "instagram", "engagement", from, to, "posts"),
     tl(b, "tiktok", "followers_count", from, to, "account"),
-    tl(b, "tiktok", "views", from, to, "video"),
-    tl(b, "tiktok", "engagement", from, to, "video"),
+    ft(b, "tiktok", [["views", "video"], ["views", undefined]], from, to),
+    ft(b, "tiktok", [["engagement", "video"], ["engagement", undefined]], from, to),
     tl(b, "facebook", "pageFollows", from, to, "account"),
-    tl(b, "facebook", "engagement", from, to, undefined),
+    ft(b, "facebook", [["engagement", "posts"], ["engagement", undefined]], from, to),
+    // Facebook "Views" (page_media_view) already counts reels plays. The old
+    // code added blue_reels_play_count on top, which double-counted every
+    // reel view. Reels plays are now only used as a fallback (below).
     tl(b, "facebook", "page_media_view", from, to, "account"),
-    tl(b, "facebook", "blue_reels_play_count", from, to, undefined),
-    tl(b, "instagram", "saved", from, to, "posts"),
+    // Instagram saves: feed posts report "saves", reels report "saved". The
+    // old code asked for "saved" on posts, which is not a posts metric, and
+    // never asked reels at all, so most saves were missing.
+    tl(b, "instagram", "saves", from, to, "posts"),
+    tl(b, "instagram", "saved", from, to, "reels"),
+    // Instagram shares: posts AND reels (reels were missing before).
     tl(b, "instagram", "shares", from, to, "posts"),
-    tl(b, "tiktok", "shares", from, to, "video"),
+    tl(b, "instagram", "shares", from, to, "reels"),
+    ft(b, "tiktok", [["shares", "video"], ["shares", undefined]], from, to),
+    // Facebook does expose post shares; the old code hard-coded them to 0.
+    tl(b, "facebook", "shares", from, to, "posts"),
     tl(b, "facebook", "post_video_avg_time_watched", from, to, undefined),
     tl(b, "facebook", "post_video_view_time", from, to, undefined),
     api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ }),
   ]);
-  const fb_views = dsum(fb_mv, fb_reels);
+  const ig_f = ig_fR.data, tt_views = tt_viewsR.data, tt_eng = tt_engR.data, fb_eng = fb_engR.data, tt_shares = tt_sharesR.data;
+  let fb_views = fb_mv, fbViewsSource = "page_media_view";
+  if (!nonEmpty(fb_mv)) {
+    const [reels, imps] = await Promise.all([
+      tl(b, "facebook", "blue_reels_play_count", from, to, "reels"),
+      tl(b, "facebook", "page_posts_impressions", from, to, "account"),
+    ]);
+    fb_views = dsum(reels, imps);
+    fbViewsSource = nonEmpty(fb_views) ? "reels plays + post impressions (fallback)" : "none";
+  }
   const posts = (resp && Array.isArray(resp.data)) ? resp.data : [];
 
   const fol = { ig: lastVal(ig_f), tt: lastVal(tt_f), fb: lastVal(fb_f) };
@@ -291,10 +217,17 @@ async function buildTeam(t, from, to, profiles, api, tl) {
   const posts_list = { ig: [], tt: [], fb: [] };
   const ranked = [];
   const eng_by = { ig: [], tt: [], fb: [] }, imp_by = { ig: 0, tt: 0, fb: 0 };
+  // Per-post saves/shares. Used whenever Metricool's per-post payload carries
+  // them, because they line up with the per-post impressions and interactions
+  // the rest of this page (and EMV) is built on.
+  const pp = { saves: { ig: 0, tt: 0, fb: 0 }, shares: { ig: 0, tt: 0, fb: 0 }, hasSave: { ig: false, tt: false, fb: false }, hasShare: { ig: false, tt: false, fb: false } };
+  const ppDaily = {};
+  const metricKeys = new Set();
   const fmt = {};
   const pats = PLAYER_PAT[b] || [], pAgg = {};
   for (const p of posts) {
     const net = NETMAP[p.network]; const m = p.metrics || {};
+    Object.keys(m).forEach(k => metricKeys.add(k));
     const inter = Math.round(m.INTERACTIONS || 0);
     const imp = Math.round(m.IMPRESSIONS || 0);
     const eng = Number(m.ENGAGEMENT) || 0;
@@ -313,6 +246,10 @@ async function buildTeam(t, from, to, profiles, api, tl) {
       const day = dt.slice(0, 10);
       if (day) { posts_daily[net][day] = (posts_daily[net][day] || 0) + 1; inter_daily[net][day] = (inter_daily[net][day] || 0) + (m.INTERACTIONS || 0); }
       posts_list[net].push({ date: dt, text: (p.text || "").slice(0, 140), link: p.link, interactions: inter, type: ty });
+      const sv = pickMetric(m, SAVE_KEYS), sh = pickMetric(m, SHARE_KEYS);
+      if (sv.has) { pp.hasSave[net] = true; pp.saves[net] += sv.v; }
+      if (sh.has) { pp.hasShare[net] = true; pp.shares[net] += sh.v; }
+      if (day && (sv.has || sh.has)) { ppDaily[net] = ppDaily[net] || {}; ppDaily[net][day] = (ppDaily[net][day] || 0) + sv.v + sh.v; }
     }
     ranked.push({
       team: t.name, accent: t.accent, blogId: b, network: p.network, type: ty,
@@ -323,19 +260,32 @@ async function buildTeam(t, from, to, profiles, api, tl) {
   for (const net of ["ig", "tt", "fb"]) posts_list[net].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   ranked.sort((a, b2) => (b2.interactions - a.interactions) || (b2.impressions - a.impressions));
 
+  // Saves / shares: per-post when available for that platform, otherwise the
+  // corrected timelines.
+  const tlSaves = { ig: sumVals(ig_saves_p) + sumVals(ig_saved_r), tt: 0, fb: 0 };
+  const tlShares = { ig: sumVals(ig_shares_p) + sumVals(ig_shares_r), tt: sumVals(tt_shares), fb: sumVals(fb_shares_p) };
+  const tlDaily = { ig: dsum(ig_saves_p, ig_saved_r, ig_shares_p, ig_shares_r), tt: tt_shares, fb: fb_shares_p };
+  const savesByPlatform = {}, sharesByPlatform = {}, ssSource = { saves: {}, shares: {} };
+  const dailyParts = [];
+  for (const net of ["ig", "tt", "fb"]) {
+    savesByPlatform[net] = Math.round(pp.hasSave[net] ? pp.saves[net] : tlSaves[net]);
+    sharesByPlatform[net] = Math.round(pp.hasShare[net] ? pp.shares[net] : tlShares[net]);
+    ssSource.saves[net] = pp.hasSave[net] ? "per-post" : (tlSaves[net] ? "timeline" : "none");
+    ssSource.shares[net] = pp.hasShare[net] ? "per-post" : (tlShares[net] ? "timeline" : "none");
+    dailyParts.push((pp.hasSave[net] || pp.hasShare[net]) ? (ppDaily[net] || {}) : (tlDaily[net] || {}));
+  }
+
   const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
   const engRateByPlatform = { ig: round(mean(eng_by.ig), 2), tt: round(mean(eng_by.tt), 2), fb: round(mean(eng_by.fb), 2) };
   const engAgg = { ig: { s: sum(eng_by.ig), n: eng_by.ig.length }, tt: { s: sum(eng_by.tt), n: eng_by.tt.length }, fb: { s: sum(eng_by.fb), n: eng_by.fb.length } };
   const engRate = round(mean([...eng_by.ig, ...eng_by.tt, ...eng_by.fb]), 2);
-  const savesByPlatform = { ig: Math.round(sumVals(ig_saved)), tt: 0, fb: 0 };
-  const sharesByPlatform = { ig: Math.round(sumVals(ig_shares)), tt: Math.round(sumVals(tt_shares)), fb: 0 };
   const players = Object.values(pAgg).map(a => ({ name: a.name, posts: a.posts, interactions: a.interactions, impressions: a.impressions, engAvg: round(a.engSum / a.posts, 2), items: a.items.sort((x, y) => y.interactions - x.interactions).slice(0, 6) })).sort((a, b) => b.interactions - a.interactions);
   const watchDays = Object.values(fb_vwatch).filter(v => v > 0);
   const watch = { avgSec: watchDays.length ? round(watchDays.reduce((a, b) => a + b, 0) / watchDays.length / 1000, 1) : 0, totalHrs: round(sumVals(fb_vtime) / 3.6e6, 1), days: watchDays.length };
 
   const prof = profiles[b] || {};
   return {
-    blogId: b, name: t.name, accent: t.accent, picture: prof.picture || null, handles: prof.handles || {},
+    blogId: b, name: t.name, accent: t.accent, teamId: t.teamId, picture: prof.picture || null, handles: prof.handles || {},
     followersNow: Math.round(fol.ig + fol.tt + fol.fb),
     followersByNetwork: { ig: Math.round(fol.ig), tt: Math.round(fol.tt), fb: Math.round(fol.fb) },
     netNew: Math.round(sumPairs(netnew_series)),
@@ -343,6 +293,7 @@ async function buildTeam(t, from, to, profiles, api, tl) {
     engagementRate: eng_series.length ? round(sumPairs(eng_series) / eng_series.length, 2) : 0,
     interactions: Math.round(inter_by.ig + inter_by.tt + inter_by.fb),
     contentCount: posts.length,
+    parity: { behind: behindOf(posts_by) },
     byPlatform: {
       followers: { ig: Math.round(fol.ig), tt: Math.round(fol.tt), fb: Math.round(fol.fb) },
       views: { ig: Math.round(sumVals(ig_views)), tt: Math.round(sumVals(tt_views)), fb: Math.round(sumVals(fb_views)) },
@@ -367,20 +318,23 @@ async function buildTeam(t, from, to, profiles, api, tl) {
     engAgg,
     impressions: Math.round(imp_by.ig + imp_by.tt + imp_by.fb),
     impressionsByPlatform: { ig: imp_by.ig, tt: imp_by.tt, fb: imp_by.fb },
-    saves: savesByPlatform.ig,
-    shares: sharesByPlatform.ig + sharesByPlatform.tt,
+    saves: savesByPlatform.ig + savesByPlatform.tt + savesByPlatform.fb,
+    shares: sharesByPlatform.ig + sharesByPlatform.tt + sharesByPlatform.fb,
     savesByPlatform, sharesByPlatform,
-    seriesSavesShares: slist(dsum(ig_saved, ig_shares, tt_shares)),
+    seriesSavesShares: slist(dsum(...dailyParts)),
     formats: fmt,
     players,
     watch,
     postsList: posts_list,
     topPosts: ranked.slice(0, 3),
     rankedTop: ranked.slice(0, 8),
+    _audit: { fbViews: fbViewsSource, igFollowers: ig_fR.used, ss: ssSource, metricKeys: [...metricKeys] },
   };
 }
 
-function buildInsights(teams, label) {
+const PLAT_NAME = { ig: "Instagram", tt: "TikTok", fb: "Facebook" };
+
+function buildInsights(teams, label, isMaster) {
   const out = [];
   const top = [...teams].sort((a, b) => b.netNew - a.netNew)[0];
   out.push({ kind: "Double down", team: top.name, accent: top.accent, title: "Double down on " + top.name,
@@ -405,31 +359,52 @@ function buildInsights(teams, label) {
   if (engPool.length) {
     const low = engPool.reduce((a, b) => b.engagementRate < a.engagementRate ? b : a);
     out.push({ kind: "Hook test", team: low.name, accent: low.accent, title: "Fix " + low.name + " with a stronger hook",
-      detail: `Reach is fine but engagement lags at ${low.engagementRate.toFixed(2)}% on ${low.contentCount} posts. Test a curiosity hook ('The real reason ...') or a question CTA in the first line to lift comments, which weigh more than likes.` });
+      detail: `Reach is fine but engagement lags at ${low.engagementRate.toFixed(2)}%${isMaster ? ` on ${low.contentCount} posts` : ""}. Test a curiosity hook ('The real reason ...') or a question CTA in the first line to lift comments, which weigh more than likes.` });
     const high = engPool.reduce((a, b) => b.engagementRate > a.engagementRate ? b : a);
     out.push({ kind: "Model it", team: high.name, accent: high.accent, title: high.name + " is the engagement benchmark",
       detail: `Top engagement rate in the league at ${high.engagementRate.toFixed(2)}%. Reverse-engineer its hooks and post structure and templatize them for the other eight teams.` });
   }
   const lowC = teams.reduce((a, b) => b.contentCount < a.contentCount ? b : a);
   out.push({ kind: "Cadence", team: lowC.name, accent: lowC.accent, title: lowC.name + " is under-posting",
-    detail: `Only ${lowC.contentCount} posts in ${label}, the thinnest cadence in the league. For accounts this early, volume is the cheapest growth lever, so batch a week of content and aim for 1-2 posts/day before any spend.` });
+    detail: isMaster
+      ? `Only ${lowC.contentCount} posts in ${label}, the thinnest cadence in the league. For accounts this early, volume is the cheapest growth lever, so batch a week of content and aim for 1-2 posts/day before any spend.`
+      : `The thinnest posting cadence in the league in ${label}. For accounts this early, volume is the cheapest growth lever, so batch a week of content and aim for 1-2 posts/day before any spend.` });
 
   const arr = [["Facebook", sum(teams.map(t => t.byPlatform.posts.fb))], ["Instagram", sum(teams.map(t => t.byPlatform.posts.ig))], ["TikTok", sum(teams.map(t => t.byPlatform.posts.tt))]];
   const thin = arr.reduce((a, b) => b[1] < a[1] ? b : a), fat = arr.reduce((a, b) => b[1] > a[1] ? b : a);
   if (fat[1] && thin[1] < fat[1]) {
     out.push({ kind: "Cross-post", team: "League", accent: "#5B8DEF", title: `Close the ${thin[0]} gap`,
-      detail: `Across the league this window: ${fat[1]} posts on ${fat[0]} vs only ${thin[1]} on ${thin[0]}. Mirror the top ${fat[0]} cuts to ${thin[0]} to reclaim that reach for free.` });
+      detail: isMaster
+        ? `Across the league this window: ${fat[1]} posts on ${fat[0]} vs only ${thin[1]} on ${thin[0]}. Mirror the top ${fat[0]} cuts to ${thin[0]} to reclaim that reach for free.`
+        : `${thin[0]} is running behind ${fat[0]} across the league this window. Mirror the top ${fat[0]} cuts to ${thin[0]} to reclaim that reach for free.` });
   }
   return out;
 }
 
+// Union of what each Metricool call returned across the nine teams, for the
+// master-only Data check panel.
+function summarizeAudit(mc, teams) {
+  const metrics = Object.entries(mc.audit).map(([key, a]) => ({ key, calls: a.calls, withData: a.withData })).sort((a, b) => a.key.localeCompare(b.key));
+  const keys = new Set(); teams.forEach(t => (t._audit.metricKeys || []).forEach(k => keys.add(k)));
+  const tally = (pick) => { const o = {}; teams.forEach(t => { const v = pick(t); o[v] = (o[v] || 0) + 1; }); return o; };
+  return {
+    metrics,
+    postMetricKeys: [...keys].sort(),
+    fbViews: tally(t => t._audit.fbViews),
+    igFollowers: tally(t => t._audit.igFollowers || "none"),
+    saves: { ig: tally(t => t._audit.ss.saves.ig), tt: tally(t => t._audit.ss.saves.tt), fb: tally(t => t._audit.ss.saves.fb) },
+    shares: { ig: tally(t => t._audit.ss.shares.ig), tt: tally(t => t._audit.ss.shares.tt), fb: tally(t => t._audit.ss.shares.fb) },
+    teams: teams.length,
+  };
+}
+
 export async function compute(days, rng, token, userId, custom) {
   const { from, to, label } = windowRange(days, rng, custom);
-  const { api, timeline } = makeApi(token, userId);
-  const profiles = await loadProfiles(api);
+  const mc = makeApi(token, userId);
+  const profiles = await loadProfiles(mc.api);
   const [teams, blw] = await Promise.all([
-    Promise.all(TEAMS.map(t => buildTeam(t, from, to, profiles, api, timeline))),
-    buildBLW(from, to, profiles, api),
+    Promise.all(TEAMS.map(t => buildTeam(t, from, to, profiles, mc))),
+    buildBLW(from, to, profiles, mc.api),
   ]);
   teams.forEach(tm => { tm.mom = tm.followersNow ? round(tm.netNew / tm.followersNow * 100, 1) : 0; });
 
@@ -455,8 +430,10 @@ export async function compute(days, rng, token, userId, custom) {
     fmtAll[ty] = fmtAll[ty] || { count: 0, inter: 0, imp: 0, engSum: 0 };
     fmtAll[ty].count += f.count; fmtAll[ty].inter += f.inter; fmtAll[ty].imp += f.imp; fmtAll[ty].engSum += f.engSum;
   }
+  const fmtTotal = sum(Object.values(fmtAll).map(f => f.count)) || 1;
   const formatBreakdown = Object.entries(fmtAll).map(([type, f]) => ({
-    type, count: f.count, interactions: f.inter, impressions: f.imp,
+    type, count: f.count, share: round(f.count / fmtTotal * 100, 1), enough: f.count >= 2,
+    interactions: f.inter, impressions: f.imp,
     avgInteractions: round(f.inter / f.count, 1), avgEngagement: round(f.engSum / f.count, 2),
   })).sort((a, b) => b.avgInteractions - a.avgInteractions);
   const engL = { ig: { s: 0, n: 0 }, tt: { s: 0, n: 0 }, fb: { s: 0, n: 0 } };
@@ -464,8 +441,8 @@ export async function compute(days, rng, token, userId, custom) {
   const engRateByPlatform = { ig: round(engL.ig.n ? engL.ig.s / engL.ig.n : 0, 2), tt: round(engL.tt.n ? engL.tt.s / engL.tt.n : 0, 2), fb: round(engL.fb.n ? engL.fb.s / engL.fb.n : 0, 2) };
   const engRate = round((engL.ig.s + engL.tt.s + engL.fb.s) / Math.max(1, engL.ig.n + engL.tt.n + engL.fb.n), 2);
   const impByPlat = { ig: sum(teams.map(t => t.impressionsByPlatform.ig)), tt: sum(teams.map(t => t.impressionsByPlatform.tt)), fb: sum(teams.map(t => t.impressionsByPlatform.fb)) };
-  const savesByPlat = { ig: sum(teams.map(t => t.savesByPlatform.ig)), tt: 0, fb: 0 };
-  const sharesByPlat = { ig: sum(teams.map(t => t.sharesByPlatform.ig)), tt: sum(teams.map(t => t.sharesByPlatform.tt)), fb: 0 };
+  const savesByPlat = { ig: sum(teams.map(t => t.savesByPlatform.ig)), tt: sum(teams.map(t => t.savesByPlatform.tt)), fb: sum(teams.map(t => t.savesByPlatform.fb)) };
+  const sharesByPlat = { ig: sum(teams.map(t => t.sharesByPlatform.ig)), tt: sum(teams.map(t => t.sharesByPlatform.tt)), fb: sum(teams.map(t => t.sharesByPlatform.fb)) };
   const playersAll = teams.flatMap(t => (t.players || []).map(pl => ({ ...pl, team: t.name, accent: t.accent, blogId: t.blogId, amp: t.followersNow ? round(pl.impressions / t.followersNow, 1) : 0 })));
   const nz = arr => { const mx = Math.max(1, ...arr); return arr.map(v => v / mx); };
   const pI = nz(playersAll.map(x => x.interactions)), pP = nz(playersAll.map(x => x.impressions)), pE = nz(playersAll.map(x => x.engAvg));
@@ -474,6 +451,9 @@ export async function compute(days, rng, token, userId, custom) {
   const rosterCoverage = { withRoster: teams.filter(t => (ROSTER[t.blogId] || []).length).length, total: teams.length, missing: teams.filter(t => !(ROSTER[t.blogId] || []).length).map(t => t.name), untracked: ["New York Green Apples", "San Diego Orcas"] };
   const wTeams = teams.filter(t => t.watch.days > 0);
   const watchLeague = { totalHrs: round(sum(teams.map(t => t.watch.totalHrs)), 1), avgSec: wTeams.length ? round(sum(wTeams.map(t => t.watch.avgSec)) / wTeams.length, 1) : 0, teamsWithData: wTeams.length, platform: "facebook" };
+  const parityBehind = behindOf(totals_platform.posts);
+  const dataAudit = summarizeAudit(mc, teams);
+  teams.forEach(t => { delete t._audit; });
 
   return {
     generatedAt: new Date().toISOString(), from, to, label, days, range: rng, timezone: TZ,
@@ -485,7 +465,7 @@ export async function compute(days, rng, token, userId, custom) {
     },
     leaderboard, formatBreakdown, watch: watchLeague, playerLeaderboard, rosterCoverage, blw,
     engRateByPlatform, impressionsByPlatform: impByPlat, savesByPlatform: savesByPlat, sharesByPlatform: sharesByPlat,
-    totalsByPlatform: totals_platform,
+    totalsByPlatform: totals_platform, parityBehind,
     network: {
       followers: fmtPairs(carrySum(sd("followers"))), views: fmtPairs(mergeDicts(sd("views"), "sum")),
       netNew: fmtPairs(mergeDicts(sd("netNew"), "sum")), engagement: fmtPairs(mergeDicts(sd("engagement"), "mean")),
@@ -494,36 +474,134 @@ export async function compute(days, rng, token, userId, custom) {
       interactionsByPlatform: dailyByPlat(inter_by_platform),
     },
     teams,
-    insights: buildInsights(teams, label),
+    insights: buildInsights(teams, label, true),
+    insightsPublic: buildInsights(teams, label, false),
+    dataAudit,
   };
 }
 
+// Strip every post count before the payload leaves the server for a
+// non-master viewer. Works on a deep copy so the cached original keeps them.
+export function redactLeague(src) {
+  const d = structuredClone(src);
+  delete d.totals.content;
+  delete d.totalsByPlatform.posts;
+  delete d.network.postsByPlatform;
+  d.insights = d.insightsPublic;
+  delete d.insightsPublic;
+  delete d.dataAudit;
+  d.formatBreakdown = d.formatBreakdown.map(({ count, ...f }) => f);
+  d.playerLeaderboard = d.playerLeaderboard.map(({ posts, ...p }) => p);
+  for (const t of d.teams) {
+    delete t.contentCount;
+    delete t.byPlatform.posts;
+    delete t.seriesByPlatform.posts;
+    delete t.formats;
+    t.players = (t.players || []).map(({ posts, ...p }) => p);
+  }
+  if (d.blw) {
+    delete d.blw.contentCount;
+    delete d.blw.unattributed;
+    d.blw.attribution = (d.blw.attribution || []).map(({ posts, ...a }) => a);
+    d.blw.formatBreakdown = (d.blw.formatBreakdown || []).map(({ count, ...f }) => f);
+  }
+  d.viewer = { isMaster: false };
+  return d;
+}
+function masterLeague(src) {
+  const d = { ...src };
+  delete d.insightsPublic;
+  d.viewer = { isMaster: true };
+  return d;
+}
+
+// ── Per-instance cache ──────────────────────────────────────────────────────
+const CACHE = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+async function cached(key, ttl, fresh, fn) {
+  const hit = CACHE.get(key);
+  if (!fresh && hit && Date.now() - hit.at < ttl) return hit.value;
+  const value = await fn();
+  CACHE.set(key, { at: Date.now(), value });
+  if (CACHE.size > 40) CACHE.delete(CACHE.keys().next().value);
+  return value;
+}
+
+function parseWindow(q) {
+  const rng = q.range || null;
+  const days = rng ? null : (parseInt(q.days, 10) || 30);
+  const custom = rng === "custom" ? { from: String(q.from || ""), to: String(q.to || "") } : null;
+  return { rng, days, custom };
+}
+
+function readBody(req) {
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  return body || {};
+}
+
 export default async function handler(req, res) {
+  const q = req.query || {};
+  const view = String(q.view || "league");
+
+  // Public: the Supabase project URL + anon key. Both are already shipped in
+  // the BLW Studio bundle; the static Command Center page needs them to run
+  // the official auth client, which refreshes expired sessions on its own.
+  if (view === "config") {
+    const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.status(200).json({ supabaseUrl: url, anonKey });
+    return;
+  }
+
   // Gated to the content team and up: master_admin / admin / content accounts
   // may read league data. (Athletes and fans cannot — this is internal
   // cross-property reporting, not athlete-facing.)
   const ctx = await requireUser(req, res);
   if (!ctx) return; // 401 already sent
   if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return; // 403 already sent
+  const isMaster = ctx.profile?.role === "master_admin";
 
   const token = process.env.METRICOOL_TOKEN, userId = process.env.METRICOOL_USER_ID;
   if (!token || !userId) {
     res.status(500).json({ error: "METRICOOL_TOKEN / METRICOOL_USER_ID not set in Vercel env vars" });
     return;
   }
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Content-Type", "application/json");
+  const fresh = q.fresh === "1";
   try {
-    const q = req.query || {};
-    const rng = q.range || null;
-    const days = rng ? null : (parseInt(q.days, 10) || 30);
-    const custom = rng === "custom" ? { from: String(q.from || ""), to: String(q.to || "") } : null;
-    if (rng === "custom" && !(custom.from && custom.to)) {
-      res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" });
+    if (view === "league") {
+      const { rng, days, custom } = parseWindow(q);
+      if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
+      const key = `league|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
+      const data = await cached(key, CACHE_TTL, fresh, () => compute(days, rng, token, userId, custom));
+      res.status(200).send(JSON.stringify(isMaster ? masterLeague(data) : redactLeague(data)));
       return;
     }
-    const data = await compute(days, rng, token, userId, custom);
-    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
-    res.setHeader("Content-Type", "application/json");
-    res.status(200).send(JSON.stringify(data));
+    if (view === "wiffle") {
+      const { rng, days, custom } = parseWindow(q);
+      if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
+      const key = `wiffle|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
+      const data = await cached(key, CACHE_TTL, fresh, () => buildWiffle(windowRange(days, rng, custom), token, userId));
+      res.status(200).send(JSON.stringify(isMaster ? { ...data, viewer: { isMaster: true } } : redactWiffle(data)));
+      return;
+    }
+    if (view === "scheduled") {
+      const data = await cached("scheduled", 2 * 60 * 1000, fresh, () => buildScheduled(token, userId));
+      res.status(200).send(JSON.stringify({ ...data, viewer: { isMaster } }));
+      return;
+    }
+    if (view === "ideas") {
+      if (req.method !== "POST") { res.status(405).json({ error: "POST required" }); return; }
+      if (await checkRateLimit(ctx, 'ideas', res)) return;
+      const body = readBody(req);
+      const out = await generateIdeas(body, { sb: ctx.sb, roster: ATTR_ROSTER });
+      res.status(out.error ? (out.status || 500) : 200).send(JSON.stringify(out));
+      return;
+    }
+    res.status(400).json({ error: "Unknown view" });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
   }
