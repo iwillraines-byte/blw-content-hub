@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '5.7.1',
+    date: '2026-10-31',
+    kind: 'patch',
+    summary: 'v5.7.1 — Command Center schedule becomes a two-week calendar, with posts you can plan right on it',
+    items: [
+      'The scheduled feed is now a connected two-week calendar (this week and next, Sunday to Saturday). Today is marked, past days dim, and posts already published earlier in the week stay visible.',
+      'Plan posts that are not in Metricool: press "+ Plan a post", or the + on any day, to add a brand, date, optional time, platforms, format, status (Idea, In progress, Ready), a working title and notes. Planned posts show dashed on the calendar, can be edited or deleted, are visible only on the Command Center, and are never sent to Metricool.',
+      'Platforms on each post are now small icons instead of colored blocks, and clicking any Metricool post opens its preview, caption, platforms and status.',
+      'Removed the "nothing scheduled in the next 48 hours" warning.',
+      'Post ideas now also avoid repeating anything already on the planned list.',
+    ],
+  },
+  {
     version: '5.7.0',
     date: '2026-10-30',
     kind: 'minor',

@@ -2,8 +2,9 @@
 //
 // Reads Metricool's planner (GET /v2/scheduler/posts) for each BLW team, the
 // BLW league page and the WIFFLE® brand(s), and returns one flat list sorted
-// by publish time. The window is always "now through 7 days from now", so the
-// feed rolls forward on its own; the page re-polls every few minutes.
+// by publish time. The window is this week and next (Sunday through the
+// following Saturday, Central time), matching the two-week calendar on the
+// page. It rolls forward on its own; the page re-polls every few minutes.
 
 import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, makeApi, loadProfiles, tzDate } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
@@ -29,6 +30,15 @@ export function zonedToMs(local, tz) {
   let ms = guess - tzOffsetMin(tz, new Date(guess)) * 60000;
   ms = guess - tzOffsetMin(tz, new Date(ms)) * 60000; // second pass settles DST edges
   return ms;
+}
+
+// Sunday of this week through Saturday of next week, as Central dates.
+export function calendarWindow(now = Date.now()) {
+  const today = tzDate(new Date(now));
+  const dow = new Date(today + "T12:00:00Z").getUTCDay();
+  const start = new Date(Date.parse(today + "T12:00:00Z") - dow * 86400000);
+  const end = new Date(start.getTime() + 13 * 86400000);
+  return { startDay: start.toISOString().slice(0, 10), endDay: end.toISOString().slice(0, 10), today };
 }
 
 function mediaOf(p) {
@@ -59,9 +69,9 @@ export async function buildScheduled(token, userId) {
   ].map(b => ({ ...b, picture: (profiles[b.blogId] || {}).picture || null }));
 
   const now = Date.now();
-  const endMs = now + 7 * 86400000;
-  const startDay = tzDate(new Date(now));
-  const endDay = tzDate(new Date(endMs));
+  const { startDay, endDay } = calendarWindow(now);
+  const startMs = zonedToMs(`${startDay}T00:00:00`, TZ);
+  const endMs = zonedToMs(`${endDay}T23:59:59`, TZ);
   const items = [], errors = [];
 
   await Promise.all(brands.map(async br => {
@@ -74,11 +84,11 @@ export async function buildScheduled(token, userId) {
       const pd = p.publicationDate || {};
       const local = pd.dateTime || p.dateTime || p.date || "";
       const ms = zonedToMs(local, pd.timezone || p.timezone || TZ);
-      if (!Number.isFinite(ms) || ms < now - 15 * 60000 || ms > endMs) continue;
+      if (!Number.isFinite(ms) || ms < startMs || ms > endMs) continue;
       const providers = Array.isArray(p.providers) ? p.providers : [];
       const nets = [...new Set(providers.map(x => normNet(x.network || x.provider)).filter(Boolean))];
       const statuses = providers.map(x => String(x.status || "").toUpperCase()).filter(Boolean);
-      if (statuses.length && statuses.every(s => s === "PUBLISHED")) continue;
+      const published = statuses.length > 0 && statuses.every(s => s === "PUBLISHED");
       const media = mediaOf(p);
       items.push({
         id: String(p.id || p.uuid || `${br.blogId}-${ms}`),
@@ -90,14 +100,14 @@ export async function buildScheduled(token, userId) {
         image: media.image, isVideo: media.isVideo, mediaCount: media.count,
         draft: !!p.draft,
         failed: statuses.some(s => s === "ERROR" || s === "FAILED"),
+        published,
       });
     }
   }));
   items.sort((a, b) => a.at.localeCompare(b.at));
   return {
     generatedAt: new Date().toISOString(), timezone: TZ,
-    from: new Date(now).toISOString(), to: new Date(endMs).toISOString(),
-    brands, items, errors,
-    windowLabel: `${startDay} to ${endDay}`,
+    from: new Date(startMs).toISOString(), to: new Date(endMs).toISOString(),
+    startDay, endDay, brands, items, errors,
   };
 }
