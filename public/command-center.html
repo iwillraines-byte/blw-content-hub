@@ -321,38 +321,12 @@
   .lbteam{display:flex;align-items:center;gap:6px}
   .lbteam .mini{width:15px;height:15px;border-radius:4px;overflow:hidden;flex:none;background:#16171b}
   .lbteam .mini img{width:100%;height:100%;object-fit:cover;display:block}
-  .schedbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}
   .schedchips{display:flex;gap:6px;flex-wrap:wrap}
   .schip{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-2);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:5px 9px;cursor:pointer;transition:.16s;white-space:nowrap}
   .schip.on{background:rgba(255,255,255,.11);color:var(--ink);border-color:var(--line-2)}
   .schip:focus-visible{outline:2px solid var(--pos)}
   .schip .sl0{width:16px;height:16px;border-radius:4px;overflow:hidden;background:#16171b;flex:none}
   .schip .sl0 img{width:100%;height:100%;object-fit:cover;display:block}
-  .schedmeta{font-size:11px;color:var(--ink-2)}
-  .schedgap{font-size:11.5px;color:#ffdca0;background:rgba(255,192,76,.08);border:1px solid rgba(255,192,76,.25);border-radius:10px;padding:8px 11px;margin-top:10px;line-height:1.5}
-  .schedcols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(150px,1fr);gap:10px;margin-top:10px;overflow-x:auto;padding-bottom:4px}
-  .sday{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:10px;min-height:120px;display:flex;flex-direction:column}
-  .sday.today{border-color:var(--line-2)}
-  .sdayh{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);padding-bottom:7px;border-bottom:1px solid var(--line)}
-  .sdayh b{color:var(--ink);font-weight:700}
-  .slist{display:flex;flex-direction:column;gap:7px;margin-top:8px;max-height:250px;overflow:auto}
-  .spost{display:flex;flex-direction:column;gap:6px;background:rgba(255,255,255,.025);border:1px solid var(--line);border-left:2px solid var(--accent,#555);border-radius:10px;padding:8px}
-  .spost .st{display:flex;align-items:center;gap:7px;font-size:11px}
-  .spost .st b{font-size:12px}
-  .spost .st .rel{color:var(--ink-3);margin-left:auto;font-size:10px}
-  .spost .sb{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;min-width:0}
-  .spost .sb span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .spost .sb .sl0{width:18px;height:18px;border-radius:5px;overflow:hidden;background:#16171b;flex:none}
-  .spost .sb .sl0 img{width:100%;height:100%;object-fit:cover;display:block}
-  .spost .sn{display:flex;gap:4px;flex-wrap:wrap}
-  .spost .sn i{font-style:normal;font-size:9px;font-weight:700;letter-spacing:.03em;padding:2px 5px;border-radius:5px;color:#0A0B0D}
-  .spost .sn .ty{background:rgba(255,255,255,.08);color:var(--ink-2)}
-  .spost .sn .warn{background:var(--warn)}
-  .spost .sbody{display:flex;gap:7px;align-items:flex-start}
-  .spost .sthumb{width:46px;height:46px;flex:none;font-size:8px;border-radius:7px;overflow:hidden;background:#15161a;display:grid;place-items:center;color:var(--ink-3);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
-  .spost .sthumb img{width:100%;height:100%;object-fit:cover;display:block}
-  .spost .sx{font-size:10.5px;color:var(--ink-2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-width:0}
-  .sempty{font-size:11px;color:var(--ink-3);margin-top:10px}
   .wnote{font-size:12px;color:var(--ink-2);margin-top:12px;line-height:1.55}
   .wroster{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px;margin-top:12px}
   .netbadge{position:absolute;right:-4px;bottom:-4px;font-size:8px;font-weight:800;letter-spacing:.03em;padding:2px 4px;border-radius:5px;color:#0A0B0D}
@@ -393,6 +367,96 @@
   .audit td,.audit th{padding:5px 8px;border-top:1px solid var(--line);text-align:left;color:var(--ink-2)}
   .audit th{color:var(--ink);font-weight:600}
   .audit .bad{color:var(--neg);font-weight:700}.audit .good{color:var(--pos);font-weight:700}
+
+  /* ── Schedule calendar ── */
+  .calbar{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:12px}
+  .calrange{font-size:15px;font-weight:600;letter-spacing:-.01em}
+  .callegend{display:flex;gap:14px;margin-top:5px;font-size:11px;color:var(--ink-2)}
+  .callegend span{display:inline-flex;align-items:center;gap:6px}
+  .callegend .lg{width:14px;height:9px;border-radius:3px;display:inline-block}
+  .callegend .lg.mc{background:rgba(255,255,255,.10);box-shadow:inset 2px 0 0 var(--ink-2)}
+  .callegend .lg.pl{border:1px dashed var(--ink-2)}
+  .calright{display:flex;gap:8px;align-items:center}
+  .sel{font-family:var(--body);font-size:12px;color:var(--ink);background:rgba(255,255,255,.05) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23A6AAB2' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center;border:1px solid var(--line-2);padding:8px 30px 8px 12px;border-radius:9px;-webkit-appearance:none;appearance:none;cursor:pointer;color-scheme:dark}
+  .sel:focus-visible{outline:2px solid var(--pos);outline-offset:2px}
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:12px;border:1px solid var(--line-2);border-radius:14px;overflow:hidden;background:rgba(14,15,18,.72);backdrop-filter:blur(14px)}
+  .calwd{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);padding:9px 11px;border-bottom:1px solid var(--line-2)}
+  .calwd + .calwd, .cday:not(:nth-child(7n+8)){border-left:1px solid var(--line)}
+  .cday{position:relative;min-height:150px;padding:8px 8px 9px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;transition:background .15s}
+  .cal .cday:nth-child(-n+14){border-top:none}
+  .cday:hover{background:rgba(255,255,255,.018)}
+  .cday.past{background:rgba(0,0,0,.18)}
+  .cday.today{background:rgba(255,255,255,.035);box-shadow:inset 0 2px 0 var(--ink)}
+  .modal-card.narrow{width:min(660px,96vw)}
+  .cday.past .cdn,.cday.past .citem{opacity:.5}
+  .cdh{display:flex;align-items:center;gap:6px;min-height:22px}
+  .cdn{font-size:12.5px;font-weight:600;color:var(--ink-2);min-width:22px;height:22px;display:grid;place-items:center;border-radius:7px;padding:0 4px;font-variant-numeric:tabular-nums}
+  .cday.today .cdn{background:var(--ink);color:#0A0B0D}
+  .cdw{display:none;font-size:11px;color:var(--ink-3)}
+  .cdtag{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+  .cday.today .cdtag{color:var(--ink-2)}
+  .cadd{margin-left:auto;width:22px;height:22px;border-radius:7px;border:1px solid transparent;background:none;color:var(--ink-3);font-size:15px;line-height:1;cursor:pointer;opacity:0;transition:.15s}
+  .cday:hover .cadd,.cadd:focus-visible{opacity:1;border-color:var(--line-2);color:var(--ink)}
+  .cadd:hover{background:rgba(255,255,255,.08)}
+  .citems{display:flex;flex-direction:column;gap:4px;max-height:236px;overflow-y:auto;scrollbar-width:thin}
+  .citem{all:unset;box-sizing:border-box;display:block;cursor:pointer;padding:5px 7px 6px 8px;border-radius:7px;background:rgba(255,255,255,.045);box-shadow:inset 2px 0 0 var(--accent,#888);transition:background .15s}
+  .citem:hover{background:rgba(255,255,255,.09)}
+  .citem:focus-visible{outline:2px solid var(--pos)}
+  .citem.pl{background:transparent;box-shadow:none;border:1px dashed rgba(255,255,255,.22);padding:4px 6px 5px}
+  .citem.pl:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.4)}
+  .citem.pub{opacity:.55}
+  .cir{display:flex;align-items:center;gap:5px;min-width:0}
+  .ctm{font-size:10.5px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;flex:none}
+  .cbr{font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+  .clg{width:14px;height:14px;border-radius:4px;overflow:hidden;flex:none;position:relative}
+  .clg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .clg .li{font-size:6px}
+  .cgl{display:inline-flex;gap:3px;flex:none}
+  .cgl svg{width:11px;height:11px;display:block}
+  .cx{font-size:10.5px;color:var(--ink-2);line-height:1.35;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cst{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);flex:none}
+  .cst.warn{color:var(--warn)}
+  .cst.ready{color:var(--pos)}
+  .calfoot{font-size:11px;color:var(--ink-3);margin-top:8px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  @media(max-width:860px){
+    .cal{grid-template-columns:1fr}
+    .calwd{display:none}
+    .cday{border-left:none !important;border-top:1px solid var(--line) !important;min-height:0}
+    .cal .cday:first-of-type{border-top:none !important}
+    .cday.past{display:none}
+    .cdw{display:inline}
+    .cadd{opacity:1}
+  }
+  /* item detail + planner form */
+  .sdet{display:grid;grid-template-columns:200px 1fr;gap:18px;margin-top:14px}
+  .sdet .simg{width:200px;aspect-ratio:1/1;border-radius:12px;overflow:hidden;background:#15161a;display:grid;place-items:center;color:var(--ink-3);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  .sdet .simg img{width:100%;height:100%;object-fit:cover}
+  .kv{display:grid;grid-template-columns:96px 1fr;gap:9px 12px;font-size:12.5px;align-content:start;align-items:baseline;margin:0}
+  .kv dt{color:var(--ink-3);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding-top:1px}
+  .kv dd{margin:0;color:var(--ink);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .kv dd svg{width:13px;height:13px}
+  .scap{margin-top:14px;font-size:12.5px;line-height:1.55;color:var(--ink-2);white-space:pre-wrap;border-top:1px solid var(--line);padding-top:12px}
+  @media(max-width:620px){.sdet{grid-template-columns:1fr}.sdet .simg{width:100%}}
+  .pform{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-top:16px}
+  .pform .full{grid-column:1/-1}
+  .pform label{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px}
+  .inp{width:100%;font-family:var(--body);font-size:13px;color:var(--ink);background:rgba(255,255,255,.04);border:1px solid var(--line-2);border-radius:9px;padding:9px 11px;color-scheme:dark}
+  .inp:focus{outline:2px solid rgba(124,241,168,.6);outline-offset:1px}
+  textarea.inp{min-height:110px;resize:vertical;line-height:1.5}
+  .pform .sel{width:100%}
+  .togs{display:flex;gap:6px;flex-wrap:wrap}
+  .tog{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);border:1px solid var(--line-2);border-radius:8px;padding:6px 10px;transition:.15s}
+  .tog svg{width:12px;height:12px}
+  .tog.on{color:var(--ink);background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.28)}
+  .tog:focus-visible{outline:2px solid var(--pos)}
+  .pfoot{display:flex;align-items:center;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+  .pfoot .note{font-size:11px;color:var(--ink-3);margin-right:auto}
+  .btn.primary{background:var(--ink);color:#0A0B0D;border-color:var(--ink);font-weight:600}
+  .btn.primary:hover{background:#fff}
+  .btn.danger{color:#ffb3b3;border-color:rgba(255,138,138,.35)}
+  .perr{grid-column:1/-1;font-size:12px;color:var(--neg);display:none}
+  .perr.on{display:block}
+  @media(max-width:620px){.pform{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -441,10 +505,14 @@
   <div class="errbox" id="errbox"></div>
 
   <div id="schedSection" style="display:none">
-    <div class="section-title"><span>Scheduled &middot; next 7 days</span><span class="rule"></span></div>
-    <div class="schedbar"><div class="schedchips" id="schedChips"></div><div class="schedmeta" id="schedMeta"></div></div>
-    <div id="schedGap"></div>
-    <div class="schedcols" id="schedCols"></div>
+    <div class="section-title"><span>Schedule &middot; this week and next</span><span class="rule"></span></div>
+    <div class="calbar">
+      <div><div class="calrange" id="calRange"></div>
+        <div class="callegend"><span><i class="lg mc"></i>Scheduled in Metricool</span><span><i class="lg pl"></i>Planned here only</span></div></div>
+      <div class="calright"><select class="sel" id="calFilter" aria-label="Filter by brand"></select><button class="btn" id="calAdd">+ Plan a post</button></div>
+    </div>
+    <div class="cal" id="calGrid" role="grid" aria-label="Two-week posting calendar"></div>
+    <div class="calfoot"><span id="calMeta"></span><span>Times are Central</span></div>
   </div>
 
   <div id="content" class="fade">
@@ -1180,7 +1248,7 @@ function renderBLW(R){
 }
 
 /* ============ MODALS ============ */
-function openModal(html){ destroyModalCharts(); $("#modalBody").innerHTML=html; $("#modal").classList.add("on"); }
+function openModal(html,narrow){ destroyModalCharts(); $("#modalBody").innerHTML=html; $(".modal-card").classList.toggle("narrow",!!narrow); $("#modal").classList.add("on"); }
 function closeModal(){ $("#modal").classList.remove("on"); destroyModalCharts(); }
 $("#modalX").onclick=closeModal;
 $("#modal").onclick=e=>{ if(e.target===$("#modal")) closeModal(); };
@@ -1526,54 +1594,157 @@ function setScope(sc){
 }
 $("#scopeTabs").querySelectorAll(".tab").forEach(t=>{ t.onclick=()=>setScope(t.dataset.s); t.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();setScope(t.dataset.s);} }; });
 
-/* ============ SCHEDULED · NEXT 7 DAYS ============
-   Rolling: the server window is always now -> now + 7 days. The feed re-polls
-   every 5 minutes and re-draws every minute so posts that went out drop off
-   and the "in 3h" labels stay true. */
+/* ============ SCHEDULE CALENDAR ============
+   Two weeks, Sunday through the following Saturday, one connected grid.
+   Solid items come from Metricool's planner. Dashed items are "planned here
+   only": added on this page, stored in BLW Studio, never sent to Metricool.
+   The grid re-polls every 5 minutes and redraws every minute so it rolls
+   forward on its own (past days dim, today is marked). */
 const TZC="America/Chicago";
 const dayKey=d=>new Intl.DateTimeFormat("en-CA",{timeZone:TZC,year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+const addDays=(k,n)=>new Date(Date.parse(k+"T12:00:00Z")+n*86400000).toISOString().slice(0,10);
+const GLYPH={
+  instagram:'<rect x="3" y="3" width="18" height="18" rx="5.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.3" cy="6.7" r=".6" fill="currentColor"/>',
+  tiktok:'<path d="M14 3.5v11a3.6 3.6 0 1 1-3.6-3.6"/><path d="M14 3.5c.6 2.6 2.6 4.4 5.2 4.6"/>',
+  facebook:'<path d="M15.5 3.5h-2.4A3.6 3.6 0 0 0 9.5 7.1V20.5"/><path d="M6.5 11h8"/>',
+  twitter:'<path d="M5 4.5l14 15M19 4.5l-14 15"/>',
+  youtube:'<rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.2 9.3l4.6 2.7-4.6 2.7z" fill="currentColor"/>',
+  linkedin:'<rect x="3" y="3" width="18" height="18" rx="3.5"/><path d="M8 10.5v6M8 7.5v.01M12 16.5v-6M12 13a2.5 2.5 0 0 1 5 0v3.5"/>',
+  threads:'<circle cx="12" cy="12" r="3.6"/><path d="M15.6 12v1.4a2.4 2.4 0 0 0 4.8 0V12A8.4 8.4 0 1 0 17 18.7"/>',
+};
+function glyph(n,withColor){ const g=GLYPH[n]; if(!g) return `<span style="font-size:9px">${esc(LBNET[n]||n)}</span>`; return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:${withColor===false?"inherit":(NCOL[n]||"var(--ink-2)")}" aria-label="${esc(NLABEL[n]||n)}">${g}</svg>`; }
+const shortTime=ms=>new Date(ms).toLocaleTimeString("en-US",{timeZone:TZC,hour:"numeric",minute:"2-digit"}).replace(":00","").replace(" AM","a").replace(" PM","p");
+const hhmmLabel=t=>{ if(!t) return ""; const [h,m]=t.split(":").map(Number); const ap=h>=12?"p":"a"; const hh=((h+11)%12)+1; return hh+(m?":"+String(m).padStart(2,"0"):"")+ap; };
+const PSTATUS={ "idea":"Idea", "in-progress":"In progress", "ready":"Ready" };
+const PTYPES=["POST","REEL","CAROUSEL","STORY","VIDEO","SHORT","THREAD"];
+const PNETS=["instagram","tiktok","facebook","twitter","youtube","linkedin","threads"];
+STATE.planned=STATE.planned||[];
+
 async function loadSched(fresh){
   try{
-    const r=await apiFetch("/api/metricool?view=scheduled"+(fresh?("&fresh=1&_="+Date.now()):""));
-    if(r.noauth||!r.ok) return;
-    const data=await r.json(); if(data.error) return;
-    STATE.sched=data; renderSched(); renderIdeaChips();
+    const [r,rp]=await Promise.all([
+      apiFetch("/api/metricool?view=scheduled"+(fresh?("&fresh=1&_="+Date.now()):"")),
+      apiFetch("/api/metricool?view=planned"),
+    ]);
+    if(rp && rp.ok){ const pd=await rp.json(); if(Array.isArray(pd.posts)) STATE.planned=pd.posts; }
+    if(r && r.ok){ const data=await r.json(); if(!data.error) STATE.sched=data; }
+    renderSched(); renderIdeaChips();
   }catch(e){}
 }
-function relTime(ms){ const m=Math.round((ms-Date.now())/60000); if(m<1) return "now"; if(m<60) return "in "+m+"m"; const h=Math.round(m/60); if(h<36) return "in "+h+"h"; return "in "+Math.round(h/24)+"d"; }
-function renderSched(){
-  const S=STATE.sched; if(!S) return;
-  const now=Date.now(), end=now+7*86400000;
-  const brands=S.brands||[];
-  const bById=Object.fromEntries(brands.map(b=>[String(b.blogId),b]));
-  const f=STATE.schedFilter;
-  const live=(S.items||[]).filter(it=>{ const t=Date.parse(it.at); return t>=now-5*60000 && t<=end; });
-  const shown=live.filter(it=> f==="all" ? true : f==="teams" ? it.kind==="team" : String(it.blogId)===f || it.kind===f);
-  const chip=(key,label,pic,accent)=>`<span class="schip${f===key?" on":""}" data-f="${esc(key)}" tabindex="0" role="button">${pic!==undefined?logoChip("sl0",pic,label,accent):""}${esc(label)}</span>`;
-  $("#schedChips").innerHTML=chip("all","All brands")+chip("teams","BLW teams")+brands.map(b=>chip(String(b.blogId),b.kind==="team"?b.name.split(" ").slice(-1)[0]:b.name,b.picture,b.accent)).join("");
-  $("#schedChips").querySelectorAll(".schip").forEach(c=>{ const go=()=>{ STATE.schedFilter=c.dataset.f; renderSched(); }; c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
-  $("#schedMeta").textContent="Rolling window · updated "+new Date(S.generatedAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})+(S.errors&&S.errors.length?" · couldn't read "+S.errors.join(", "):"");
-  // Brands with nothing on the calendar for the next 48 hours.
-  const soon=now+48*3600000;
-  const quiet=brands.filter(b=>!live.some(it=>String(it.blogId)===String(b.blogId)&&Date.parse(it.at)<=soon));
-  $("#schedGap").innerHTML=quiet.length&&f==="all"?`<div class="schedgap">&#9888; <b>Nothing scheduled in the next 48 hours:</b> ${quiet.map(b=>esc(b.name)).join(", ")}</div>`:"";
-  const days=[]; for(let t=now;dayKey(new Date(t))<=dayKey(new Date(end));t+=86400000){ const k=dayKey(new Date(t)); if(!days.includes(k)) days.push(k); }
-  const todayK=dayKey(new Date(now)), tomK=dayKey(new Date(now+86400000));
-  $("#schedCols").innerHTML=days.map(k=>{
-    const items=shown.filter(it=>dayKey(new Date(it.at))===k);
-    const d=new Date(k+"T12:00:00");
-    const name=k===todayK?"Today":k===tomK?"Tomorrow":d.toLocaleDateString("en-US",{weekday:"short"});
-    return `<div class="sday${k===todayK?" today":""}"><div class="sdayh"><b>${name}</b><span>${d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span></div>
-      <div class="slist">${items.length?items.map(it=>{ const b=bById[String(it.blogId)]||{}; const ms=Date.parse(it.at);
-        return `<div class="spost" style="--accent:${it.accent}">
-          <div class="st"><b>${new Date(ms).toLocaleTimeString("en-US",{timeZone:TZC,hour:"numeric",minute:"2-digit"})}</b><span class="rel">${relTime(ms)}</span></div>
-          <div class="sb">${logoChip("sl0",b.picture,it.brand,it.accent)}<span>${esc(it.brand)}</span></div>
-          <div class="sn">${(it.networks||[]).map(n=>`<i style="background:${NCOL[n]||"#C4C9D2"}">${esc(LBNET[n]||NLABEL[n]||n)}</i>`).join("")}<i class="ty">${esc(capw(it.type))}</i>${it.draft?'<i class="warn">Draft</i>':""}${it.failed?'<i class="warn">Error</i>':""}</div>
-          <div class="sbody">${it.image?`<div class="sthumb"><img src="${esc(it.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.textContent='${it.isVideo?"Video":"Media"}'"></div>`:(it.isVideo?`<div class="sthumb">Video</div>`:"")}
-          <div class="sx">${esc(it.text)||"(no caption)"}</div></div></div>`; }).join(""):`<div class="sempty">Nothing scheduled</div>`}</div></div>`;
-  }).join("");
+function brandList(){ return (STATE.sched&&STATE.sched.brands)||[]; }
+function brandOf(id){ return brandList().find(b=>String(b.blogId)===String(id))||{name:"Unknown brand",accent:"#888",kind:"team"}; }
+const brandShort=b=>b.kind==="team"?b.name.split(" ").slice(-1)[0]:(b.kind==="league"?"BLW League":b.name);
+function passesFilter(blogId,kind){ const f=STATE.schedFilter; return f==="all"||(f==="teams"?kind==="team":String(blogId)===f); }
+
+// Everything on the calendar, Metricool and planned, normalized.
+function calendarItems(){
+  const out=[];
+  ((STATE.sched&&STATE.sched.items)||[]).forEach(it=>{ const ms=Date.parse(it.at); out.push({src:"mc",key:"mc:"+it.id,day:dayKey(new Date(ms)),sortKey:new Date(ms).toISOString(),ms,blogId:it.blogId,kind:it.kind,networks:it.networks||[],type:it.type,text:it.text,image:it.image,isVideo:it.isVideo,draft:it.draft,failed:it.failed,published:it.published,raw:it}); });
+  (STATE.planned||[]).forEach(p=>{ const b=brandOf(p.blogId); out.push({src:"pl",key:"pl:"+p.id,day:p.date,sortKey:p.date+"T"+(p.time||"00:00"),blogId:p.blogId,kind:b.kind,networks:p.networks||[],type:p.type,text:p.title||p.text,status:p.status,time:p.time,raw:p}); });
+  return out.filter(x=>passesFilter(x.blogId,x.kind)).sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
 }
-setInterval(()=>{ if(STATE.sched && !document.hidden) renderSched(); }, 60000);
+function renderSched(){
+  const S=STATE.sched; if(!S&&!(STATE.planned||[]).length) return;
+  const today=dayKey(new Date());
+  const start=(S&&S.startDay)||addDays(today,-new Date(today+"T12:00:00Z").getUTCDay());
+  const days=Array.from({length:14},(_,i)=>addDays(start,i));
+  const fmtD=k=>new Date(k+"T12:00:00Z").toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric"});
+  $("#calRange").textContent=fmtD(days[0])+" to "+fmtD(days[13]);
+  // filter
+  const sel=$("#calFilter"), brands=brandList();
+  const opts=[["all","All brands"],["teams","BLW teams"],...brands.map(b=>[String(b.blogId),b.name])];
+  if(sel.options.length!==opts.length){ sel.innerHTML=opts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join(""); }
+  sel.value=STATE.schedFilter; sel.onchange=()=>{ STATE.schedFilter=sel.value; renderSched(); };
+  const items=calendarItems();
+  const head=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=>`<div class="calwd" role="columnheader">${d}</div>`).join("");
+  $("#calGrid").innerHTML=head+days.map(k=>{
+    const its=items.filter(x=>x.day===k);
+    const d=new Date(k+"T12:00:00Z"), dn=d.getUTCDate();
+    const label=(dn===1||k===days[0])?d.toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric"}):String(dn);
+    const cls=k<today?" past":k===today?" today":"";
+    const tag=k===today?'<span class="cdtag">Today</span>':"";
+    return `<div class="cday${cls}" data-d="${k}" role="gridcell" aria-label="${esc(d.toLocaleDateString("en-US",{timeZone:"UTC",weekday:"long",month:"long",day:"numeric"}))}">
+      <div class="cdh"><span class="cdn">${label}</span><span class="cdw">${d.toLocaleDateString("en-US",{timeZone:"UTC",weekday:"short"})}</span>${tag}${k>=today?`<button class="cadd" data-d="${k}" title="Plan a post for this day" aria-label="Plan a post for this day">+</button>`:""}</div>
+      <div class="citems">${its.map(itemHTML).join("")}</div></div>`;
+  }).join("");
+  $("#calGrid").querySelectorAll(".citem").forEach(el=>el.onclick=e=>{ e.stopPropagation(); openSchedItem(el.dataset.k); });
+  $("#calGrid").querySelectorAll(".cadd").forEach(el=>el.onclick=e=>{ e.stopPropagation(); openPlanner(null,el.dataset.d); });
+  const meta=[]; if(S) meta.push("Metricool synced "+new Date(S.generatedAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}));
+  if(S&&S.errors&&S.errors.length) meta.push("couldn't read "+S.errors.join(", "));
+  $("#calMeta").textContent=meta.join(" · ");
+}
+function itemHTML(x){
+  const b=brandOf(x.blogId), acc=b.accent||"#888";
+  const t=x.src==="mc"?shortTime(x.ms):(x.time?hhmmLabel(x.time):"");
+  let st="";
+  if(x.src==="mc"){ if(x.failed) st='<span class="cst warn">Error</span>'; else if(x.draft) st='<span class="cst warn">Draft</span>'; else if(x.published) st='<span class="cst">Posted</span>'; }
+  else st=`<span class="cst${x.status==="ready"?" ready":""}">${esc(PSTATUS[x.status]||"Planned")}</span>`;
+  const title=`${b.name} · ${(x.networks||[]).map(n=>NLABEL[n]||n).join(", ")}${x.text?" · "+x.text:""}`;
+  return `<button class="citem ${x.src}${x.published?" pub":""}" style="--accent:${acc}" data-k="${esc(x.key)}" title="${esc(title.slice(0,220))}">
+    <span class="cir">${t?`<span class="ctm">${t}</span>`:""}${logoChip("clg",b.picture,b.name,acc)}<span class="cbr">${esc(brandShort(b))}</span><span class="cgl">${(x.networks||[]).map(n=>glyph(n)).join("")}</span></span>
+    ${x.text?`<span class="cx">${esc(x.text)}</span>`:""}${st?`<span class="cir" style="margin-top:3px">${st}</span>`:""}</button>`;
+}
+function openSchedItem(key){
+  const x=calendarItems().find(i=>i.key===key)||(()=>{ const f=STATE.schedFilter; STATE.schedFilter="all"; const r=calendarItems().find(i=>i.key===key); STATE.schedFilter=f; return r; })();
+  if(!x) return;
+  if(x.src==="pl"){ openPlanner(x.raw); return; }
+  const b=brandOf(x.blogId), it=x.raw;
+  const when=new Date(x.ms).toLocaleString("en-US",{timeZone:TZC,weekday:"long",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+  const status=it.failed?"Error in Metricool":it.draft?"Draft":it.published?"Posted":"Scheduled";
+  openModal(`<div class="modal-title">${logoChip("clg",b.picture,b.name,b.accent)}${esc(b.name)}</div>
+    <div class="modal-sub">Scheduled in Metricool · edit it there</div>
+    <div class="sdet"><div class="simg">${it.image?`<img src="${esc(it.image)}" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.textContent='${it.isVideo?"Video":"No preview"}'">`:(it.isVideo?"Video":"No preview")}</div>
+      <dl class="kv"><dt>When</dt><dd>${esc(when)}</dd><dt>Platforms</dt><dd>${(x.networks||[]).map(n=>`${glyph(n)}${esc(NLABEL[n]||n)}`).join("&nbsp;&nbsp;")||"Not set"}</dd><dt>Format</dt><dd>${esc(capw(x.type))}</dd><dt>Status</dt><dd>${esc(status)}</dd></dl></div>
+    <div class="scap">${esc(it.text)||"(no caption)"}</div>`, true);
+}
+function openPlanner(post, day){
+  const brands=brandList(); if(!brands.length) return;
+  const edit=!!post;
+  const p=post||{blogId:STATE.schedFilter!=="all"&&STATE.schedFilter!=="teams"?STATE.schedFilter:String(brands[0].blogId),date:day||dayKey(new Date()),time:"",networks:["instagram"],type:"POST",status:"idea",title:"",text:""};
+  const groups=[["BLW teams",brands.filter(b=>b.kind==="team")],["League and brand",brands.filter(b=>b.kind!=="team")]];
+  openModal(`<div class="modal-title">${edit?"Edit planned post":"Plan a post"}</div>
+    <div class="modal-sub">Shows on this calendar only. It is not sent to Metricool or posted anywhere.</div>
+    <form class="pform" id="pform" autocomplete="off">
+      <div class="full"><label for="pfBrand">Brand</label><select class="sel" id="pfBrand">${groups.map(([g,bs])=>bs.length?`<optgroup label="${esc(g)}">${bs.map(b=>`<option value="${esc(String(b.blogId))}"${String(b.blogId)===String(p.blogId)?" selected":""}>${esc(b.name)}</option>`).join("")}</optgroup>`:"").join("")}</select></div>
+      <div><label for="pfDate">Date</label><input class="inp" type="date" id="pfDate" value="${esc(p.date)}" required></div>
+      <div><label for="pfTime">Time (optional)</label><input class="inp" type="time" id="pfTime" value="${esc(p.time||"")}"></div>
+      <div class="full"><label>Platforms</label><div class="togs" id="pfNets">${PNETS.map(n=>`<button type="button" class="tog${(p.networks||[]).includes(n)?" on":""}" data-n="${n}" aria-pressed="${(p.networks||[]).includes(n)}">${glyph(n)}${esc(NLABEL[n])}</button>`).join("")}</div></div>
+      <div><label for="pfType">Format</label><select class="sel" id="pfType">${PTYPES.map(t=>`<option value="${t}"${t===p.type?" selected":""}>${esc(capw(t))}</option>`).join("")}</select></div>
+      <div><label>Status</label><div class="togs" id="pfStatus">${Object.entries(PSTATUS).map(([k,l])=>`<button type="button" class="tog${k===p.status?" on":""}" data-s="${k}" aria-pressed="${k===p.status}">${l}</button>`).join("")}</div></div>
+      <div class="full"><label for="pfTitle">Working title</label><input class="inp" id="pfTitle" maxlength="120" placeholder="e.g. Jeter re-signs: 2026 highlight reel" value="${esc(p.title||"")}"></div>
+      <div class="full"><label for="pfText">Caption or notes</label><textarea class="inp" id="pfText" maxlength="1500" placeholder="Draft caption, shot list, who is making it...">${esc(p.text||"")}</textarea></div>
+      <div class="perr" id="pfErr"></div>
+    </form>
+    <div class="pfoot"><span class="note">${edit&&p.createdBy?`Added by ${esc(p.createdBy)}`:""}</span>${edit?'<button class="btn danger" id="pfDel">Delete</button>':""}<button class="btn" id="pfCancel">Cancel</button><button class="btn primary" id="pfSave">${edit?"Save changes":"Add to calendar"}</button></div>`, true);
+  $("#pfNets").querySelectorAll(".tog").forEach(b=>b.onclick=()=>{ b.classList.toggle("on"); b.setAttribute("aria-pressed",b.classList.contains("on")); });
+  $("#pfStatus").querySelectorAll(".tog").forEach(b=>b.onclick=()=>{ $("#pfStatus").querySelectorAll(".tog").forEach(x=>{x.classList.remove("on");x.setAttribute("aria-pressed","false");}); b.classList.add("on"); b.setAttribute("aria-pressed","true"); });
+  $("#pfCancel").onclick=closeModal;
+  const err=m=>{ const e=$("#pfErr"); e.textContent=m; e.classList.add("on"); };
+  const send=async(body,btn)=>{
+    btn.classList.add("spin");
+    try{
+      const r=await apiFetch("/api/metricool?view=planned",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+      if(gateFor(r)) return;
+      const data=await r.json().catch(()=>({error:"Bad response"}));
+      if(!r.ok||data.error) throw new Error(data.error||("Server returned "+r.status));
+      STATE.planned=data.posts||[]; closeModal(); renderSched();
+    }catch(e){ err("Couldn't save: "+e.message); }
+    finally{ btn.classList.remove("spin"); }
+  };
+  $("#pfSave").onclick=()=>{
+    const post={ id:p.id, blogId:$("#pfBrand").value, date:$("#pfDate").value, time:$("#pfTime").value,
+      networks:[...$("#pfNets").querySelectorAll(".tog.on")].map(b=>b.dataset.n), type:$("#pfType").value,
+      status:($("#pfStatus").querySelector(".tog.on")||{dataset:{s:"idea"}}).dataset.s, title:$("#pfTitle").value.trim(), text:$("#pfText").value.trim() };
+    if(!post.date) return err("Pick a date.");
+    if(!post.networks.length) return err("Pick at least one platform.");
+    if(!post.title&&!post.text) return err("Add a working title or some notes.");
+    send({op:edit?"update":"add",post},$("#pfSave"));
+  };
+  if(edit) $("#pfDel").onclick=()=>{ const b=$("#pfDel"); if(b.dataset.c!=="1"){ b.dataset.c="1"; b.textContent="Click again to delete"; return; } send({op:"delete",id:p.id},b); };
+  setTimeout(()=>{ const t=$("#pfTitle"); if(t) t.focus(); },50);
+}
+$("#calAdd").onclick=()=>openPlanner(null);
+setInterval(()=>{ if((STATE.sched||STATE.planned.length) && !document.hidden && !$("#modal").classList.contains("on")) renderSched(); }, 60000);
 setInterval(()=>{ if(STATE.sched && !document.hidden) loadSched(false); }, 5*60000);
 
 /* ============ POST IDEAS ============ */
@@ -1596,9 +1767,14 @@ function renderIdeaChips(){
   renderIdeas();
 }
 function scheduledFor(key){
-  const S=STATE.sched; if(!S) return [];
-  return (S.items||[]).filter(it=> key==="wiffle"?it.kind==="wiffle": key==="blw"?it.kind==="league": String(it.blogId)===key)
+  const S=STATE.sched; const now=Date.now();
+  const match=(blogId,kind)=> key==="wiffle"?kind==="wiffle": key==="blw"?kind==="league": String(blogId)===key;
+  const mc=((S&&S.items)||[]).filter(it=>!it.published&&Date.parse(it.at)>=now&&match(it.blogId,it.kind))
     .map(it=>({at:new Date(it.at).toLocaleString("en-US",{timeZone:TZC,weekday:"short",hour:"numeric",minute:"2-digit"}),networks:it.networks,text:it.text}));
+  const today=dayKey(new Date());
+  const pl=(STATE.planned||[]).filter(p=>p.date>=today&&match(p.blogId,brandOf(p.blogId).kind))
+    .map(p=>({at:p.date+(p.time?" "+p.time:"")+" (planned, not yet made)",networks:p.networks,text:[p.title,p.text].filter(Boolean).join(": ")}));
+  return [...mc,...pl];
 }
 function perfFor(key){
   const d=STATE.data, w=STATE.wdata;

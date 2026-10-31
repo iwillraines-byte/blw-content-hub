@@ -10,8 +10,9 @@
 // Views (?view=):
 //   league     (default) the nine BLW team accounts + the BLW league page
 //   wiffle     the WIFFLE® brand, one row per connected social account
-//   scheduled  every brand's scheduled posts for the next 7 days
+//   scheduled  every brand's scheduled posts, this week and next
 //   ideas      POST — AI post ideas for one brand (see api/_cc-ideas.js)
+//   planned    GET / POST — Command Center-only planned posts (api/_cc-planned.js)
 //   config     PUBLIC — Supabase URL + anon key so the static page can run
 //              the official auth client and refresh its own session
 //
@@ -32,6 +33,7 @@ import {
 import { buildWiffle, redactWiffle } from './_cc-wiffle.js';
 import { buildScheduled } from './_cc-schedule.js';
 import { generateIdeas } from './_cc-ideas.js';
+import { plannedHandler } from './_cc-planned.js';
 
 export const maxDuration = 60;
 
@@ -562,6 +564,9 @@ export default async function handler(req, res) {
   if (!ctx) return; // 401 already sent
   if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return; // 403 already sent
   const isMaster = ctx.profile?.role === "master_admin";
+
+  // Planned posts never touch Metricool, so they work even without its env vars.
+  if (view === "planned") { res.setHeader("Cache-Control", "private, no-store"); await plannedHandler(req, res, ctx); return; }
 
   const token = process.env.METRICOOL_TOKEN, userId = process.env.METRICOOL_USER_ID;
   if (!token || !userId) {
