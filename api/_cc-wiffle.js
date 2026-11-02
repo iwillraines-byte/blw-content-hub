@@ -77,11 +77,22 @@ async function accountSeries(mc, b, net, from, to) {
   }
 }
 
-export async function buildWiffle(win, token, userId) {
+// The BLW league page (@blwwiffleball) as its own brand view: one row per
+// connected account (Instagram, TikTok, ...), same layout as WIFFLE®.
+export function findBLWBrand(profiles) {
+  const b = (profiles._list || []).find(x => Number(x.id) === BLW_BRAND.blogId);
+  return [b ? { ...b, label: b.label || BLW_BRAND.name, guessNetworks: !Object.keys(b.networks || {}).length }
+            : { id: BLW_BRAND.blogId, label: BLW_BRAND.name, picture: null, networks: {}, guessNetworks: true }];
+}
+
+export function buildWiffle(win, token, userId) { return buildBrandAccounts(win, token, userId, findWiffleBrands); }
+export function buildBLWPage(win, token, userId) { return buildBrandAccounts(win, token, userId, findBLWBrand); }
+
+async function buildBrandAccounts(win, token, userId, pickBrands) {
   const { from, to, label } = win;
   const mc = makeApi(token, userId);
   const profiles = await loadProfiles(mc.api);
-  const brands = findWiffleBrands(profiles);
+  const brands = pickBrands(profiles);
   const base = { generatedAt: new Date().toISOString(), from, to, label, timezone: TZ };
   if (!brands.length) {
     return { ...base, configured: false, accounts: [], brandsSeen: (profiles._list || []).map(b => ({ id: b.id, label: b.label })) };
@@ -172,6 +183,7 @@ export async function buildWiffle(win, token, userId) {
   };
 }
 
+export function redactAccounts(src) { return redactWiffle(src); }
 export function redactWiffle(src) {
   const d = structuredClone(src);
   if (d.totals) delete d.totals.content;

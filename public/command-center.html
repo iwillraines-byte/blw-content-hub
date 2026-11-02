@@ -467,7 +467,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <div class="brand"><h1>BLW Brand Command Center</h1><div class="sub" id="brandSub">BLW League · 9 Teams</div></div>
+    <div class="brand"><h1>BLW Brand Command Center</h1><div class="sub" id="brandSub">BLW Teams · 9 accounts</div></div>
     <div class="status">
       <div class="live"><span class="dot" id="dot"></span> <span id="synced">connecting...</span></div>
       <div class="live clock" id="clock"></div>
@@ -479,10 +479,11 @@
   <div class="controls">
     <div class="ctl-left">
       <div class="tabs" id="scopeTabs" role="tablist" aria-label="Which brand">
-        <div class="tab active" data-s="league" role="tab" tabindex="0">BLW League</div>
+        <div class="tab active" data-s="league" role="tab" tabindex="0">BLW Teams</div>
+        <div class="tab" data-s="blw" role="tab" tabindex="0">BLW League Page</div>
         <div class="tab" data-s="wiffle" role="tab" tabindex="0">WIFFLE&reg;</div>
       </div>
-      <div class="eyebrow" id="eyebrow">Click any KPI or team to drill in. The whole league at a glance.</div>
+      <div class="eyebrow" id="eyebrow">Every BLW team account. Click any KPI or team to drill in.</div>
     </div>
     <div class="tabs" id="tfTabs">
       <div class="tab" data-q="days=7">7D</div>
@@ -562,16 +563,6 @@
     </div>
     <div class="panel" style="margin-top:12px"><div class="head"><div class="t">EMV by team</div><div class="meta">reach + interactions + followers + saves/shares</div></div><div id="emvTeams" style="margin-top:8px"></div></div>
 
-    <div class="section-title"><span>BLW league page</span><span class="rule"></span></div>
-    <div class="panel">
-      <div class="emvhead">
-        <div><div class="emvtot" id="blwEmv">$0</div><div class="emvsub" id="blwSub">BLW page EMV</div></div>
-        <div class="emvsplit" id="blwStats"></div>
-      </div>
-      <div id="blwAttr" style="margin-top:12px"></div>
-      <div class="fc-note" id="blwNote"></div>
-    </div>
-
     <div class="section-title"><span>Roster</span><span class="rule"></span></div>
     <div class="roster" id="roster"></div>
 
@@ -586,7 +577,7 @@
     <div class="recs" id="recs"></div>
   </div>
 
-  <div id="wiffleContent" class="fade" style="display:none"></div>
+  <div id="acctContent" class="fade" style="display:none"></div>
 
   <div id="ideasSection" style="display:none">
     <div class="section-title"><span>Post ideas</span><span class="rule"></span></div>
@@ -603,9 +594,12 @@
 <script>
 const $ = s => document.querySelector(s);
 const STATE = { q: "days=30", data: null, fcTeam: null, charts: {}, modalCharts: [], drillIsolate: null,
-  scope: "league", wdata: null, wq: null, sched: null, schedFilter: "all", ideaBrand: null, ideasBusy: false };
+  scope: "league", wdata: null, wq: null, bdata: null, acct: {}, sched: null, schedFilter: "all", ideaBrand: null, ideasBusy: false };
 // Post counts are master-admin only. The server strips them for everyone else;
 // this flag just keeps the layout from leaving holes where they used to be.
+// v5.7.2: post counts are hidden for everyone, master admin included. The
+// server no longer sends them; flip this to bring the count UI back.
+const showCounts = () => false;
 const isM = () => !!((STATE.data && STATE.data.viewer && STATE.data.viewer.isMaster) || (STATE.wdata && STATE.wdata.viewer && STATE.wdata.viewer.isMaster) || (STATE.sched && STATE.sched.viewer && STATE.sched.viewer.isMaster));
 const logoCache = {};
 const PCOL = { ig:"#FF6FCF", tt:"#5CE0E0", fb:"#5B8DEF" };
@@ -755,7 +749,7 @@ async function apiFetch(url, opts){
 }
 function showGate(kind){
   $("#overlay").classList.remove("on");
-  ["#content","#wiffleContent","#schedSection","#ideasSection","#auditSection"].forEach(sel=>{ const el=$(sel); if(el) el.style.display="none"; });
+  ["#content","#acctContent","#schedSection","#ideasSection","#auditSection"].forEach(sel=>{ const el=$(sel); if(el) el.style.display="none"; });
   $("#errbox").classList.add("on");
   $("#errbox").innerHTML = kind==="forbidden"
     ? "<b>Content team and admins only.</b> Your BLW Studio account doesn't have access to the Command Center. Ask the master admin to update your role."
@@ -765,11 +759,11 @@ function showGate(kind){
 }
 function gateFor(r){ if(r.noauth){ showGate("signin"); return true; } if(r.status===401){ showGate("expired"); return true; } if(r.status===403){ showGate("forbidden"); return true; } return false; }
 
-function loadCurrent(q, fresh){ return STATE.scope==="wiffle" ? loadWiffle(q, fresh) : load(q, fresh); }
+function loadCurrent(q, fresh){ return STATE.scope==="league" ? load(q, fresh) : loadAccounts(STATE.scope, q, fresh); }
 
 async function load(q,fresh){
   STATE.q=q;
-  $("#content").style.display="";
+  if(STATE.scope==="league") $("#content").style.display="";
   $("#overlay").classList.add("on");
   $("#ovmsg").textContent = fresh?"Refreshing from Metricool...":"Pulling live data from Metricool...";
   $("#errbox").classList.remove("on");
@@ -780,7 +774,7 @@ async function load(q,fresh){
     const data=await r.json(); if(data.error) throw new Error(data.error);
     STATE.data=data; STATE.lq=q; if(!STATE.fcTeam && data.teams.length) STATE.fcTeam=data.teams[0].blogId;
     showShared();
-    render(); $("#dot").classList.remove("err");
+    if(STATE.scope==="league") render(); $("#dot").classList.remove("err");
     $("#synced").textContent="LIVE · synced "+new Date(data.generatedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
   }catch(e){
     $("#dot").classList.add("err"); $("#synced").textContent="connection issue";
@@ -805,7 +799,7 @@ function renderHero(){
   const base=t.followers - d.network.netNew.reduce((a,b)=>a+b.v,0);
   const folDelta=base>0?(t.followers-base)/base*100:0;
   let postsAlert=null;
-  if(isM()){ const lp=leagueParity(d); if(lp.gap>0){ const w=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; postsAlert=`${PNAME[w[0]]} ${w[1]} behind`; } }
+  if(showCounts()){ const lp=leagueParity(d); if(lp.gap>0){ const w=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; postsAlert=`${PNAME[w[0]]} ${w[1]} behind`; } }
   const interSpark=(d.network.interactionsByPlatform?["ig","tt","fb"].reduce((acc,k)=>{ (d.network.interactionsByPlatform[k]||[]).forEach(p=>{acc[p.d]=(acc[p.d]||0)+p.v}); return acc; },{}):{});
   const interArr=Object.keys(interSpark).sort().map(k=>interSpark[k]);
   const cards=[
@@ -813,7 +807,7 @@ function renderHero(){
     {key:"views",label:"Views ("+d.label+")",val:t.views,accent:"#5B8DEF",spark:d.network.views.map(p=>p.v),sub:"IG + TikTok + FB"},
     {key:"interactions",label:"Interactions ("+d.label+")",val:t.interactions,accent:"#FFB13C",spark:interArr,sub:"likes, comments, shares"},
     {key:"posts",label:"Posts ("+d.label+")",val:t.content,accent:"#FF6FCF",spark:d.network.netNew.map(p=>Math.abs(p.v)),sub:"shipped across teams",alert:postsAlert}
-  ].filter(k=>k.key!=="posts"||isM());
+  ].filter(k=>k.key!=="posts"||showCounts());
   $("#hero").classList.toggle("three", cards.length===3);
   $("#hero").innerHTML=cards.map((k,i)=>`
     <div class="kpi" data-metric="${k.key}" tabindex="0" role="button" style="animation-delay:${i*.06}s">
@@ -1021,7 +1015,7 @@ function renderFormatsInto(list, barsSel, mixId, metaSel){
   else{
     const max=Math.max(...fb.map(f=>f.avgInteractions))||1;
     host.innerHTML=fb.map(f=>{ const c=TYPECOL[f.type]||TYPECOL.OTHER; const w=Math.max(2,Math.round(f.avgInteractions/max*100));
-      const tail=isM()&&f.count!=null?`${f.count} posts`:`${(f.share||0).toFixed(0)}% of posts`;
+      const tail=showCounts()&&f.count!=null?`${f.count} posts`:`${(f.share||0).toFixed(0)}% of posts`;
       return `<div class="fmtrow"><div class="fmtname"><span class="ic" style="background:${c}"></span>${capw(f.type)}</div>
         <div class="fmtbar"><span data-w="${w}%" style="background:${c}"></span></div>
         <div class="fmtval">${fmt(f.avgInteractions)}<span class="s"> /post · ${tail}</span></div></div>`; }).join("");
@@ -1029,7 +1023,7 @@ function renderFormatsInto(list, barsSel, mixId, metaSel){
     else host.querySelectorAll(".fmtbar>span").forEach(el=>el.style.width=el.dataset.w);
   }
   if(STATE.charts[mixId]){try{STATE.charts[mixId].destroy()}catch(e){}}
-  const useCount=isM()&&all.every(f=>f.count!=null);
+  const useCount=showCounts()&&all.every(f=>f.count!=null);
   const tot=all.reduce((a,b)=>a+(b.count||0),0);
   $(metaSel).textContent=useCount?(tot+" posts this window"):"share of posts by format";
   const el=document.getElementById(mixId);
@@ -1073,7 +1067,7 @@ function renderDigest(){
     bo=`<a class="dgbreak" href="${esc(lb.link||'#')}" target="_blank" rel="noopener"><div class="dgthumb">${thumb}</div><div><div class="dglbl">Breakout post</div><div class="dgteam lbteam" style="color:${lb.accent}">${logoChip("mini",lb.teamPicture,lb.team,lb.accent)}<span>${esc(lb.team)} · ${LBNET[lb.network]||''} ${capw(lb.type)}</span></div><div class="dgmet"><b>${fmt(lb.interactions)}</b> interactions${amp?` · reached ~${amp}x its followers`:""}</div></div></a>`;
   }
   const alerts=[];
-  if(isM()){ const lp=leagueParity(d); if(lp.gap>0){ const wpl=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; alerts.push(`<b>Cross-post gap:</b> ${PNAME[wpl[0]]} is ${wpl[1]} posts behind across the league.`); } }
+  if(showCounts()){ const lp=leagueParity(d); if(lp.gap>0){ const wpl=Object.entries(lp.def).sort((a,b)=>b[1]-a[1])[0]; alerts.push(`<b>Cross-post gap:</b> ${PNAME[wpl[0]]} is ${wpl[1]} posts behind across the league.`); } }
   else if((d.parityBehind||[]).length){ alerts.push(`<b>Cross-post gap:</b> ${d.parityBehind.map(k=>PNAME[k]).join(" and ")} ${d.parityBehind.length>1?"are":"is"} behind across the league.`); }
   if(weak && (weak.netNew<0||weak.mom<1)) alerts.push(`<b>Watch ${esc(weak.name)}:</b> ${weak.netNew<0?signed(weak.netNew)+" followers":"flat growth ("+weak.mom.toFixed(1)+"%)"} this window.`);
   if(!alerts.length) alerts.push("All teams healthy: no cross-post gaps or growth drops flagged.");
@@ -1125,7 +1119,7 @@ function renderPlayers(){
   host.innerHTML=lb.map((p,i)=>{const w=Math.max(3,Math.round(p.interactions/max*100));
     return `<div class="prow" data-i="${i}" tabindex="0" role="button">
       <div class="prank">${i+1}</div>
-      <div class="pinfo"><div class="pn">${esc(p.name)}</div><div class="ptm"><i style="background:${p.accent}"></i>${esc(p.team.split(" ").slice(0,2).join(" "))}${isM()&&p.posts!=null?` · ${p.posts} posts`:""}</div></div>
+      <div class="pinfo"><div class="pn">${esc(p.name)}</div><div class="ptm"><i style="background:${p.accent}"></i>${esc(p.team.split(" ").slice(0,2).join(" "))}${showCounts()&&p.posts!=null?` · ${p.posts} posts`:""}</div></div>
       <div class="pbar"><span data-w="${w}%" style="background:${p.accent}"></span></div>
       <div class="pstats"><div class="pstat"><b>${fmt(p.interactions)}</b><div class="k">int</div></div><div class="pstat"><b>${fmt(p.impressions)}</b><div class="k">reach</div></div><div class="pstat"><b>${(p.engAvg||0).toFixed(1)}%</b><div class="k">eng</div></div></div>
       <div class="pheat" style="color:${p.accent}">${p.heat}</div></div>`;}).join("")
@@ -1140,7 +1134,7 @@ function openPlayer(i){
   const NET={instagram:"IG",tiktok:"TikTok",facebook:"FB"};
   const ini=esc(p.name.split(" ").map(w=>w[0]).join("").slice(0,3));
   let body=`<div class="modal-title"><span style="width:12px;height:12px;border-radius:4px;background:${p.accent};display:inline-block"></span>${esc(p.name)}</div>
-    <div class="modal-sub">${esc(p.team)}${isM()&&p.posts!=null?` · ${p.posts} posts mentioning`:""} · heat ${p.heat}/100</div>
+    <div class="modal-sub">${esc(p.team)}${showCounts()&&p.posts!=null?` · ${p.posts} posts mentioning`:""} · heat ${p.heat}/100</div>
     <div class="gchips" style="margin-top:12px">${gchip("Interactions",p.accent,fmtFull(p.interactions),null)}${gchip("Reach",PCOL.fb,fmtFull(p.impressions),null)}${gchip("Avg engagement",PCOL.ig,(p.engAvg||0).toFixed(2)+"%",null)}${gchip("Reach vs followers",PCOL.tt,(p.amp||0)+"x",null)}</div>
     <div class="modal-sub" style="margin-top:14px">Posts driving ${esc(p.name.split(" ")[0])}'s numbers</div>
     <div class="lbgrid" style="margin-top:10px">`+(p.items||[]).map(it=>{
@@ -1207,7 +1201,7 @@ function renderEMV(){
     document.querySelectorAll("#emvTeams .emvrow").forEach(el2=>{const go=()=>openTeamModal(+el2.dataset.id,"views");el2.onclick=go;el2.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
     renderBLW(R);
     const avg=d.totals.content?tot/d.totals.content:0;
-    const perPost=isM()&&d.totals.content?` At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts.`:"";
+    const perPost=showCounts()&&d.totals.content?` At these rates the league averages <b>${usdFull(avg)} EMV per post</b> across ${d.totals.content} posts.`:"";
     $("#emvNote").innerHTML=`Matches Socialpruf's formula: <b>(views / 1000) x CPM + interactions</b>, starting from their published benchmark of <b>$20 CPM, $0.25 per like, $1.25 per comment</b>. <b>On "views":</b> this is the per-post view count for posts published in this window, which Metricool returns under the field name "impressions". It is the same number Socialpruf means by views. It is deliberately not the ${fmt(d.totals.views)} in the Views charts above, which is an account-level total that also counts views on older posts and would overstate EMV by about ${d.totals.impressions?(d.totals.views/d.totals.impressions).toFixed(1):"5"}x. Metricool reports interactions as one combined number rather than splitting likes and comments, so the per-interaction rate defaults to the conservative $0.25 like value; raise it toward $1.25 if your comment volume is high. Followers and the saves/shares premium are additions beyond Socialpruf's formula, and the premium stacks on top of interactions since a share already counts as one.${perPost} Rates save to this browser.`;
   };
   const bind=(key,obj,prop)=>{
@@ -1228,14 +1222,14 @@ function renderBLW(R){
   const total=emvOf(b.impressions,b.interactions);
   const el=$("#blwEmv"); if(el) el.textContent=usdFull(total);
   $("#blwSub").textContent="BLW page EMV · "+d.label;
-  $("#blwStats").innerHTML=[["Views",fmt(b.impressions)],["Interactions",fmt(b.interactions)],...(isM()&&b.contentCount!=null?[["Posts",b.contentCount]]:[]),["Eng rate",(b.engagementRatePost||0).toFixed(1)+"%"]]
+  $("#blwStats").innerHTML=[["Views",fmt(b.impressions)],["Interactions",fmt(b.interactions)],...(showCounts()&&b.contentCount!=null?[["Posts",b.contentCount]]:[]),["Eng rate",(b.engagementRatePost||0).toFixed(1)+"%"]]
     .map(([k,v])=>`<div class="e"><b>${v}</b><span>${k}</span></div>`).join("");
   const accent={}; d.teams.forEach(t=>accent[t.name]=t.accent);
   const rows=(b.attribution||[]).map(a=>({...a,emv:emvOf(a.impressions,a.interactions),accent:accent[a.team]||"#7CF1A8"}));
   const mx=rows.length?Math.max(...rows.map(r=>r.impressions)):1;
   $("#blwAttr").innerHTML=rows.map(r=>{
     const via=[["handle",r.via.handle],["name",r.via.name],["player",r.via.player]].filter(x=>x[1]>0).map(x=>x[1]+" "+x[0]).join(" · ");
-    return `<div class="blwrow"><div class="blwname"><i style="background:${r.accent}"></i>${esc(r.team.split(" ").slice(0,2).join(" "))}${isM()&&r.posts!=null?`<span class="bs">${r.posts}p</span>`:""}</div>
+    return `<div class="blwrow"><div class="blwname"><i style="background:${r.accent}"></i>${esc(r.team.split(" ").slice(0,2).join(" "))}${showCounts()&&r.posts!=null?`<span class="bs">${r.posts}p</span>`:""}</div>
       <div class="blwtrack"><div class="blwfill" data-w="${Math.max(3,Math.round(r.impressions/mx*100))}%" style="background:${r.accent}"></div></div>
       <div class="blwnum">${fmt(r.impressions)} views</div><div class="blwval">${usdFull(r.emv)}</div>
       <span class="viachip" title="how this post was matched">${via||"-"}</span></div>`;
@@ -1243,8 +1237,8 @@ function renderBLW(R){
   const set=()=>document.querySelectorAll("#blwAttr .blwfill").forEach(s=>s.style.width=s.dataset.w);
   REDUCE?set():requestAnimationFrame(set);
   const pctUn=b.unattributedPct!=null?b.unattributedPct:(b.contentCount?Math.round(b.unattributed/b.contentCount*100):0);
-  const unTxt=isM()&&b.contentCount!=null?`<b>${b.unattributed} of ${b.contentCount} posts (${pctUn}%)</b>`:`<b>${pctUn}% of posts</b>`;
-  $("#blwNote").innerHTML=`Content posted on the <b>@${esc((b.handles&&b.handles.instagram)||"blwwiffleball")}</b> league page, credited to teams by caption signals: an @handle mention, the team name, or a rostered player's name. A post naming two teams credits both, so the rows can sum to more than the page total. ${unTxt} carry no team signal and are not credited to anyone; that is ${fmt(b.unattributedImpressions)} views sitting uncredited. Instagram's collaborator field would close that gap and needs the Graph API. Kept separate from team totals on purpose so team-vs-team comparisons stay clean and no view is counted twice. EMV uses the average of your per-platform rates ($${cpm.toFixed(2)} CPM, $${per.toFixed(2)} per interaction) since this page is Instagram only.`;
+  const unTxt=showCounts()&&b.contentCount!=null?`<b>${b.unattributed} of ${b.contentCount} posts (${pctUn}%)</b>`:`<b>${pctUn}% of posts</b>`;
+  $("#blwNote").innerHTML=`Posts on the <b>@${esc((b.handles&&b.handles.instagram)||"blwwiffleball")}</b> league page, credited to teams by caption signals: an @handle mention, the team name, or a rostered player's name. A post naming two teams credits both, so the rows can sum to more than the page total. ${unTxt} carry no team signal and are not credited to anyone; that is ${fmt(b.unattributedImpressions)} views sitting uncredited. Instagram's collaborator field would close that gap and needs the Graph API. Kept separate from the team totals so team-vs-team comparisons stay clean and no view is counted twice. EMV here uses the average of your per-platform rates ($${cpm.toFixed(2)} CPM, $${per.toFixed(2)} per interaction).`;
 }
 
 /* ============ MODALS ============ */
@@ -1363,13 +1357,13 @@ function openTeamModal(id, initial){
   initial = initial || "followers";
   openModal(`
     <div class="modal-title">${logoHTML(t)}${esc(t.name)}</div>
-    <div class="modal-sub">${esc(t.handles.instagram?'@'+t.handles.instagram:'')} · ${fmtFull(t.followersNow)} followers · ${fmtFull(t.interactions)} interactions${isM()&&t.contentCount!=null?` · ${t.contentCount} posts`:""} (${esc(STATE.data.label)})</div>
+    <div class="modal-sub">${esc(t.handles.instagram?'@'+t.handles.instagram:'')} · ${fmtFull(t.followersNow)} followers · ${fmtFull(t.interactions)} interactions${showCounts()&&t.contentCount!=null?` · ${t.contentCount} posts`:""} (${esc(STATE.data.label)})</div>
     <div class="mtoggle" id="tmToggle">
       <div class="mt" data-m="followers">Followers</div>
       <div class="mt" data-m="views">Views</div>
       <div class="mt" data-m="interactions">Interactions</div>
       <div class="mt" data-m="engagement">Engagement</div>
-      ${isM()?'<div class="mt" data-m="posts">Posts/day</div>':''}
+      ${showCounts()?'<div class="mt" data-m="posts">Posts/day</div>':''}
       <div class="mt" data-m="crosspost">Cross-post</div>
     </div>
     <div id="tmChips"></div>
@@ -1384,7 +1378,7 @@ function openTeamModal(id, initial){
     const tp=$("#teamParity"), chips=$("#tmChips"), leg=$("#tmPlatLegend"), bodyEl=$("#tmBody");
     tp.style.display="none"; chips.innerHTML=""; leg.innerHTML=""; bodyEl.innerHTML="";
 
-    if(metric==='crosspost' && !isM()){
+    if(metric==='crosspost' && !showCounts()){
       const behind=(t.parity&&t.parity.behind)||[];
       tp.style.display="block"; tp.className='parity '+(behind.length?'warn':'ok');
       tp.innerHTML = behind.length
@@ -1465,42 +1459,54 @@ function openTeamModal(id, initial){
   draw(initial);
 }
 
-/* ============ WIFFLE® VIEW ============
-   WIFFLE® is kept apart from the team pages. Same reporting, but every
-   connected WIFFLE® social account is its own line instead of a team. */
-async function loadWiffle(q, fresh){
+/* ============ BRAND ACCOUNT VIEWS (BLW League Page, WIFFLE®) ============
+   Three tabs: the nine team pages (the league view above), the BLW league
+   page itself, and WIFFLE®. The last two share this layout: every connected
+   social account of that brand is its own line, kept out of the team totals. */
+const SCOPES={
+  league:{ sub:"BLW Teams · 9 accounts", eyebrow:"Every BLW team account. Click any KPI or team to drill in." },
+  blw:{ view:"blw", name:"BLW League Page", tile:"BLW", sub:"BLW League Page · @blwwiffleball", eyebrow:"The league's own page, one line per connected account. Kept out of the team totals.", loading:"Pulling the BLW league page from Metricool..." },
+  wiffle:{ view:"wiffle", name:"WIFFLE®", tile:"WIFFLE", sub:"WIFFLE® · every account", eyebrow:"Every WIFFLE® account on its own line, kept out of the BLW totals.", loading:"Pulling WIFFLE® accounts from Metricool..." },
+};
+const acctData=sc=>STATE.acct[sc]&&STATE.acct[sc].data;
+async function loadAccounts(sc, q, fresh){
+  const cfg=SCOPES[sc];
   STATE.q=q;
   $("#content").style.display="none";
-  $("#wiffleContent").style.display="";
+  $("#acctContent").style.display="";
   $("#overlay").classList.add("on");
-  $("#ovmsg").textContent=fresh?"Refreshing WIFFLE® from Metricool...":"Pulling WIFFLE® accounts from Metricool...";
+  $("#ovmsg").textContent=fresh?"Refreshing from Metricool...":cfg.loading;
   $("#errbox").classList.remove("on");
   try{
-    const r=await apiFetch("/api/metricool?view=wiffle&"+q+(fresh?("&fresh=1&_="+Date.now()):""));
+    const r=await apiFetch("/api/metricool?view="+cfg.view+"&"+q+(fresh?("&fresh=1&_="+Date.now()):""));
     if(gateFor(r)) return;
     if(!r.ok) throw new Error("Server returned "+r.status);
     const data=await r.json(); if(data.error) throw new Error(data.error);
-    STATE.wdata=data; STATE.wq=q;
-    showShared(); renderWiffle(); $("#dot").classList.remove("err");
+    STATE.acct[sc]={data,q};
+    if(sc==="wiffle"){ STATE.wdata=data; STATE.wq=q; } else { STATE.bdata=data; }
+    if(sc==="blw" && !STATE.data){ load(q,false).then(()=>{ if(STATE.scope==="blw"){ $("#content").style.display="none"; renderAccounts("blw"); } }); }
+    showShared(); if(STATE.scope===sc) renderAccounts(sc); $("#dot").classList.remove("err");
     $("#synced").textContent="LIVE · synced "+new Date(data.generatedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
   }catch(e){
     $("#dot").classList.add("err"); $("#synced").textContent="connection issue";
     $("#errbox").classList.add("on");
-    $("#errbox").innerHTML="<b>Couldn't load WIFFLE® data.</b> "+esc(e.message)+".";
+    $("#errbox").innerHTML="<b>Couldn't load "+esc(cfg.name)+" data.</b> "+esc(e.message)+".";
   }finally{ $("#overlay").classList.remove("on"); }
 }
-function accWho(a){ return { name:"WIFFLE® "+a.name, label:a.name+(a.handle?" · @"+String(a.handle).replace(/^@/,""):""), picture:a.picture, accent:a.color }; }
+function scopeName(){ return (SCOPES[STATE.scope]||SCOPES.wiffle).name||""; }
+function accWho(a){ return { name:scopeName()+" "+a.name, label:a.name+(a.handle?" · @"+String(a.handle).replace(/^@/,""):""), picture:a.picture, accent:a.color }; }
 function accLogo(a, size){
   const s=size||44;
-  return `<div class="logowrap rel" style="width:${s}px;height:${s}px;box-shadow:inset 0 0 0 2px ${a.color}">${logoChip("badge",a.picture,"WIFFLE",a.color)}<span class="netbadge" style="background:${a.color}">${esc(LBNET[a.network]||a.name)}</span></div>`;
+  return `<div class="logowrap rel" style="width:${s}px;height:${s}px;box-shadow:inset 0 0 0 2px ${a.color}">${logoChip("badge",a.picture,(SCOPES[STATE.scope]||SCOPES.wiffle).tile||"",a.color)}<span class="netbadge" style="background:${a.color}">${esc(LBNET[a.network]||a.name)}</span></div>`;
 }
-function renderWiffle(){
-  const w=STATE.wdata, host=$("#wiffleContent"); if(!w) return;
+function renderAccounts(sc){
+  const w=acctData(sc), host=$("#acctContent"); if(!w) return;
+  const NAME=esc(SCOPES[sc].name);
   destroyCharts();
   if(!w.configured){
     const seen=(w.brandsSeen||[]).map(b=>`${esc(b.label||"(no label)")} <span style="opacity:.6">#${esc(String(b.id))}</span>`).join(", ");
-    host.innerHTML=`<div class="section-title"><span>WIFFLE&reg;</span><span class="rule"></span></div>
-      <div class="panel" style="margin-top:12px"><div class="wnote"><b>No WIFFLE&reg; brand found in Metricool.</b> The view looks for a Metricool brand whose name contains "Wiffle" (other than the BLW teams and league page). ${isM()?`To pin it explicitly, add <b>WIFFLE_BLOG_IDS</b> in Vercel with the brand id(s), comma-separated, then redeploy.${seen?`<br><br>Brands visible to this Metricool login: ${seen}`:""}`:"Ask the master admin to connect it."}</div></div>`;
+    host.innerHTML=`<div class="section-title"><span>${NAME}</span><span class="rule"></span></div>
+      <div class="panel" style="margin-top:12px"><div class="wnote">${sc==="wiffle"?`<b>No WIFFLE&reg; brand found in Metricool.</b> The view looks for a Metricool brand whose name contains "Wiffle" (other than the BLW teams and league page). ${isM()?`To pin it explicitly, add <b>WIFFLE_BLOG_IDS</b> in Vercel with the brand id(s), comma-separated, then redeploy.${seen?`<br><br>Brands visible to this Metricool login: ${seen}`:""}`:"Ask the master admin to connect it."}`:`<b>No connected accounts found for the BLW league page in Metricool.</b>`}</div></div>`;
     return;
   }
   const A=w.accounts, T=w.totals, lbl=esc(w.label);
@@ -1509,14 +1515,14 @@ function renderWiffle(){
     {label:"Total followers",val:T.followers,accent:"#F3F3F1",spark:w.network.followers.map(p=>p.v),row:`<span class="delta ${delta>0?'up':delta<0?'down':'flat'}">${delta>0?'▲':delta<0?'▼':'•'} ${Math.abs(delta).toFixed(1)}%</span><span class="sub">${signed(T.netNew)} this window</span>`},
     {label:"Views ("+lbl+")",val:T.views,accent:"#5B8DEF",spark:w.network.views.map(p=>p.v),row:`<span class="sub">account-level, all ${A.length} accounts</span>`},
     {label:"Interactions ("+lbl+")",val:T.interactions,accent:"#FFB13C",spark:null,row:`<span class="sub">likes, comments, shares</span>`},
-    {label:"Impressions ("+lbl+")",val:T.impressions,accent:"#79E6C2",spark:null,row:`<span class="sub">${isM()&&T.content!=null?T.content+" posts · ":""}${fmtFull((T.saves||0)+(T.shares||0))} saves + shares</span>`},
+    {label:"Impressions ("+lbl+")",val:T.impressions,accent:"#79E6C2",spark:null,row:`<span class="sub">${showCounts()&&T.content!=null?T.content+" posts · ":""}${fmtFull((T.saves||0)+(T.shares||0))} saves + shares</span>`},
   ];
   host.innerHTML=`
-    <div class="section-title"><span>WIFFLE&reg; &middot; ${A.length} account${A.length===1?"":"s"}</span><span class="rule"></span></div>
+    <div class="section-title"><span>${NAME} &middot; ${A.length} account${A.length===1?"":"s"}</span><span class="rule"></span></div>
     <div class="hero" id="wHero">${cards.map((k,i)=>`<div class="kpi" style="cursor:default;animation-delay:${i*.06}s"><div class="accent" style="background:${k.accent}"></div><div class="label">${k.label}</div><div class="val" id="wk${i}" data-v="0">0</div><div class="row">${k.row}</div><div class="sparkwrap">${k.spark?`<canvas id="wsp${i}"></canvas>`:""}</div></div>`).join("")}</div>
     <div class="section-title"><span>Followers over time</span><span class="rule"></span></div>
     <div class="grid g-2">
-      <div class="panel"><div class="head"><div class="t">Total WIFFLE&reg; followers</div><div class="meta">stacked by account</div></div><div class="chart-box" style="height:260px"><canvas id="wFolStack"></canvas></div></div>
+      <div class="panel"><div class="head"><div class="t">Total ${NAME} followers</div><div class="meta">stacked by account</div></div><div class="chart-box" style="height:260px"><canvas id="wFolStack"></canvas></div></div>
       <div class="panel"><div class="head"><div class="t">Follower-growth velocity</div><div class="meta">net new / day, by account</div></div><div class="chart-box" style="height:260px"><canvas id="wVel"></canvas></div></div>
     </div>
     <div class="legend">${A.map(a=>`<span><i style="background:${a.color}"></i>${esc(a.name)}${a.handle?` · @${esc(String(a.handle).replace(/^@/,""))}`:""}</span>`).join("")}</div>
@@ -1526,14 +1532,17 @@ function renderWiffle(){
     </div>
     <div class="section-title"><span>Accounts</span><span class="rule"></span></div>
     <div class="wroster" id="wRoster"></div>
-    <div class="section-title"><span>Top WIFFLE&reg; posts this window</span><span class="rule"></span></div>
+    <div class="section-title"><span>Top ${NAME} posts this window</span><span class="rule"></span></div>
     <div class="lbgrid" id="wLeader"></div>
     <div class="section-title"><span>What is working &middot; by format</span><span class="rule"></span></div>
     <div class="grid g-2">
       <div class="panel"><div class="head"><div class="t">Average interactions per post</div><div class="meta">by content format</div></div><div id="wFormatBars" style="margin-top:6px"></div></div>
       <div class="panel"><div class="head"><div class="t">Format mix</div><div class="meta" id="wFormatMeta"></div></div><div class="chart-box" style="height:210px"><canvas id="wFormatMix"></canvas></div></div>
     </div>
-    <div class="wnote">WIFFLE&reg; numbers are kept out of every BLW league total above. Followers are each account's own count (Instagram followers, TikTok followers, Facebook page follows, X followers, LinkedIn followers, YouTube subscribers).</div>`;
+    ${sc==="blw"?`<div class="section-title"><span>Credit to teams</span><span class="rule"></span></div>
+    <div class="panel"><div class="emvhead"><div><div class="emvtot" id="blwEmv">$0</div><div class="emvsub" id="blwSub">BLW page EMV</div></div><div class="emvsplit" id="blwStats"></div></div>
+      <div id="blwAttr" style="margin-top:12px"></div><div class="fc-note" id="blwNote"></div></div>`:""}
+    <div class="wnote">${NAME} numbers are kept out of the BLW team totals. Followers are each account's own count (Instagram followers, TikTok followers, Facebook page follows, X followers, LinkedIn followers, YouTube subscribers).</div>`;
   cards.forEach((k,i)=>{ countUp($("#wk"+i),k.val,950); if(k.spark&&k.spark.length) miniSpark("wsp"+i,k.spark,k.accent); });
   STATE.charts.wFolStack=stackedFollowers($("#wFolStack"), A.map(a=>({label:a.name,color:a.color,series:a.series.followers})), "No follower data for this window.");
   const acctLines=(canvas,key,opts)=>{
@@ -1556,13 +1565,14 @@ function renderWiffle(){
   $("#wRoster").querySelectorAll(".team").forEach(c=>{ const go=()=>openAccountModal(c.dataset.k); c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
   const lb=w.leaderboard||[];
   const byKey=Object.fromEntries(A.map(a=>[a.key,a]));
-  $("#wLeader").innerHTML=lb.length?postCards(lb,{who:p=>accWho(byKey[p.accountKey]||{name:p.account,color:p.accent})}):`<div class="fc-note">No WIFFLE&reg; posts with measured interactions in this window.</div>`;
+  $("#wLeader").innerHTML=lb.length?postCards(lb,{who:p=>accWho(byKey[p.accountKey]||{name:p.account,color:p.accent})}):`<div class="fc-note">No ${NAME} posts with measured interactions in this window.</div>`;
   renderFormatsInto(w.formatBreakdown,"#wFormatBars","wFormatMix","#wFormatMeta");
+  if(sc==="blw"){ if(STATE.data) renderBLW(emvRates()); else { const n=$("#blwNote"); if(n) n.textContent="Loading team credit..."; } }
 }
 function openAccountModal(key){
-  const a=(STATE.wdata&&STATE.wdata.accounts||[]).find(x=>x.key===key); if(!a) return;
-  openModal(`<div class="modal-title">${accLogo(a,36)}WIFFLE&reg; ${esc(a.name)}</div>
-    <div class="modal-sub">${a.handle?"@"+esc(String(a.handle).replace(/^@/,""))+" · ":""}${fmtFull(a.followersNow)} ${a.network==="youtube"?"subscribers":"followers"} · ${fmtFull(a.interactions)} interactions${isM()&&a.contentCount!=null?` · ${a.contentCount} posts`:""} (${esc(STATE.wdata.label)})</div>
+  const a=((acctData(STATE.scope)||{}).accounts||[]).find(x=>x.key===key); if(!a) return;
+  openModal(`<div class="modal-title">${accLogo(a,36)}${esc(scopeName())} ${esc(a.name)}</div>
+    <div class="modal-sub">${a.handle?"@"+esc(String(a.handle).replace(/^@/,""))+" · ":""}${fmtFull(a.followersNow)} ${a.network==="youtube"?"subscribers":"followers"} · ${fmtFull(a.interactions)} interactions${showCounts()&&a.contentCount!=null?` · ${a.contentCount} posts`:""} (${esc(acctData(STATE.scope).label)})</div>
     <div class="gchips">${gchip("Net new",a.color,signed(a.netNew),a.mom)}${gchip("Views",PCOL.fb,fmtFull(a.views),null)}${gchip("Impressions",PCOL.tt,fmtFull(a.impressions),null)}${gchip("Avg engagement",PCOL.ig,(a.engagementRate||0).toFixed(2)+"%",null)}</div>
     <div class="mtoggle" id="amToggle"><div class="mt active" data-m="followers">Followers</div><div class="mt" data-m="netNew">Gained / day</div><div class="mt" data-m="views">Views</div><div class="mt" data-m="interactions">Interactions</div></div>
     <div class="chart-box" style="height:280px;margin-top:8px"><canvas id="acctChart"></canvas></div>
@@ -1576,20 +1586,21 @@ function openAccountModal(key){
   draw("followers");
 }
 function setScope(sc){
-  if(STATE.scope===sc) return;
+  if(STATE.scope===sc||!SCOPES[sc]) return;
   STATE.scope=sc;
   $("#scopeTabs").querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.s===sc));
-  $("#brandSub").textContent = sc==="wiffle" ? "WIFFLE® · every account" : "BLW League · 9 Teams";
+  $("#brandSub").textContent=SCOPES[sc].sub;
+  $("#eyebrow").textContent=SCOPES[sc].eyebrow;
   renderAudit();
-  $("#eyebrow").textContent = sc==="wiffle" ? "Every WIFFLE® account on its own line, kept out of the BLW totals." : "Click any KPI or team to drill in. The whole league at a glance.";
-  if(sc==="wiffle"){
-    $("#content").style.display="none"; $("#wiffleContent").style.display="";
-    if(STATE.wdata && STATE.wq===STATE.q) renderWiffle(); else loadWiffle(STATE.q,false);
-    if(!STATE.ideaBrand || STATE.ideaBrand!=="wiffle"){ STATE.ideaBrand="wiffle"; renderIdeaChips(); }
-  }else{
-    $("#wiffleContent").style.display="none"; $("#content").style.display="";
+  if(sc==="league"){
+    $("#acctContent").style.display="none"; $("#content").style.display="";
     if(STATE.data && STATE.data.label && STATE.lq===STATE.q) render(); else load(STATE.q,false);
-    if(STATE.ideaBrand==="wiffle"){ STATE.ideaBrand=null; renderIdeaChips(); }
+    if(STATE.ideaBrand==="wiffle"||STATE.ideaBrand==="blw"){ STATE.ideaBrand=null; renderIdeaChips(); }
+  }else{
+    $("#content").style.display="none"; $("#acctContent").style.display="";
+    const c=STATE.acct[sc];
+    if(c && c.q===STATE.q) renderAccounts(sc); else loadAccounts(sc,STATE.q,false);
+    if(STATE.ideaBrand!==sc){ STATE.ideaBrand=sc; renderIdeaChips(); }
   }
 }
 $("#scopeTabs").querySelectorAll(".tab").forEach(t=>{ t.onclick=()=>setScope(t.dataset.s); t.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();setScope(t.dataset.s);} }; });
@@ -1755,13 +1766,13 @@ function ideaBrands(){
   const sb=(STATE.sched&&STATE.sched.brands)||[];
   (teams.length?teams:sb.filter(b=>b.kind==="team")).forEach(t=>out.push({key:String(t.blogId),name:t.name,short:t.name.split(" ").slice(-1)[0],picture:t.picture,accent:t.accent}));
   const blw=sb.find(b=>b.kind==="league")||(STATE.data&&STATE.data.blw);
-  out.push({key:"blw",name:"BLW League Page",short:"BLW League Page",picture:blw&&blw.picture,accent:"#7CF1A8"});
+  out.push({key:"blw",name:"BLW League Page",short:"BLW League Page",picture:(STATE.bdata&&STATE.bdata.brands&&STATE.bdata.brands[0]&&STATE.bdata.brands[0].picture)||(blw&&blw.picture),accent:"#7CF1A8"});
   out.push({key:"wiffle",name:"WIFFLE®",short:"WIFFLE®",picture:(STATE.wdata&&STATE.wdata.brands&&STATE.wdata.brands[0]&&STATE.wdata.brands[0].picture)||(sb.find(b=>b.kind==="wiffle")||{}).picture,accent:"#F3F3F1"});
   return out;
 }
 function renderIdeaChips(){
   const host=$("#ideaChips"); if(!host) return;
-  const list=ideaBrands(); if(!STATE.ideaBrand) STATE.ideaBrand=STATE.scope==="wiffle"?"wiffle":(list[0]&&list[0].key);
+  const list=ideaBrands(); if(!STATE.ideaBrand) STATE.ideaBrand=STATE.scope!=="league"?STATE.scope:(list[0]&&list[0].key);
   host.innerHTML=list.map(b=>`<span class="schip${STATE.ideaBrand===b.key?" on":""}" data-b="${esc(b.key)}" tabindex="0" role="button">${logoChip("sl0",b.picture,b.name,b.accent)}${esc(b.short)}</span>`).join("");
   host.querySelectorAll(".schip").forEach(c=>{ const go=()=>{ STATE.ideaBrand=c.dataset.b; renderIdeaChips(); }; c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
   renderIdeas();
@@ -1780,6 +1791,12 @@ function perfFor(key){
   const d=STATE.data, w=STATE.wdata;
   const tp=p=>({network:p.network,type:p.type,interactions:p.interactions,impressions:p.impressions,date:(p.date||"").slice(0,10),text:p.text});
   const fm=list=>(list||[]).filter(f=>f.enough!==false).map(f=>({type:f.type,avgInteractions:f.avgInteractions}));
+  const acctPerf=a=>({window:a.label,followers:a.totals.followers,netNew:a.totals.netNew,mom:a.totals.followers?a.totals.netNew/a.totals.followers*100:0,
+      byPlatform:a.accounts.map(x=>({name:x.name,followers:x.followersNow,views:x.views})),formats:fm(a.formatBreakdown),topPosts:(a.leaderboard||[]).slice(0,5).map(tp)});
+  if(key==="blw" && STATE.bdata && STATE.bdata.configured){
+    return {...acctPerf(STATE.bdata), leagueEngagement:d&&d.totals.engagementRate,
+      players:d?(d.playerLeaderboard||[]).slice(0,6).map(p=>({name:p.name+" ("+p.team+")",interactions:p.interactions})):[], scheduled:scheduledFor(key)};
+  }
   if(key==="wiffle"){
     if(!w||!w.configured) return {scheduled:scheduledFor(key)};
     return {window:w.label,followers:w.totals.followers,netNew:w.totals.netNew,mom:w.totals.followers?w.totals.netNew/w.totals.followers*100:0,
@@ -1821,7 +1838,8 @@ async function generateIdeasFor(key){
   if(STATE.ideasBusy) return;
   STATE.ideasBusy=true; renderIdeas();
   try{
-    if(key==="wiffle" && !STATE.wdata){ try{ const r=await apiFetch("/api/metricool?view=wiffle&"+STATE.q); if(r.ok){ STATE.wdata=await r.json(); STATE.wq=STATE.q; } }catch(e){} }
+    if(key==="wiffle" && !STATE.wdata){ try{ const r=await apiFetch("/api/metricool?view=wiffle&"+STATE.q); if(r.ok){ STATE.wdata=await r.json(); STATE.wq=STATE.q; STATE.acct.wiffle={data:STATE.wdata,q:STATE.q}; } }catch(e){} }
+    if(key==="blw" && !STATE.bdata){ try{ const r=await apiFetch("/api/metricool?view=blw&"+STATE.q); if(r.ok){ STATE.bdata=await r.json(); STATE.acct.blw={data:STATE.bdata,q:STATE.q}; } }catch(e){} }
     const r=await apiFetch("/api/metricool?view=ideas",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({brand:key,count:5,perf:perfFor(key)})});
     if(gateFor(r)) return;
     const data=await r.json().catch(()=>({error:"Bad response"}));
@@ -1883,7 +1901,7 @@ $("#tfTabs").querySelectorAll(".tab:not(#customTab)").forEach(tab=>{ tab.setAttr
 $("#refreshBtn").onclick=()=>{ const b=$("#refreshBtn"); b.classList.add("spin"); Promise.all([loadCurrent(STATE.q,true),loadSched(true)]).finally(()=>b.classList.remove("spin")); };
 function tick(){ $("#clock").textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
 setInterval(tick,1000); tick();
-document.addEventListener("visibilitychange",()=>{ if(document.hidden || $("#modal").classList.contains("on")) return; if(STATE.scope==="wiffle"){ if(STATE.wdata) renderWiffle(); } else if(STATE.data) render(); if(STATE.sched) renderSched(); });
+document.addEventListener("visibilitychange",()=>{ if(document.hidden || $("#modal").classList.contains("on")) return; if(STATE.scope!=="league"){ if(acctData(STATE.scope)) renderAccounts(STATE.scope); } else if(STATE.data) render(); if(STATE.sched) renderSched(); });
 
 const cv=$("#particles"),cx=cv.getContext("2d"); let W,Hh,parts;
 function initP(){ W=cv.width=innerWidth; Hh=cv.height=innerHeight; parts=Array.from({length:Math.min(80,Math.floor(W/18))},()=>({x:Math.random()*W,y:Math.random()*Hh,vx:(Math.random()-.5)*.16,vy:(Math.random()-.5)*.16,r:Math.random()*1.4+.4,a:Math.random()*.35+.1})); }
