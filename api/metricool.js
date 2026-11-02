@@ -9,6 +9,7 @@
 //
 // Views (?view=):
 //   league     (default) the nine BLW team accounts + the BLW league page
+//   blw        the BLW league page (@blwwiffleball), one row per connected account
 //   wiffle     the WIFFLE® brand, one row per connected social account
 //   scheduled  every brand's scheduled posts, this week and next
 //   ideas      POST — AI post ideas for one brand (see api/_cc-ideas.js)
@@ -16,8 +17,9 @@
 //   config     PUBLIC — Supabase URL + anon key so the static page can run
 //              the official auth client and refresh its own session
 //
-// Post counts are master-admin only. For every other role they are stripped
-// here, server-side, so they never reach the browser (see redactLeague).
+// Post counts are not shown to anyone (v5.7.2; they were master-only before).
+// They are stripped here, server-side, so they never reach the browser
+// (see redactLeague). Master admins additionally get the Data check panel.
 //
 // Results are cached in this function instance for 5 minutes, keyed by view
 // and query. Responses are private: they vary by role, so no shared CDN cache.
@@ -30,7 +32,7 @@ import {
   windowRange, makeApi, dsum, diffs, mergeDicts, carrySum, slist, fmtPairs, loadProfiles,
   pickMetric, SAVE_KEYS, SHARE_KEYS,
 } from './_cc-core.js';
-import { buildWiffle, redactWiffle } from './_cc-wiffle.js';
+import { buildWiffle, buildBLWPage, redactAccounts } from './_cc-wiffle.js';
 import { buildScheduled } from './_cc-schedule.js';
 import { generateIdeas } from './_cc-ideas.js';
 import { plannedHandler } from './_cc-planned.js';
@@ -184,7 +186,9 @@ async function buildTeam(t, from, to, profiles, mc) {
     // Instagram saves: feed posts report "saves", reels report "saved". The
     // old code asked for "saved" on posts, which is not a posts metric, and
     // never asked reels at all, so most saves were missing.
-    tl(b, "instagram", "saves", from, to, "posts"),
+    // "saves" is the catalog name but returned nothing live; "saved" is the
+    // name reels use and the one this dashboard originally asked for.
+    ft(b, "instagram", [["saves", "posts"], ["saved", "posts"]], from, to),
     tl(b, "instagram", "saved", from, to, "reels"),
     // Instagram shares: posts AND reels (reels were missing before).
     tl(b, "instagram", "shares", from, to, "posts"),
@@ -196,6 +200,7 @@ async function buildTeam(t, from, to, profiles, mc) {
     tl(b, "facebook", "post_video_view_time", from, to, undefined),
     api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ }),
   ]);
+  const ig_saves_p_d = ig_saves_p.data;
   const ig_f = ig_fR.data, tt_views = tt_viewsR.data, tt_eng = tt_engR.data, fb_eng = fb_engR.data, tt_shares = tt_sharesR.data;
   let fb_views = fb_mv, fbViewsSource = "page_media_view";
   if (!nonEmpty(fb_mv)) {
@@ -264,9 +269,9 @@ async function buildTeam(t, from, to, profiles, mc) {
 
   // Saves / shares: per-post when available for that platform, otherwise the
   // corrected timelines.
-  const tlSaves = { ig: sumVals(ig_saves_p) + sumVals(ig_saved_r), tt: 0, fb: 0 };
+  const tlSaves = { ig: sumVals(ig_saves_p_d) + sumVals(ig_saved_r), tt: 0, fb: 0 };
   const tlShares = { ig: sumVals(ig_shares_p) + sumVals(ig_shares_r), tt: sumVals(tt_shares), fb: sumVals(fb_shares_p) };
-  const tlDaily = { ig: dsum(ig_saves_p, ig_saved_r, ig_shares_p, ig_shares_r), tt: tt_shares, fb: fb_shares_p };
+  const tlDaily = { ig: dsum(ig_saves_p_d, ig_saved_r, ig_shares_p, ig_shares_r), tt: tt_shares, fb: fb_shares_p };
   const savesByPlatform = {}, sharesByPlatform = {}, ssSource = { saves: {}, shares: {} };
   const dailyParts = [];
   for (const net of ["ig", "tt", "fb"]) {
@@ -510,12 +515,6 @@ export function redactLeague(src) {
   d.viewer = { isMaster: false };
   return d;
 }
-function masterLeague(src) {
-  const d = { ...src };
-  delete d.insightsPublic;
-  d.viewer = { isMaster: true };
-  return d;
-}
 
 // ── Per-instance cache ──────────────────────────────────────────────────────
 const CACHE = new Map();
@@ -582,15 +581,20 @@ export default async function handler(req, res) {
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
       const key = `league|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
       const data = await cached(key, CACHE_TTL, fresh, () => compute(days, rng, token, userId, custom));
-      res.status(200).send(JSON.stringify(isMaster ? masterLeague(data) : redactLeague(data)));
+      const out = redactLeague(data);
+      if (isMaster) { out.dataAudit = data.dataAudit; out.viewer = { isMaster: true }; }
+      res.status(200).send(JSON.stringify(out));
       return;
     }
-    if (view === "wiffle") {
+    if (view === "wiffle" || view === "blw") {
       const { rng, days, custom } = parseWindow(q);
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
-      const key = `wiffle|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
-      const data = await cached(key, CACHE_TTL, fresh, () => buildWiffle(windowRange(days, rng, custom), token, userId));
-      res.status(200).send(JSON.stringify(isMaster ? { ...data, viewer: { isMaster: true } } : redactWiffle(data)));
+      const key = `${view}|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
+      const build = view === "blw" ? buildBLWPage : buildWiffle;
+      const data = await cached(key, CACHE_TTL, fresh, () => build(windowRange(days, rng, custom), token, userId));
+      const out = redactAccounts(data);
+      if (isMaster) { out.dataAudit = data.dataAudit; out.brandsSeen = data.brandsSeen; out.viewer = { isMaster: true }; }
+      res.status(200).send(JSON.stringify(out));
       return;
     }
     if (view === "scheduled") {

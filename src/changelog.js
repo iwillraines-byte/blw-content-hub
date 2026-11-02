@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.7.2',
+    date: '2026-11-02',
+    kind: 'patch',
+    summary: 'v5.7.2 — Command Center: separate tabs for BLW Teams, the BLW League Page and WIFFLE®; post counts removed',
+    items: [
+      'The Command Center now has three tabs: BLW Teams (the nine team accounts), BLW League Page (@blwwiffleball) and WIFFLE®. The league page tab counts its own followers, views and interactions for every connected account (Instagram and TikTok), with follower charts, account cards, top posts, format breakdown and the credit-to-teams panel.',
+      'Post counts and post counters are gone for everyone, master admin included. The server no longer sends them.',
+      'Instagram feed-post saves are counted again: the metric name used in v5.7.0 returned nothing, so the original name is now tried as a fallback.',
+    ],
+  },
+  {
     version: '5.7.1',
     date: '2026-10-31',
     kind: 'patch',
