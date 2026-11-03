@@ -563,8 +563,6 @@
   .info:hover,.info:focus-visible{border-color:var(--ink);color:var(--ink);outline:none}
   #tip{position:fixed;z-index:200;max-width:280px;padding:9px 11px;border-radius:9px;background:#1B1C21;border:1px solid var(--line-2);box-shadow:0 8px 24px rgba(0,0,0,.45);font-size:12px;line-height:1.45;color:var(--ink);pointer-events:none;opacity:0;transition:opacity .12s}
   #tip.on{opacity:1}
-  .legend span.lgavg{cursor:default}
-  .legend span.lgavg i{height:3px;width:14px;border-radius:2px}
   .legend span.dim{opacity:.35}
   .legend span.pin{color:var(--ink)}
   .legend span.pin i{box-shadow:0 0 0 2px rgba(255,255,255,.35)}
@@ -662,8 +660,8 @@
     <div class="legend" id="teamLegend"></div>
 
     <div class="grid g-2">
-      <div class="panel"><div class="head"><div class="t">Follower-growth velocity</div><div class="meta">net new / day · league average per team</div></div><div class="chart-box"><canvas id="velChart"></canvas></div></div>
-      <div class="panel"><div class="head"><div class="t">Account views over time</div><div class="meta">per day · league average per team</div></div><div class="chart-box"><canvas id="viewsChart"></canvas></div></div>
+      <div class="panel"><div class="head"><div class="t">Follower-growth velocity</div><div class="meta">net new / day · stacked by team</div></div><div class="chart-box"><canvas id="velChart"></canvas></div></div>
+      <div class="panel"><div class="head"><div class="t">Account views over time</div><div class="meta">per day · stacked by team</div></div><div class="chart-box"><canvas id="viewsChart"></canvas></div></div>
     </div>
 
     <div class="section-title"><span>Top posts this window</span><span class="rule"></span></div>
@@ -1133,30 +1131,32 @@ function renderFollowersSplit(){
   STATE.charts.folTop=lineChart($("#folTop"),order.slice(0,3),labels,"followers",{logo:true});
   STATE.charts.folRest=lineChart($("#folRest"),order.slice(3),labels,"followers",{logo:true});
 }
-// Trend charts (v5.10): one bold league-average line, every team faint
-// behind it. Hover or click a team in the legend to bring it forward.
-function avgChart(canvas, teams, key, opts){
+// Trend charts (v5.10.1): stacked bars, one segment per team in its own
+// color, so each day's bar is the league total. Hover or click a team in
+// the legend to bring its segment forward.
+function stackChart(canvas, teams, key, opts){
   opts=opts||{};
   const labels=alignedAxis(key);
-  const rows=teams.map(t=>{ const m=Object.fromEntries(t.series[key].map(p=>[p.d,p.v])); return labels.map(d=>(d in m)?m[d]:(opts.zero?0:null)); });
-  const avg=labels.map((_,j)=>{ const vs=rows.map(r=>r[j]).filter(v=>v!=null); return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null; });
-  const ds=teams.map((t,i)=>({label:t.name,__accent:t.accent,data:rows[i],borderColor:t.accent+"40",backgroundColor:t.accent,borderWidth:1.2,pointRadius:0,pointHoverRadius:0,tension:.32,spanGaps:true}));
-  ds.push({label:"League average",__avg:true,data:avg,borderColor:"#EDEDE7",backgroundColor:"#EDEDE7",borderWidth:2.6,pointRadius:0,pointHoverRadius:4,tension:.32,spanGaps:true});
-  return new Chart(canvas,{type:"line",data:{labels:labels.map(mmdd),datasets:ds},
+  const ds=teams.map(t=>{ const m=Object.fromEntries(t.series[key].map(p=>[p.d,p.v]));
+    return {label:t.name,__accent:t.accent,data:labels.map(d=>(d in m)?m[d]:0),backgroundColor:t.accent+"d9",hoverBackgroundColor:t.accent,borderWidth:0,borderSkipped:false,stack:"league",barPercentage:.86,categoryPercentage:.9}; });
+  return new Chart(canvas,{type:"bar",data:{labels:labels.map(mmdd),datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-      plugins:{legend:{display:false},tooltip:{...TT,filter:it=>{ const x=it.chart.data.datasets[it.datasetIndex]; return x.__avg||x.label===hlName(); },itemSort:(a,b)=>b.parsed.y-a.parsed.y,
-        callbacks:{label:it=>` ${it.dataset.label}: ${fmt(Math.round(it.parsed.y))}`}}},
-      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
+      plugins:{legend:{display:false},tooltip:{...TT,filter:it=>it.parsed.y!==0,itemSort:(a,b)=>b.parsed.y-a.parsed.y,
+        callbacks:{label:it=>` ${it.dataset.label}: ${opts.signed?signed(it.parsed.y):fmtFull(it.parsed.y)}`,
+          footer:items=>{ const tot=items.reduce((a,b)=>a+b.parsed.y,0); return "League: "+(opts.signed?signed(tot):fmtFull(tot)); }}}},
+      scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:10}},y:{stacked:true,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
 }
-function renderVelocity(){ STATE.charts.vel=avgChart($("#velChart"),STATE.data.teams,"netNew"); }
-function renderViews(){ STATE.charts.views=avgChart($("#viewsChart"),STATE.data.teams,"views",{zero:true}); }
+function renderVelocity(){ STATE.charts.vel=stackChart($("#velChart"),STATE.data.teams,"netNew",{signed:true}); }
+function renderViews(){ STATE.charts.views=stackChart($("#viewsChart"),STATE.data.teams,"views"); }
 const hlName=()=>STATE.hlHover||STATE.pin||null;
 function hlApply(){
   const name=hlName();
   ["folTop","folRest","vel","views"].forEach(k=>{ const ch=STATE.charts[k]; if(!ch) return;
+    const bar=ch.config.type==="bar";
     ch.data.datasets.forEach(x=>{
+      if(bar){ if(!x.__baseBg) x.__baseBg=x.backgroundColor;
+        x.backgroundColor=!name?x.__baseBg:(x.label===name?x.__accent:x.__accent+"2e"); return; }
       if(!x.__base) x.__base={c:x.borderColor,w:x.borderWidth};
-      if(x.__avg){ x.borderColor=name?"rgba(237,237,231,.6)":x.__base.c; x.borderWidth=name?2:x.__base.w; return; }
       if(!name){ x.borderColor=x.__base.c; x.borderWidth=x.__base.w; }
       else if(x.label===name){ x.borderColor=x.__accent||x.__base.c; x.borderWidth=2.6; }
       else { x.borderColor=(x.__accent||String(x.__base.c).slice(0,7))+"1c"; x.borderWidth=x.__base.w; }
@@ -1168,7 +1168,7 @@ function hlApply(){
 function renderLegend(){
   const lg=$("#teamLegend");
   if(STATE.pin && !STATE.data.teams.some(t=>t.name===STATE.pin)) STATE.pin=null;
-  lg.innerHTML=`<span class="lgavg"><i style="background:#EDEDE7"></i>League average</span>`+STATE.data.teams.map(t=>`<span data-name="${esc(t.name)}" tabindex="0" role="button" aria-pressed="false"><i style="background:${t.accent}"></i>${esc(t.name)}</span>`).join("")+`<span class="lghint">Hover a team to highlight it, click to pin</span>`;
+  lg.innerHTML=STATE.data.teams.map(t=>`<span data-name="${esc(t.name)}" tabindex="0" role="button" aria-pressed="false"><i style="background:${t.accent}"></i>${esc(t.name)}</span>`).join("")+`<span class="lghint">Hover a team to highlight it, click to pin</span>`;
   lg.querySelectorAll("span[data-name]").forEach(sp=>{
     const n=sp.dataset.name;
     sp.onmouseenter=()=>{ STATE.hlHover=n; hlApply(); };
