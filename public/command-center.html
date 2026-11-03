@@ -457,6 +457,60 @@
   .perr{grid-column:1/-1;font-size:12px;color:var(--neg);display:none}
   .perr.on{display:block}
   @media(max-width:620px){.pform{grid-template-columns:1fr}}
+  /* ── Every post (library) ── */
+  .plbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  .plbar .sel{padding:7px 28px 7px 10px;font-size:11.5px}
+  .plbar .inp{width:200px;padding:7px 10px;font-size:12px}
+  .plbar .sp{flex:1}
+  .plsum{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:12px}
+  .plc{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 12px;cursor:pointer;transition:.15s}
+  .plc:hover{border-color:var(--line-2)}
+  .plc.on{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.05)}
+  .plc .n{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600}
+  .plc .n i{width:8px;height:8px;border-radius:2px}
+  .plc .m{display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--ink-2);white-space:nowrap}
+  .plc .m b{display:block;font-size:14px;color:var(--ink);font-weight:600}
+  .plsel{display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;border:1px solid var(--line-2);border-radius:10px;background:rgba(255,255,255,.04);font-size:12px;position:sticky;top:8px;z-index:5;backdrop-filter:blur(10px)}
+  .plsel.on{display:flex}
+  .plsel .lab{color:var(--ink-2);margin-right:4px}
+  .pllist{margin-top:10px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(14,15,18,.6)}
+  .plrow{display:grid;grid-template-columns:22px 56px minmax(0,1fr) 150px 150px 26px;gap:12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}
+  .plrow:first-child{border-top:none}
+  .plrow:hover{background:rgba(255,255,255,.02)}
+  .plrow.sel{background:rgba(124,241,168,.05)}
+  .plrow input[type=checkbox]{width:15px;height:15px;accent-color:#7CF1A8;cursor:pointer}
+  .plth{width:56px;height:56px;border-radius:9px;overflow:hidden;background:#15161a;display:grid;place-items:center;font-size:9px;color:var(--ink-3)}
+  .plth img{width:100%;height:100%;object-fit:cover}
+  .plhead{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-2);min-width:0;flex-wrap:wrap}
+  .plhead b{color:var(--ink);font-weight:600}
+  .plhead .ty{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .plhead .man{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9AD1FF}
+  .pltxt{font-size:12px;color:var(--ink);line-height:1.4;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .plnets{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .plnets a{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-2);text-decoration:none}
+  .plnets a:hover{color:var(--ink)}
+  .plnets svg{width:12px;height:12px}
+  .pltot{display:flex;gap:14px;justify-content:flex-end;text-align:right}
+  .pltot div{font-size:10px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+  .pltot b{display:block;font-size:14px;color:var(--ink);letter-spacing:0;text-transform:none}
+  .plwho .sel{width:100%;padding:7px 26px 7px 10px;font-size:11.5px}
+  .plwho .sel.mixed{color:var(--warn)}
+  .plx{all:unset;cursor:pointer;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--ink-2);transition:.15s}
+  .plx:hover{background:rgba(255,255,255,.08);color:var(--ink)}
+  .plx.on{transform:rotate(180deg)}
+  .pldet{grid-column:1/-1;margin:2px 0 4px 90px;border-left:1px solid var(--line-2);padding-left:12px;display:flex;flex-direction:column;gap:2px}
+  .pldr{display:grid;grid-template-columns:20px 120px 80px 1fr 80px 80px 60px auto;gap:10px;align-items:center;font-size:11.5px;color:var(--ink-2);padding:4px 0}
+  .pldr svg{width:13px;height:13px}
+  .pldr b{color:var(--ink);font-weight:600}
+  .pldr a{color:var(--ink);text-decoration:none}.pldr a:hover{text-decoration:underline}
+  .pldr .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lnk{all:unset;cursor:pointer;font-size:11px;color:var(--ink-2);border-bottom:1px dotted var(--ink-3)}
+  .lnk:hover{color:var(--ink)}
+  .plmore{display:flex;justify-content:center;margin-top:10px}
+  .plempty{padding:24px;text-align:center;font-size:12px;color:var(--ink-3)}
+  .crow{display:grid;grid-template-columns:34px 1fr 32px;gap:8px;align-items:center;margin-top:8px}
+  .crow input[type=color]{width:34px;height:34px;border:1px solid var(--line-2);border-radius:8px;background:none;padding:2px;cursor:pointer}
+  @media(max-width:1080px){.plrow{grid-template-columns:22px 48px minmax(0,1fr) 130px 26px}.plrow .pltot{display:none}.pldet{margin-left:0}.pldr{grid-template-columns:20px 1fr 70px 70px auto}.pldr .hm{display:none}}
 </style>
 </head>
 <body>
@@ -578,6 +632,15 @@
   </div>
 
   <div id="acctContent" class="fade" style="display:none"></div>
+
+  <div id="postLib" style="display:none">
+    <div class="section-title"><span id="plTitle">Every post</span><span class="rule"></span></div>
+    <div class="plbar" id="plBar"></div>
+    <div class="plsum" id="plSum"></div>
+    <div class="plsel" id="plSel" role="toolbar" aria-label="Selected posts"></div>
+    <div class="pllist" id="plList"></div>
+    <div class="plmore" id="plMore"></div>
+  </div>
 
   <div id="ideasSection" style="display:none">
     <div class="section-title"><span>Post ideas</span><span class="rule"></span></div>
@@ -749,7 +812,7 @@ async function apiFetch(url, opts){
 }
 function showGate(kind){
   $("#overlay").classList.remove("on");
-  ["#content","#acctContent","#schedSection","#ideasSection","#auditSection"].forEach(sel=>{ const el=$(sel); if(el) el.style.display="none"; });
+  ["#content","#acctContent","#postLib","#schedSection","#ideasSection","#auditSection"].forEach(sel=>{ const el=$(sel); if(el) el.style.display="none"; });
   $("#errbox").classList.add("on");
   $("#errbox").innerHTML = kind==="forbidden"
     ? "<b>Content team and admins only.</b> Your BLW Studio account doesn't have access to the Command Center. Ask the master admin to update your role."
@@ -782,7 +845,7 @@ async function load(q,fresh){
     $("#errbox").innerHTML="<b>Couldn't load data.</b> "+esc(e.message)+". If env vars were just added in Vercel, redeploy, then Refresh.";
   }finally{ $("#overlay").classList.remove("on"); }
 }
-function showShared(){ $("#schedSection").style.display=""; $("#ideasSection").style.display=""; if(!STATE.sched) loadSched(false); renderIdeaChips(); renderAudit(); }
+function showShared(){ $("#schedSection").style.display=""; $("#ideasSection").style.display=""; if(!STATE.sched) loadSched(false); renderIdeaChips(); renderAudit(); loadPosts(false); }
 
 function render(){
   const c=$("#content"); c.classList.add("dim");
@@ -1592,6 +1655,7 @@ function setScope(sc){
   $("#brandSub").textContent=SCOPES[sc].sub;
   $("#eyebrow").textContent=SCOPES[sc].eyebrow;
   renderAudit();
+  STATE.pl.sel.clear(); STATE.pl.f.brand="all"; if(STATE.pl.data) renderPosts();
   if(sc==="league"){
     $("#acctContent").style.display="none"; $("#content").style.display="";
     if(STATE.data && STATE.data.label && STATE.lq===STATE.q) render(); else load(STATE.q,false);
@@ -1758,6 +1822,192 @@ $("#calAdd").onclick=()=>openPlanner(null);
 setInterval(()=>{ if((STATE.sched||STATE.planned.length) && !document.hidden && !$("#modal").classList.contains("on")) renderSched(); }, 60000);
 setInterval(()=>{ if(STATE.sched && !document.hidden) loadSched(false); }, 5*60000);
 
+/* ============ EVERY POST ============
+   Every post published in the selected window for the brands on the current
+   tab, grouped into "creatives": the same piece of content cross-posted to
+   several platforms becomes one row with per-platform numbers. Grouping is
+   automatic (server, api/_cc-posts.js); anything it gets wrong can be fixed
+   here with Group together / Split apart. Each creative can be tagged with
+   the contractor who made it, and the cards on top roll performance up by
+   contractor. Tags and fixes are shared: stored in BLW Studio, not Metricool. */
+STATE.pl={data:null,q:null,tags:null,f:{brand:"all",net:"all",type:"all",who:"all",q:"",sort:"new"},sel:new Set(),open:new Set(),limit:40,busy:false};
+const PL_KIND={league:"team",blw:"league",wiffle:"wiffle"};
+async function loadPosts(fresh){
+  const q=STATE.q; if(!q) return;
+  $("#postLib").style.display="";
+  if(!fresh && STATE.pl.q===q && STATE.pl.data){ renderPosts(); return; }
+  if(STATE.pl.busy===q && !fresh) return;
+  STATE.pl.busy=q;
+  $("#plList").innerHTML='<div class="plempty">Loading every post for this window...</div>';
+  try{
+    const [r,rt]=await Promise.all([
+      apiFetch("/api/metricool?view=posts&"+q+(fresh?("&fresh=1&_="+Date.now()):"")),
+      (!STATE.pl.tags||fresh)?apiFetch("/api/metricool?view=posttags"):null,
+    ]);
+    if(rt&&rt.ok){ const t=await rt.json(); if(!t.error) STATE.pl.tags=t; }
+    if(r&&r.ok){ const d=await r.json(); if(!d.error){ STATE.pl.data=d; STATE.pl.q=q; STATE.pl.sel.clear(); STATE.pl.limit=40; } else throw new Error(d.error); }
+    else if(r) throw new Error("Server returned "+r.status);
+  }catch(e){ $("#plList").innerHTML=`<div class="plempty">Couldn't load posts: ${esc(e.message)}</div>`; STATE.pl.busy=false; return; }
+  STATE.pl.busy=false;
+  renderPosts();
+}
+function plTags(){ return STATE.pl.tags||{contractors:[],assign:{},groups:{}}; }
+function plContractor(id){ return plTags().contractors.find(c=>c.id===id)||null; }
+// Posts -> creatives for the current tab.
+function plCreatives(){
+  const D=STATE.pl.data; if(!D) return [];
+  const T=plTags(), kind=PL_KIND[STATE.scope];
+  const bById=Object.fromEntries(D.brands.map(b=>[String(b.blogId),b]));
+  const map=new Map();
+  for(const p of D.posts){
+    if(p.kind!==kind) continue;
+    const ov=T.groups[p.key];
+    const gid= ov==="solo" ? "S:"+p.key : ov ? "M:"+ov : "A:"+p.autoGroup;
+    let c=map.get(gid); if(!c){ c={id:gid,manual:!!ov&&ov!=="solo",posts:[],brand:bById[String(p.blogId)]||{name:"?",accent:"#888"}}; map.set(gid,c); }
+    c.posts.push(p);
+  }
+  const out=[];
+  for(const c of map.values()){
+    c.posts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    c.date=c.posts[0].date;
+    c.text=c.posts.reduce((a,p)=>(p.text||"").length>a.length?p.text:a,"");
+    const pic=c.posts.find(p=>p.network==="instagram"&&p.picture)||c.posts.find(p=>p.picture);
+    c.picture=pic?pic.picture:null;
+    c.impressions=c.posts.reduce((a,p)=>a+(p.impressions||0),0);
+    c.interactions=c.posts.reduce((a,p)=>a+(p.interactions||0),0);
+    c.nets=[...new Set(c.posts.map(p=>p.network))];
+    c.types=[...new Set(c.posts.map(p=>p.type))];
+    const ws=[...new Set(c.posts.map(p=>T.assign[p.key]||""))];
+    c.who= ws.length===1 ? ws[0] : "mixed";
+    // a manual group whose members are now on other tabs/windows can be a single post
+    out.push(c);
+  }
+  return out;
+}
+function plFiltered(skipWho){
+  const f=STATE.pl.f, q=f.q.trim().toLowerCase();
+  let list=plCreatives().filter(c=>
+    (f.brand==="all"||String(c.brand.blogId)===f.brand) &&
+    (f.net==="all"||c.nets.includes(f.net)) &&
+    (f.type==="all"||c.types.includes(f.type)) &&
+    (!q||(c.text||"").toLowerCase().includes(q)) &&
+    (skipWho||f.who==="all"||(f.who==="none"?c.who==="":c.who===f.who)));
+  const by={new:(a,b)=>(b.date||"").localeCompare(a.date||""),old:(a,b)=>(a.date||"").localeCompare(b.date||""),views:(a,b)=>b.impressions-a.impressions,inter:(a,b)=>b.interactions-a.interactions,eng:(a,b)=>(b.interactions/Math.max(1,b.impressions))-(a.interactions/Math.max(1,a.impressions))}[f.sort];
+  return list.sort(by);
+}
+function plDate(s,withTime){ if(!s) return ""; const d=new Date(s.length===19?s+"Z":s); return d.toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric"})+(withTime?" "+d.toLocaleTimeString("en-US",{timeZone:"UTC",hour:"numeric",minute:"2-digit"}):""); }
+function renderPosts(){
+  const D=STATE.pl.data, host=$("#plList"); if(!D||!host) return;
+  const kind=PL_KIND[STATE.scope], f=STATE.pl.f, T=plTags();
+  const scopeBrands=D.brands.filter(b=>b.kind===kind);
+  if(f.brand!=="all"&&!scopeBrands.some(b=>String(b.blogId)===f.brand)) f.brand="all";
+  $("#plTitle").textContent="Every post · "+D.label;
+  const opt=(v,l,cur)=>`<option value="${esc(v)}"${String(cur)===String(v)?" selected":""}>${esc(l)}</option>`;
+  const nets=[...new Set(D.posts.filter(p=>p.kind===kind).map(p=>p.network))];
+  const types=[...new Set(D.posts.filter(p=>p.kind===kind).map(p=>p.type))];
+  $("#plBar").innerHTML=
+    (scopeBrands.length>1?`<select class="sel" data-f="brand" aria-label="Brand">${opt("all","All brands",f.brand)}${scopeBrands.map(b=>opt(String(b.blogId),b.name,f.brand)).join("")}</select>`:"")+
+    `<select class="sel" data-f="net" aria-label="Platform">${opt("all","All platforms",f.net)}${nets.map(n=>opt(n,NLABEL[n]||n,f.net)).join("")}</select>`+
+    `<select class="sel" data-f="type" aria-label="Format">${opt("all","All formats",f.type)}${types.map(t=>opt(t,capw(t),f.type)).join("")}</select>`+
+    `<select class="sel" data-f="who" aria-label="Contractor">${opt("all","Anyone",f.who)}${opt("none","Not tagged",f.who)}${T.contractors.map(c=>opt(c.id,c.name,f.who)).join("")}</select>`+
+    `<input class="inp" data-f="q" type="search" placeholder="Search captions" value="${esc(f.q)}" aria-label="Search captions">`+
+    `<select class="sel" data-f="sort" aria-label="Sort">${opt("new","Newest first",f.sort)}${opt("old","Oldest first",f.sort)}${opt("views","Most views",f.sort)}${opt("inter","Most interactions",f.sort)}${opt("eng","Best engagement",f.sort)}</select>`+
+    `<span class="sp"></span><button class="btn" id="plCsv">Download CSV</button><button class="btn" id="plWho">Contractors</button>`;
+  $("#plBar").querySelectorAll("[data-f]").forEach(el=>{ const ev=el.tagName==="INPUT"?"input":"change"; el.addEventListener(ev,()=>{ f[el.dataset.f]=el.value; STATE.pl.limit=40; if(el.tagName==="INPUT"){ clearTimeout(STATE.pl.t); STATE.pl.t=setTimeout(()=>{ renderPostRows(); renderPostSummary(); },200); } else renderPosts(); }); });
+  $("#plCsv").onclick=plCsv; $("#plWho").onclick=plManage;
+  renderPostSummary(); renderPostRows();
+}
+function renderPostSummary(){
+  const T=plTags(), list=plFiltered(true), f=STATE.pl.f;
+  const agg={}; list.forEach(c=>{ const k=c.who||"none"; const a=agg[k]||(agg[k]={v:0,i:0,n:0}); a.v+=c.impressions; a.i+=c.interactions; a.n+=1; });
+  const cards=[...T.contractors.map(c=>({id:c.id,name:c.name,color:c.color})),{id:"none",name:"Not tagged",color:"#5f6370"},{id:"mixed",name:"Mixed (split by platform)",color:"#FFC04C"}].filter(c=>agg[c.id]);
+  $("#plSum").innerHTML=cards.map(c=>{ const a=agg[c.id];
+    return `<div class="plc${f.who===c.id?" on":""}" data-w="${esc(c.id)}" tabindex="0" role="button" title="Show only ${esc(c.name)}"><div class="n"><i style="background:${c.color}"></i>${esc(c.name)}</div>
+      <div class="m"><span><b>${fmt(a.v)}</b>views</span><span><b>${fmt(a.i)}</b>interactions</span><span><b>${fmt(a.v/a.n)}</b>avg views</span></div></div>`; }).join("");
+  $("#plSum").querySelectorAll(".plc").forEach(el=>{ const go=()=>{ if(el.dataset.w==="mixed") return; f.who=f.who===el.dataset.w?"all":el.dataset.w; STATE.pl.limit=40; renderPosts(); }; el.onclick=go; el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
+}
+function plWhoSelect(c){
+  const T=plTags();
+  return `<select class="sel${c.who==="mixed"?" mixed":""}" data-g="${esc(c.id)}" aria-label="Who made this">${c.who==="mixed"?'<option value="__mixed" selected>Mixed</option>':""}<option value=""${c.who===""?" selected":""}>Not tagged</option>${T.contractors.map(x=>`<option value="${esc(x.id)}"${c.who===x.id?" selected":""}>${esc(x.name)}</option>`).join("")}</select>`;
+}
+function renderPostRows(){
+  const host=$("#plList"); const list=plFiltered(false); STATE.pl.view=list;
+  const shown=list.slice(0,STATE.pl.limit);
+  if(!list.length){ host.innerHTML='<div class="plempty">No posts match these filters in this window.</div>'; $("#plMore").innerHTML=""; plSelBar(); return; }
+  host.innerHTML=shown.map(c=>{
+    const b=c.brand, open=STATE.pl.open.has(c.id), sel=STATE.pl.sel.has(c.id);
+    const nets=c.posts.map(p=>`<a href="${esc(p.link||"#")}" target="_blank" rel="noopener" title="${esc(NLABEL[p.network]||p.network)}: ${fmtFull(p.impressions)} views, ${fmtFull(p.interactions)} interactions. Click to open the post.">${glyph(p.network)}${fmt(p.impressions)} · ${fmt(p.interactions)}</a>`).join("");
+    const det=open?`<div class="pldet">${c.posts.map(p=>`<div class="pldr">${glyph(p.network)}<span>${esc(plDate(p.date,true))}</span><span class="hm">${esc(capw(p.type))}</span><span class="t hm">${esc((p.text||"").slice(0,120))||"(no caption)"}</span><span><b>${fmt(p.impressions)}</b> views</span><span><b>${fmt(p.interactions)}</b> int</span><span class="hm">${(p.engagement||0).toFixed(1)}%</span><span>${p.link?`<a href="${esc(p.link)}" target="_blank" rel="noopener">Open</a>`:""}${c.posts.length>1?` &nbsp;<button class="lnk" data-split="${esc(p.key)}">Split off</button>`:""}</span></div>`).join("")}${c.manual?`<div style="margin-top:4px"><button class="lnk" data-reset="${esc(c.id)}">Undo manual grouping</button></div>`:""}</div>`:"";
+    return `<div class="plrow${sel?" sel":""}" data-g="${esc(c.id)}">
+      <input type="checkbox" data-ck="${esc(c.id)}"${sel?" checked":""} aria-label="Select">
+      <div class="plth">${c.picture?`<img src="${esc(c.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:esc(capw(c.types[0]||""))}</div>
+      <div style="min-width:0"><div class="plhead">${logoChip("clg",b.picture,b.name,b.accent)}<b>${esc(b.name)}</b><span>${esc(plDate(c.date))}</span><span class="ty">${c.types.map(capw).join(" / ")}</span>${c.manual?'<span class="man">Grouped by hand</span>':""}</div>
+        <div class="pltxt">${esc(c.text)||"<span style='color:var(--ink-3)'>(no caption)</span>"}</div><div class="plnets" aria-label="Views and interactions per platform">${nets}</div></div>
+      <div class="pltot"><div><b>${fmt(c.impressions)}</b>views</div><div><b>${fmt(c.interactions)}</b>int</div></div>
+      <div class="plwho">${plWhoSelect(c)}</div>
+      <button class="plx${open?" on":""}" data-x="${esc(c.id)}" aria-label="Show each platform" title="Show each platform"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button>
+      ${det}</div>`;
+  }).join("");
+  $("#plMore").innerHTML=list.length>shown.length?`<button class="btn" id="plMoreBtn">Show more</button>`:"";
+  const mb=$("#plMoreBtn"); if(mb) mb.onclick=()=>{ STATE.pl.limit+=40; renderPostRows(); };
+  const byId=Object.fromEntries(list.map(c=>[c.id,c]));
+  host.querySelectorAll("[data-ck]").forEach(el=>el.onchange=()=>{ el.checked?STATE.pl.sel.add(el.dataset.ck):STATE.pl.sel.delete(el.dataset.ck); el.closest(".plrow").classList.toggle("sel",el.checked); plSelBar(); });
+  host.querySelectorAll("[data-x]").forEach(el=>el.onclick=()=>{ const id=el.dataset.x; STATE.pl.open.has(id)?STATE.pl.open.delete(id):STATE.pl.open.add(id); renderPostRows(); });
+  host.querySelectorAll(".plwho select").forEach(el=>el.onchange=()=>{ if(el.value==="__mixed") return; const c=byId[el.dataset.g]; plSave({op:"assign",postKeys:c.posts.map(p=>p.key),contractorId:el.value||null}); });
+  host.querySelectorAll("[data-split]").forEach(el=>el.onclick=()=>plSave({op:"ungroup",postKeys:[el.dataset.split]}));
+  host.querySelectorAll("[data-reset]").forEach(el=>el.onclick=()=>{ const c=byId[el.dataset.reset]; plSave({op:"reset",postKeys:c.posts.map(p=>p.key)}); });
+  plSelBar();
+}
+function plSelected(){ const all=Object.fromEntries((STATE.pl.view||[]).map(c=>[c.id,c])); return [...STATE.pl.sel].map(id=>all[id]).filter(Boolean); }
+function plSelBar(){
+  const bar=$("#plSel"), sel=plSelected(), T=plTags();
+  if(!sel.length){ bar.classList.remove("on"); bar.innerHTML=""; return; }
+  const sameBrand=new Set(sel.map(c=>String(c.brand.blogId))).size===1;
+  bar.classList.add("on");
+  bar.innerHTML=`<span class="lab">${sel.length===1?"One row selected":"Rows selected"}</span>
+    ${sel.length>1?`<button class="btn" id="plGroup"${sameBrand?"":" disabled title='Only posts from the same brand can be grouped'"}>Group together</button>`:""}
+    ${sel.some(c=>c.posts.length>1)?'<button class="btn" id="plSplit">Split apart</button>':""}
+    <select class="sel" id="plAssign" aria-label="Tag who made the selected posts"><option value="">Tag who made these...</option><option value="__none">Not tagged</option>${T.contractors.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("")}</select>
+    <button class="btn" id="plClear">Clear selection</button>`;
+  const keys=()=>sel.flatMap(c=>c.posts.map(p=>p.key));
+  const g=$("#plGroup"); if(g&&sameBrand) g.onclick=()=>{ const anchor=sel[0].posts[0].key; plSave({op:"group",postKeys:keys(),anchor},true); };
+  const sp=$("#plSplit"); if(sp) sp.onclick=()=>plSave({op:"ungroup",postKeys:keys()},true);
+  $("#plAssign").onchange=e=>{ const v=e.target.value; if(!v) return; plSave({op:"assign",postKeys:keys(),contractorId:v==="__none"?null:v},true); };
+  $("#plClear").onclick=()=>{ STATE.pl.sel.clear(); renderPostRows(); };
+}
+async function plSave(body,clearSel){
+  try{
+    const r=await apiFetch("/api/metricool?view=posttags",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    if(gateFor(r)) return;
+    const d=await r.json().catch(()=>({error:"Bad response"}));
+    if(!r.ok||d.error) throw new Error(d.error||("Server returned "+r.status));
+    STATE.pl.tags=d; if(clearSel) STATE.pl.sel.clear();
+    renderPostSummary(); renderPostRows();
+  }catch(e){ alertBar("Couldn't save: "+e.message); }
+}
+function alertBar(msg){ const b=$("#plSel"); b.classList.add("on"); b.innerHTML=`<span style="color:var(--neg)">${esc(msg)}</span>`; setTimeout(()=>plSelBar(),3500); }
+function plManage(){
+  const T=plTags(); let rows=T.contractors.map(c=>({...c}));
+  const draw=()=>{ $("#cList").innerHTML=rows.map((c,i)=>`<div class="crow"><input type="color" value="${esc(c.color||"#cccccc")}" data-i="${i}" data-k="color" aria-label="Color"><input class="inp" value="${esc(c.name)}" data-i="${i}" data-k="name" placeholder="Name" maxlength="60"><button class="plx" data-rm="${i}" title="Remove" aria-label="Remove">&#10005;</button></div>`).join("");
+    $("#cList").querySelectorAll("input").forEach(el=>el.oninput=()=>{ rows[+el.dataset.i][el.dataset.k]=el.value; });
+    $("#cList").querySelectorAll("[data-rm]").forEach(el=>el.onclick=()=>{ rows.splice(+el.dataset.rm,1); draw(); }); };
+  openModal(`<div class="modal-title">Contractors</div><div class="modal-sub">Who can be tagged on a post. Removing someone untags their posts.</div>
+    <div id="cList" style="margin-top:12px"></div>
+    <div style="margin-top:10px"><button class="btn" id="cAdd">+ Add person</button></div>
+    <div class="pfoot"><span class="note"></span><button class="btn" id="cCancel">Cancel</button><button class="btn primary" id="cSave">Save</button></div>`, true);
+  draw();
+  $("#cAdd").onclick=()=>{ rows.push({id:"",name:"",color:["#5CE0E0","#FF6FCF","#FFB13C","#7CF1A8","#9AD1FF","#C7F24E","#B8A6FF"][rows.length%7]}); draw(); const ins=$("#cList").querySelectorAll('input[data-k="name"]'); ins[ins.length-1].focus(); };
+  $("#cCancel").onclick=closeModal;
+  $("#cSave").onclick=async()=>{ await plSave({op:"contractors",contractors:rows.filter(r=>r.name.trim())}); closeModal(); renderPosts(); };
+}
+function plCsv(){
+  const T=plTags(), rows=[["Creative","Date","Brand","Platform","Format","Caption","Link","Views","Interactions","Engagement %","Saves","Shares","Made by"]];
+  plFiltered(false).forEach((c,ci)=>c.posts.forEach(p=>{ const who=plContractor(T.assign[p.key]); rows.push([ci+1,p.date,c.brand.name,NLABEL[p.network]||p.network,capw(p.type),(p.text||"").replace(/\s+/g," "),p.link||"",p.impressions,p.interactions,p.engagement,p.saves??"",p.shares??"",who?who.name:""]); }));
+  const csv=rows.map(r=>r.map(v=>{ const s=String(v??""); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(",")).join("\n");
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download=`blw-posts-${STATE.scope}-${(STATE.pl.data&&STATE.pl.data.label||"window").replace(/[^A-Za-z0-9]+/g,"-")}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
 /* ============ POST IDEAS ============ */
 const IDEA_KEY=b=>"cc-ideas-v1:"+b;
 function ideaBrands(){
@@ -1898,7 +2148,7 @@ function renderAudit(){
   };
 })();
 $("#tfTabs").querySelectorAll(".tab:not(#customTab)").forEach(tab=>{ tab.setAttribute("tabindex","0"); tab.onclick=()=>{ if(tab.classList.contains("active"))return; $("#tfTabs").querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); loadCurrent(tab.dataset.q,false); }; tab.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();tab.click();} }; });
-$("#refreshBtn").onclick=()=>{ const b=$("#refreshBtn"); b.classList.add("spin"); Promise.all([loadCurrent(STATE.q,true),loadSched(true)]).finally(()=>b.classList.remove("spin")); };
+$("#refreshBtn").onclick=()=>{ const b=$("#refreshBtn"); b.classList.add("spin"); Promise.all([loadCurrent(STATE.q,true),loadSched(true),loadPosts(true)]).finally(()=>b.classList.remove("spin")); };
 function tick(){ $("#clock").textContent=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
 setInterval(tick,1000); tick();
 document.addEventListener("visibilitychange",()=>{ if(document.hidden || $("#modal").classList.contains("on")) return; if(STATE.scope!=="league"){ if(acctData(STATE.scope)) renderAccounts(STATE.scope); } else if(STATE.data) render(); if(STATE.sched) renderSched(); });
