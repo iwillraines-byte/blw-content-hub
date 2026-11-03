@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '5.8.0',
+    date: '2026-11-03',
+    kind: 'minor',
+    summary: 'v5.8.0 — Command Center: every post in the window, grouped by creative, tagged by contractor',
+    items: [
+      'New "Every post" section on each Command Center tab: every post published in the selected window for that tab\'s brands, not just the top 12. Filter by brand, platform, format, contractor or caption text, and sort by date, views, interactions or engagement.',
+      'Cross-posts are grouped automatically: the same creative posted to Instagram, TikTok and Facebook shows as one row with each platform\'s views and interactions and the combined total. Grouping matches captions (ignoring hashtags, links, handles and emoji) on the same brand within 72 hours. Fix anything it gets wrong with Group together or Split off, and undo manual grouping any time.',
+      'Tag who made each creative from a contractor list you manage (Contractors button). Cards above the list roll up views, interactions and average views per creative for each contractor; click one to filter to their work.',
+      'Download the filtered list as a CSV, one line per post, including who made it.',
+    ],
+  },
+  {
     version: '5.7.2',
     date: '2026-11-02',
     kind: 'patch',

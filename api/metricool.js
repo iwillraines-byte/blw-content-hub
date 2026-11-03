@@ -14,6 +14,8 @@
 //   scheduled  every brand's scheduled posts, this week and next
 //   ideas      POST — AI post ideas for one brand (see api/_cc-ideas.js)
 //   planned    GET / POST — Command Center-only planned posts (api/_cc-planned.js)
+//   posts      every post in the window, all brands, auto-grouped by creative
+//   posttags   GET / POST — contractors, who made which post, grouping fixes
 //   config     PUBLIC — Supabase URL + anon key so the static page can run
 //              the official auth client and refresh its own session
 //
@@ -36,6 +38,7 @@ import { buildWiffle, buildBLWPage, redactAccounts } from './_cc-wiffle.js';
 import { buildScheduled } from './_cc-schedule.js';
 import { generateIdeas } from './_cc-ideas.js';
 import { plannedHandler } from './_cc-planned.js';
+import { buildPostLibrary, postTagsHandler } from './_cc-posts.js';
 
 export const maxDuration = 60;
 
@@ -566,6 +569,7 @@ export default async function handler(req, res) {
 
   // Planned posts never touch Metricool, so they work even without its env vars.
   if (view === "planned") { res.setHeader("Cache-Control", "private, no-store"); await plannedHandler(req, res, ctx); return; }
+  if (view === "posttags") { res.setHeader("Cache-Control", "private, no-store"); await postTagsHandler(req, res, ctx); return; }
 
   const token = process.env.METRICOOL_TOKEN, userId = process.env.METRICOOL_USER_ID;
   if (!token || !userId) {
@@ -595,6 +599,14 @@ export default async function handler(req, res) {
       const out = redactAccounts(data);
       if (isMaster) { out.dataAudit = data.dataAudit; out.brandsSeen = data.brandsSeen; out.viewer = { isMaster: true }; }
       res.status(200).send(JSON.stringify(out));
+      return;
+    }
+    if (view === "posts") {
+      const { rng, days, custom } = parseWindow(q);
+      if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
+      const key = `posts|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
+      const data = await cached(key, CACHE_TTL, fresh, () => buildPostLibrary(windowRange(days, rng, custom), token, userId));
+      res.status(200).send(JSON.stringify(data));
       return;
     }
     if (view === "scheduled") {
