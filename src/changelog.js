@@ -18,6 +18,22 @@
 
 export const RELEASES = [
   {
+    version: '5.10.0',
+    date: '2026-11-03',
+    kind: 'minor',
+    summary: 'v5.10.0 — Command Center UI cleanup: jump bar, collapsible sections, clearer charts',
+    items: [
+      'A sticky jump bar under the tabs links to every section on the page and highlights where you are. Section titles now collapse and expand, and the page remembers which ones you closed.',
+      'The KPIs (and the morning digest for master admins) now sit above the two-week calendar on every tab.',
+      '"Views" is now named consistently: Account views (every view the accounts got, including older posts) and Post views (views on posts published in the window, the number EMV uses), with an info tip on each. The long EMV explainer folds behind "How EMV is calculated".',
+      'Follower-growth velocity and Account views over time now show one bold league-average line over faint team lines. Hover a team in the legend to highlight it everywhere; click to pin it.',
+      'Forecast, calendar and idea chips use consistent short team names (Scorpions, Naturals, Philly) instead of cut-off city names.',
+      'Facebook watch time moved into the stat strip with its own drill-in, and the old watch-time panel with its outdated Phase copy is gone. Team Heat Index now runs full width.',
+      'No text on the page is smaller than 11px, and secondary labels are a little brighter.',
+      'Loading no longer covers the page: the first load shows placeholder cards, and later refreshes keep the current numbers on screen, dimmed, with a thin progress bar at the top.',
+    ],
+  },
+  {
     version: '5.9.1',
     date: '2026-11-03',
     kind: 'patch',
