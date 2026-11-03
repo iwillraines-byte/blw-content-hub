@@ -18,6 +18,18 @@
 
 export const RELEASES = [
   {
+    version: '5.11.0',
+    date: '2026-11-03',
+    kind: 'minor',
+    summary: 'v5.11.0 — All BLW tab, side-by-side Heat Index, one format chart',
+    items: [
+      'New All BLW tab in the Command Center: the nine team accounts and the BLW league page on one scoreboard. Combined followers, account views, interactions and post views (each split teams vs league page), share by brand, stacked follower and views charts by brand, top posts across every BLW account, and a format chart. WIFFLE® stays separate.',
+      'All BLW also shows each team\'s reach with league page credit: its own posts plus the league page posts that name the team, its handle, or one of its players.',
+      'Team and Player Heat Index now sit side by side in one Heat Index section. Players show the top 9 with a Show all toggle.',
+      'Average interactions per post and Format mix are now one chart: bars for interactions per post in each format\'s color, a line for each format\'s share of posts. Same chart on every tab.',
+    ],
+  },
+  {
     version: '5.10.1',
     date: '2026-11-03',
     kind: 'patch',

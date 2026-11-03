@@ -36,6 +36,7 @@ import {
   pickMetric, SAVE_KEYS, SHARE_KEYS,
 } from './_cc-core.js';
 import { buildWiffle, buildBLWPage, redactAccounts } from './_cc-wiffle.js';
+import { buildAll, redactAll } from './_cc-all.js';
 import { buildScheduled } from './_cc-schedule.js';
 import { generateIdeas } from './_cc-ideas.js';
 import { plannedHandler } from './_cc-planned.js';
@@ -595,6 +596,21 @@ export default async function handler(req, res) {
       const data = await cached(key, CACHE_TTL, fresh, () => compute(days, rng, token, userId, custom));
       const out = redactLeague(data);
       if (isMaster) { out.dataAudit = data.dataAudit; out.viewer = { isMaster: true }; }
+      res.status(200).send(JSON.stringify(out));
+      return;
+    }
+    if (view === "all") {
+      // Teams + league page together. Reuses the league and league-page
+      // cache entries, so switching tabs does not re-pull Metricool.
+      const { rng, days, custom } = parseWindow(q);
+      if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
+      const wkey = `${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
+      const [L, B] = await Promise.all([
+        cached("league|" + wkey, CACHE_TTL, fresh, () => compute(days, rng, token, userId, custom)),
+        cached("blw|" + wkey, CACHE_TTL, fresh, () => buildBLWPage(windowRange(days, rng, custom), token, userId)),
+      ]);
+      const out = redactAll(buildAll(L, B));
+      if (isMaster) out.viewer = { isMaster: true };
       res.status(200).send(JSON.stringify(out));
       return;
     }
