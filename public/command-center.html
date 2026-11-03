@@ -1167,6 +1167,10 @@ function openStat(kind){
 
 function renderDigest(){
   const d=STATE.data, host=$("#digest"); if(!host) return;
+  // Morning digest is master-admin only (v5.9.1). Hidden for every other
+  // role, and while a master is using View as.
+  if(!isM()){ host.innerHTML=""; host.style.display="none"; return; }
+  host.style.display="";
   const net=d.network.netNew||[]; const yday=net.length?net[net.length-1].v:0; const w7=net.slice(-7).reduce((a,b)=>a+b.v,0);
   const lb=d.leaderboard&&d.leaderboard[0];
   const grower=[...d.teams].sort((a,b)=>b.netNew-a.netNew)[0];
