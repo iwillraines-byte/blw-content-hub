@@ -14,8 +14,8 @@
 //   scheduled  every brand's scheduled posts, this week and next
 //   ideas      POST — AI post ideas for one brand (see api/_cc-ideas.js)
 //   planned    GET / POST — Command Center-only planned posts (api/_cc-planned.js)
-//   posts      every post in the window, all brands, auto-grouped by creative
-//   posttags   GET / POST — contractors, who made which post, grouping fixes
+//   posts      every post in the window, all brands, auto-grouped by creative (master admin only)
+//   posttags   GET / POST — contractors, who made which post, grouping fixes (master admin only)
 //   config     PUBLIC — Supabase URL + anon key so the static page can run
 //              the official auth client and refresh its own session
 //
@@ -569,6 +569,8 @@ export default async function handler(req, res) {
 
   // Planned posts never touch Metricool, so they work even without its env vars.
   if (view === "planned") { res.setHeader("Cache-Control", "private, no-store"); await plannedHandler(req, res, ctx); return; }
+  // The post library (every post + contractor tags) is master-admin only.
+  if ((view === "posts" || view === "posttags") && !isMaster) { res.status(403).json({ error: "Master admin only" }); return; }
   if (view === "posttags") { res.setHeader("Cache-Control", "private, no-store"); await postTagsHandler(req, res, ctx); return; }
 
   const token = process.env.METRICOOL_TOKEN, userId = process.env.METRICOOL_USER_ID;
