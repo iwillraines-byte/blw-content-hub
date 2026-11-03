@@ -584,6 +584,37 @@
   .skeleton .chart-box{border-radius:10px;background:linear-gradient(100deg,rgba(255,255,255,.02) 30%,rgba(255,255,255,.06) 50%,rgba(255,255,255,.02) 70%);background-size:300% 100%;animation:shim 1.3s linear infinite}
   @keyframes shim{from{background-position:100% 0}to{background-position:0 0}}
   .synced-busy{color:var(--ink-2)}
+  /* v5.11 · heat side by side, format combo, All BLW */
+  .heatgrid .pinfo{width:150px;min-width:0;flex:none}
+  .heatgrid .pinfo .pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .heatgrid .hname{width:180px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .heatgrid .pstats{gap:12px;min-width:168px}
+  .heatgrid .pbar{min-width:36px}
+  .pmore{display:flex;justify-content:center;margin-top:8px}
+  .fmtkey{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:10px;font-size:11.5px;color:var(--ink-2)}
+  .fmtkey span{display:inline-flex;align-items:center;gap:6px}
+  .fmtkey i{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .fmtkey i.ln{height:2px;width:16px;border-radius:2px;background:#EDEDE7}
+  .fmtkey .dim{opacity:.5}
+  .split2{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-2);margin-top:2px}
+  .split2 b{color:var(--ink);font-weight:600}
+  .brow{display:grid;grid-template-columns:34px minmax(150px,220px) 1fr 92px 64px;align-items:center;gap:12px;padding:7px 4px;border-radius:9px}
+  .brow .logowrap{width:30px;height:30px}
+  .brow .bn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brow .bn small{display:block;font-size:11px;color:var(--ink-3);font-weight:500}
+  .brow .bt{height:9px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden}
+  .brow .bt span{display:block;height:100%;border-radius:5px;width:0;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .brow .bv{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .brow .bp{text-align:right;font-size:11.5px;color:var(--ink-2)}
+  .brow.lg{background:rgba(255,111,207,.06)}
+  .crow{display:grid;grid-template-columns:minmax(150px,210px) 1fr 250px;align-items:center;gap:12px;padding:7px 4px}
+  .crow .cn{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .crow .cn i{width:9px;height:9px;border-radius:3px;flex:none}
+  .crow .ct{display:flex;height:10px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden}
+  .crow .ct span{height:100%;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .crow .cv{text-align:right;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .crow .cv b{color:var(--ink)}
+  @media(max-width:760px){.brow{grid-template-columns:30px 1fr 80px 52px}.brow .bt{display:none}.crow{grid-template-columns:1fr 140px}.crow .ct{display:none}}
 </style>
 </head>
 <body>
@@ -609,6 +640,7 @@
       <div class="tabs" id="scopeTabs" role="tablist" aria-label="Which brand">
         <div class="tab active" data-s="league" role="tab" tabindex="0">BLW Teams</div>
         <div class="tab" data-s="blw" role="tab" tabindex="0">BLW League Page</div>
+        <div class="tab" data-s="all" role="tab" tabindex="0">All BLW</div>
         <div class="tab" data-s="wiffle" role="tab" tabindex="0">WIFFLE&reg;</div>
       </div>
       <div class="eyebrow" id="eyebrow">Every BLW team account. Click any KPI or team to drill in.</div>
@@ -668,16 +700,13 @@
     <div class="lbgrid" id="leaderboard"></div>
 
     <div class="section-title"><span>What is working &middot; by format</span><span class="rule"></span></div>
-    <div class="grid g-2">
-      <div class="panel"><div class="head"><div class="t">Average interactions per post</div><div class="meta">by content format</div></div><div id="formatBars" style="margin-top:6px"></div></div>
-      <div class="panel"><div class="head"><div class="t">Format mix</div><div class="meta" id="formatMixMeta">posts this window</div></div><div class="chart-box" style="height:210px"><canvas id="formatMix"></canvas></div></div>
+    <div class="panel"><div class="head"><div class="t">Interactions per post vs. share of posts</div><div class="meta" id="formatMeta">by content format</div></div><div class="chart-box" style="height:250px"><canvas id="formatCombo"></canvas></div><div class="fmtkey" id="formatKey"></div></div>
+
+    <div class="section-title"><span>Heat Index</span><span class="rule"></span></div>
+    <div class="grid g-2 heatgrid">
+      <div class="panel"><div class="head"><div class="t">Teams</div><div class="meta">breakout potential · 0-100</div></div><div id="heatBars" style="margin-top:8px"></div></div>
+      <div class="panel"><div class="head"><div class="t">Players</div><div class="meta" id="playerMeta">attributed by caption mentions</div></div><div id="playerBoard" style="margin-top:8px"></div></div>
     </div>
-
-    <div class="section-title"><span>Team Heat Index</span><span class="rule"></span></div>
-    <div class="panel"><div class="head"><div class="t">Breakout potential</div><div class="meta">0-100, scored against the league</div></div><div id="heatBars" style="margin-top:8px"></div></div>
-
-    <div class="section-title"><span>Player Heat Index</span><span class="rule"></span></div>
-    <div class="panel"><div class="head"><div class="t">Who is driving your traffic</div><div class="meta" id="playerMeta">attributed by caption mentions</div></div><div id="playerBoard" style="margin-top:8px"></div></div>
 
     <div class="section-title"><span>Earned media value</span><span class="rule"></span></div>
     <div class="panel">
@@ -830,7 +859,7 @@ function placeSchedule(){
 }
 
 // ---- sticky jump bar ----
-const JUMPL=[[/^schedule/,"Schedule"],[/followers-over-time/,"Followers"],[/^top-.*posts/,"Top posts"],[/^what-is-working/,"Formats"],[/^team-heat/,"Team heat"],[/^player-heat/,"Players"],[/^earned-media/,"EMV"],[/^roster/,"Roster"],[/^forecast/,"Forecast"],[/^insights/,"Insights"],[/^accounts$/,"Accounts"],[/^credit-to-teams/,"Team credit"],[/^every-post/,"Every post"],[/^post-ideas/,"Ideas"],[/^data-check/,"Data check"]];
+const JUMPL=[[/^schedule/,"Schedule"],[/followers-over-time/,"Followers"],[/^top-.*posts/,"Top posts"],[/^what-is-working/,"Formats"],[/^heat-index/,"Heat index"],[/^team-heat/,"Team heat"],[/^player-heat/,"Players"],[/^share-by-brand/,"Brands"],[/^team-reach/,"Team credit"],[/^earned-media/,"EMV"],[/^roster/,"Roster"],[/^forecast/,"Forecast"],[/^insights/,"Insights"],[/^accounts$/,"Accounts"],[/^credit-to-teams/,"Team credit"],[/^every-post/,"Every post"],[/^post-ideas/,"Ideas"],[/^data-check/,"Data check"]];
 let jumpSig="";
 function buildJump(){
   const bar=$("#jumpBar"); if(!bar) return;
@@ -1136,14 +1165,14 @@ function renderFollowersSplit(){
 // the legend to bring its segment forward.
 function stackChart(canvas, teams, key, opts){
   opts=opts||{};
-  const labels=alignedAxis(key);
-  const ds=teams.map(t=>{ const m=Object.fromEntries(t.series[key].map(p=>[p.d,p.v]));
+  const set=new Set(); teams.forEach(t=>(t.series[key]||[]).forEach(p=>set.add(p.d))); const labels=[...set].sort();
+  const ds=teams.map(t=>{ const m=Object.fromEntries((t.series[key]||[]).map(p=>[p.d,p.v]));
     return {label:t.name,__accent:t.accent,data:labels.map(d=>(d in m)?m[d]:0),backgroundColor:t.accent+"d9",hoverBackgroundColor:t.accent,borderWidth:0,borderSkipped:false,stack:"league",barPercentage:.86,categoryPercentage:.9}; });
   return new Chart(canvas,{type:"bar",data:{labels:labels.map(mmdd),datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
       plugins:{legend:{display:false},tooltip:{...TT,filter:it=>it.parsed.y!==0,itemSort:(a,b)=>b.parsed.y-a.parsed.y,
         callbacks:{label:it=>` ${it.dataset.label}: ${opts.signed?signed(it.parsed.y):fmtFull(it.parsed.y)}`,
-          footer:items=>{ const tot=items.reduce((a,b)=>a+b.parsed.y,0); return "League: "+(opts.signed?signed(tot):fmtFull(tot)); }}}},
+          footer:items=>{ const tot=items.reduce((a,b)=>a+b.parsed.y,0); return (opts.totalLabel||"League")+": "+(opts.signed?signed(tot):fmtFull(tot)); }}}},
       scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:10}},y:{stacked:true,grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}});
 }
 function renderVelocity(){ STATE.charts.vel=stackChart($("#velChart"),STATE.data.teams,"netNew",{signed:true}); }
@@ -1327,29 +1356,35 @@ function renderLeaderboard(){
 }
 // Format bars + mix donut. Masters see post counts; everyone else sees each
 // format's share of posts instead (the server sends no counts to them).
-function renderFormatsInto(list, barsSel, mixId, metaSel){
-  const all=(list||[]).filter(f=>(f.count||f.share||0)>0);
-  const fb=all.filter(f=>f.enough!==undefined?f.enough:f.count>=2); const host=$(barsSel);
-  if(!fb.length){ host.innerHTML=`<div class="fc-note">Not enough posts to break down by format.</div>`; }
-  else{
-    const max=Math.max(...fb.map(f=>f.avgInteractions))||1;
-    host.innerHTML=fb.map(f=>{ const c=TYPECOL[f.type]||TYPECOL.OTHER; const w=Math.max(2,Math.round(f.avgInteractions/max*100));
-      const tail=showCounts()&&f.count!=null?`${f.count} posts`:`${(f.share||0).toFixed(0)}% of posts`;
-      return `<div class="fmtrow"><div class="fmtname"><span class="ic" style="background:${c}"></span>${capw(f.type)}</div>
-        <div class="fmtbar"><span data-w="${w}%" style="background:${c}"></span></div>
-        <div class="fmtval">${fmt(f.avgInteractions)}<span class="s"> /post · ${tail}</span></div></div>`; }).join("");
-    if(!REDUCE) requestAnimationFrame(()=>host.querySelectorAll(".fmtbar>span").forEach(el=>el.style.width=el.dataset.w));
-    else host.querySelectorAll(".fmtbar>span").forEach(el=>el.style.width=el.dataset.w);
-  }
-  if(STATE.charts[mixId]){try{STATE.charts[mixId].destroy()}catch(e){}}
+// One chart per format (v5.11): bars are average interactions per post in
+// the format's color, the line is that format's share of all posts.
+function renderFormatsInto(list, chartId, metaSel, keySel){
+  const all=(list||[]).filter(f=>(f.count||f.share||0)>0)
+    .sort((x,y)=>((y.enough!==false)-(x.enough!==false))||(y.avgInteractions-x.avgInteractions));
+  if(STATE.charts[chartId]){ try{ STATE.charts[chartId].destroy(); }catch(e){} }
+  const el=document.getElementById(chartId), key=$(keySel), meta=$(metaSel);
+  if(!el) return;
+  if(!all.length){ el.parentElement.innerHTML=`<div class="fc-note" style="margin-top:16px">Not enough posts to break down by format.</div>`; if(key) key.innerHTML=""; return; }
   const useCount=showCounts()&&all.every(f=>f.count!=null);
   const tot=all.reduce((a,b)=>a+(b.count||0),0);
-  $(metaSel).textContent=useCount?(tot+" posts this window"):"share of posts by format";
-  const el=document.getElementById(mixId);
-  if(all.length&&el) STATE.charts[mixId]=new Chart(el,{type:"doughnut",data:{labels:all.map(f=>capw(f.type)),datasets:[{data:all.map(f=>useCount?f.count:f.share),backgroundColor:all.map(f=>TYPECOL[f.type]||TYPECOL.OTHER),borderColor:"#0A0B0D",borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:"58%",plugins:{legend:{position:"right",labels:{boxWidth:9,boxHeight:9,font:{size:11},color:"#A6AAB2"}},tooltip:{...TT,callbacks:{label:ctx=>ctx.label+": "+(useCount?ctx.parsed+" posts":ctx.parsed.toFixed(1)+"% of posts")}}},animation:{duration:ANIM}}});
+  const shareOf=f=>useCount&&tot?f.count/tot*100:(f.share||0);
+  const low=f=>f.enough===false||(f.enough===undefined&&f.count<2);
+  const col=f=>TYPECOL[f.type]||TYPECOL.OTHER;
+  if(meta) meta.textContent=useCount?`by content format · ${tot} posts`:"by content format";
+  STATE.charts[chartId]=new Chart(el,{data:{labels:all.map(f=>capw(f.type)),datasets:[
+      {type:"line",label:"Share of posts",yAxisID:"y1",data:all.map(f=>+shareOf(f).toFixed(1)),borderColor:"#EDEDE7",backgroundColor:"#EDEDE7",borderWidth:2,pointRadius:4,pointHoverRadius:6,pointBackgroundColor:"#0A0B0D",pointBorderWidth:2,tension:.25,order:0},
+      {type:"bar",label:"Avg interactions per post",yAxisID:"y",data:all.map(f=>f.avgInteractions),backgroundColor:all.map(f=>col(f)+(low(f)?"55":"e0")),hoverBackgroundColor:all.map(col),borderRadius:6,maxBarThickness:70,order:1}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{display:false},tooltip:{...TT,callbacks:{
+        label:it=>it.dataset.type==="line"?` Share of posts: ${it.parsed.y.toFixed(0)}%${useCount?` (${all[it.dataIndex].count} posts)`:""}`:` ${fmt(it.parsed.y)} interactions per post`,
+        footer:items=>low(all[items[0].dataIndex])?"Too few posts to compare reliably":""}}},
+      scales:{x:{grid:{display:false}},
+        y:{beginAtZero:true,grid:GRID,ticks:{callback:v=>fmt(v)},title:{display:true,text:"interactions / post",color:"#9499A2",font:{size:11}}},
+        y1:{position:"right",beginAtZero:true,suggestedMax:60,grid:{display:false},ticks:{callback:v=>v+"%"},title:{display:true,text:"share of posts",color:"#9499A2",font:{size:11}}}},
+      animation:{duration:ANIM}}});
+  if(key) key.innerHTML=all.map(f=>`<span class="${low(f)?"dim":""}"><i style="background:${col(f)}"></i>${capw(f.type)} <b style="color:var(--ink)">${fmt(f.avgInteractions)}</b>/post · ${shareOf(f).toFixed(0)}%</span>`).join("")+`<span><i class="ln"></i>Share of posts</span>`;
 }
-function renderFormats(){ renderFormatsInto(STATE.data.formatBreakdown, "#formatBars", "formatMix", "#formatMixMeta"); }
+function renderFormats(){ renderFormatsInto(STATE.data.formatBreakdown, "formatCombo", "#formatMeta", "#formatKey"); }
 
 function openStat(kind){
   const d=STATE.data;
@@ -1429,9 +1464,10 @@ function renderHeat(){
 function renderPlayers(){
   const lb=STATE.data.playerLeaderboard||[], host=$("#playerBoard"); if(!host) return;
   const cov=STATE.data.rosterCoverage||{};
-  const meta=$("#playerMeta"); if(meta) meta.textContent=`top ${Math.min(20,lb.length)} by attributed interactions`;
+  const meta=$("#playerMeta"); if(meta) meta.textContent=`by attributed interactions`;
   if(!lb.length){ host.innerHTML=`<div class="fc-note">No player name mentions matched in captions this window.</div>`; return; }
   const max=lb[0].interactions||1;
+  const SHOWN=9, more=lb.length>SHOWN;
   host.innerHTML=lb.map((p,i)=>{const w=Math.max(3,Math.round(p.interactions/max*100));
     return `<div class="prow" data-i="${i}" tabindex="0" role="button">
       <div class="prank">${i+1}</div>
@@ -1439,7 +1475,10 @@ function renderPlayers(){
       <div class="pbar"><span data-w="${w}%" style="background:${p.accent}"></span></div>
       <div class="pstats"><div class="pstat"><b>${fmt(p.interactions)}</b><div class="k">int</div></div><div class="pstat"><b>${fmt(p.impressions)}</b><div class="k">views</div></div><div class="pstat"><b>${(p.engAvg||0).toFixed(1)}%</b><div class="k">eng</div></div></div>
       <div class="pheat" style="color:${p.accent}">${p.heat}</div></div>`;}).join("")
+    +(more?`<div class="pmore"><button class="lnk" id="pMore">${STATE.pAll?"Show top "+SHOWN:"Show all "+lb.length}</button></div>`:"")
     +`<div class="fc-note" style="margin-top:11px">Attributed when a player's name appears in the caption (a post can credit more than one player). Heat blends interactions (55%), post views (30%) and engagement (15%), scored across the league. Names come from the BLW Studio roster, including nicknames and Instagram handles; a credit like "shoutout X for the clip" or "📸 X" does not count. ${isM()?"Tag posts by hand in Every post to correct it. ":""}Click a player for their lifetime page.</div>`;
+  if(more){ host.querySelectorAll(".prow").forEach((r,k)=>{ if(k>=SHOWN&&!STATE.pAll) r.style.display="none"; });
+    const b=$("#pMore"); if(b) b.onclick=e=>{ e.stopPropagation(); STATE.pAll=!STATE.pAll; renderPlayers(); }; }
   if(STATE.heatStale) host.insertAdjacentHTML("afterbegin",`<div class="fc-note" style="margin:0 0 8px">Player tags changed. <button class="lnk" id="heatReload">Update the Heat Index</button></div>`);
   const hr=document.getElementById("heatReload"); if(hr) hr.onclick=()=>{ STATE.heatStale=false; load(STATE.q,false); };
   const set=()=>host.querySelectorAll(".pbar>span").forEach(el=>el.style.width=el.dataset.w);
@@ -1772,6 +1811,7 @@ function openTeamModal(id, initial){
 const SCOPES={
   league:{ sub:"BLW Teams · 9 accounts", eyebrow:"Every BLW team account. Click any KPI or team to drill in." },
   blw:{ view:"blw", name:"BLW League Page", tile:"BLW", sub:"BLW League Page · @blwwiffleball", eyebrow:"The league's own page, one line per connected account. Kept out of the team totals.", loading:"Pulling the BLW league page from Metricool..." },
+  all:{ view:"all", name:"All BLW", tile:"BLW", sub:"All BLW · 9 teams + league page", eyebrow:"Teams and the league page on one scoreboard.", loading:"Pulling every BLW account from Metricool..." },
   wiffle:{ view:"wiffle", name:"WIFFLE®", tile:"WIFFLE", sub:"WIFFLE® · every account", eyebrow:"Every WIFFLE® account on its own line, kept out of the BLW totals.", loading:"Pulling WIFFLE® accounts from Metricool..." },
 };
 const acctData=sc=>STATE.acct[sc]&&STATE.acct[sc].data;
@@ -1788,7 +1828,7 @@ async function loadAccounts(sc, q, fresh){
     if(!r.ok) throw new Error("Server returned "+r.status);
     const data=await r.json(); if(data.error) throw new Error(data.error);
     STATE.acct[sc]={data,q};
-    if(sc==="wiffle"){ STATE.wdata=data; STATE.wq=q; } else { STATE.bdata=data; }
+    if(sc==="wiffle"){ STATE.wdata=data; STATE.wq=q; } else if(sc==="blw"){ STATE.bdata=data; }
     if(sc==="blw" && !STATE.data){ load(q,false).then(()=>{ if(STATE.scope==="blw"){ $("#content").style.display="none"; renderAccounts("blw"); } }); }
     showShared(); if(STATE.scope===sc) renderAccounts(sc); $("#dot").classList.remove("err");
     $("#synced").textContent="LIVE · synced "+new Date(data.generatedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
@@ -1805,6 +1845,7 @@ function accLogo(a, size){
   return `<div class="logowrap rel" style="width:${s}px;height:${s}px;box-shadow:inset 0 0 0 2px ${a.color}">${logoChip("badge",a.picture,(SCOPES[STATE.scope]||SCOPES.wiffle).tile||"",a.color)}<span class="netbadge" style="background:${a.color}">${esc(LBNET[a.network]||a.name)}</span></div>`;
 }
 function renderAccounts(sc){
+  if(sc==="all") return renderAll();
   const w=acctData(sc), host=$("#acctContent"); if(!w) return;
   const NAME=esc(SCOPES[sc].name);
   destroyCharts();
@@ -1844,10 +1885,7 @@ function renderAccounts(sc){
     <div class="section-title"><span>Top ${NAME} posts this window</span><span class="rule"></span></div>
     <div class="lbgrid" id="wLeader"></div>
     <div class="section-title"><span>What is working &middot; by format</span><span class="rule"></span></div>
-    <div class="grid g-2">
-      <div class="panel"><div class="head"><div class="t">Average interactions per post</div><div class="meta">by content format</div></div><div id="wFormatBars" style="margin-top:6px"></div></div>
-      <div class="panel"><div class="head"><div class="t">Format mix</div><div class="meta" id="wFormatMeta"></div></div><div class="chart-box" style="height:210px"><canvas id="wFormatMix"></canvas></div></div>
-    </div>
+    <div class="panel"><div class="head"><div class="t">Interactions per post vs. share of posts</div><div class="meta" id="wFormatMeta">by content format</div></div><div class="chart-box" style="height:250px"><canvas id="wFormatCombo"></canvas></div><div class="fmtkey" id="wFormatKey"></div></div>
     ${sc==="blw"?`<div class="section-title"><span>Credit to teams</span><span class="rule"></span></div>
     <div class="panel"><div class="emvhead"><div><div class="emvtot" id="blwEmv">$0</div><div class="emvsub" id="blwSub">BLW page EMV</div></div><div class="emvsplit" id="blwStats"></div></div>
       <div id="blwAttr" style="margin-top:12px"></div><div class="fc-note" id="blwNote"></div></div>`:""}
@@ -1875,9 +1913,87 @@ function renderAccounts(sc){
   const lb=w.leaderboard||[];
   const byKey=Object.fromEntries(A.map(a=>[a.key,a]));
   $("#wLeader").innerHTML=lb.length?postCards(lb,{who:p=>accWho(byKey[p.accountKey]||{name:p.account,color:p.accent})}):`<div class="fc-note">No ${NAME} posts with measured interactions in this window.</div>`;
-  renderFormatsInto(w.formatBreakdown,"#wFormatBars","wFormatMix","#wFormatMeta");
+  renderFormatsInto(w.formatBreakdown,"wFormatCombo","#wFormatMeta","#wFormatKey");
   if(sc==="blw"){ if(STATE.data) renderBLW(emvRates()); else { const n=$("#blwNote"); if(n) n.textContent="Loading team credit..."; } }
   placeSchedule();
+}
+/* ============ ALL BLW (v5.11) ============
+   The nine team accounts and the BLW league page on one scoreboard. Comes
+   from view=all, which reuses the league and league-page payloads. */
+const ALLM={followers:["Followers","followers"],views:["Account views","views"],interactions:["Interactions","interactions"],impressions:["Post views","impressions"]};
+function renderAll(){
+  const w=acctData("all"), host=$("#acctContent"); if(!w) return;
+  destroyCharts();
+  const same=host.dataset.sc==="all"; host.dataset.sc="all";
+  parkSchedule();
+  const B=w.brands, T=w.totals, S=w.split, lbl=esc(w.label), nT=B.filter(b=>b.kind==="team").length;
+  const sp=k=>S.league?`<div class="split2"><span>Teams <b>${fmt(S.teams[k])}</b></span><span>League page <b>${fmt(S.league[k])}</b></span></div>`:`<div class="split2">League page not connected</div>`;
+  const base=T.followers-T.netNew, delta=base>0?T.netNew/base*100:0;
+  const cards=[
+    {label:"Total followers",val:T.followers,accent:"#F3F3F1",spark:w.network.followers.map(p=>p.v),row:`<span class="delta ${delta>0?'up':delta<0?'down':'flat'}">${delta>0?'▲':delta<0?'▼':'•'} ${Math.abs(delta).toFixed(1)}%</span><span class="sub">${signed(T.netNew)} this window</span>`,k:"followers"},
+    {label:"Account views ("+lbl+")"+INFO(DEF.acct),val:T.views,accent:"#5B8DEF",spark:w.network.views.map(p=>p.v),row:"",k:"views"},
+    {label:"Interactions ("+lbl+")",val:T.interactions,accent:"#FFB13C",spark:null,row:"",k:"interactions"},
+    {label:"Post views ("+lbl+")"+INFO(DEF.post),val:T.impressions,accent:"#79E6C2",spark:null,row:"",k:"impressions"},
+  ];
+  const lp=S.league&&T.interactions?S.league.interactions/T.interactions*100:0;
+  host.innerHTML=`
+    <div class="section-title"><span>All BLW &middot; ${nT} teams${w.leaguePage?" + league page":""}</span><span class="rule"></span></div>
+    <div class="hero" id="aHero">${cards.map((k,i)=>`<div class="kpi" style="cursor:default;animation-delay:${i*.06}s"><div class="accent" style="background:${k.accent}"></div><div class="label">${k.label}</div><div class="val" id="ak${i}" data-v="${same?prevV("ak"+i):0}">0</div>${k.row?`<div class="row">${k.row}</div>`:""}${sp(k.k)}<div class="sparkwrap">${k.spark?`<canvas id="asp${i}"></canvas>`:""}</div></div>`).join("")}</div>
+    <div class="schedSlot" data-slot="acct"></div>
+    <div class="section-title"><span>Share by brand</span><span class="rule"></span></div>
+    <div class="panel"><div class="head"><div class="t">Who carries the numbers</div><div class="meta">${S.league?`league page: ${lp.toFixed(1)}% of interactions`:"teams only"}</div></div>
+      <div class="mtoggle" id="allToggle">${Object.entries(ALLM).map(([k,v])=>`<div class="mt${(STATE.allMetric||"interactions")===k?" active":""}" data-m="${k}" tabindex="0" role="button">${v[0]}</div>`).join("")}</div>
+      <div id="allBrands" style="margin-top:10px"></div></div>
+    <div class="section-title"><span>Followers over time</span><span class="rule"></span></div>
+    <div class="grid g-2">
+      <div class="panel"><div class="head"><div class="t">Total BLW followers</div><div class="meta">stacked by brand</div></div><div class="chart-box" style="height:260px"><canvas id="aFol"></canvas></div></div>
+      <div class="panel"><div class="head"><div class="t">Follower-growth velocity</div><div class="meta">net new / day · stacked by brand</div></div><div class="chart-box" style="height:260px"><canvas id="aVel"></canvas></div></div>
+    </div>
+    <div class="panel" style="margin-top:12px"><div class="head"><div class="t">Account views over time</div><div class="meta">per day · stacked by brand</div></div><div class="chart-box"><canvas id="aViews"></canvas></div></div>
+    <div class="legend">${B.map(b=>`<span style="cursor:default"><i style="background:${b.accent}"></i>${esc(b.name)}</span>`).join("")}</div>
+    ${S.league?`<div class="section-title"><span>Team reach with league page credit</span><span class="rule"></span></div>
+    <div class="panel"><div class="head"><div class="t">Each team's own posts plus league page posts about them</div><div class="meta" id="allCreditMeta"></div></div>
+      <div class="mtoggle" id="creditToggle"><div class="mt${STATE.creditMetric!=="interactions"?" active":""}" data-m="impressions" tabindex="0" role="button">Post views</div><div class="mt${STATE.creditMetric==="interactions"?" active":""}" data-m="interactions" tabindex="0" role="button">Interactions</div></div>
+      <div id="allCredit" style="margin-top:10px"></div>
+      <div class="fc-note" style="margin-top:10px">Solid is the team's own accounts; the lighter end is league page posts credited to that team by an @handle, the team name, or a rostered player in the caption.${w.leagueCredit?` ${w.leagueCredit.unattributedPct}% of league page posts name no team and are not credited to anyone.`:""}</div></div>`:""}
+    <div class="section-title"><span>Top posts across All BLW</span><span class="rule"></span></div>
+    <div class="lbgrid" id="aLeader"></div>
+    <div class="section-title"><span>What is working &middot; by format</span><span class="rule"></span></div>
+    <div class="panel"><div class="head"><div class="t">Interactions per post vs. share of posts</div><div class="meta" id="aFormatMeta">by content format</div></div><div class="chart-box" style="height:250px"><canvas id="aFormatCombo"></canvas></div><div class="fmtkey" id="aFormatKey"></div></div>
+    <div class="wnote" data-sec-end>All BLW adds the nine team accounts and the BLW league page together. WIFFLE&reg; stays out of these totals. Followers are each account's own count, so a fan who follows two accounts counts twice.</div>`;
+  cards.forEach((k,i)=>{ countUp($("#ak"+i),k.val,950); if(k.spark&&k.spark.length) miniSpark("asp"+i,k.spark,k.accent); });
+  const layers=B.map(b=>({label:b.name,color:b.accent,series:b.series.followers||[]}));
+  STATE.charts.aFol=stackedFollowers($("#aFol"),layers,"No follower data for this window.");
+  STATE.charts.aVel=stackChart($("#aVel"),B,"netNew",{signed:true,totalLabel:"All BLW"});
+  STATE.charts.aViews=stackChart($("#aViews"),B,"views",{totalLabel:"All BLW"});
+  renderAllBrands(); renderAllCredit();
+  const lb=w.leaderboard||[];
+  $("#aLeader").innerHTML=lb.length?postCards(lb,{who:p=>({name:p.brandName,picture:p.brandPicture,accent:p.brandAccent})}):`<div class="fc-note">No posts with measured interactions in this window.</div>`;
+  renderFormatsInto(w.formatBreakdown,"aFormatCombo","#aFormatMeta","#aFormatKey");
+  const wire=(sel,fn)=>$(sel)&&$(sel).querySelectorAll(".mt").forEach(m=>{ const go=()=>fn(m.dataset.m); m.onclick=go; m.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } }; });
+  wire("#allToggle",m=>{ STATE.allMetric=m; $("#allToggle").querySelectorAll(".mt").forEach(x=>x.classList.toggle("active",x.dataset.m===m)); renderAllBrands(); });
+  wire("#creditToggle",m=>{ STATE.creditMetric=m; $("#creditToggle").querySelectorAll(".mt").forEach(x=>x.classList.toggle("active",x.dataset.m===m)); renderAllCredit(); });
+  placeSchedule();
+}
+function renderAllBrands(){
+  const w=acctData("all"), host=$("#allBrands"); if(!w||!host) return;
+  const k=STATE.allMetric||"interactions", f=ALLM[k][1];
+  const rows=[...w.brands].sort((a,b)=>b[f]-a[f]); const tot=rows.reduce((a,b)=>a+b[f],0)||1, mx=rows.length?rows[0][f]||1:1;
+  host.innerHTML=rows.map(b=>`<div class="brow${b.kind==="league"?" lg":""}">${logoHTML(b)}<div class="bn">${esc(b.name)}<small>${b.kind==="league"?"League page · all accounts":"Team"}</small></div>
+    <div class="bt"><span data-w="${Math.max(2,b[f]/mx*100)}%" style="background:${b.accent}"></span></div><div class="bv">${fmtFull(b[f])}</div><div class="bp">${(b[f]/tot*100).toFixed(1)}%</div></div>`).join("");
+  const set=()=>host.querySelectorAll(".bt>span").forEach(el=>el.style.width=el.dataset.w); REDUCE?set():requestAnimationFrame(set);
+}
+function renderAllCredit(){
+  const w=acctData("all"), host=$("#allCredit"); if(!w||!host) return;
+  const f=STATE.creditMetric==="interactions"?"interactions":"impressions";
+  const rows=[...w.credit].sort((a,b)=>(b.own[f]+b.credited[f])-(a.own[f]+a.credited[f]));
+  const mx=Math.max(1,...rows.map(r=>r.own[f]+r.credited[f]));
+  const lift=rows.reduce((a,r)=>a+r.credited[f],0), own=rows.reduce((a,r)=>a+r.own[f],0);
+  const m=$("#allCreditMeta"); if(m) m.textContent=`league page adds ${own?(lift/own*100).toFixed(1):0}% to team ${f==="interactions"?"interactions":"post views"}`;
+  host.innerHTML=rows.map(r=>`<div class="crow"><div class="cn"><i style="background:${r.accent}"></i>${esc(r.name)}</div>
+    <div class="ct"><span data-w="${r.own[f]/mx*100}%" style="width:0;background:${r.accent}"></span><span data-w="${r.credited[f]/mx*100}%" style="width:0;background:${r.accent}66"></span></div>
+    <div class="cv"><b>${fmt(r.own[f]+r.credited[f])}</b> · ${fmt(r.own[f])} own${r.credited[f]?` · +${fmt(r.credited[f])} league`:""}</div></div>`).join("");
+  const set=()=>host.querySelectorAll(".ct>span").forEach(el=>el.style.width=el.dataset.w); REDUCE?set():requestAnimationFrame(set);
 }
 function openAccountModal(key){
   const a=((acctData(STATE.scope)||{}).accounts||[]).find(x=>x.key===key); if(!a) return;
@@ -1911,7 +2027,8 @@ function setScope(sc){
     $("#content").style.display="none"; $("#acctContent").style.display="";
     const c=STATE.acct[sc];
     if(c && c.q===STATE.q) renderAccounts(sc); else loadAccounts(sc,STATE.q,false);
-    if(STATE.ideaBrand!==sc){ STATE.ideaBrand=sc; renderIdeaChips(); }
+    if(sc==="all"){ if(STATE.ideaBrand==="wiffle"||!STATE.ideaBrand){ STATE.ideaBrand="blw"; renderIdeaChips(); } }
+    else if(STATE.ideaBrand!==sc){ STATE.ideaBrand=sc; renderIdeaChips(); }
   }
   placeSchedule(); buildJump();
 }
@@ -2079,7 +2196,8 @@ setInterval(()=>{ if(STATE.sched && !document.hidden) loadSched(false); }, 5*600
    the contractor who made it, and the cards on top roll performance up by
    contractor. Tags and fixes are shared: stored in BLW Studio, not Metricool. */
 STATE.pl={data:null,q:null,tags:null,f:{brand:"all",net:"all",type:"all",who:"all",player:"all",q:"",sort:"new"},sel:new Set(),open:new Set(),limit:40,busy:false};
-const PL_KIND={league:"team",blw:"league",wiffle:"wiffle"};
+const PL_KIND={league:"team",blw:"league",wiffle:"wiffle",all:"blwall"};
+const plKindOk=k=>{ const want=PL_KIND[STATE.scope]; return want==="blwall"?(k==="team"||k==="league"):k===want; };
 async function loadPosts(fresh){
   const q=STATE.q; if(!q) return;
   // Master admin only (the server enforces this too).
@@ -2114,7 +2232,7 @@ function plCreatives(){
   const bById=Object.fromEntries(D.brands.map(b=>[String(b.blogId),b]));
   const map=new Map();
   for(const p of D.posts){
-    if(p.kind!==kind) continue;
+    if(!plKindOk(p.kind)) continue;
     const ov=T.groups[p.key];
     const gid= ov==="solo" ? "S:"+p.key : ov ? "M:"+ov : "A:"+p.autoGroup;
     let c=map.get(gid); if(!c){ c={id:gid,manual:!!ov&&ov!=="solo",posts:[],brand:bById[String(p.blogId)]||{name:"?",accent:"#888"}}; map.set(gid,c); }
@@ -2158,12 +2276,12 @@ function plDate(s,withTime){ if(!s) return ""; const d=new Date(s.length===19?s+
 function renderPosts(){
   const D=STATE.pl.data, host=$("#plList"); if(!D||!host) return;
   const kind=PL_KIND[STATE.scope], f=STATE.pl.f, T=plTags();
-  const scopeBrands=D.brands.filter(b=>b.kind===kind);
+  const scopeBrands=D.brands.filter(b=>plKindOk(b.kind));
   if(f.brand!=="all"&&!scopeBrands.some(b=>String(b.blogId)===f.brand)) f.brand="all";
   $("#plTitle").textContent="Every post · "+D.label;
   const opt=(v,l,cur)=>`<option value="${esc(v)}"${String(cur)===String(v)?" selected":""}>${esc(l)}</option>`;
-  const nets=[...new Set(D.posts.filter(p=>p.kind===kind).map(p=>p.network))];
-  const types=[...new Set(D.posts.filter(p=>p.kind===kind).map(p=>p.type))];
+  const nets=[...new Set(D.posts.filter(p=>plKindOk(p.kind)).map(p=>p.network))];
+  const types=[...new Set(D.posts.filter(p=>plKindOk(p.kind)).map(p=>p.type))];
   $("#plBar").innerHTML=
     (scopeBrands.length>1?`<select class="sel" data-f="brand" aria-label="Brand">${opt("all","All brands",f.brand)}${scopeBrands.map(b=>opt(String(b.blogId),b.name,f.brand)).join("")}</select>`:"")+
     `<select class="sel" data-f="net" aria-label="Platform">${opt("all","All platforms",f.net)}${nets.map(n=>opt(n,NLABEL[n]||n,f.net)).join("")}</select>`+
@@ -2373,7 +2491,7 @@ function ideaBrands(){
 }
 function renderIdeaChips(){
   const host=$("#ideaChips"); if(!host) return;
-  const list=ideaBrands(); if(!STATE.ideaBrand) STATE.ideaBrand=STATE.scope!=="league"?STATE.scope:(list[0]&&list[0].key);
+  const list=ideaBrands(); if(!STATE.ideaBrand) STATE.ideaBrand=STATE.scope==="all"?"blw":STATE.scope!=="league"?STATE.scope:(list[0]&&list[0].key);
   host.innerHTML=list.map(b=>`<span class="schip${STATE.ideaBrand===b.key?" on":""}" data-b="${esc(b.key)}" tabindex="0" role="button">${logoChip("sl0",b.picture,b.name,b.accent)}${esc(b.short)}</span>`).join("");
   host.querySelectorAll(".schip").forEach(c=>{ const go=()=>{ STATE.ideaBrand=c.dataset.b; renderIdeaChips(); }; c.onclick=go; c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
   renderIdeas();
