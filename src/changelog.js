@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '5.9.1',
+    date: '2026-11-03',
+    kind: 'patch',
+    summary: 'v5.9.1 — Command Center morning digest is master-admin only',
+    items: [
+      'The Morning digest at the top of the Command Center\'s BLW Teams tab now shows only for master admins. Content and admin accounts (and a master using View as) no longer see it.',
+    ],
+  },
+  {
     version: '5.9.0',
     date: '2026-11-03',
     kind: 'minor',
