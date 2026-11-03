@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '5.10.1',
+    date: '2026-11-03',
+    kind: 'patch',
+    summary: 'v5.10.1 — Velocity and account views charts are stacked team bars',
+    items: [
+      'Follower-growth velocity and Account views over time are now stacked bar charts, one segment per team in its team color, so each bar is the league total for that day. The league-average line is gone.',
+      'Hovering a team in the legend still highlights its segment (and its follower line above); clicking pins it. The tooltip lists every team plus the league total.',
+    ],
+  },
+  {
     version: '5.10.0',
     date: '2026-11-03',
     kind: 'minor',
