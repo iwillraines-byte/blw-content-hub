@@ -15,7 +15,8 @@
 //   ideas      POST — AI post ideas for one brand (see api/_cc-ideas.js)
 //   planned    GET / POST — Command Center-only planned posts (api/_cc-planned.js)
 //   posts      every post in the window, all brands, auto-grouped by creative (master admin only)
-//   posttags   GET / POST — contractors, who made which post, grouping fixes (master admin only)
+//   posttags   GET / POST — contractors, who made which post, grouping fixes, player tags (master admin only)
+//   player     lifetime content stats + career stats for one player (?name=)
 //   config     PUBLIC — Supabase URL + anon key so the static page can run
 //              the official auth client and refresh its own session
 //
@@ -38,21 +39,17 @@ import { buildWiffle, buildBLWPage, redactAccounts } from './_cc-wiffle.js';
 import { buildScheduled } from './_cc-schedule.js';
 import { generateIdeas } from './_cc-ideas.js';
 import { plannedHandler } from './_cc-planned.js';
-import { buildPostLibrary, postTagsHandler } from './_cc-posts.js';
+import { buildPostLibrary, postTagsHandler, readTagsSafe, postKeyOf, normNet } from './_cc-posts.js';
+import { playerDirectory, publicDirectory, matchPlayers as matchDir, TEAM_NAME, TEAM_ACCENT } from './_cc-players.js';
+import { playerLifetime, lifetimeStart } from './_cc-player-page.js';
+import { getServiceClient } from './_supabase.js';
+import { CANONICAL_ROSTER_2026 } from '../src/roster-2026.js';
 
 export const maxDuration = 60;
 
-const ROSTER = {
-  6201154: ["Andrew Ledet","Paul Marshall","Will Marshall","Edward Martinez","Brice Clark","Cooper Ruckel","Jackson Richardson"],
-  6201165: ["Randy Dalbey","Jake Sullivan","Ethan Winer","Jonathan Dalbey","Jim Balian","Tom Gannon","Kyle Vonschleusingen"],
-  6201157: ["Keaton Kimmel","Justin Hall","Bryson Livingston","Ryan O'Rear","Drew Baalman","Jeff Lopes","Grant Miller"],
-  6201149: ["Jaxson Blum","Carson Rose","Logan Rose","Luke Rose","Joey Jankowski","Caleb Jeter","Ben Dulin"],
-  6201166: ["Dustin Staggs","Jaxen Pearson","Preston Kolm","Steven Hayden","Sawyer Behen","James Lee","Justin Lee"],
-  6201159: ["Jordan Robles","Konner Jaso","Vincent Lea","Mychal Witty Jr.","Joaquin Jimenez","Bryan Owens","Dallas Allen"],
-  6200089: ["Tommy Hernandez","Cam Smith","Jeremy Adams","Jackson Albers","John Paul Gunn","Mike Stiles","Sean Hornberger"],
-  6201828: ["Josh Wheeler","Dominic Citrowske","Chandler Melton","Kaiden Rice","Spencer Foss","Brody Livingston","Jimmy Cole"],
-};
-export { ROSTER };
+// Player rosters, names, nicknames and handles now come from the shared
+// player directory (api/_cc-players.js, built on src/roster-2026.js), the
+// same list BLW Studio uses, instead of a hand-kept copy here.
 // Attribution for BLW-league-page posts. New York has no tracked account of its own
 // but is included because league-page content is where its reach lives.
 const ATTR_HANDLES = {
@@ -78,48 +75,21 @@ const ATTR_WORDS = {
   "New York Green Apples": ["new york", "green apple"],
   "Philadelphia Wiffle Club": ["philadelphia", "philly", "wiffle club"],
 };
-const ATTR_ROSTER = {
-  "Arizona Saguaros": ROSTER[6201154], "Boston Harbor Hawks": ROSTER[6201165],
-  "Chicago Bats": ROSTER[6201157], "Dallas Pandas": ROSTER[6201149],
-  "Las Vegas Scorpions": ROSTER[6201166], "Los Angeles Naturals": ROSTER[6201159],
-  "Miami Mirage": ROSTER[6200089], "Philadelphia Wiffle Club": ROSTER[6201828],
-  "Atlanta Ballers": ["Brett Caladie","Torin Roth","Jack Roth","Brandon Crone","Trevor Bauer","Cael Foreman","Connor Smith"],
-  "New York Green Apples": ["Will Smithey","Gus Skibbe","Brendan Dudas","Reid Werner","Tyler Flakne","Sam Skibbe","James Kline"],
-};
-export { ATTR_ROSTER };
-const SUFFIX = /\b(jr|sr|ii|iii|iv)\b/g;
-const normText = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(SUFFIX, " ").replace(/\s+/g, " ").trim();
-const PLAYER_PAT = (() => {
-  const lastCount = {};
-  for (const arr of Object.values(ROSTER)) for (const nm of arr) { const l = normText(nm).split(" ").slice(-1)[0]; lastCount[l] = (lastCount[l] || 0) + 1; }
-  const out = {};
-  for (const [b, arr] of Object.entries(ROSTER)) out[b] = arr.map(nm => {
-    const full = normText(nm); const collapsed = full.replace(/ /g, ""); const last = full.split(" ").slice(-1)[0];
-    return { name: nm, full, collapsed, last, useLast: last.length >= 6 && lastCount[last] === 1 };
-  });
-  return out;
-})();
-function matchPlayers(text, pats) {
-  const n = normText(text); if (!n) return [];
-  const padded = " " + n + " ", collapsed = n.replace(/ /g, "");
-  const hits = [];
-  for (const p of pats) if (padded.includes(" " + p.full + " ") || collapsed.includes(p.collapsed) || (p.useLast && padded.includes(" " + p.last + " "))) hits.push(p.name);
-  return hits;
-}
-
-function attributePost(text) {
+function attributePost(text, dir, players) {
   const t = " " + String(text || "").toLowerCase().replace(/\s+/g, " ") + " ";
   const found = new Map(); // name -> how
   for (const [hh, nm] of Object.entries(ATTR_HANDLES)) if (t.includes("@" + hh)) found.set(nm, "handle");
   for (const [nm, ws] of Object.entries(ATTR_WORDS)) if (!found.has(nm) && ws.some(w => t.includes(w))) found.set(nm, "name");
-  for (const [nm, arr] of Object.entries(ATTR_ROSTER)) {
-    if (found.has(nm) || !arr) continue;
-    for (const pl of arr) { const f = String(pl).toLowerCase().replace(/[^a-z ]/g, ""); if (f.length > 5 && t.includes(" " + f + " ")) { found.set(nm, "player"); break; } }
+  const featured = players || (dir ? matchDir(text, dir, null) : []);
+  for (const name of featured) {
+    const pl = dir && dir.find(p => p.name === name);
+    const team = pl && TEAM_NAME[pl.team];
+    if (team && !found.has(team)) found.set(team, "player");
   }
   return [...found.entries()].map(([team, via]) => ({ team, via }));
 }
 
-async function buildBLW(from, to, profiles, api) {
+async function buildBLW(from, to, profiles, api, pctx) {
   const b = BLW_BRAND.blogId;
   const resp = await api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ });
   const posts = (resp && Array.isArray(resp.data)) ? resp.data : [];
@@ -135,7 +105,8 @@ async function buildBLW(from, to, profiles, api) {
     imp += i; inter += x; engSum += e;
     fmt[ty] = fmt[ty] || { count: 0, inter: 0, imp: 0, engSum: 0 };
     fmt[ty].count += 1; fmt[ty].inter += x; fmt[ty].imp += i; fmt[ty].engSum += e;
-    const hits = attributePost(p.text);
+    const pk = postKeyOf(p, b, posts.indexOf(p));
+    const hits = attributePost(p.text, pctx.dir, pctx.tagPlayers[pk]);
     if (!hits.length) { unattributed += 1; unattImp += i; }
     for (const hh of hits) {
       const a = agg[hh.team] || (agg[hh.team] = { team: hh.team, posts: 0, impressions: 0, interactions: 0, engSum: 0, via: { handle: 0, name: 0, player: 0 } });
@@ -166,7 +137,7 @@ function behindOf(counts) {
   return ["ig", "tt", "fb"].filter(k => counts[k] < max);
 }
 
-async function buildTeam(t, from, to, profiles, mc) {
+async function buildTeam(t, from, to, profiles, mc, pctx) {
   const b = t.blogId;
   const { api, timeline: tl, firstTimeline: ft } = mc;
   const [ig_fR, ig_views, ig_eng, tt_f, tt_viewsR, tt_engR, fb_f, fb_engR, fb_mv,
@@ -234,7 +205,8 @@ async function buildTeam(t, from, to, profiles, mc) {
   const ppDaily = {};
   const metricKeys = new Set();
   const fmt = {};
-  const pats = PLAYER_PAT[b] || [], pAgg = {};
+  const pAgg = {};
+  posts.forEach((p, idx) => { p.__key = postKeyOf(p, b, idx); });
   for (const p of posts) {
     const net = NETMAP[p.network]; const m = p.metrics || {};
     Object.keys(m).forEach(k => metricKeys.add(k));
@@ -245,7 +217,9 @@ async function buildTeam(t, from, to, profiles, mc) {
     const dt = (p.publicationDate || {}).dateTime || "";
     fmt[ty] = fmt[ty] || { count: 0, inter: 0, imp: 0, engSum: 0 };
     fmt[ty].count += 1; fmt[ty].inter += inter; fmt[ty].imp += imp; fmt[ty].engSum += eng;
-    if (pats.length) for (const nm of matchPlayers(p.text, pats)) {
+    // Manual tags from the post library win; otherwise match the caption.
+    const featured = pctx.tagPlayers[p.__key] || matchDir(p.text, pctx.dir, t.teamId);
+    for (const nm of featured) {
       const a = pAgg[nm] || (pAgg[nm] = { name: nm, posts: 0, interactions: 0, impressions: 0, engSum: 0, items: [] });
       a.posts += 1; a.interactions += inter; a.impressions += imp; a.engSum += eng;
       a.items.push({ network: p.network, type: ty, interactions: inter, impressions: imp, link: p.link, picture: p.picture || null, date: dt });
@@ -412,9 +386,12 @@ export async function compute(days, rng, token, userId, custom) {
   const { from, to, label } = windowRange(days, rng, custom);
   const mc = makeApi(token, userId);
   const profiles = await loadProfiles(mc.api);
+  const sb = getServiceClient();
+  const tags = await readTagsSafe(sb);
+  const pctx = { dir: await playerDirectory(sb, tags.playerAliases), tagPlayers: tags.players || {} };
   const [teams, blw] = await Promise.all([
-    Promise.all(TEAMS.map(t => buildTeam(t, from, to, profiles, mc))),
-    buildBLW(from, to, profiles, mc.api),
+    Promise.all(TEAMS.map(t => buildTeam(t, from, to, profiles, mc, pctx))),
+    buildBLW(from, to, profiles, mc.api, pctx),
   ]);
   teams.forEach(tm => { tm.mom = tm.followersNow ? round(tm.netNew / tm.followersNow * 100, 1) : 0; });
 
@@ -453,12 +430,28 @@ export async function compute(days, rng, token, userId, custom) {
   const impByPlat = { ig: sum(teams.map(t => t.impressionsByPlatform.ig)), tt: sum(teams.map(t => t.impressionsByPlatform.tt)), fb: sum(teams.map(t => t.impressionsByPlatform.fb)) };
   const savesByPlat = { ig: sum(teams.map(t => t.savesByPlatform.ig)), tt: sum(teams.map(t => t.savesByPlatform.tt)), fb: sum(teams.map(t => t.savesByPlatform.fb)) };
   const sharesByPlat = { ig: sum(teams.map(t => t.sharesByPlatform.ig)), tt: sum(teams.map(t => t.sharesByPlatform.tt)), fb: sum(teams.map(t => t.sharesByPlatform.fb)) };
-  const playersAll = teams.flatMap(t => (t.players || []).map(pl => ({ ...pl, team: t.name, accent: t.accent, blogId: t.blogId, amp: t.followersNow ? round(pl.impressions / t.followersNow, 1) : 0 })));
+  // One row per player across every team account, credited to the player's
+  // own team (a Dallas player featured on the Chicago account is still Dallas).
+  const teamOf = Object.fromEntries(pctx.dir.map(p => [p.name, p.team]));
+  const merged = {};
+  for (const t of teams) for (const pl of (t.players || [])) {
+    const m = merged[pl.name] || (merged[pl.name] = { name: pl.name, posts: 0, interactions: 0, impressions: 0, engW: 0, items: [], accounts: new Set() });
+    m.posts += pl.posts; m.interactions += pl.interactions; m.impressions += pl.impressions; m.engW += pl.engAvg * pl.posts; m.accounts.add(t.name);
+    m.items.push(...pl.items);
+  }
+  const teamAcct = Object.fromEntries(teams.map(t => [t.teamId, t]));
+  const playersAll = Object.values(merged).map(m => {
+    const tid = teamOf[m.name]; const acct = teamAcct[tid];
+    return { name: m.name, posts: m.posts, interactions: m.interactions, impressions: m.impressions, engAvg: round(m.engW / Math.max(1, m.posts), 2),
+      items: m.items.sort((x, y) => y.interactions - x.interactions).slice(0, 6), accounts: [...m.accounts],
+      team: TEAM_NAME[tid] || "Unknown team", teamId: tid || null, accent: TEAM_ACCENT[tid] || "#C4C9D2", blogId: acct ? acct.blogId : null,
+      amp: acct && acct.followersNow ? round(m.impressions / acct.followersNow, 1) : 0 };
+  });
   const nz = arr => { const mx = Math.max(1, ...arr); return arr.map(v => v / mx); };
   const pI = nz(playersAll.map(x => x.interactions)), pP = nz(playersAll.map(x => x.impressions)), pE = nz(playersAll.map(x => x.engAvg));
   playersAll.forEach((x, i) => { x.heat = Math.round(100 * (0.55 * pI[i] + 0.30 * pP[i] + 0.15 * pE[i])); });
   const playerLeaderboard = playersAll.sort((a, b) => b.interactions - a.interactions).slice(0, 20);
-  const rosterCoverage = { withRoster: teams.filter(t => (ROSTER[t.blogId] || []).length).length, total: teams.length, missing: teams.filter(t => !(ROSTER[t.blogId] || []).length).map(t => t.name), untracked: ["New York Green Apples", "San Diego Orcas"] };
+  const rosterCoverage = { withRoster: teams.length, total: teams.length, missing: [], untracked: ["New York Green Apples"] };
   const wTeams = teams.filter(t => t.watch.days > 0);
   const watchLeague = { totalHrs: round(sum(teams.map(t => t.watch.totalHrs)), 1), avgSec: wTeams.length ? round(sum(wTeams.map(t => t.watch.avgSec)) / wTeams.length, 1) : 0, teamsWithData: wTeams.length, platform: "facebook" };
   const parityBehind = behindOf(totals_platform.posts);
@@ -565,13 +558,26 @@ export default async function handler(req, res) {
   const ctx = await requireUser(req, res);
   if (!ctx) return; // 401 already sent
   if (requireRole(res, ctx.profile, ['master_admin', 'admin', 'content'])) return; // 403 already sent
-  const isMaster = ctx.profile?.role === "master_admin";
+  // "View as" (BLW Studio's master-only impersonation). The page sends the
+  // role being previewed; it can only LOWER a real master admin's access,
+  // never raise anyone's. Viewing as an athlete gets the athlete answer.
+  const realMaster = ctx.profile?.role === "master_admin";
+  const viewAs = String(req.headers["x-view-as"] || "").toLowerCase();
+  if (realMaster && (viewAs === "athlete" || viewAs === "fan")) { res.status(403).json({ error: "Forbidden", viewAs }); return; }
+  const isMaster = realMaster && !(viewAs && viewAs !== "master_admin");
 
   // Planned posts never touch Metricool, so they work even without its env vars.
   if (view === "planned") { res.setHeader("Cache-Control", "private, no-store"); await plannedHandler(req, res, ctx); return; }
   // The post library (every post + contractor tags) is master-admin only.
   if ((view === "posts" || view === "posttags") && !isMaster) { res.status(403).json({ error: "Master admin only" }); return; }
-  if (view === "posttags") { res.setHeader("Cache-Control", "private, no-store"); await postTagsHandler(req, res, ctx); return; }
+  if (view === "posttags") {
+    res.setHeader("Cache-Control", "private, no-store");
+    await postTagsHandler(req, res, ctx);
+    // Player tags feed the heat index: drop cached league results so the
+    // next load reflects them.
+    if (req.method === "POST") for (const k of [...CACHE.keys()]) if (k.startsWith("league|")) CACHE.delete(k);
+    return;
+  }
 
   const token = process.env.METRICOOL_TOKEN, userId = process.env.METRICOOL_USER_ID;
   if (!token || !userId) {
@@ -608,7 +614,24 @@ export default async function handler(req, res) {
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
       const key = `posts|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
       const data = await cached(key, CACHE_TTL, fresh, () => buildPostLibrary(windowRange(days, rng, custom), token, userId));
-      res.status(200).send(JSON.stringify(data));
+      // Who is in each post (automatic), computed fresh so new nicknames and
+      // handles apply immediately. Manual tags are applied on the page.
+      const tags = await readTagsSafe(ctx.sb);
+      const dir = await playerDirectory(ctx.sb, tags.playerAliases);
+      const out = { ...data, players: publicDirectory(dir), posts: data.posts.map(p => ({ ...p, autoPlayers: matchDir(p.text, dir, p.teamId) })) };
+      res.status(200).send(JSON.stringify(out));
+      return;
+    }
+    if (view === "player") {
+      const name = String(q.name || "").slice(0, 80);
+      if (!name) { res.status(400).json({ error: "name required" }); return; }
+      const start = lifetimeStart();
+      const today = new Date().toISOString().slice(0, 10);
+      const lib = await cached(`posts|lifetime|${start}`, 30 * 60 * 1000, fresh, () => buildPostLibrary(windowRange(null, "custom", { from: start, to: today }), token, userId));
+      const tags = await readTagsSafe(ctx.sb);
+      const dir = await playerDirectory(ctx.sb, tags.playerAliases);
+      const out = await playerLifetime(name, lib, dir, tags);
+      res.status(out.error ? out.status : 200).send(JSON.stringify(out));
       return;
     }
     if (view === "scheduled") {
@@ -620,7 +643,7 @@ export default async function handler(req, res) {
       if (req.method !== "POST") { res.status(405).json({ error: "POST required" }); return; }
       if (await checkRateLimit(ctx, 'ideas', res)) return;
       const body = readBody(req);
-      const out = await generateIdeas(body, { sb: ctx.sb, roster: ATTR_ROSTER });
+      const out = await generateIdeas(body, { sb: ctx.sb, roster: Object.fromEntries(Object.entries(TEAM_NAME).map(([id, nm]) => [nm, CANONICAL_ROSTER_2026.filter(p => p.team === id).map(p => p.name)])) });
       res.status(out.error ? (out.status || 500) : 200).send(JSON.stringify(out));
       return;
     }

@@ -18,6 +18,19 @@
 
 export const RELEASES = [
   {
+    version: '5.9.0',
+    date: '2026-11-03',
+    kind: 'minor',
+    summary: 'v5.9.0 — Command Center: View as, a fixed Player Heat Index, player tagging and lifetime player pages',
+    items: [
+      'BLW Studio\'s "View as" now applies to the Command Center. Pick Content in View as and the Command Center shows exactly what a content admin sees, with a banner to exit. Viewing as an athlete shows the athlete\'s "no access" screen. It only ever hides things from a master admin; it never grants access.',
+      'Player Heat Index fixes: names now come from the same canonical roster and aliases as the rest of BLW Studio (Nick Martinez, Myc Witty, Vin Lea, Johnny Gunn and so on), players\' Instagram handles and nicknames count, credits like "shoutout X for the clip", "filmed by X" or "📸 X" no longer count as featuring that player, and each player is credited to their own team even when another team\'s account posts them.',
+      'Tag who is in a post: in Every post, expand a row to add or remove players, mark "Nobody featured", or go back to automatic detection. Manual tags override the caption matching everywhere, including the Heat Index. Filter Every post by player, and add extra nicknames and @handles per player.',
+      'Player pages: click any player for their lifetime content stats since tracking began (views, interactions, engagement, by platform, by account, by month, top posts) across every team account, the BLW league page and WIFFLE®, plus their career season lines from Grand Slam Systems.',
+      'The canonical roster and name aliases moved to src/roster-2026.js so the app and the Command Center share one list.',
+    ],
+  },
+  {
     version: '5.8.1',
     date: '2026-11-03',
     kind: 'patch',

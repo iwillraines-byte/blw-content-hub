@@ -22,7 +22,7 @@ import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, round, makeApi, loadProfiles, pick
 import { findWiffleBrands } from './_cc-wiffle.js';
 
 const NET_ALIAS = { x: 'twitter', twitter: 'twitter', linkedincompany: 'linkedin', linkedin: 'linkedin', instagram: 'instagram', tiktok: 'tiktok', facebook: 'facebook', youtube: 'youtube', threads: 'threads' };
-const normNet = n => NET_ALIAS[String(n || '').toLowerCase()] || String(n || '').toLowerCase();
+export const normNet = n => NET_ALIAS[String(n || '').toLowerCase()] || String(n || '').toLowerCase();
 
 const STOP = new Set(['the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'is', 'it', 'this', 'that', 'with', 'at', 'by', 'be', 'are', 'was', 'from', 'up', 'out', 'we', 'you', 'our', 'your', 'i', 'my', 'me']);
 export function tokens(text) {
@@ -71,12 +71,20 @@ export function autoGroup(posts) {
   return out;
 }
 
+// Stable key for one post on one platform. Shared by the library, the heat
+// index and the tags so a tag set in one place applies everywhere.
+export function postKeyOf(p, blogId, i) {
+  const dt = (p.publicationDate || {}).dateTime || '';
+  const id = p.id || p.postId || p.mediaId || p.link || `${dt}#${i}`;
+  return `${blogId}:${normNet(p.network)}:${id}`;
+}
+
 export async function buildPostLibrary(win, token, userId) {
   const { from, to, label } = win;
   const mc = makeApi(token, userId);
   const profiles = await loadProfiles(mc.api);
   const brands = [
-    ...TEAMS.map(t => ({ blogId: t.blogId, name: t.name, accent: t.accent, kind: 'team' })),
+    ...TEAMS.map(t => ({ blogId: t.blogId, name: t.name, accent: t.accent, kind: 'team', teamId: t.teamId })),
     { blogId: BLW_BRAND.blogId, name: BLW_BRAND.name, accent: BLW_BRAND.accent, kind: 'league' },
     ...findWiffleBrands(profiles).map(w => ({ blogId: Number(w.id), name: w.label || 'WIFFLE®', accent: WIFFLE_ACCENT, kind: 'wiffle' })),
   ].map(b => ({ ...b, picture: (profiles[b.blogId] || {}).picture || null }));
@@ -90,10 +98,10 @@ export async function buildPostLibrary(win, token, userId) {
       const network = normNet(p.network);
       const dt = (p.publicationDate || {}).dateTime || '';
       const ms = Date.parse(dt.length === 19 ? dt + 'Z' : dt) || 0; // ordering only; same offset for every post
-      const id = p.id || p.postId || p.mediaId || p.link || `${dt}#${i}`;
       const sv = pickMetric(m, SAVE_KEYS), sh = pickMetric(m, SHARE_KEYS);
       posts.push({
-        key: `${br.blogId}:${network}:${id}`,
+        teamId: br.teamId || null,
+        key: postKeyOf(p, br.blogId, i),
         blogId: br.blogId, kind: br.kind, network,
         type: String(p.type || 'OTHER').toUpperCase(),
         date: dt, ms,
@@ -123,15 +131,23 @@ const DEFAULT_CONTRACTORS = [
 ];
 const PALETTE = ['#5CE0E0', '#FF6FCF', '#FFB13C', '#7CF1A8', '#9AD1FF', '#C7F24E', '#B8A6FF', '#FF8A8A', '#DAC79C'];
 
+const obj = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
 async function readTags(sb) {
   const { data, error } = await sb.from('app_settings').select('value').eq('key', KEY).maybeSingle();
   if (error) throw new Error(error.message);
   const v = (data && data.value) || {};
   return {
     contractors: Array.isArray(v.contractors) ? v.contractors : DEFAULT_CONTRACTORS,
-    assign: v.assign && typeof v.assign === 'object' ? v.assign : {},
-    groups: v.groups && typeof v.groups === 'object' ? v.groups : {},
+    assign: obj(v.assign),
+    groups: obj(v.groups),
+    players: obj(v.players),          // post key -> [player names] (manual; [] = nobody)
+    playerAliases: obj(v.playerAliases), // player name -> extra nicknames / @handles
   };
+}
+// For read-only callers (heat index, player pages): never throws.
+export async function readTagsSafe(sb) {
+  try { if (sb) return await readTags(sb); } catch { /* fall through */ }
+  return { contractors: DEFAULT_CONTRACTORS, assign: {}, groups: {}, players: {}, playerAliases: {} };
 }
 
 const keysOf = b => (Array.isArray(b.postKeys) ? b.postKeys : []).map(String).filter(k => k.length < 400).slice(0, 200);
@@ -168,6 +184,17 @@ export async function postTagsHandler(req, res, ctx) {
       for (const k of keysOf(body)) t.groups[k] = 'solo';
     } else if (op === 'reset') {
       for (const k of keysOf(body)) delete t.groups[k];
+    } else if (op === 'players') {
+      // players: array of names -> manual tag (empty array = "nobody");
+      // null -> back to automatic caption matching.
+      const keys = keysOf(body);
+      const names = Array.isArray(body.players) ? [...new Set(body.players.map(String).map(x => x.trim()).filter(Boolean))].slice(0, 20) : null;
+      for (const k of keys) { if (names) t.players[k] = names; else delete t.players[k]; }
+    } else if (op === 'aliases') {
+      const name = String(body.name || '').trim().slice(0, 80);
+      if (!name) { res.status(400).json({ error: 'name required' }); return; }
+      const list = (Array.isArray(body.aliases) ? body.aliases : []).map(x => String(x).trim()).filter(x => x.length >= 2 && x.length <= 40).slice(0, 12);
+      if (list.length) t.playerAliases[name] = list; else delete t.playerAliases[name];
     } else { res.status(400).json({ error: 'Unknown op' }); return; }
     const { error } = await sb.from('app_settings').upsert(
       { key: KEY, value: t, updated_at: new Date().toISOString(), updated_by: ctx.user.id }, { onConflict: 'key' });

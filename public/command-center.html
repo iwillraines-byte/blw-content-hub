@@ -511,6 +511,37 @@
   .crow{display:grid;grid-template-columns:34px 1fr 32px;gap:8px;align-items:center;margin-top:8px}
   .crow input[type=color]{width:34px;height:34px;border:1px solid var(--line-2);border-radius:8px;background:none;padding:2px;cursor:pointer}
   @media(max-width:1080px){.plrow{grid-template-columns:22px 48px minmax(0,1fr) 130px 26px}.plrow .pltot{display:none}.pldet{margin-left:0}.pldr{grid-template-columns:20px 1fr 70px 70px auto}.pldr .hm{display:none}}
+  /* view-as banner */
+  .vabar{display:none;align-items:center;gap:12px;justify-content:center;margin:0 0 14px;padding:9px 14px;border-radius:11px;background:rgba(154,209,255,.10);border:1px solid rgba(154,209,255,.35);color:#cfe7ff;font-size:12.5px}
+  .vabar.on{display:flex}
+  .vabar b{color:#fff}
+  /* player tags in the post library */
+  .plpl{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+  .pchipp{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--ink);padding:2px 7px;border-radius:6px;background:rgba(255,255,255,.07);border:1px solid transparent}
+  .pchipp i{width:7px;height:7px;border-radius:2px}
+  .pchipp.auto{background:transparent;border:1px dashed rgba(255,255,255,.22);color:var(--ink-2)}
+  .pchipp:hover{border-color:rgba(255,255,255,.4)}
+  .pled{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 8px;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:9px}
+  .pled .lab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
+  .pled .x{all:unset;cursor:pointer;margin-left:3px;color:var(--ink-3)}
+  .pled .x:hover{color:var(--neg)}
+  .pled .sel{padding:5px 26px 5px 9px;font-size:11.5px}
+  /* player lifetime */
+  .life{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
+  .life h4{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:600;margin:16px 0 8px}
+  .life h4:first-child{margin-top:0}
+  .lacct{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12px}
+  .lacct .nm{min-width:170px;display:flex;align-items:center;gap:7px}
+  .lacct .tr{flex:1;height:8px;border-radius:5px;background:rgba(255,255,255,.05);overflow:hidden}
+  .lacct .tr span{display:block;height:100%;border-radius:5px}
+  .lacct .v{min-width:120px;text-align:right;color:var(--ink-2)} .lacct .v b{color:var(--ink)}
+  .ctab{width:100%;border-collapse:collapse;font-size:11.5px}
+  .ctab th,.ctab td{padding:6px 8px;border-top:1px solid var(--line);text-align:right;color:var(--ink-2);white-space:nowrap}
+  .ctab th{color:var(--ink-3);font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+  .ctab td:first-child,.ctab th:first-child{text-align:left;color:var(--ink)}
+  .ctabwrap{overflow-x:auto}
+  .aled{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .aled .inp{flex:1}
 </style>
 </head>
 <body>
@@ -520,6 +551,7 @@
 <div class="modal" id="modal"><div class="modal-card"><button class="modal-x" id="modalX" aria-label="Close">&#10005;</button><div id="modalBody"></div></div></div>
 
 <div class="wrap">
+  <div class="vabar" id="vaBar" role="status"></div>
   <div class="topbar">
     <div class="brand"><h1>BLW Brand Command Center</h1><div class="sub" id="brandSub">BLW Teams · 9 accounts</div></div>
     <div class="status">
@@ -757,6 +789,22 @@ function countUp(el,to,dur,f){
 function destroyCharts(){ Object.values(STATE.charts).forEach(c=>{try{c.destroy()}catch(e){}}); STATE.charts={}; }
 function destroyModalCharts(){ STATE.modalCharts.forEach(c=>{try{c.destroy()}catch(e){}}); STATE.modalCharts=[]; }
 
+/* ============ VIEW AS ============
+   BLW Studio's master-only "View as" (stored in this browser under
+   blw_view_as) now applies here too. The page tells the server which role
+   is being previewed; the server can only lower a real master admin's
+   access with it, never raise anyone's. */
+const VIEW_AS_KEY="blw_view_as";
+function viewAs(){ try{ const v=JSON.parse(localStorage.getItem(VIEW_AS_KEY)||"null"); return v&&v.role?v:null; }catch(e){ return null; } }
+function exitViewAs(){ try{ localStorage.removeItem(VIEW_AS_KEY); }catch(e){} location.reload(); }
+function renderViewAsBar(){
+  const v=viewAs(), bar=$("#vaBar"); if(!bar) return;
+  if(!v){ bar.classList.remove("on"); return; }
+  const label=v.label||({content:"Content",athlete:"Athlete",admin:"Admin"}[v.role]||v.role);
+  bar.innerHTML=`<span>Viewing the Command Center as <b>${esc(label)}</b>, the same view-as you picked in BLW Studio.</span><button class="btn" id="vaExit">Exit view as</button>`;
+  bar.classList.add("on"); $("#vaExit").onclick=exitViewAs;
+}
+
 /* ============ AUTH ============
    Before: this page read the access token straight out of localStorage. Supabase
    access tokens expire after an hour, and nothing on this standalone page ever
@@ -805,22 +853,26 @@ async function apiFetch(url, opts){
   opts = opts || {};
   let tok = await getToken(false);
   if(!tok) return { status: 0, noauth: true };
-  const go = t => fetch(url, { ...opts, headers: { ...(opts.headers||{}), Authorization: "Bearer " + t } });
+  const va = viewAs();
+  const go = t => fetch(url, { ...opts, headers: { ...(opts.headers||{}), Authorization: "Bearer " + t, ...(va ? { "X-View-As": va.role } : {}) } });
   let r = await go(tok);
   if(r.status === 401){ const t2 = await getToken(true); if(t2) r = await go(t2); }
   return r;
 }
 function showGate(kind){
+  setTimeout(()=>{ const x=document.getElementById("vaExit2"); if(x) x.onclick=e=>{ e.preventDefault(); exitViewAs(); }; },0);
   $("#overlay").classList.remove("on");
   ["#content","#acctContent","#postLib","#schedSection","#ideasSection","#auditSection"].forEach(sel=>{ const el=$(sel); if(el) el.style.display="none"; });
   $("#errbox").classList.add("on");
-  $("#errbox").innerHTML = kind==="forbidden"
+  $("#errbox").innerHTML = kind==="viewas"
+    ? `<b>You're viewing BLW Studio as ${esc((viewAs()||{}).label||(viewAs()||{}).role||"another role")}.</b> That role can't open the Command Center, which is exactly what they would see. <a href="#" id="vaExit2">Exit view as &#8594;</a>`
+    : kind==="forbidden"
     ? "<b>Content team and admins only.</b> Your BLW Studio account doesn't have access to the Command Center. Ask the master admin to update your role."
     : kind==="expired"
       ? "<b>Your BLW Studio session has ended.</b> Sign in again and this page will pick it up. &nbsp;<a href='/'>Go to BLW Studio &#8594;</a>"
       : "<b>Sign in to BLW Studio first,</b> then open /command-center. &nbsp;<a href='/'>Go to BLW Studio &#8594;</a>";
 }
-function gateFor(r){ if(r.noauth){ showGate("signin"); return true; } if(r.status===401){ showGate("expired"); return true; } if(r.status===403){ showGate("forbidden"); return true; } return false; }
+function gateFor(r){ if(r.noauth){ showGate("signin"); return true; } if(r.status===401){ showGate("expired"); return true; } if(r.status===403){ showGate(viewAs()&&viewAs().role!=="content"&&viewAs().role!=="admin"?"viewas":"forbidden"); return true; } return false; }
 
 function loadCurrent(q, fresh){ return STATE.scope==="league" ? load(q, fresh) : loadAccounts(STATE.scope, q, fresh); }
 
@@ -1186,26 +1238,15 @@ function renderPlayers(){
       <div class="pbar"><span data-w="${w}%" style="background:${p.accent}"></span></div>
       <div class="pstats"><div class="pstat"><b>${fmt(p.interactions)}</b><div class="k">int</div></div><div class="pstat"><b>${fmt(p.impressions)}</b><div class="k">reach</div></div><div class="pstat"><b>${(p.engAvg||0).toFixed(1)}%</b><div class="k">eng</div></div></div>
       <div class="pheat" style="color:${p.accent}">${p.heat}</div></div>`;}).join("")
-    +`<div class="fc-note" style="margin-top:11px">Attributed when a player's name appears in the caption (a post can credit more than one player). Heat blends interactions (55%), reach (30%) and engagement (15%), scored across the league. ${cov.missing&&cov.missing.length?"No roster yet for "+esc(cov.missing.join(", "))+". ":""}${cov.untracked&&cov.untracked.length?esc(cov.untracked.join(" and "))+" rosters received but those accounts are not tracked yet.":""}</div>`;
+    +`<div class="fc-note" style="margin-top:11px">Attributed when a player's name appears in the caption (a post can credit more than one player). Heat blends interactions (55%), reach (30%) and engagement (15%), scored across the league. Names come from the BLW Studio roster, including nicknames and Instagram handles; a credit like "shoutout X for the clip" or "📸 X" does not count. ${isM()?"Tag posts by hand in Every post to correct it. ":""}Click a player for their lifetime page.</div>`;
+  if(STATE.heatStale) host.insertAdjacentHTML("afterbegin",`<div class="fc-note" style="margin:0 0 8px">Player tags changed. <button class="lnk" id="heatReload">Update the Heat Index</button></div>`);
+  const hr=document.getElementById("heatReload"); if(hr) hr.onclick=()=>{ STATE.heatStale=false; load(STATE.q,false); };
   const set=()=>host.querySelectorAll(".pbar>span").forEach(el=>el.style.width=el.dataset.w);
   REDUCE?set():requestAnimationFrame(set);
   host.querySelectorAll(".prow").forEach(el=>{const go=()=>openPlayer(+el.dataset.i);el.onclick=go;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
 }
 
-function openPlayer(i){
-  const p=(STATE.data.playerLeaderboard||[])[i]; if(!p) return;
-  const NET={instagram:"IG",tiktok:"TikTok",facebook:"FB"};
-  const ini=esc(p.name.split(" ").map(w=>w[0]).join("").slice(0,3));
-  let body=`<div class="modal-title"><span style="width:12px;height:12px;border-radius:4px;background:${p.accent};display:inline-block"></span>${esc(p.name)}</div>
-    <div class="modal-sub">${esc(p.team)}${showCounts()&&p.posts!=null?` · ${p.posts} posts mentioning`:""} · heat ${p.heat}/100</div>
-    <div class="gchips" style="margin-top:12px">${gchip("Interactions",p.accent,fmtFull(p.interactions),null)}${gchip("Reach",PCOL.fb,fmtFull(p.impressions),null)}${gchip("Avg engagement",PCOL.ig,(p.engAvg||0).toFixed(2)+"%",null)}${gchip("Reach vs followers",PCOL.tt,(p.amp||0)+"x",null)}</div>
-    <div class="modal-sub" style="margin-top:14px">Posts driving ${esc(p.name.split(" ")[0])}'s numbers</div>
-    <div class="lbgrid" style="margin-top:10px">`+(p.items||[]).map(it=>{
-      const thumb=it.picture?`<img src="${esc(it.picture)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="ph" style="display:none">${ini}</div>`:`<div class="ph">${ini}</div>`;
-      return `<a class="lbcard" href="${esc(it.link||'#')}" target="_blank" rel="noopener" style="--accent:${p.accent}"><div class="lbthumb">${thumb}<span class="lbnet">${NET[it.network]||""} · ${capw(it.type)}</span></div><div class="lbbody"><div class="lbmet"><b>${fmt(it.interactions)}</b> int <span class="e">· ${fmt(it.impressions)} reach</span></div><div class="lbcap">${(it.date||"").slice(0,10)}</div></div></a>`;
-    }).join("")+`</div>`;
-  openModal(body);
-}
+function openPlayer(i){ const p=(STATE.data.playerLeaderboard||[])[i]; if(p) openPlayerByName(p.name,p); }
 
 const EMV_KEY="blw-emv-rates-v1";
 const EMV_DEFAULTS={cpm:{ig:20,tt:20,fb:20},per:{ig:0.25,tt:0.25,fb:0.25},fol:1.00,ss:1.25};
@@ -1830,7 +1871,7 @@ setInterval(()=>{ if(STATE.sched && !document.hidden) loadSched(false); }, 5*600
    here with Group together / Split apart. Each creative can be tagged with
    the contractor who made it, and the cards on top roll performance up by
    contractor. Tags and fixes are shared: stored in BLW Studio, not Metricool. */
-STATE.pl={data:null,q:null,tags:null,f:{brand:"all",net:"all",type:"all",who:"all",q:"",sort:"new"},sel:new Set(),open:new Set(),limit:40,busy:false};
+STATE.pl={data:null,q:null,tags:null,f:{brand:"all",net:"all",type:"all",who:"all",player:"all",q:"",sort:"new"},sel:new Set(),open:new Set(),limit:40,busy:false};
 const PL_KIND={league:"team",blw:"league",wiffle:"wiffle"};
 async function loadPosts(fresh){
   const q=STATE.q; if(!q) return;
@@ -1853,7 +1894,11 @@ async function loadPosts(fresh){
   STATE.pl.busy=false;
   renderPosts();
 }
-function plTags(){ return STATE.pl.tags||{contractors:[],assign:{},groups:{}}; }
+function plTags(){ return STATE.pl.tags||{contractors:[],assign:{},groups:{},players:{},playerAliases:{}}; }
+function plPlayerDir(){ return (STATE.pl.data&&STATE.pl.data.players)||[]; }
+function playerAccent(name){ const p=plPlayerDir().find(x=>x.name===name); return p?({AZS:"#C7F24E",ATL:"#9AD1FF",BOS:"#DAC79C",CHI:"#C0162B",DAL:"#E8B53A",LV:"#C4C9D2",LAN:"#2E63E8",MIA:"#79E6C2",PHI:"#34489E",NYG:"#8BD17C"}[p.team]||"#C4C9D2"):"#C4C9D2"; }
+function playerOptions(exclude){ const ex=new Set(exclude||[]); const byTeam={}; plPlayerDir().forEach(p=>{ if(!ex.has(p.name)) (byTeam[p.teamName]=byTeam[p.teamName]||[]).push(p); });
+  return Object.keys(byTeam).sort().map(t=>`<optgroup label="${esc(t)}">${byTeam[t].map(p=>`<option value="${esc(p.name)}">${esc(p.name)}${p.num?" #"+esc(p.num):""}</option>`).join("")}</optgroup>`).join(""); }
 function plContractor(id){ return plTags().contractors.find(c=>c.id===id)||null; }
 // Posts -> creatives for the current tab.
 function plCreatives(){
@@ -1880,6 +1925,9 @@ function plCreatives(){
     c.nets=[...new Set(c.posts.map(p=>p.network))];
     c.engagement=c.posts.reduce((a,p)=>a+(p.engagement||0),0)/c.posts.length;
     c.types=[...new Set(c.posts.map(p=>p.type))];
+    const tp=T.players||{};
+    c.playersManual=c.posts.some(p=>Array.isArray(tp[p.key]));
+    c.players=[...new Set(c.posts.flatMap(p=>Array.isArray(tp[p.key])?tp[p.key]:(p.autoPlayers||[])))];
     const ws=[...new Set(c.posts.map(p=>T.assign[p.key]||""))];
     c.who= ws.length===1 ? ws[0] : "mixed";
     // a manual group whose members are now on other tabs/windows can be a single post
@@ -1894,6 +1942,7 @@ function plFiltered(skipWho){
     (f.net==="all"||c.nets.includes(f.net)) &&
     (f.type==="all"||c.types.includes(f.type)) &&
     (!q||(c.text||"").toLowerCase().includes(q)) &&
+    (f.player==="all"||(f.player==="none"?!c.players.length:c.players.includes(f.player))) &&
     (skipWho||f.who==="all"||(f.who==="none"?c.who==="":c.who===f.who)));
   const by={new:(a,b)=>(b.date||"").localeCompare(a.date||""),old:(a,b)=>(a.date||"").localeCompare(b.date||""),views:(a,b)=>b.impressions-a.impressions,inter:(a,b)=>b.interactions-a.interactions,eng:(a,b)=>b.engagement-a.engagement}[f.sort];
   return list.sort(by);
@@ -1913,11 +1962,12 @@ function renderPosts(){
     `<select class="sel" data-f="net" aria-label="Platform">${opt("all","All platforms",f.net)}${nets.map(n=>opt(n,NLABEL[n]||n,f.net)).join("")}</select>`+
     `<select class="sel" data-f="type" aria-label="Format">${opt("all","All formats",f.type)}${types.map(t=>opt(t,capw(t),f.type)).join("")}</select>`+
     `<select class="sel" data-f="who" aria-label="Contractor">${opt("all","Anyone",f.who)}${opt("none","Not tagged",f.who)}${T.contractors.map(c=>opt(c.id,c.name,f.who)).join("")}</select>`+
+    `<select class="sel" data-f="player" aria-label="Player">${opt("all","Any player",f.player)}${opt("none","No player",f.player)}${plPlayerDir().length?(()=>{ const byTeam={}; plPlayerDir().forEach(p=>(byTeam[p.teamName]=byTeam[p.teamName]||[]).push(p)); return Object.keys(byTeam).sort().map(t=>`<optgroup label="${esc(t)}">${byTeam[t].map(p=>opt(p.name,p.name,f.player)).join("")}</optgroup>`).join(""); })():""}</select>`+
     `<input class="inp" data-f="q" type="search" placeholder="Search captions" value="${esc(f.q)}" aria-label="Search captions">`+
     `<select class="sel" data-f="sort" aria-label="Sort">${opt("new","Newest first",f.sort)}${opt("old","Oldest first",f.sort)}${opt("views","Most views",f.sort)}${opt("inter","Most interactions",f.sort)}${opt("eng","Best engagement",f.sort)}</select>`+
-    `<span class="sp"></span><button class="btn" id="plCsv">Download CSV</button><button class="btn" id="plWho">Contractors</button>`;
+    `<span class="sp"></span><button class="btn" id="plCsv">Download CSV</button><button class="btn" id="plWho">Contractors</button><button class="btn" id="plNames">Player nicknames</button>`;
   $("#plBar").querySelectorAll("[data-f]").forEach(el=>{ const ev=el.tagName==="INPUT"?"input":"change"; el.addEventListener(ev,()=>{ f[el.dataset.f]=el.value; STATE.pl.limit=40; if(el.tagName==="INPUT"){ clearTimeout(STATE.pl.t); STATE.pl.t=setTimeout(()=>{ renderPostRows(); renderPostSummary(); },200); } else renderPosts(); }); });
-  $("#plCsv").onclick=plCsv; $("#plWho").onclick=plManage;
+  $("#plCsv").onclick=plCsv; $("#plWho").onclick=plManage; $("#plNames").onclick=()=>plAliases();
   renderPostSummary(); renderPostRows();
 }
 function renderPostSummary(){
@@ -1940,12 +1990,17 @@ function renderPostRows(){
   host.innerHTML=shown.map(c=>{
     const b=c.brand, open=STATE.pl.open.has(c.id), sel=STATE.pl.sel.has(c.id);
     const nets=c.posts.map(p=>`<a href="${esc(p.link||"#")}" target="_blank" rel="noopener" title="${esc(NLABEL[p.network]||p.network)}: ${fmtFull(p.impressions)} views, ${fmtFull(p.interactions)} interactions. Click to open the post.">${glyph(p.network)}${fmt(p.impressions)} · ${fmt(p.interactions)}</a>`).join("");
-    const det=open?`<div class="pldet">${c.posts.map(p=>`<div class="pldr">${glyph(p.network)}<span>${esc(plDate(p.date,true))}</span><span class="hm">${esc(capw(p.type))}</span><span class="t hm">${esc((p.text||"").slice(0,120))||"(no caption)"}</span><span><b>${fmt(p.impressions)}</b> views</span><span><b>${fmt(p.interactions)}</b> int</span><span class="hm">${(p.engagement||0).toFixed(1)}%</span><span>${p.link?`<a href="${esc(p.link)}" target="_blank" rel="noopener">Open</a>`:""}${c.posts.length>1?` &nbsp;<button class="lnk" data-split="${esc(p.key)}">Split off</button>`:""}</span></div>`).join("")}${c.manual?`<div style="margin-top:4px"><button class="lnk" data-reset="${esc(c.id)}">Undo manual grouping</button></div>`:""}</div>`:"";
+    const editor=`<div class="pled"><span class="lab">Players</span>${c.players.map(n=>`<span class="pchipp${c.playersManual?"":" auto"}"><i style="background:${playerAccent(n)}"></i>${esc(n)}<button class="x" data-prm="${esc(n)}" data-g="${esc(c.id)}" aria-label="Remove ${esc(n)}">&#10005;</button></span>`).join("")||'<span style="font-size:11.5px;color:var(--ink-3)">Nobody detected</span>'}
+      <select class="sel" data-padd="${esc(c.id)}" aria-label="Add a player"><option value="">+ Add player</option>${playerOptions(c.players)}</select>
+      ${c.playersManual?`<button class="lnk" data-pauto="${esc(c.id)}">Back to automatic</button>`:`<span style="font-size:10.5px;color:var(--ink-3)">Detected from the caption. Any change here locks it in.</span>`}
+      ${c.players.length?`<button class="lnk" data-pnone="${esc(c.id)}">Nobody featured</button>`:""}</div>`;
+    const det=open?`<div class="pldet">${editor}${c.posts.map(p=>`<div class="pldr">${glyph(p.network)}<span>${esc(plDate(p.date,true))}</span><span class="hm">${esc(capw(p.type))}</span><span class="t hm">${esc((p.text||"").slice(0,120))||"(no caption)"}</span><span><b>${fmt(p.impressions)}</b> views</span><span><b>${fmt(p.interactions)}</b> int</span><span class="hm">${(p.engagement||0).toFixed(1)}%</span><span>${p.link?`<a href="${esc(p.link)}" target="_blank" rel="noopener">Open</a>`:""}${c.posts.length>1?` &nbsp;<button class="lnk" data-split="${esc(p.key)}">Split off</button>`:""}</span></div>`).join("")}${c.manual?`<div style="margin-top:4px"><button class="lnk" data-reset="${esc(c.id)}">Undo manual grouping</button></div>`:""}</div>`:"";
     return `<div class="plrow${sel?" sel":""}" data-g="${esc(c.id)}">
       <input type="checkbox" data-ck="${esc(c.id)}"${sel?" checked":""} aria-label="Select">
       <div class="plth">${c.picture?`<img src="${esc(c.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:esc(capw(c.types[0]||""))}</div>
       <div style="min-width:0"><div class="plhead">${logoChip("clg",b.picture,b.name,b.accent)}<b>${esc(b.name)}</b><span>${esc(plDate(c.date))}</span><span class="ty">${c.types.map(capw).join(" / ")}</span>${c.manual?'<span class="man">Grouped by hand</span>':""}</div>
-        <div class="pltxt">${esc(c.text)||"<span style='color:var(--ink-3)'>(no caption)</span>"}</div><div class="plnets" aria-label="Views and interactions per platform">${nets}</div></div>
+        <div class="pltxt">${esc(c.text)||"<span style='color:var(--ink-3)'>(no caption)</span>"}</div><div class="plnets" aria-label="Views and interactions per platform">${nets}</div>
+        ${c.players.length?`<div class="plpl">${c.players.map(n=>`<button class="pchipp${c.playersManual?"":" auto"}" data-pp="${esc(n)}" title="${c.playersManual?"Tagged by hand":"Detected from the caption"}. Open ${esc(n)}'s page"><i style="background:${playerAccent(n)}"></i>${esc(n)}</button>`).join("")}</div>`:""}</div>
       <div class="pltot"><div><b>${fmt(c.impressions)}</b>views</div><div><b>${fmt(c.interactions)}</b>int</div><div><b>${c.engagement.toFixed(1)}%</b>eng</div></div>
       <div class="plwho">${plWhoSelect(c)}</div>
       <button class="plx${open?" on":""}" data-x="${esc(c.id)}" aria-label="Show each platform" title="Show each platform"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -1958,6 +2013,12 @@ function renderPostRows(){
   host.querySelectorAll("[data-x]").forEach(el=>el.onclick=()=>{ const id=el.dataset.x; STATE.pl.open.has(id)?STATE.pl.open.delete(id):STATE.pl.open.add(id); renderPostRows(); });
   host.querySelectorAll(".plwho select").forEach(el=>el.onchange=()=>{ if(el.value==="__mixed") return; const c=byId[el.dataset.g]; plSave({op:"assign",postKeys:c.posts.map(p=>p.key),contractorId:el.value||null}); });
   host.querySelectorAll("[data-split]").forEach(el=>el.onclick=()=>plSave({op:"ungroup",postKeys:[el.dataset.split]}));
+  const setPlayers=(c,list)=>plSave({op:"players",postKeys:c.posts.map(p=>p.key),players:list});
+  host.querySelectorAll("[data-prm]").forEach(el=>el.onclick=()=>{ const c=byId[el.dataset.g]; setPlayers(c,c.players.filter(n=>n!==el.dataset.prm)); });
+  host.querySelectorAll("[data-padd]").forEach(el=>el.onchange=()=>{ if(!el.value) return; const c=byId[el.dataset.padd]; setPlayers(c,[...c.players,el.value]); });
+  host.querySelectorAll("[data-pauto]").forEach(el=>el.onclick=()=>{ const c=byId[el.dataset.pauto]; setPlayers(c,null); });
+  host.querySelectorAll("[data-pnone]").forEach(el=>el.onclick=()=>{ const c=byId[el.dataset.pnone]; setPlayers(c,[]); });
+  host.querySelectorAll("[data-pp]").forEach(el=>el.onclick=()=>openPlayerByName(el.dataset.pp));
   host.querySelectorAll("[data-reset]").forEach(el=>el.onclick=()=>{ const c=byId[el.dataset.reset]; plSave({op:"reset",postKeys:c.posts.map(p=>p.key)}); });
   plSelBar();
 }
@@ -1985,6 +2046,7 @@ async function plSave(body,clearSel){
     const d=await r.json().catch(()=>({error:"Bad response"}));
     if(!r.ok||d.error) throw new Error(d.error||("Server returned "+r.status));
     STATE.pl.tags=d; if(clearSel) STATE.pl.sel.clear();
+    if(body.op==="players"||body.op==="aliases"){ STATE.lq=null; STATE.heatStale=true; }
     renderPostSummary(); renderPostRows();
   }catch(e){ alertBar("Couldn't save: "+e.message); }
 }
@@ -2004,11 +2066,90 @@ function plManage(){
   $("#cSave").onclick=async()=>{ await plSave({op:"contractors",contractors:rows.filter(r=>r.name.trim())}); closeModal(); renderPosts(); };
 }
 function plCsv(){
-  const T=plTags(), rows=[["Creative","Date","Brand","Platform","Format","Caption","Link","Views","Interactions","Engagement %","Saves","Shares","Made by"]];
-  plFiltered(false).forEach((c,ci)=>c.posts.forEach(p=>{ const who=plContractor(T.assign[p.key]); rows.push([ci+1,p.date,c.brand.name,NLABEL[p.network]||p.network,capw(p.type),(p.text||"").replace(/\s+/g," "),p.link||"",p.impressions,p.interactions,p.engagement,p.saves??"",p.shares??"",who?who.name:""]); }));
+  const T=plTags(), rows=[["Creative","Date","Brand","Platform","Format","Caption","Link","Views","Interactions","Engagement %","Saves","Shares","Made by","Players"]];
+  plFiltered(false).forEach((c,ci)=>c.posts.forEach(p=>{ const who=plContractor(T.assign[p.key]); rows.push([ci+1,p.date,c.brand.name,NLABEL[p.network]||p.network,capw(p.type),(p.text||"").replace(/\s+/g," "),p.link||"",p.impressions,p.interactions,p.engagement,p.saves??"",p.shares??"",who?who.name:"",c.players.join("; ")]); }));
   const csv=rows.map(r=>r.map(v=>{ const s=String(v??""); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(",")).join("\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
   a.download=`blw-posts-${STATE.scope}-${(STATE.pl.data&&STATE.pl.data.label||"window").replace(/[^A-Za-z0-9]+/g,"-")}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+/* ============ PLAYER PAGES ============
+   Click a player (Heat Index row, or a player chip in Every post) to open
+   their page: this window's numbers plus LIFETIME content stats since
+   tracking began, across every team account, the BLW league page and
+   WIFFLE®, and their career lines from Grand Slam Systems. */
+const lifeCache={};
+function openPlayerByName(name, row){
+  const lb=(STATE.data&&STATE.data.playerLeaderboard)||[];
+  const p=row||lb.find(x=>x.name===name);
+  const accent=(p&&p.accent)||playerAccent(name);
+  const ini=esc(name.split(" ").map(w=>w[0]).join("").slice(0,3));
+  let body=`<div class="modal-title"><span style="width:12px;height:12px;border-radius:4px;background:${accent};display:inline-block"></span>${esc(name)}</div>
+    <div class="modal-sub" id="ppSub">${p?esc(p.team)+` · heat ${p.heat}/100 this window`:"Not in this window's Heat Index"}</div>`;
+  if(p){
+    body+=`<div class="gchips" style="margin-top:12px">${gchip("Interactions",accent,fmtFull(p.interactions),null)}${gchip("Reach",PCOL.fb,fmtFull(p.impressions),null)}${gchip("Avg engagement",PCOL.ig,(p.engAvg||0).toFixed(2)+"%",null)}${gchip("Reach vs followers",PCOL.tt,(p.amp||0)+"x",null)}</div>
+    <div class="modal-sub" style="margin-top:14px">Posts driving ${esc(name.split(" ")[0])}'s numbers · ${esc(STATE.data.label)}</div>
+    <div class="lbgrid" style="margin-top:10px">`+(p.items||[]).map(it=>{
+      const thumb=it.picture?`<img src="${esc(it.picture)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="ph" style="display:none">${ini}</div>`:`<div class="ph">${ini}</div>`;
+      return `<a class="lbcard" href="${esc(it.link||'#')}" target="_blank" rel="noopener" style="--accent:${accent}"><div class="lbthumb">${thumb}<span class="lbnet">${LBNET[it.network]||""} · ${capw(it.type)}</span></div><div class="lbbody"><div class="lbmet"><b>${fmt(it.interactions)}</b> int <span class="e">· ${fmt(it.impressions)} reach</span></div><div class="lbcap">${(it.date||"").slice(0,10)}</div></div></a>`;
+    }).join("")+`</div>`;
+  }
+  body+=`<div class="life" id="ppLife"><div class="fc-note">Loading lifetime stats...</div></div>`;
+  openModal(body);
+  loadLifetime(name);
+}
+async function loadLifetime(name){
+  let d=lifeCache[name];
+  if(!d){
+    try{
+      const r=await apiFetch("/api/metricool?view=player&name="+encodeURIComponent(name));
+      d=await r.json().catch(()=>({error:"Bad response"}));
+      if(!r.ok||d.error) throw new Error(d.error||("Server returned "+r.status));
+      lifeCache[name]=d;
+    }catch(e){ const h=$("#ppLife"); if(h) h.innerHTML=`<div class="fc-note" style="color:var(--neg)">Couldn't load lifetime stats: ${esc(e.message)}</div>`; return; }
+  }
+  const h=$("#ppLife"); if(!h) return;
+  const P=d.player, C=d.content;
+  const start=new Date(d.window.start+"T12:00:00Z").toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric",year:"numeric"});
+  const sub=$("#ppSub"); if(sub) sub.innerHTML=`${esc(P.teamName)}${P.num?" · #"+esc(P.num):""}${P.handle?" · @"+esc(P.handle):""}${P.nickname?` · "${esc(P.nickname)}"`:""}${sub.textContent.includes("heat")?" · "+esc(sub.textContent.split("·").slice(1).join("·").trim()):""}`;
+  let html=`<h4>Lifetime content · since ${esc(start)}</h4>`;
+  if(!C.featured){ html+=`<div class="fc-note">No posts featuring ${esc(P.name)} have been found since ${esc(start)}. Tag them in Every post and they will show here.</div>`; }
+  else{
+    html+=`<div class="gchips">${gchip("Views",P.accent,fmtFull(C.views),null)}${gchip("Interactions",PCOL.ig,fmtFull(C.interactions),null)}${gchip("Avg engagement",PCOL.tt,(C.engagement||0).toFixed(2)+"%",null)}</div>`;
+    const nets=Object.entries(C.byPlatform).sort((a,b)=>b[1].views-a[1].views);
+    html+=`<div class="plnets" style="margin-top:8px">${nets.map(([n,v])=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-2)">${glyph(n)}${esc(NLABEL[n]||n)} <b style="color:var(--ink)">${fmt(v.views)}</b> views · ${fmt(v.interactions)} int</span>`).join("")}</div>`;
+    const mx=Math.max(1,...C.byAccount.map(a=>a.views));
+    html+=`<h4>Where the views came from</h4>`+C.byAccount.map(a=>`<div class="lacct"><div class="nm">${logoChip("clg",a.picture,a.name,a.accent)}${esc(a.name)}</div><div class="tr"><span style="width:${Math.max(2,a.views/mx*100)}%;background:${a.accent}"></span></div><div class="v"><b>${fmt(a.views)}</b> views · ${fmt(a.interactions)} int</div></div>`).join("");
+    if(C.monthly.length>1) html+=`<h4>By month</h4><div class="chart-box" style="height:170px"><canvas id="ppMonthly"></canvas></div>`;
+    html+=`<h4>Top posts, lifetime</h4><div class="lbgrid">${postCards(C.topPosts,{who:p=>({name:p.brand,picture:p.brandPicture,accent:p.accent})})}</div>`;
+  }
+  html+=`<h4>Career stats · Grand Slam Systems</h4>`;
+  const bat=d.career.filter(s=>s.batting), pit=d.career.filter(s=>s.pitching);
+  const f3=v=>v==null?"-":Number(v).toFixed(3).replace(/^0\./,"."), f2=v=>v==null?"-":Number(v).toFixed(2);
+  if(!d.career.length) html+=`<div class="fc-note">No season lines found for ${esc(P.name)} in the league feed.</div>`;
+  if(bat.length) html+=`<div class="ctabwrap"><table class="ctab"><tr><th>Batting</th><th>G</th><th>PA</th><th>AVG</th><th>OBP</th><th>SLG</th><th>OPS</th><th>OPS+</th><th>HR</th><th>RBI</th></tr>${bat.map(s=>{ const b=s.batting; return `<tr><td>${s.year}${s.active?" (current)":""}</td><td>${b.g??"-"}</td><td>${b.pa??"-"}</td><td>${f3(b.avg)}</td><td>${f3(b.obp)}</td><td>${f3(b.slg)}</td><td>${f3(b.ops)}</td><td>${b.opsPlus!=null?Math.round(b.opsPlus):"-"}</td><td>${b.hr}</td><td>${b.rbi}</td></tr>`; }).join("")}</table></div>`;
+  if(pit.length) html+=`<div class="ctabwrap" style="margin-top:8px"><table class="ctab"><tr><th>Pitching</th><th>G</th><th>IP</th><th>W-L</th><th>ERA</th><th>FIP</th><th>WHIP</th><th>K</th></tr>${pit.map(s=>{ const p=s.pitching; return `<tr><td>${s.year}${s.active?" (current)":""}</td><td>${p.g??"-"}</td><td>${esc(String(p.ip??"-"))}</td><td>${p.w}-${p.l}</td><td>${f2(p.era)}</td><td>${f2(p.fip)}</td><td>${f2(p.whip)}</td><td>${p.k}</td></tr>`; }).join("")}</table></div>`;
+  if(isM()) html+=`<h4>Nicknames and handles</h4><div class="fc-note">Extra ways ${esc(P.name)} is written in captions, used to find them automatically. Use @ for handles. Comma-separated.</div>
+    <div class="aled"><input class="inp" id="ppAliases" value="${esc((P.aliases||[]).join(", "))}" placeholder="e.g. K-VON, @kyleslush"><button class="btn" id="ppAliasSave">Save</button></div>`;
+  h.innerHTML=html;
+  if(C.featured && C.monthly.length>1){
+    STATE.modalCharts.push(new Chart($("#ppMonthly"),{type:"bar",data:{labels:C.monthly.map(m=>new Date(m.m+"-15T12:00:00Z").toLocaleDateString("en-US",{timeZone:"UTC",month:"short"})),datasets:[{label:"Views",data:C.monthly.map(m=>m.views),backgroundColor:P.accent+"AA",borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>fmtFull(ctx.parsed.y)+" views · "+fmtFull(C.monthly[ctx.dataIndex].interactions)+" interactions"}}},scales:{x:{grid:{display:false}},y:{grid:GRID,ticks:{callback:v=>fmt(v)}}},animation:{duration:ANIM}}}));
+  }
+  const sv=$("#ppAliasSave"); if(sv) sv.onclick=async()=>{ const list=$("#ppAliases").value.split(",").map(x=>x.trim()).filter(Boolean); await plSave({op:"aliases",name:P.name,aliases:list}); delete lifeCache[P.name]; STATE.pl.q=null; loadPosts(false); sv.textContent="Saved"; setTimeout(()=>{ sv.textContent="Save"; },1500); };
+}
+function plAliases(){
+  const dir=plPlayerDir(); if(!dir.length) return;
+  const T=plTags();
+  openModal(`<div class="modal-title">Player nicknames</div><div class="modal-sub">Extra ways a player is written in captions, so posts find them automatically. Their BLW Studio nickname and Instagram handle are already included.</div>
+    <div class="pform" style="grid-template-columns:1fr"><div><label for="paWho">Player</label><select class="sel" id="paWho">${playerOptions([])}</select></div>
+    <div><label for="paList">Nicknames and @handles (comma-separated)</label><input class="inp" id="paList" placeholder="e.g. K-VON, @kyleslush"></div>
+    <div class="fc-note" id="paNote"></div></div>
+    <div class="pfoot"><span class="note"></span><button class="btn" id="paCancel">Close</button><button class="btn primary" id="paSave">Save</button></div>`, true);
+  const fill=()=>{ const n=$("#paWho").value; const p=dir.find(x=>x.name===n)||{}; $("#paList").value=((T.playerAliases||{})[n]||p.aliases||[]).join(", "); $("#paNote").textContent=[p.nickname?`BLW Studio nickname: ${p.nickname}`:"",p.handle?`Instagram: @${p.handle}`:""].filter(Boolean).join(" · "); };
+  $("#paWho").onchange=fill; fill();
+  $("#paCancel").onclick=closeModal;
+  $("#paSave").onclick=async()=>{ const n=$("#paWho").value; await plSave({op:"aliases",name:n,aliases:$("#paList").value.split(",").map(x=>x.trim()).filter(Boolean)}); delete lifeCache[n]; STATE.pl.q=null; await loadPosts(false); closeModal(); };
 }
 
 /* ============ POST IDEAS ============ */
@@ -2163,6 +2304,7 @@ function drawP(){ cx.clearRect(0,0,W,Hh); for(const p of parts){ p.x+=p.vx;p.y+=
   requestAnimationFrame(drawP); }
 if(!REDUCE){ initP(); drawP(); addEventListener("resize",initP); }
 
+renderViewAsBar();
 load("days=30",false);
 </script>
 </body>
