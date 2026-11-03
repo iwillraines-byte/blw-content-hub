@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '5.8.1',
+    date: '2026-11-03',
+    kind: 'patch',
+    summary: 'v5.8.1 — Every post is master-admin only; contractor cards show engagement',
+    items: [
+      'The Command Center "Every post" section, contractor tags and grouping are now master-admin only. Other roles do not see the section and the server refuses its data.',
+      'Contractor cards now show average engagement % alongside views, interactions and average views, and every creative row shows its engagement %. "Best engagement" sorting uses the same number.',
+    ],
+  },
+  {
     version: '5.8.0',
     date: '2026-11-03',
     kind: 'minor',

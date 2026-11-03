@@ -462,7 +462,7 @@
   .plbar .sel{padding:7px 28px 7px 10px;font-size:11.5px}
   .plbar .inp{width:200px;padding:7px 10px;font-size:12px}
   .plbar .sp{flex:1}
-  .plsum{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:12px}
+  .plsum{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:8px;margin-top:12px}
   .plc{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 12px;cursor:pointer;transition:.15s}
   .plc:hover{border-color:var(--line-2)}
   .plc.on{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.05)}
@@ -474,7 +474,7 @@
   .plsel.on{display:flex}
   .plsel .lab{color:var(--ink-2);margin-right:4px}
   .pllist{margin-top:10px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(14,15,18,.6)}
-  .plrow{display:grid;grid-template-columns:22px 56px minmax(0,1fr) 150px 150px 26px;gap:12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}
+  .plrow{display:grid;grid-template-columns:22px 56px minmax(0,1fr) 200px 150px 26px;gap:12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}
   .plrow:first-child{border-top:none}
   .plrow:hover{background:rgba(255,255,255,.02)}
   .plrow.sel{background:rgba(124,241,168,.05)}
@@ -1834,6 +1834,8 @@ STATE.pl={data:null,q:null,tags:null,f:{brand:"all",net:"all",type:"all",who:"al
 const PL_KIND={league:"team",blw:"league",wiffle:"wiffle"};
 async function loadPosts(fresh){
   const q=STATE.q; if(!q) return;
+  // Master admin only (the server enforces this too).
+  if(!isM()){ $("#postLib").style.display="none"; return; }
   $("#postLib").style.display="";
   if(!fresh && STATE.pl.q===q && STATE.pl.data){ renderPosts(); return; }
   if(STATE.pl.busy===q && !fresh) return;
@@ -1876,6 +1878,7 @@ function plCreatives(){
     c.impressions=c.posts.reduce((a,p)=>a+(p.impressions||0),0);
     c.interactions=c.posts.reduce((a,p)=>a+(p.interactions||0),0);
     c.nets=[...new Set(c.posts.map(p=>p.network))];
+    c.engagement=c.posts.reduce((a,p)=>a+(p.engagement||0),0)/c.posts.length;
     c.types=[...new Set(c.posts.map(p=>p.type))];
     const ws=[...new Set(c.posts.map(p=>T.assign[p.key]||""))];
     c.who= ws.length===1 ? ws[0] : "mixed";
@@ -1892,7 +1895,7 @@ function plFiltered(skipWho){
     (f.type==="all"||c.types.includes(f.type)) &&
     (!q||(c.text||"").toLowerCase().includes(q)) &&
     (skipWho||f.who==="all"||(f.who==="none"?c.who==="":c.who===f.who)));
-  const by={new:(a,b)=>(b.date||"").localeCompare(a.date||""),old:(a,b)=>(a.date||"").localeCompare(b.date||""),views:(a,b)=>b.impressions-a.impressions,inter:(a,b)=>b.interactions-a.interactions,eng:(a,b)=>(b.interactions/Math.max(1,b.impressions))-(a.interactions/Math.max(1,a.impressions))}[f.sort];
+  const by={new:(a,b)=>(b.date||"").localeCompare(a.date||""),old:(a,b)=>(a.date||"").localeCompare(b.date||""),views:(a,b)=>b.impressions-a.impressions,inter:(a,b)=>b.interactions-a.interactions,eng:(a,b)=>b.engagement-a.engagement}[f.sort];
   return list.sort(by);
 }
 function plDate(s,withTime){ if(!s) return ""; const d=new Date(s.length===19?s+"Z":s); return d.toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric"})+(withTime?" "+d.toLocaleTimeString("en-US",{timeZone:"UTC",hour:"numeric",minute:"2-digit"}):""); }
@@ -1919,11 +1922,11 @@ function renderPosts(){
 }
 function renderPostSummary(){
   const T=plTags(), list=plFiltered(true), f=STATE.pl.f;
-  const agg={}; list.forEach(c=>{ const k=c.who||"none"; const a=agg[k]||(agg[k]={v:0,i:0,n:0}); a.v+=c.impressions; a.i+=c.interactions; a.n+=1; });
+  const agg={}; list.forEach(c=>{ const k=c.who||"none"; const a=agg[k]||(agg[k]={v:0,i:0,n:0,es:0,en:0}); a.v+=c.impressions; a.i+=c.interactions; a.n+=1; c.posts.forEach(p=>{ a.es+=p.engagement||0; a.en+=1; }); });
   const cards=[...T.contractors.map(c=>({id:c.id,name:c.name,color:c.color})),{id:"none",name:"Not tagged",color:"#5f6370"},{id:"mixed",name:"Mixed (split by platform)",color:"#FFC04C"}].filter(c=>agg[c.id]);
   $("#plSum").innerHTML=cards.map(c=>{ const a=agg[c.id];
     return `<div class="plc${f.who===c.id?" on":""}" data-w="${esc(c.id)}" tabindex="0" role="button" title="Show only ${esc(c.name)}"><div class="n"><i style="background:${c.color}"></i>${esc(c.name)}</div>
-      <div class="m"><span><b>${fmt(a.v)}</b>views</span><span><b>${fmt(a.i)}</b>interactions</span><span><b>${fmt(a.v/a.n)}</b>avg views</span></div></div>`; }).join("");
+      <div class="m"><span><b>${fmt(a.v)}</b>views</span><span><b>${fmt(a.i)}</b>interactions</span><span><b>${(a.en?a.es/a.en:0).toFixed(1)}%</b>engagement</span><span><b>${fmt(a.v/a.n)}</b>avg views</span></div></div>`; }).join("");
   $("#plSum").querySelectorAll(".plc").forEach(el=>{ const go=()=>{ if(el.dataset.w==="mixed") return; f.who=f.who===el.dataset.w?"all":el.dataset.w; STATE.pl.limit=40; renderPosts(); }; el.onclick=go; el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();go();} }; });
 }
 function plWhoSelect(c){
@@ -1943,7 +1946,7 @@ function renderPostRows(){
       <div class="plth">${c.picture?`<img src="${esc(c.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:esc(capw(c.types[0]||""))}</div>
       <div style="min-width:0"><div class="plhead">${logoChip("clg",b.picture,b.name,b.accent)}<b>${esc(b.name)}</b><span>${esc(plDate(c.date))}</span><span class="ty">${c.types.map(capw).join(" / ")}</span>${c.manual?'<span class="man">Grouped by hand</span>':""}</div>
         <div class="pltxt">${esc(c.text)||"<span style='color:var(--ink-3)'>(no caption)</span>"}</div><div class="plnets" aria-label="Views and interactions per platform">${nets}</div></div>
-      <div class="pltot"><div><b>${fmt(c.impressions)}</b>views</div><div><b>${fmt(c.interactions)}</b>int</div></div>
+      <div class="pltot"><div><b>${fmt(c.impressions)}</b>views</div><div><b>${fmt(c.interactions)}</b>int</div><div><b>${c.engagement.toFixed(1)}%</b>eng</div></div>
       <div class="plwho">${plWhoSelect(c)}</div>
       <button class="plx${open?" on":""}" data-x="${esc(c.id)}" aria-label="Show each platform" title="Show each platform"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button>
       ${det}</div>`;
