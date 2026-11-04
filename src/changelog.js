@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '5.11.1',
+    date: '2026-11-04',
+    kind: 'patch',
+    summary: 'v5.11.1 — One calendar slot per scheduled post',
+    items: [
+      'When Metricool stores one post as a separate entry per platform, the Command Center calendar now folds them into a single item with every platform icon, instead of one row per platform. Entries merge when they are for the same brand, publish within 5 minutes of each other, and share the same caption.',
+    ],
+  },
+  {
     version: '5.11.0',
     date: '2026-11-03',
     kind: 'minor',
