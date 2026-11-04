@@ -8,6 +8,7 @@
 
 import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, makeApi, loadProfiles, tzDate } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
+import { tokens, similar } from './_cc-posts.js';
 
 const NET_ALIAS = { x: "twitter", twitter: "twitter", linkedincompany: "linkedin", linkedin: "linkedin", instagram: "instagram", tiktok: "tiktok", facebook: "facebook", youtube: "youtube", threads: "threads", pinterest: "pinterest", bluesky: "bluesky", gmb: "gmb" };
 const normNet = n => NET_ALIAS[String(n || "").toLowerCase()] || String(n || "").toLowerCase();
@@ -105,9 +106,39 @@ export async function buildScheduled(token, userId) {
     }
   }));
   items.sort((a, b) => a.at.localeCompare(b.at));
+  const merged = mergeCrossPosts(items);
   return {
     generatedAt: new Date().toISOString(), timezone: TZ,
     from: new Date(startMs).toISOString(), to: new Date(endMs).toISOString(),
-    startDay, endDay, brands, items, errors,
+    startDay, endDay, brands, items: merged, errors,
   };
+}
+
+// Metricool sometimes stores one creative as a separate planner entry per
+// network (common when a post is scheduled from the mobile app or edited per
+// platform). Fold those into one calendar item: same brand, publish times
+// within 5 minutes, and the same caption (or one of them blank).
+const MERGE_WINDOW_MS = 5 * 60 * 1000;
+export function mergeCrossPosts(items) {
+  const out = [];
+  const norm = t => String(t || "").toLowerCase().replace(/\s+/g, " ").trim();
+  for (const it of items) {
+    const ms = Date.parse(it.at), tk = tokens(it.text), nt = norm(it.text);
+    const host = out.find(o => o.blogId === it.blogId && !!o.draft === !!it.draft
+      && Math.abs(Date.parse(o.at) - ms) <= MERGE_WINDOW_MS
+      && !it.networks.some(n => o.networks.includes(n))
+      && (!nt || !o._nt || nt === o._nt || similar(tk, o._tk) >= 0.6));
+    if (!host) { out.push({ ...it, ids: [it.id], _tk: tk, _nt: nt }); continue; }
+    host.ids.push(it.id);
+    host.networks = [...new Set([...host.networks, ...it.networks])];
+    if (it.text.length > host.text.length) { host.text = it.text; host._tk = tk; host._nt = nt; }
+    if (!host.image && it.image) host.image = it.image;
+    host.isVideo = host.isVideo || it.isVideo;
+    host.mediaCount = Math.max(host.mediaCount || 0, it.mediaCount || 0);
+    if (host.type === "POST" && it.type !== "POST") host.type = it.type;
+    if (Date.parse(it.at) < Date.parse(host.at)) host.at = it.at;
+    host.failed = host.failed || it.failed;
+    host.published = host.published && it.published;
+  }
+  return out.map(({ _tk, _nt, ...o }) => o);
 }
