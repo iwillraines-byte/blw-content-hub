@@ -18,6 +18,15 @@
 
 export const RELEASES = [
   {
+    version: '5.12.1',
+    date: '2026-11-05',
+    kind: 'patch',
+    summary: 'v5.12.1 — Fix: calendar now actually finds natively posted content',
+    items: [
+      'The calendar\'s check for posts made outside Metricool sent Metricool bare dates, which its analytics quietly answer with nothing, so no native posts showed up. It now sends full Central-time datetimes, the same way every other Command Center view does.',
+    ],
+  },
+  {
     version: '5.12.0',
     date: '2026-11-05',
     kind: 'minor',

@@ -6,7 +6,7 @@
 // following Saturday, Central time), matching the two-week calendar on the
 // page. It rolls forward on its own; the page re-polls every few minutes.
 
-import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, makeApi, loadProfiles, tzDate } from './_cc-core.js';
+import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, makeApi, loadProfiles, tzDate, windowRange } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
 import { tokens, similar, postKeyOf } from './_cc-posts.js';
 
@@ -162,7 +162,9 @@ async function publishedPosts(mc, brands, fromDay, toDay, startMs, fresh) {
   if (!fresh && PUB_CACHE.key === key && Date.now() - PUB_CACHE.at < PUB_TTL) return PUB_CACHE.data;
   const out = [];
   await Promise.all(brands.map(async br => {
-    const resp = await mc.api("/v2/analytics/brand-summary/posts", br.blogId, { from: fromDay, to: toDay, timezone: TZ });
+    // Analytics wants full datetimes with an offset, not bare days.
+    const win = windowRange(null, "custom", { from: fromDay, to: toDay });
+    const resp = await mc.api("/v2/analytics/brand-summary/posts", br.blogId, { from: win.from, to: win.to, timezone: TZ });
     const list = resp && Array.isArray(resp.data) ? resp.data : [];
     list.forEach((p, i) => {
       const dt = (p.publicationDate || {}).dateTime || "";
