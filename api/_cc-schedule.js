@@ -8,7 +8,7 @@
 
 import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, makeApi, loadProfiles, tzDate } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
-import { tokens, similar } from './_cc-posts.js';
+import { tokens, similar, postKeyOf } from './_cc-posts.js';
 
 const NET_ALIAS = { x: "twitter", twitter: "twitter", linkedincompany: "linkedin", linkedin: "linkedin", instagram: "instagram", tiktok: "tiktok", facebook: "facebook", youtube: "youtube", threads: "threads", pinterest: "pinterest", bluesky: "bluesky", gmb: "gmb" };
 const normNet = n => NET_ALIAS[String(n || "").toLowerCase()] || String(n || "").toLowerCase();
@@ -59,7 +59,7 @@ function typeOf(p, nets) {
   return "POST";
 }
 
-export async function buildScheduled(token, userId) {
+export async function buildScheduled(token, userId, opts = {}) {
   const mc = makeApi(token, userId);
   const profiles = await loadProfiles(mc.api);
   const wiffle = findWiffleBrands(profiles);
@@ -107,10 +107,21 @@ export async function buildScheduled(token, userId) {
   }));
   items.sort((a, b) => a.at.localeCompare(b.at));
   const merged = mergeCrossPosts(items);
+  // Posts that went out without Metricool (posted straight from the app, or
+  // scheduled in Instagram / Meta Business Suite / TikTok) only exist in
+  // Metricool's analytics. Pull this calendar's past days from there and add
+  // anything the planner doesn't already account for.
+  let native = [], nativeErr = null;
+  try {
+    const pub = await publishedPosts(mc, brands, startDay, tzDate(new Date(now)), startMs, !!opts.fresh);
+    native = reconcilePublished(merged, pub, brands);
+  } catch (e) { nativeErr = String((e && e.message) || e); }
+  merged.push(...native);
+  merged.sort((a, b) => a.at.localeCompare(b.at));
   return {
     generatedAt: new Date().toISOString(), timezone: TZ,
     from: new Date(startMs).toISOString(), to: new Date(endMs).toISOString(),
-    startDay, endDay, brands, items: merged, errors,
+    startDay, endDay, brands, items: merged, errors, nativeError: nativeErr,
   };
 }
 
@@ -141,4 +152,71 @@ export function mergeCrossPosts(items) {
     host.published = host.published && it.published;
   }
   return out.map(({ _tk, _nt, ...o }) => o);
+}
+
+// ---- published posts from analytics (cached 10 min per calendar week) ----
+const PUB_TTL = 10 * 60 * 1000;
+let PUB_CACHE = { key: "", at: 0, data: null };
+async function publishedPosts(mc, brands, fromDay, toDay, startMs, fresh) {
+  const key = fromDay + "|" + toDay;
+  if (!fresh && PUB_CACHE.key === key && Date.now() - PUB_CACHE.at < PUB_TTL) return PUB_CACHE.data;
+  const out = [];
+  await Promise.all(brands.map(async br => {
+    const resp = await mc.api("/v2/analytics/brand-summary/posts", br.blogId, { from: fromDay, to: toDay, timezone: TZ });
+    const list = resp && Array.isArray(resp.data) ? resp.data : [];
+    list.forEach((p, i) => {
+      const dt = (p.publicationDate || {}).dateTime || "";
+      const ms = zonedToMs(dt, (p.publicationDate || {}).timezone || TZ);
+      if (!Number.isFinite(ms) || ms < startMs) return;
+      const m = p.metrics || {};
+      out.push({
+        key: postKeyOf(p, br.blogId, i), blogId: br.blogId, network: normNet(p.network), ms,
+        type: String(p.type || "POST").toUpperCase(), text: String(p.text || "").slice(0, 280),
+        link: p.link || null, picture: p.picture || null,
+        impressions: Math.round(m.IMPRESSIONS || 0), interactions: Math.round(m.INTERACTIONS || 0),
+      });
+    });
+  }));
+  PUB_CACHE = { key, at: Date.now(), data: out };
+  return out;
+}
+
+const MATCH_MC_MS = 3 * 3600 * 1000;   // a Metricool post shows up in analytics near its slot
+const GROUP_NATIVE_MS = 6 * 3600 * 1000; // same creative posted to several apps the same day
+export function reconcilePublished(items, pub, brands) {
+  const byId = Object.fromEntries(brands.map(b => [String(b.blogId), b]));
+  const rest = [];
+  for (const p of pub) {
+    const pt = tokens(p.text);
+    // Went out through Metricool? Then it is already on the calendar.
+    const hit = items.find(it => it.blogId === p.blogId && it.networks.includes(p.network)
+      && Math.abs(Date.parse(it.at) - p.ms) <= MATCH_MC_MS
+      && (!p.text || !it.text || similar(pt, tokens(it.text)) >= 0.4));
+    if (hit) { hit.links = hit.links || {}; if (p.link) hit.links[p.network] = p.link; continue; }
+    rest.push({ ...p, _t: pt });
+  }
+  rest.sort((a, b) => a.ms - b.ms);
+  const groups = [];
+  for (const p of rest) {
+    const g = groups.find(g => g.blogId === p.blogId && !g.networks.includes(p.network) && p.ms - g.first <= GROUP_NATIVE_MS
+      && ((!p._t.length && !g._t.length) || similar(p._t, g._t) >= 0.5));
+    if (g) {
+      g.networks.push(p.network); g.keys.push(p.key);
+      if (p.link) g.links[p.network] = p.link;
+      if (!g.image && p.picture) g.image = p.picture;
+      if (p.text.length > g.text.length) { g.text = p.text; g._t = p._t; }
+      g.impressions += p.impressions; g.interactions += p.interactions;
+      continue;
+    }
+    const br = byId[String(p.blogId)] || {};
+    groups.push({
+      id: "nat:" + p.key, keys: [p.key], native: true,
+      blogId: p.blogId, brand: br.name, accent: br.accent, kind: br.kind,
+      first: p.ms, at: new Date(p.ms).toISOString(), networks: [p.network], type: p.type,
+      text: p.text, image: p.picture, isVideo: /REEL|VIDEO/.test(p.type), mediaCount: p.picture ? 1 : 0,
+      links: p.link ? { [p.network]: p.link } : {}, impressions: p.impressions, interactions: p.interactions,
+      draft: false, failed: false, published: true, _t: p._t,
+    });
+  }
+  return groups.map(({ _t, first, ...g }) => g);
 }

@@ -651,7 +651,7 @@ export default async function handler(req, res) {
       return;
     }
     if (view === "scheduled") {
-      const data = await cached("scheduled", 2 * 60 * 1000, fresh, () => buildScheduled(token, userId));
+      const data = await cached("scheduled", 2 * 60 * 1000, fresh, () => buildScheduled(token, userId, { fresh }));
       res.status(200).send(JSON.stringify({ ...data, viewer: { isMaster } }));
       return;
     }

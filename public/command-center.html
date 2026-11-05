@@ -417,6 +417,29 @@
   .cst{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);flex:none}
   .cst.warn{color:var(--warn)}
   .cst.ready{color:var(--pos)}
+  .cst.done{color:var(--pos)}
+  .cst.nat{color:var(--ink-2)}
+  .citem.pl{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .citem.pl.canmove{cursor:grab}
+  .citem.dragging{opacity:.3}
+  .cdrag-ghost{position:fixed;z-index:400;pointer-events:none;margin:0;transform:rotate(-1.5deg);box-shadow:0 14px 34px rgba(0,0,0,.55);background:#1B1C21 !important;opacity:.96}
+  body.cdragging,body.cdragging *{cursor:grabbing !important;-webkit-user-select:none !important;user-select:none !important}
+  .cday.dropok{background:rgba(124,241,168,.07) !important;box-shadow:inset 0 0 0 2px rgba(124,241,168,.55) !important}
+  .cday.dropno{box-shadow:inset 0 0 0 2px rgba(255,107,107,.35) !important}
+  .idlink{margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(124,241,168,.06);border:1px solid rgba(124,241,168,.22);font-size:12.5px;line-height:1.5;color:var(--ink-2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .idlink b{color:var(--ink)}
+  .idlink .lnk{margin-left:auto}
+  .postedq{grid-column:1/-1;margin-top:4px;border-top:1px solid var(--line);padding-top:12px}
+  .postedq h4{margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+  .postedq .note{font-size:12px;color:var(--ink-3);line-height:1.45}
+  .pcand{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.035);margin-top:6px}
+  .pcand .pcw{flex:none;font-size:11.5px;color:var(--ink-2);min-width:74px}
+  .pcand .pcg{flex:none;display:flex;gap:3px}
+  .pcand .pcg svg{width:12px;height:12px}
+  .pcand .pct{flex:1;min-width:0;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pcand .pcs{flex:none;font-size:11px;color:var(--pos)}
+  .slinks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .lg.nat{background:rgba(255,255,255,.045);box-shadow:inset 2px 0 0 var(--ink-2)}
   .calfoot{font-size:11px;color:var(--ink-3);margin-top:8px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
   @media(max-width:860px){
     .cal{grid-template-columns:1fr}
@@ -671,7 +694,7 @@
     <div class="section-title"><span>Schedule &middot; this week and next</span><span class="rule"></span></div>
     <div class="calbar">
       <div><div class="calrange" id="calRange"></div>
-        <div class="callegend"><span><i class="lg mc"></i>Scheduled in Metricool</span><span><i class="lg pl"></i>Planned here only</span></div></div>
+        <div class="callegend"><span><i class="lg mc"></i>Scheduled in Metricool</span><span><i class="lg pl"></i>Planned here only</span><span><i class="lg nat"></i>Posted outside Metricool</span></div></div>
       <div class="calright"><select class="sel" id="calFilter" aria-label="Filter by brand"></select><button class="btn" id="calAdd">+ Plan a post</button></div>
     </div>
     <div class="cal" id="calGrid" role="grid" aria-label="Two-week posting calendar"></div>
@@ -2076,14 +2099,47 @@ function brandOf(id){ return brandList().find(b=>String(b.blogId)===String(id))|
 const brandShort=b=>b.kind==="team"?shortTeam(b.name):(b.kind==="league"?"BLW League":b.name);
 function passesFilter(blogId,kind){ const f=STATE.schedFilter; return f==="all"||(f==="teams"?kind==="team":String(blogId)===f); }
 
-// Everything on the calendar, Metricool and planned, normalized.
+// Ideas that have been posted. A planned post drops off the calendar once a
+// real post (scheduled in Metricool or published natively) replaces it:
+// either linked by hand from the planner, or matched automatically when the
+// real caption covers most of the idea's working title, same brand, within
+// three days. A wrong automatic match can be dismissed ("notKeys").
+const PSTOP=new Set("the a an and or of to in on for with at by from is are was be this that it its our your my we you i us vs x".split(" "));
+const ptoks=t=>String(t||"").toLowerCase().replace(/https?:\/\/\S+/g," ").replace(/[^a-z0-9@#\s']/g," ").split(/\s+/).map(w=>w.replace(/^[@#]+/,"").replace(/'s$/,"")).filter(w=>w.length>1&&!PSTOP.has(w));
+function ideaScore(p,it){
+  const C=new Set(ptoks(it.text)); if(!C.size) return 0;
+  const cov=src=>{ const T=[...new Set(ptoks(src))]; return T.length>=2?T.filter(w=>C.has(w)).length/T.length:0; };
+  const a=cov(p.title), b=p.text&&ptoks(p.text).length>=4?cov(p.text):0;
+  return Math.max(a,b);
+}
+const dayGap=(a,b)=>Math.abs(Date.parse(a+"T12:00:00Z")-Date.parse(b+"T12:00:00Z"))/86400000;
+function ideaLinks(){
+  const items=(STATE.sched&&STATE.sched.items)||[], planned=STATE.planned||[];
+  const done=new Map(), used=new Set();
+  planned.forEach(p=>{ if(p.doneKey){ done.set(p.id,{key:p.doneKey,auto:false}); used.add(p.doneKey); } });
+  planned.forEach(p=>{
+    if(p.doneKey) return;
+    const not=new Set(p.notKeys||[]); let best=null, bs=0;
+    items.forEach(it=>{ const k="mc:"+it.id;
+      if(used.has(k)||not.has(k)||String(it.blogId)!==String(p.blogId)) return;
+      if(dayGap(dayKey(new Date(Date.parse(it.at))),p.date)>3) return;
+      const sc=ideaScore(p,it); if(sc>=0.6&&sc>bs){ best=k; bs=sc; } });
+    if(best){ done.set(p.id,{key:best,auto:true}); used.add(best); }
+  });
+  const byItem=new Map();
+  done.forEach((v,id)=>{ const p=planned.find(x=>x.id===id); if(!p) return; if(!byItem.has(v.key)) byItem.set(v.key,[]); byItem.get(v.key).push({p,auto:v.auto}); });
+  return {done,byItem};
+}
+
+// Everything on the calendar, Metricool, posted natively and planned, normalized.
 function calendarItems(){
-  const out=[];
-  ((STATE.sched&&STATE.sched.items)||[]).forEach(it=>{ const ms=Date.parse(it.at); out.push({src:"mc",key:"mc:"+it.id,day:dayKey(new Date(ms)),sortKey:new Date(ms).toISOString(),ms,blogId:it.blogId,kind:it.kind,networks:it.networks||[],type:it.type,text:it.text,image:it.image,isVideo:it.isVideo,draft:it.draft,failed:it.failed,published:it.published,raw:it}); });
-  (STATE.planned||[]).forEach(p=>{ const b=brandOf(p.blogId); out.push({src:"pl",key:"pl:"+p.id,day:p.date,sortKey:p.date+"T"+(p.time||"00:00"),blogId:p.blogId,kind:b.kind,networks:p.networks||[],type:p.type,text:p.title||p.text,status:p.status,time:p.time,raw:p}); });
+  const out=[], L=ideaLinks();
+  ((STATE.sched&&STATE.sched.items)||[]).forEach(it=>{ const ms=Date.parse(it.at), key="mc:"+it.id; out.push({src:"mc",key,day:dayKey(new Date(ms)),sortKey:new Date(ms).toISOString(),ms,blogId:it.blogId,kind:it.kind,networks:it.networks||[],type:it.type,text:it.text,image:it.image,isVideo:it.isVideo,draft:it.draft,failed:it.failed,published:it.published,native:!!it.native,ideas:L.byItem.get(key)||null,raw:it}); });
+  (STATE.planned||[]).forEach(p=>{ if(L.done.has(p.id)) return; const b=brandOf(p.blogId); out.push({src:"pl",key:"pl:"+p.id,day:p.date,sortKey:p.date+"T"+(p.time||"00:00"),blogId:p.blogId,kind:b.kind,networks:p.networks||[],type:p.type,text:p.title||p.text,status:p.status,time:p.time,raw:p}); });
   return out.filter(x=>passesFilter(x.blogId,x.kind)).sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
 }
 function renderSched(){
+  if(DRAG.on) return; // don't rebuild the grid mid-drag
   const S=STATE.sched; if(!S&&!(STATE.planned||[]).length) return;
   const today=dayKey(new Date());
   const start=(S&&S.startDay)||addDays(today,-new Date(today+"T12:00:00Z").getUTCDay());
@@ -2107,20 +2163,24 @@ function renderSched(){
       <div class="cdh"><span class="cdn">${label}</span><span class="cdw">${d.toLocaleDateString("en-US",{timeZone:"UTC",weekday:"short"})}</span>${tag}${k>=today?`<button class="cadd" data-d="${k}" title="Plan a post for this day" aria-label="Plan a post for this day">+</button>`:""}</div>
       <div class="citems">${its.map(itemHTML).join("")}</div></div>`;
   }).join("");
-  $("#calGrid").querySelectorAll(".citem").forEach(el=>el.onclick=e=>{ e.stopPropagation(); openSchedItem(el.dataset.k); });
+  $("#calGrid").querySelectorAll(".citem").forEach(el=>el.onclick=e=>{ e.stopPropagation(); if(DRAG.justDragged&&Date.now()-DRAG.justDragged<400) return; openSchedItem(el.dataset.k); });
+  wireCalDrag();
   $("#calGrid").querySelectorAll(".cadd").forEach(el=>el.onclick=e=>{ e.stopPropagation(); openPlanner(null,el.dataset.d); });
   const meta=[]; if(S) meta.push("Metricool synced "+new Date(S.generatedAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}));
   if(S&&S.errors&&S.errors.length) meta.push("couldn't read "+S.errors.join(", "));
+  if(S&&S.nativeError) meta.push("couldn't check for posts made outside Metricool");
   $("#calMeta").textContent=meta.join(" · ");
 }
 function itemHTML(x){
   const b=brandOf(x.blogId), acc=b.accent||"#888";
   const t=x.src==="mc"?shortTime(x.ms):(x.time?hhmmLabel(x.time):"");
   let st="";
-  if(x.src==="mc"){ if(x.failed) st='<span class="cst warn">Error</span>'; else if(x.draft) st='<span class="cst warn">Draft</span>'; else if(x.published) st='<span class="cst">Posted</span>'; }
+  if(x.src==="mc"){ if(x.failed) st='<span class="cst warn">Error</span>'; else if(x.draft) st='<span class="cst warn">Draft</span>'; else if(x.native) st='<span class="cst nat">Posted natively</span>'; else if(x.published) st='<span class="cst">Posted</span>'; }
   else st=`<span class="cst${x.status==="ready"?" ready":""}">${esc(PSTATUS[x.status]||"Planned")}</span>`;
+  if(x.ideas) st+=`<span class="cst done" title="${esc("Replaces planned idea: "+x.ideas.map(i=>i.p.title||i.p.text).join(", "))}">&#10003; Idea</span>`;
   const title=`${b.name} · ${(x.networks||[]).map(n=>NLABEL[n]||n).join(", ")}${x.text?" · "+x.text:""}`;
-  return `<button class="citem ${x.src}${x.published?" pub":""}" style="--accent:${acc}" data-k="${esc(x.key)}" title="${esc(title.slice(0,220))}">
+  const canMove=x.src==="pl"&&!!STATE.sched;
+  return `<button class="citem ${x.src}${x.published?" pub":""}${x.native?" nat":""}${canMove?" canmove":""}" style="--accent:${acc}" data-k="${esc(x.key)}" title="${esc((title+(canMove?" · drag to another day (or Alt + arrow keys)":"")).slice(0,260))}">
     <span class="cir">${t?`<span class="ctm">${t}</span>`:""}${logoChip("clg",b.picture,b.name,acc)}<span class="cbr">${esc(brandShort(b))}</span><span class="cgl">${(x.networks||[]).map(n=>glyph(n)).join("")}</span></span>
     ${x.text?`<span class="cx">${esc(x.text)}</span>`:""}${st?`<span class="cir" style="margin-top:3px">${st}</span>`:""}</button>`;
 }
@@ -2130,12 +2190,31 @@ function openSchedItem(key){
   if(x.src==="pl"){ openPlanner(x.raw); return; }
   const b=brandOf(x.blogId), it=x.raw;
   const when=new Date(x.ms).toLocaleString("en-US",{timeZone:TZC,weekday:"long",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
-  const status=it.failed?"Error in Metricool":it.draft?"Draft":it.published?"Posted":"Scheduled";
+  const status=it.failed?"Error in Metricool":it.draft?"Draft":it.native?"Posted natively":it.published?"Posted":"Scheduled";
+  const links=Object.entries(it.links||{});
+  const ideas=x.ideas||[];
   openModal(`<div class="modal-title">${logoChip("clg",b.picture,b.name,b.accent)}${esc(b.name)}</div>
-    <div class="modal-sub">Scheduled in Metricool · edit it there</div>
+    <div class="modal-sub">${it.native?"Posted directly on the platform, not through Metricool. Picked up from Metricool's analytics.":"Scheduled in Metricool · edit it there"}</div>
     <div class="sdet"><div class="simg">${it.image?`<img src="${esc(it.image)}" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.textContent='${it.isVideo?"Video":"No preview"}'">`:(it.isVideo?"Video":"No preview")}</div>
-      <dl class="kv"><dt>When</dt><dd>${esc(when)}</dd><dt>Platforms</dt><dd>${(x.networks||[]).map(n=>`${glyph(n)}${esc(NLABEL[n]||n)}`).join("&nbsp;&nbsp;")||"Not set"}</dd><dt>Format</dt><dd>${esc(capw(x.type))}</dd><dt>Status</dt><dd>${esc(status)}</dd></dl></div>
+      <dl class="kv"><dt>When</dt><dd>${esc(when)}</dd><dt>Platforms</dt><dd>${(x.networks||[]).map(n=>`${glyph(n)}${esc(NLABEL[n]||n)}`).join("&nbsp;&nbsp;")||"Not set"}</dd><dt>Format</dt><dd>${esc(capw(x.type))}</dd><dt>Status</dt><dd>${esc(status)}</dd>${it.native&&(it.impressions||it.interactions)?`<dt>So far</dt><dd>${fmt(it.impressions||0)} views · ${fmt(it.interactions||0)} interactions</dd>`:""}</dl></div>
+    ${links.length?`<div class="slinks">${links.map(([n,u])=>`<a class="btn" href="${esc(u)}" target="_blank" rel="noopener">${glyph(n)} Open on ${esc(NLABEL[n]||n)}</a>`).join("")}</div>`:""}
+    ${ideas.map(i=>`<div class="idlink">&#10003; Replaces planned idea <b>${esc(i.p.title||i.p.text)}</b>${i.p.createdBy?` (added by ${esc(i.p.createdBy)})`:""}${i.auto?" · matched automatically":""}<button class="lnk" data-unlink="${esc(i.p.id)}" data-auto="${i.auto?1:0}">Not the same post</button></div>`).join("")}
     <div class="scap">${esc(it.text)||"(no caption)"}</div>`, true);
+  document.querySelectorAll("#modal [data-unlink]").forEach(btn=>btn.onclick=async()=>{
+    btn.disabled=true; btn.textContent="Saving...";
+    const ok=await plannedOp({op:btn.dataset.auto==="1"?"notmatch":"unlink",id:btn.dataset.unlink,key});
+    if(ok){ renderSched(); openSchedItem(key); } else { btn.disabled=false; btn.textContent="Couldn't save, try again"; }
+  });
+}
+// One planned-post write; refreshes STATE.planned from the server's answer.
+async function plannedOp(body){
+  try{
+    const r=await apiFetch("/api/metricool?view=planned",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    if(gateFor(r)) return false;
+    const data=await r.json().catch(()=>({error:"Bad response"}));
+    if(!r.ok||data.error) throw new Error(data.error||("Server returned "+r.status));
+    STATE.planned=data.posts||[]; return true;
+  }catch(e){ STATE.lastPlannedErr=e.message; return false; }
 }
 function openPlanner(post, day){
   const brands=brandList(); if(!brands.length) return;
@@ -2153,6 +2232,7 @@ function openPlanner(post, day){
       <div><label>Status</label><div class="togs" id="pfStatus">${Object.entries(PSTATUS).map(([k,l])=>`<button type="button" class="tog${k===p.status?" on":""}" data-s="${k}" aria-pressed="${k===p.status}">${l}</button>`).join("")}</div></div>
       <div class="full"><label for="pfTitle">Working title</label><input class="inp" id="pfTitle" maxlength="120" placeholder="e.g. Jeter re-signs: 2026 highlight reel" value="${esc(p.title||"")}"></div>
       <div class="full"><label for="pfText">Caption or notes</label><textarea class="inp" id="pfText" maxlength="1500" placeholder="Draft caption, shot list, who is making it...">${esc(p.text||"")}</textarea></div>
+      ${edit?postedPicker(p):""}
       <div class="perr" id="pfErr"></div>
     </form>
     <div class="pfoot"><span class="note">${edit&&p.createdBy?`Added by ${esc(p.createdBy)}`:""}</span>${edit?'<button class="btn danger" id="pfDel">Delete</button>':""}<button class="btn" id="pfCancel">Cancel</button><button class="btn primary" id="pfSave">${edit?"Save changes":"Add to calendar"}</button></div>`, true);
@@ -2180,9 +2260,89 @@ function openPlanner(post, day){
     if(!post.title&&!post.text) return err("Add a working title or some notes.");
     send({op:edit?"update":"add",post},$("#pfSave"));
   };
+  if(edit) document.querySelectorAll("#pform [data-link]").forEach(bt=>bt.onclick=e=>{ e.preventDefault(); send({op:"link",id:p.id,key:bt.dataset.link},bt); });
   if(edit) $("#pfDel").onclick=()=>{ const b=$("#pfDel"); if(b.dataset.c!=="1"){ b.dataset.c="1"; b.textContent="Click again to delete"; return; } send({op:"delete",id:p.id},b); };
   setTimeout(()=>{ const t=$("#pfTitle"); if(t) t.focus(); },50);
 }
+// Real posts for the same brand within 3 days of a planned idea, best match
+// first, so the idea can be replaced by what actually went out.
+function postedPicker(p){
+  const b=brandOf(p.blogId);
+  const c=((STATE.sched&&STATE.sched.items)||[]).filter(it=>String(it.blogId)===String(p.blogId)&&dayGap(dayKey(new Date(Date.parse(it.at))),p.date)<=3)
+    .map(it=>({it,sc:ideaScore(p,it),gap:dayGap(dayKey(new Date(Date.parse(it.at))),p.date)}))
+    .sort((a,b)=>(b.sc-a.sc)||(a.gap-b.gap)).slice(0,6);
+  const row=({it,sc})=>`<div class="pcand"><span class="pcw">${esc(new Date(Date.parse(it.at)).toLocaleDateString("en-US",{timeZone:TZC,weekday:"short",month:"short",day:"numeric"}))}<br>${esc(shortTime(Date.parse(it.at)))}${it.native?" · native":""}</span><span class="pcg">${(it.networks||[]).map(n=>glyph(n)).join("")}</span><span class="pct">${esc(it.text||"(no caption)")}</span>${sc>=0.6?'<span class="pcs">likely match</span>':""}<button class="btn" data-link="${esc("mc:"+it.id)}">Replace idea</button></div>`;
+  return `<div class="postedq"><h4>Already posted?</h4>${c.length?`<div class="note">Pick the real post and this idea leaves the calendar.</div>${c.map(row).join("")}`:`<div class="note">Nothing from ${esc(b.name)} on the calendar within 3 days of this idea yet. Posts published straight from Instagram, TikTok or Facebook show up here once Metricool picks them up, usually within a day.</div>`}</div>`;
+}
+
+/* Drag and drop for planned posts. Pointer events so it works with a mouse
+   and on touch (touch needs a short press first, so scrolling still works).
+   Alt + arrow keys move a focused planned post by a day (left/right) or a
+   week (up/down). Metricool and native posts don't move: edit those at the
+   source. */
+const DRAG={};
+function movePlanned(id,day){
+  const p=(STATE.planned||[]).find(x=>x.id===id); if(!p||!day||p.date===day) return;
+  const before=p.date; p.date=day; renderSched();
+  plannedOp({op:"move",id,date:day}).then(ok=>{ if(ok){ renderSched(); return; }
+    const q=(STATE.planned||[]).find(x=>x.id===id); if(q) q.date=before; renderSched();
+    $("#calMeta").textContent="Couldn't move that post: "+(STATE.lastPlannedErr||"try again"); });
+  const fb=$("#calGrid").querySelector(`.citem[data-k="pl:${CSS.escape(id)}"]`); if(fb) fb.focus({preventScroll:true});
+}
+function wireCalDrag(){
+  const grid=$("#calGrid"), today=dayKey(new Date());
+  grid.querySelectorAll(".citem.pl.canmove").forEach(el=>{
+    const id=el.dataset.k.slice(3);
+    el.addEventListener("keydown",e=>{ if(!e.altKey) return; const d={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[e.key]; if(!d) return; e.preventDefault();
+      const p=(STATE.planned||[]).find(x=>x.id===id); if(!p) return; const nd=addDays(p.date,d); if(nd<today) return; movePlanned(id,nd); setTimeout(()=>{ const n=grid.querySelector(`.citem[data-k="pl:${CSS.escape(id)}"]`); if(n) n.focus(); },30); });
+    el.addEventListener("touchmove",e=>{ if(DRAG.on) e.preventDefault(); },{passive:false});
+    el.addEventListener("mousedown",e=>{ if(e.button===0) e.preventDefault(); });
+    el.addEventListener("pointerdown",e=>{
+      if(e.button!==0) return;
+      if(e.pointerType==="mouse") e.preventDefault(); // no text selection while dragging
+      Object.assign(DRAG,{id,el,x0:e.clientX,y0:e.clientY,on:false,pid:e.pointerId,touch:e.pointerType!=="mouse",timer:null,target:null});
+      if(DRAG.touch) DRAG.timer=setTimeout(()=>startDrag(e.clientX,e.clientY),280);
+    });
+  });
+}
+function startDrag(x,y){
+  const el=DRAG.el; if(!el||DRAG.on) return;
+  DRAG.on=true; clearTimeout(DRAG.timer);
+  try{ el.setPointerCapture(DRAG.pid); }catch(e){}
+  const r=el.getBoundingClientRect(); DRAG.dx=x-r.left; DRAG.dy=y-r.top;
+  const g=el.cloneNode(true); g.classList.add("cdrag-ghost"); g.style.width=r.width+"px"; g.style.left=r.left+"px"; g.style.top=r.top+"px"; g.removeAttribute("data-k");
+  document.body.appendChild(g); DRAG.ghost=g; el.classList.add("dragging"); document.body.classList.add("cdragging");
+  try{ getSelection().removeAllRanges(); }catch(e){}
+  if(navigator.vibrate&&DRAG.touch) try{ navigator.vibrate(12); }catch(e){}
+}
+function dragTarget(x,y){
+  const t=document.elementFromPoint(x,y); const c=t&&t.closest?t.closest("#calGrid .cday"):null;
+  document.querySelectorAll("#calGrid .cday.dropok,#calGrid .cday.dropno").forEach(d=>{ if(d!==c) d.classList.remove("dropok","dropno"); });
+  if(!c){ DRAG.target=null; return; }
+  const ok=c.dataset.d>=dayKey(new Date()); c.classList.toggle("dropok",ok); c.classList.toggle("dropno",!ok); DRAG.target=ok?c.dataset.d:null;
+}
+function endDrag(drop){
+  clearTimeout(DRAG.timer);
+  if(DRAG.on){
+    if(DRAG.ghost) DRAG.ghost.remove(); if(DRAG.el) DRAG.el.classList.remove("dragging"); document.body.classList.remove("cdragging");
+    document.querySelectorAll("#calGrid .cday.dropok,#calGrid .cday.dropno").forEach(d=>d.classList.remove("dropok","dropno"));
+    DRAG.justDragged=Date.now();
+    try{ getSelection().removeAllRanges(); }catch(e){}
+    if(drop&&DRAG.target) movePlanned(DRAG.id,DRAG.target);
+  }
+  Object.assign(DRAG,{on:false,el:null,ghost:null,id:null,target:null});
+}
+document.addEventListener("pointermove",e=>{
+  if(!DRAG.el||e.pointerId!==DRAG.pid) return;
+  const dist=Math.hypot(e.clientX-DRAG.x0,e.clientY-DRAG.y0);
+  if(!DRAG.on){ if(DRAG.touch){ if(dist>8){ clearTimeout(DRAG.timer); DRAG.el=null; } return; } if(dist<6) return; startDrag(DRAG.x0,DRAG.y0); }
+  DRAG.ghost.style.left=(e.clientX-DRAG.dx)+"px"; DRAG.ghost.style.top=(e.clientY-DRAG.dy)+"px";
+  dragTarget(e.clientX,e.clientY);
+});
+document.addEventListener("pointerup",e=>{ if(DRAG.el&&e.pointerId===DRAG.pid) endDrag(true); });
+document.addEventListener("pointercancel",e=>{ if(DRAG.el&&e.pointerId===DRAG.pid) endDrag(false); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&DRAG.on) endDrag(false); });
+
 $("#calAdd").onclick=()=>openPlanner(null);
 setInterval(()=>{ if((STATE.sched||STATE.planned.length) && !document.hidden && !$("#modal").classList.contains("on")) renderSched(); }, 60000);
 setInterval(()=>{ if(STATE.sched && !document.hidden) loadSched(false); }, 5*60000);
