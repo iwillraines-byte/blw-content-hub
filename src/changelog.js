@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.12.0',
+    date: '2026-11-05',
+    kind: 'minor',
+    summary: 'v5.12.0 — Calendar picks up native posts, ideas retire once posted, drag and drop',
+    items: [
+      'Posts published straight from Instagram, TikTok or Facebook (not through Metricool) now appear on the Command Center calendar at their real time and brand, marked "Posted natively", as soon as Metricool\'s analytics pick them up (usually within a day). The same creative on several apps is one slot; anything that did go through Metricool is not doubled.',
+      'Planned ideas retire once they are posted: when a scheduled or published post for the same brand within three days covers the idea\'s working title, the idea leaves the calendar and the real post shows a check mark. Open a planned post to replace it with a specific real post by hand, or open the real post and choose "Not the same post" to undo a wrong match.',
+      'Drag planned posts to another day on the calendar (press and hold on a phone or tablet). Alt plus the arrow keys moves a selected planned post by a day or a week. Planned posts cannot be dropped on past days, and Metricool posts still move only in Metricool.',
+    ],
+  },
+  {
     version: '5.11.1',
     date: '2026-11-04',
     kind: 'patch',

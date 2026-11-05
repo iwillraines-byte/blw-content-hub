@@ -66,10 +66,32 @@ export async function plannedHandler(req, res, ctx) {
       if (i < 0) { res.status(404).json({ error: 'That planned post no longer exists' }); return; }
       saved = { ...clean(body.post, next[i]), id: next[i].id, updatedBy: who, updatedAt: nowIso };
       next[i] = saved;
+    } else if (op === 'move') {
+      // Drag and drop on the calendar: change only the day (and optionally
+      // the time) so a concurrent edit of the caption isn't overwritten.
+      const i = next.findIndex(p => p.id === String(body.id || ''));
+      if (i < 0) { res.status(404).json({ error: 'That planned post no longer exists' }); return; }
+      const date = String(body.date || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('date must be YYYY-MM-DD');
+      const upd = { ...next[i], date, updatedBy: who, updatedAt: nowIso };
+      if (typeof body.time === 'string') { if (body.time && !/^\d{2}:\d{2}$/.test(body.time)) throw new Error('time must be HH:MM'); upd.time = body.time; }
+      next[i] = saved = upd;
+    } else if (op === 'link' || op === 'unlink' || op === 'notmatch') {
+      // An idea that has been posted: link it to the real post that replaced
+      // it (it then drops off the calendar), undo that, or tell the page an
+      // automatic match was wrong so it stops suggesting it.
+      const i = next.findIndex(p => p.id === String(body.id || ''));
+      if (i < 0) { res.status(404).json({ error: 'That planned post no longer exists' }); return; }
+      const key = String(body.key || '').slice(0, 200);
+      const cur = { ...next[i], updatedBy: who, updatedAt: nowIso };
+      if (op === 'link') { if (!key) throw new Error('key required'); cur.doneKey = key; cur.doneAt = nowIso; cur.doneBy = who; cur.notKeys = (cur.notKeys || []).filter(k => k !== key); }
+      else if (op === 'unlink') { delete cur.doneKey; delete cur.doneAt; delete cur.doneBy; if (key) cur.notKeys = [...new Set([...(cur.notKeys || []), key])].slice(-20); }
+      else { if (!key) throw new Error('key required'); cur.notKeys = [...new Set([...(cur.notKeys || []), key])].slice(-20); }
+      next[i] = saved = cur;
     } else if (op === 'delete') {
       next = next.filter(p => p.id !== String(body.id || ''));
     } else {
-      res.status(400).json({ error: 'op must be add, update or delete' });
+      res.status(400).json({ error: 'op must be add, update, move, link, unlink, notmatch or delete' });
       return;
     }
     const cutoff = new Date(Date.now() - KEEP_DAYS * 86400000).toISOString().slice(0, 10);
