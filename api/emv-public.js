@@ -18,6 +18,8 @@
 // Env vars:  EMV_EMBED_KEY, METRICOOL_TOKEN, METRICOOL_USER_ID
 //            EMV_CPM (optional, default 20), EMV_PER_INTERACTION (optional, default 0.25)
 
+import { dedupeLists } from './_cc-ledger.js';
+
 const BASE = "https://app.metricool.com/api";
 const TZ = "America/Chicago";
 
@@ -140,8 +142,12 @@ export default async function handler(req, res) {
     const wins = windows();
     const out = [];
     for (const w of wins) {
-      const teamLists = await Promise.all(TEAMS.map((t) => posts(t.blogId, w.from, w.to, token, userId)));
-      const blwList = await posts(BLW.blogId, w.from, w.to, token, userId);
+      const rawTeams = await Promise.all(TEAMS.map((t) => posts(t.blogId, w.from, w.to, token, userId)));
+      const rawBlw = await posts(BLW.blogId, w.from, w.to, token, userId);
+      // Count a post shared by several accounts (a collab) once, under its owner.
+      const { postsByBlog } = dedupeLists({ ...Object.fromEntries(TEAMS.map((t, i) => [t.blogId, rawTeams[i]])), [BLW.blogId]: rawBlw }, {});
+      const teamLists = TEAMS.map(t => postsByBlog[t.blogId] || postsByBlog[String(t.blogId)] || []);
+      const blwList = postsByBlog[BLW.blogId] || postsByBlog[String(BLW.blogId)] || [];
 
       const teams = TEAMS.map((t, i) => {
         const s = tally(teamLists[i]);

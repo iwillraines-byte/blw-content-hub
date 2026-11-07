@@ -9,6 +9,7 @@
 import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, makeApi, loadProfiles, tzDate, windowRange } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
 import { tokens, similar, postKeyOf } from './_cc-posts.js';
+import { dedupeLists } from './_cc-ledger.js';
 
 const NET_ALIAS = { x: "twitter", twitter: "twitter", linkedincompany: "linkedin", linkedin: "linkedin", instagram: "instagram", tiktok: "tiktok", facebook: "facebook", youtube: "youtube", threads: "threads", pinterest: "pinterest", bluesky: "bluesky", gmb: "gmb" };
 const normNet = n => NET_ALIAS[String(n || "").toLowerCase()] || String(n || "").toLowerCase();
@@ -161,12 +162,17 @@ async function publishedPosts(mc, brands, fromDay, toDay, startMs, fresh) {
   const key = fromDay + "|" + toDay;
   if (!fresh && PUB_CACHE.key === key && Date.now() - PUB_CACHE.at < PUB_TTL) return PUB_CACHE.data;
   const out = [];
+  const rawBy = {};
   await Promise.all(brands.map(async br => {
     // Analytics wants full datetimes with an offset, not bare days.
     const win = windowRange(null, "custom", { from: fromDay, to: toDay });
     const resp = await mc.api("/v2/analytics/brand-summary/posts", br.blogId, { from: win.from, to: win.to, timezone: TZ });
-    const list = resp && Array.isArray(resp.data) ? resp.data : [];
-    list.forEach((p, i) => {
+    rawBy[br.blogId] = resp && Array.isArray(resp.data) ? resp.data : [];
+  }));
+  // A collab shows once, under the account that owns it.
+  const { postsByBlog } = dedupeLists(rawBy, {});
+  brands.forEach(br => {
+    (postsByBlog[br.blogId] || []).forEach((p, i) => {
       const dt = (p.publicationDate || {}).dateTime || "";
       const ms = zonedToMs(dt, (p.publicationDate || {}).timezone || TZ);
       if (!Number.isFinite(ms) || ms < startMs) return;
@@ -178,7 +184,7 @@ async function publishedPosts(mc, brands, fromDay, toDay, startMs, fresh) {
         impressions: Math.round(m.IMPRESSIONS || 0), interactions: Math.round(m.INTERACTIONS || 0),
       });
     });
-  }));
+  });
   PUB_CACHE = { key, at: Date.now(), data: out };
   return out;
 }

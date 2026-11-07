@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.13.0',
+    date: '2026-11-07',
+    kind: 'minor',
+    summary: 'v5.13.0 — One post, one owner: collabs never count twice',
+    items: [
+      'Every post-level number (post views, interactions, saves and shares per post, EMV, top posts, formats, heat) now checks each post\'s platform ID across all BLW accounts. A post that shows up under more than one account, like an Instagram collab between BLW and a team, is counted once: under the account that posted it first, or the BLW league page when both copies are the same post. The same check runs on the WIFFLE® accounts, the Every post library, the calendar and the public EMV card.',
+      'Data check (master only) has a new Double-count check: which numbers can and can\'t overlap across accounts, every shared post found in the window with each copy\'s numbers, and a "Count under" picker to move a shared post to a different account.',
+      'Every post marks shared posts "Collab · also on ...". The Account views info tip now says plainly that account totals can include a collab on both accounts and that EMV uses post views instead.',
+    ],
+  },
+  {
     version: '5.12.1',
     date: '2026-11-05',
     kind: 'patch',

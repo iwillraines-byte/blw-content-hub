@@ -20,6 +20,7 @@
 
 import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, round, makeApi, loadProfiles, pickMetric, SAVE_KEYS, SHARE_KEYS } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
+import { dedupeLists, platformPostId } from './_cc-ledger.js';
 
 const NET_ALIAS = { x: 'twitter', twitter: 'twitter', linkedincompany: 'linkedin', linkedin: 'linkedin', instagram: 'instagram', tiktok: 'tiktok', facebook: 'facebook', youtube: 'youtube', threads: 'threads' };
 export const normNet = n => NET_ALIAS[String(n || '').toLowerCase()] || String(n || '').toLowerCase();
@@ -79,7 +80,7 @@ export function postKeyOf(p, blogId, i) {
   return `${blogId}:${normNet(p.network)}:${id}`;
 }
 
-export async function buildPostLibrary(win, token, userId) {
+export async function buildPostLibrary(win, token, userId, opts = {}) {
   const { from, to, label } = win;
   const mc = makeApi(token, userId);
   const profiles = await loadProfiles(mc.api);
@@ -90,10 +91,18 @@ export async function buildPostLibrary(win, token, userId) {
   ].map(b => ({ ...b, picture: (profiles[b.blogId] || {}).picture || null }));
 
   const posts = [];
+  const rawBy = {};
   await Promise.all(brands.map(async br => {
     const resp = await mc.api('/v2/analytics/brand-summary/posts', br.blogId, { from, to, timezone: TZ });
-    const list = resp && Array.isArray(resp.data) ? resp.data : [];
-    list.forEach((p, i) => {
+    rawBy[br.blogId] = resp && Array.isArray(resp.data) ? resp.data : [];
+  }));
+  // A post that shows up under several accounts (a collab) is listed once,
+  // under the account that owns it, with the others noted in alsoOn.
+  const { postsByBlog, owners, shared } = dedupeLists(rawBy, { manual: opts.manual || {} });
+  const nameOf = Object.fromEntries(brands.map(b => [String(b.blogId), b.name]));
+  const alsoOn = Object.fromEntries(shared.map(s => [s.cid, s.copies.map(c => String(c.blogId)).filter(b => b !== String(s.owner)).map(b => nameOf[b] || b)]));
+  brands.forEach(br => {
+    (postsByBlog[br.blogId] || []).forEach((p, i) => {
       const m = p.metrics || {};
       const network = normNet(p.network);
       const dt = (p.publicationDate || {}).dateTime || '';
@@ -111,13 +120,14 @@ export async function buildPostLibrary(win, token, userId) {
         engagement: round(Number(m.ENGAGEMENT) || 0, 2),
         saves: sv.has ? Math.round(sv.v) : null, shares: sh.has ? Math.round(sh.v) : null,
         _toks: tokens(p.text),
+        ...(alsoOn[platformPostId(p)] ? { alsoOn: alsoOn[platformPostId(p)] } : {}),
       });
     });
-  }));
+  });
   const groups = autoGroup(posts);
   posts.forEach(p => { p.autoGroup = groups[p.key]; delete p._toks; delete p.ms; });
   posts.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  return { generatedAt: new Date().toISOString(), from, to, label, brands, posts };
+  return { generatedAt: new Date().toISOString(), from, to, label, brands, posts, shared };
 }
 
 // ── Tags: contractors, who made what, manual grouping ───────────────────────
@@ -142,12 +152,13 @@ async function readTags(sb) {
     groups: obj(v.groups),
     players: obj(v.players),          // post key -> [player names] (manual; [] = nobody)
     playerAliases: obj(v.playerAliases), // player name -> extra nicknames / @handles
+    owners: obj(v.owners),              // shared post id -> blogId that counts it (collabs)
   };
 }
 // For read-only callers (heat index, player pages): never throws.
 export async function readTagsSafe(sb) {
   try { if (sb) return await readTags(sb); } catch { /* fall through */ }
-  return { contractors: DEFAULT_CONTRACTORS, assign: {}, groups: {}, players: {}, playerAliases: {} };
+  return { contractors: DEFAULT_CONTRACTORS, assign: {}, groups: {}, players: {}, playerAliases: {}, owners: {} };
 }
 
 const keysOf = b => (Array.isArray(b.postKeys) ? b.postKeys : []).map(String).filter(k => k.length < 400).slice(0, 200);
@@ -195,6 +206,11 @@ export async function postTagsHandler(req, res, ctx) {
       if (!name) { res.status(400).json({ error: 'name required' }); return; }
       const list = (Array.isArray(body.aliases) ? body.aliases : []).map(x => String(x).trim()).filter(x => x.length >= 2 && x.length <= 40).slice(0, 12);
       if (list.length) t.playerAliases[name] = list; else delete t.playerAliases[name];
+    } else if (op === 'owner') {
+      // Which account a post shared by several accounts (a collab) counts under.
+      const cid = String(body.cid || '').slice(0, 200);
+      if (!cid) { res.status(400).json({ error: 'cid required' }); return; }
+      if (body.blogId == null || body.blogId === '') delete t.owners[cid]; else t.owners[cid] = String(body.blogId).slice(0, 20);
     } else { res.status(400).json({ error: 'Unknown op' }); return; }
     const { error } = await sb.from('app_settings').upsert(
       { key: KEY, value: t, updated_at: new Date().toISOString(), updated_by: ctx.user.id }, { onConflict: 'key' });

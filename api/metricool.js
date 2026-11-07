@@ -37,6 +37,7 @@ import {
 } from './_cc-core.js';
 import { buildWiffle, buildBLWPage, redactAccounts } from './_cc-wiffle.js';
 import { buildAll, redactAll } from './_cc-all.js';
+import { getLedger, ledgerPosts, clearLedgerCache } from './_cc-ledger.js';
 import { buildScheduled } from './_cc-schedule.js';
 import { generateIdeas } from './_cc-ideas.js';
 import { plannedHandler } from './_cc-planned.js';
@@ -92,7 +93,8 @@ function attributePost(text, dir, players) {
 
 async function buildBLW(from, to, profiles, api, pctx) {
   const b = BLW_BRAND.blogId;
-  const resp = await api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ });
+  const owned = ledgerPosts(pctx.ledger, b);
+  const resp = owned ? { data: owned } : await api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ });
   const posts = (resp && Array.isArray(resp.data)) ? resp.data : [];
   const fmt = {}, agg = {};
   let imp = 0, inter = 0, engSum = 0;
@@ -173,7 +175,7 @@ async function buildTeam(t, from, to, profiles, mc, pctx) {
     tl(b, "facebook", "shares", from, to, "posts"),
     tl(b, "facebook", "post_video_avg_time_watched", from, to, undefined),
     tl(b, "facebook", "post_video_view_time", from, to, undefined),
-    api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ }),
+    ledgerPosts(pctx.ledger, b) ? { data: ledgerPosts(pctx.ledger, b) } : api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ }),
   ]);
   const ig_saves_p_d = ig_saves_p.data;
   const ig_f = ig_fR.data, tt_views = tt_viewsR.data, tt_eng = tt_engR.data, fb_eng = fb_engR.data, tt_shares = tt_sharesR.data;
@@ -383,13 +385,13 @@ function summarizeAudit(mc, teams) {
   };
 }
 
-export async function compute(days, rng, token, userId, custom) {
+export async function compute(days, rng, token, userId, custom, ledger) {
   const { from, to, label } = windowRange(days, rng, custom);
   const mc = makeApi(token, userId);
   const profiles = await loadProfiles(mc.api);
   const sb = getServiceClient();
   const tags = await readTagsSafe(sb);
-  const pctx = { dir: await playerDirectory(sb, tags.playerAliases), tagPlayers: tags.players || {} };
+  const pctx = { dir: await playerDirectory(sb, tags.playerAliases), tagPlayers: tags.players || {}, ledger: ledger || null };
   const [teams, blw] = await Promise.all([
     Promise.all(TEAMS.map(t => buildTeam(t, from, to, profiles, mc, pctx))),
     buildBLW(from, to, profiles, mc.api, pctx),
@@ -457,6 +459,8 @@ export async function compute(days, rng, token, userId, custom) {
   const watchLeague = { totalHrs: round(sum(teams.map(t => t.watch.totalHrs)), 1), avgSec: wTeams.length ? round(sum(wTeams.map(t => t.watch.avgSec)) / wTeams.length, 1) : 0, teamsWithData: wTeams.length, platform: "facebook" };
   const parityBehind = behindOf(totals_platform.posts);
   const dataAudit = summarizeAudit(mc, teams);
+  // Posts that appear under more than one BLW account, and who counts them.
+  dataAudit.shared = ledger ? { checked: ledger.posts, accounts: ledger.accounts, list: ledger.shared } : null;
   teams.forEach(t => { delete t._audit; });
 
   return {
@@ -576,7 +580,7 @@ export default async function handler(req, res) {
     await postTagsHandler(req, res, ctx);
     // Player tags feed the heat index: drop cached league results so the
     // next load reflects them.
-    if (req.method === "POST") for (const k of [...CACHE.keys()]) if (k.startsWith("league|")) CACHE.delete(k);
+    if (req.method === "POST") { for (const k of [...CACHE.keys()]) if (/^(league|blw|posts)\|/.test(k)) CACHE.delete(k); clearLedgerCache(); }
     return;
   }
 
@@ -588,12 +592,19 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "private, no-store");
   res.setHeader("Content-Type", "application/json");
   const fresh = q.fresh === "1";
+  // One post, one owner: the BLW ledger decides which account counts a post
+  // that shows up under several (collabs). Shared by league, blw and all.
+  const ledgerFor = async (days, rng, custom) => {
+    const tags = await readTagsSafe(ctx.sb);
+    return getLedger(windowRange(days, rng, custom), token, userId, { fresh, manual: tags.owners || {} });
+  };
+  const ownersManual = async () => (await readTagsSafe(ctx.sb)).owners || {};
   try {
     if (view === "league") {
       const { rng, days, custom } = parseWindow(q);
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
       const key = `league|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
-      const data = await cached(key, CACHE_TTL, fresh, () => compute(days, rng, token, userId, custom));
+      const data = await cached(key, CACHE_TTL, fresh, async () => compute(days, rng, token, userId, custom, await ledgerFor(days, rng, custom)));
       const out = redactLeague(data);
       if (isMaster) { out.dataAudit = data.dataAudit; out.viewer = { isMaster: true }; }
       res.status(200).send(JSON.stringify(out));
@@ -606,8 +617,8 @@ export default async function handler(req, res) {
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
       const wkey = `${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
       const [L, B] = await Promise.all([
-        cached("league|" + wkey, CACHE_TTL, fresh, () => compute(days, rng, token, userId, custom)),
-        cached("blw|" + wkey, CACHE_TTL, fresh, () => buildBLWPage(windowRange(days, rng, custom), token, userId)),
+        cached("league|" + wkey, CACHE_TTL, fresh, async () => compute(days, rng, token, userId, custom, await ledgerFor(days, rng, custom))),
+        cached("blw|" + wkey, CACHE_TTL, fresh, async () => buildBLWPage(windowRange(days, rng, custom), token, userId, { ledger: await ledgerFor(days, rng, custom) })),
       ]);
       const out = redactAll(buildAll(L, B));
       if (isMaster) out.viewer = { isMaster: true };
@@ -619,7 +630,8 @@ export default async function handler(req, res) {
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
       const key = `${view}|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
       const build = view === "blw" ? buildBLWPage : buildWiffle;
-      const data = await cached(key, CACHE_TTL, fresh, () => build(windowRange(days, rng, custom), token, userId));
+      const data = await cached(key, CACHE_TTL, fresh, async () => build(windowRange(days, rng, custom), token, userId,
+        view === "blw" ? { ledger: await ledgerFor(days, rng, custom) } : { manual: await ownersManual() }));
       const out = redactAccounts(data);
       if (isMaster) { out.dataAudit = data.dataAudit; out.brandsSeen = data.brandsSeen; out.viewer = { isMaster: true }; }
       res.status(200).send(JSON.stringify(out));
@@ -629,7 +641,7 @@ export default async function handler(req, res) {
       const { rng, days, custom } = parseWindow(q);
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
       const key = `posts|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
-      const data = await cached(key, CACHE_TTL, fresh, () => buildPostLibrary(windowRange(days, rng, custom), token, userId));
+      const data = await cached(key, CACHE_TTL, fresh, async () => buildPostLibrary(windowRange(days, rng, custom), token, userId, { manual: await ownersManual() }));
       // Who is in each post (automatic), computed fresh so new nicknames and
       // handles apply immediately. Manual tags are applied on the page.
       const tags = await readTagsSafe(ctx.sb);
@@ -643,7 +655,7 @@ export default async function handler(req, res) {
       if (!name) { res.status(400).json({ error: "name required" }); return; }
       const start = lifetimeStart();
       const today = new Date().toISOString().slice(0, 10);
-      const lib = await cached(`posts|lifetime|${start}`, 30 * 60 * 1000, fresh, () => buildPostLibrary(windowRange(null, "custom", { from: start, to: today }), token, userId));
+      const lib = await cached(`posts|lifetime|${start}`, 30 * 60 * 1000, fresh, async () => buildPostLibrary(windowRange(null, "custom", { from: start, to: today }), token, userId, { manual: await ownersManual() }));
       const tags = await readTagsSafe(ctx.sb);
       const dir = await playerDirectory(ctx.sb, tags.playerAliases);
       const out = await playerLifetime(name, lib, dir, tags);
