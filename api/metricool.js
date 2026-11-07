@@ -38,6 +38,7 @@ import {
 import { buildWiffle, buildBLWPage, redactAccounts } from './_cc-wiffle.js';
 import { buildAll, redactAll } from './_cc-all.js';
 import { getLedger, ledgerPosts, clearLedgerCache } from './_cc-ledger.js';
+import { detectCollabViews, igPostsFromLedger, adjustDaily, appliedOverlap } from './_cc-collab.js';
 import { buildScheduled } from './_cc-schedule.js';
 import { generateIdeas } from './_cc-ideas.js';
 import { plannedHandler } from './_cc-planned.js';
@@ -397,6 +398,20 @@ export async function compute(days, rng, token, userId, custom, ledger) {
     buildBLW(from, to, profiles, mc.api, pctx),
   ]);
   teams.forEach(tm => { tm.mom = tm.followersNow ? round(tm.netNew / tm.followersNow * 100, 1) : 0; });
+  // Collab views go to the original poster. Instagram adds a collab's views to
+  // the collaborator's account views too; take those off the collaborator so
+  // account views across BLW add up without counting a video twice.
+  const NAMES = { ...Object.fromEntries(TEAMS.map(t => [t.blogId, t.name])), [BLW_BRAND.blogId]: BLW_BRAND.name };
+  const collab = ledger ? detectCollabViews(teams.map(t => ({ blogId: t.blogId, name: t.name, daily: t.seriesByPlatform.views.ig })), igPostsFromLedger(ledger), tags.collabFlags || {}, NAMES) : [];
+  for (const t of teams) {
+    const f = collab.filter(x => x.blogId === t.blogId); if (!f.length) continue;
+    t.collabIn = f;
+    const cut = appliedOverlap(f); if (!cut) continue;
+    t.viewsReported = t.views; t.views = Math.max(0, t.views - cut);
+    t.byPlatform.views.ig = Math.max(0, t.byPlatform.views.ig - cut);
+    t.seriesByPlatform.views.ig = adjustDaily(t.seriesByPlatform.views.ig, f);
+    t.series.views = adjustDaily(t.series.views, f);
+  }
 
   const sd = key => teams.map(tm => Object.fromEntries(tm.series[key].map(p => [p.d, p.v])));
   const posts_by_platform = { ig: {}, tt: {}, fb: {} };
@@ -461,6 +476,7 @@ export async function compute(days, rng, token, userId, custom, ledger) {
   const dataAudit = summarizeAudit(mc, teams);
   // Posts that appear under more than one BLW account, and who counts them.
   dataAudit.shared = ledger ? { checked: ledger.posts, accounts: ledger.accounts, list: ledger.shared } : null;
+  dataAudit.collab = collab;
   teams.forEach(t => { delete t._audit; });
 
   return {
@@ -599,6 +615,8 @@ export default async function handler(req, res) {
     return getLedger(windowRange(days, rng, custom), token, userId, { fresh, manual: tags.owners || {} });
   };
   const ownersManual = async () => (await readTagsSafe(ctx.sb)).owners || {};
+  const collabFlags = async () => (await readTagsSafe(ctx.sb)).collabFlags || {};
+  const BLW_NAMES = { ...Object.fromEntries(TEAMS.map(t => [t.blogId, t.name])), [BLW_BRAND.blogId]: BLW_BRAND.name };
   try {
     if (view === "league") {
       const { rng, days, custom } = parseWindow(q);
@@ -618,7 +636,7 @@ export default async function handler(req, res) {
       const wkey = `${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
       const [L, B] = await Promise.all([
         cached("league|" + wkey, CACHE_TTL, fresh, async () => compute(days, rng, token, userId, custom, await ledgerFor(days, rng, custom))),
-        cached("blw|" + wkey, CACHE_TTL, fresh, async () => buildBLWPage(windowRange(days, rng, custom), token, userId, { ledger: await ledgerFor(days, rng, custom) })),
+        cached("blw|" + wkey, CACHE_TTL, fresh, async () => buildBLWPage(windowRange(days, rng, custom), token, userId, { ledger: await ledgerFor(days, rng, custom), flags: await collabFlags(), names: BLW_NAMES })),
       ]);
       const out = redactAll(buildAll(L, B));
       if (isMaster) out.viewer = { isMaster: true };
@@ -631,7 +649,7 @@ export default async function handler(req, res) {
       const key = `${view}|${rng || days}|${custom ? custom.from + ":" + custom.to : ""}`;
       const build = view === "blw" ? buildBLWPage : buildWiffle;
       const data = await cached(key, CACHE_TTL, fresh, async () => build(windowRange(days, rng, custom), token, userId,
-        view === "blw" ? { ledger: await ledgerFor(days, rng, custom) } : { manual: await ownersManual() }));
+        view === "blw" ? { ledger: await ledgerFor(days, rng, custom), flags: await collabFlags(), names: BLW_NAMES } : { manual: await ownersManual() }));
       const out = redactAccounts(data);
       if (isMaster) { out.dataAudit = data.dataAudit; out.brandsSeen = data.brandsSeen; out.viewer = { isMaster: true }; }
       res.status(200).send(JSON.stringify(out));

@@ -453,6 +453,12 @@
   .ovo{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;color:var(--ink-2)}
   .ovo .sel{margin-left:6px}
   .ovmsg{color:var(--ink-3)}
+  .cnote{margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(91,141,239,.08);border:1px solid rgba(91,141,239,.25);font-size:12px;line-height:1.5;color:var(--ink-2)}
+  .cnote b{color:var(--ink)}
+  .cvrow{display:grid;grid-template-columns:minmax(150px,200px) 1fr auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:12px;color:var(--ink-2)}
+  .cvrow b{color:var(--ink)}
+  .cvrow.off{opacity:.55}
+  @media(max-width:760px){.cvrow{grid-template-columns:1fr}}
   .lg.nat{background:rgba(255,255,255,.045);box-shadow:inset 2px 0 0 var(--ink-2)}
   .calfoot{font-size:11px;color:var(--ink-3);margin-top:8px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
   @media(max-width:860px){
@@ -828,10 +834,16 @@ const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;
    Info tips, short team names, the jump bar, collapsible sections and the
    loading states that replaced the full-page overlay. */
 const DEF={
-  acct:"Account views: every view the accounts got in this window, including views on older posts. Reported by each platform as one total per account, so a collab can count on both accounts here. EMV uses post views instead, which count every post once.",
+  acct:"Account views: every view the accounts got in this window, including views on older posts. Instagram adds a collab's views to both accounts, so views that came from another BLW account's collab post are taken off the collaborator and stay with the account that posted it (see Data check). EMV uses post views, which count every post once.",
   post:"Post views: views on posts published in this window, counted post by post. This is the number EMV uses. Metricool calls it impressions.",
   watch:"Facebook is the only platform whose API reports watch time, so this is Facebook video only."
 };
+// "Collab views credited to the original poster" note for a team or account.
+function collabNote(list, reported, shown){
+  const ap=(list||[]).filter(f=>f.status==="applied"); if(!ap.length) return "";
+  const cut=ap.reduce((a,f)=>a+f.overlap,0);
+  return `<div class="cnote"><b>Collab views credited to the original poster.</b> Instagram reported ${fmtFull(reported)} account views. ${fmtFull(cut)} of those came from ${ap.length===1?"a collab post":"collab posts"} published by another BLW account, so they count there instead: ${ap.map(f=>`<span>${esc(f.post.owner)}'s "${esc((f.post.text||"post").slice(0,48))}" (${fmt(f.overlap)}, ${esc(f.start.slice(5).replace("-","/"))}${f.end!==f.start?"-"+esc(f.end.slice(5).replace("-","/")):""})</span>`).join("; ")}. Showing ${fmtFull(shown)}.</div>`;
+}
 const INFO=t=>`<span class="info" tabindex="0" role="note" aria-label="${esc(t)}" data-tip="${esc(t)}">i</span>`;
 const shortTeam=n=>{ n=String(n||""); if(/^philadelphia/i.test(n)) return "Philly"; return n.split(" ").filter(Boolean).slice(-1)[0]||n; };
 const prevV=id=>{ const e=document.getElementById(id); return e?(e.dataset.v||"0"):"0"; };
@@ -1828,7 +1840,7 @@ function openTeamModal(id, initial){
       return;
     }
     bodyEl.innerHTML=chartHTML;
-    chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[]; const tot=s.reduce((a,b)=>a+b.v,0); return gchip(PNAME[k],PCOL[k],fmtFull(tot),null); }).join("")+`</div>`;
+    chips.innerHTML=`<div class="gchips">`+["ig","tt","fb"].map(k=>{ const s=sp[k]||[]; const tot=s.reduce((a,b)=>a+b.v,0); return gchip(PNAME[k],PCOL[k],fmtFull(tot),null); }).join("")+`</div>`+(metric==="views"&&t.collabIn?collabNote(t.collabIn,t.viewsReported||t.views,t.views):"");
     const a=alignKeys(sp,["ig","tt","fb"]);
     const mk=k=>({label:PNAME[k],data:a.map[k],borderColor:PCOL[k],backgroundColor:PCOL[k]+"40",borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.32,fill:true,spanGaps:true});
     const anyData=["ig","tt","fb"].some(k=>(sp[k]||[]).length);
@@ -2036,7 +2048,7 @@ function openAccountModal(key){
   const a=((acctData(STATE.scope)||{}).accounts||[]).find(x=>x.key===key); if(!a) return;
   openModal(`<div class="modal-title">${accLogo(a,36)}${esc(scopeName())} ${esc(a.name)}</div>
     <div class="modal-sub">${a.handle?"@"+esc(String(a.handle).replace(/^@/,""))+" · ":""}${fmtFull(a.followersNow)} ${a.network==="youtube"?"subscribers":"followers"} · ${fmtFull(a.interactions)} interactions${showCounts()&&a.contentCount!=null?` · ${a.contentCount} posts`:""} (${esc(acctData(STATE.scope).label)})</div>
-    <div class="gchips">${gchip("Net new",a.color,signed(a.netNew),a.mom)}${gchip("Account views",PCOL.fb,fmtFull(a.views),null)}${gchip("Post views",PCOL.tt,fmtFull(a.impressions),null)}${gchip("Avg engagement",PCOL.ig,(a.engagementRate||0).toFixed(2)+"%",null)}</div>
+    <div class="gchips">${gchip("Net new",a.color,signed(a.netNew),a.mom)}${gchip("Account views",PCOL.fb,fmtFull(a.views),null)}${gchip("Post views",PCOL.tt,fmtFull(a.impressions),null)}${gchip("Avg engagement",PCOL.ig,(a.engagementRate||0).toFixed(2)+"%",null)}</div>${a.collabIn?collabNote(a.collabIn,a.viewsReported||a.views,a.views):""}
     <div class="mtoggle" id="amToggle"><div class="mt active" data-m="followers">Followers</div><div class="mt" data-m="netNew">Gained / day</div><div class="mt" data-m="views">Account views</div><div class="mt" data-m="interactions">Interactions</div></div>
     <div class="chart-box" style="height:280px;margin-top:8px"><canvas id="acctChart"></canvas></div>
     ${(a.topPosts||[]).length?`<div class="modal-sub" style="margin-top:14px">Top posts</div><div class="lbgrid" style="margin-top:8px">${postCards(a.topPosts,{who:()=>accWho(a)})}</div>`:""}`);
@@ -2765,6 +2777,14 @@ function renderAudit(){
       A metric at 0 of ${n} usually means the metric name or subject is wrong for that network, not that the teams had no activity.</div>
     </details></div>
     ${overlapPanel(a)}`;
+  host.querySelectorAll("[data-cflag]").forEach(b=>b.onclick=async()=>{
+    b.disabled=true; b.textContent="Saving...";
+    try{
+      const r=await apiFetch("/api/metricool?view=posttags",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({op:"collabflag",id:b.dataset.cflag,status:b.dataset.st||null})});
+      if(!r.ok) throw new Error("Server returned "+r.status);
+      STATE.acct={}; STATE.auditBlw=null; loadCurrent(STATE.q,false);
+    }catch(e){ b.disabled=false; b.textContent="Couldn't save"; }
+  });
   host.querySelectorAll("[data-owner]").forEach(sel=>sel.onchange=async()=>{
     sel.disabled=true;
     try{
@@ -2790,7 +2810,26 @@ function overlapPanel(a){
       <tr><td>Saves and shares</td><td>Each post where the platform reports it, otherwise the account's daily total (sources above)</td><td>Per-post: no. Account daily totals can include a collab on both accounts.</td></tr>
       <tr><td>Account views</td><td>Each account's own total from the platform</td><td class="bad">Possibly. Instagram may count a collab's views on both accounts and doesn't split them by post. Not used for EMV.</td></tr>
       <tr><td>Followers</td><td>Each account's follower count</td><td>A fan who follows two accounts is in both counts. That's audience overlap, not double-counted activity.</td></tr></table>
-    <div class="fc-note" style="margin:10px 0 6px"><b>Posts on more than one account this window:</b> ${list.length?list.length:"none. Every post was found under exactly one account."}</div>${rows}</div>`;
+    <div class="fc-note" style="margin:10px 0 6px"><b>Posts on more than one account this window:</b> ${list.length?list.length:"none. Every post was found under exactly one account."}</div>${rows}
+    ${collabViewsSection()}</div>`;
+}
+// Instagram account views that came from another BLW account's collab post,
+// taken off the collaborator. Teams come with the league data; the BLW page's
+// own Instagram comes from the BLW League Page view (fetched here if needed).
+function collabViewsSection(){
+  const team=((STATE.data&&STATE.data.dataAudit&&STATE.data.dataAudit.collab)||[]);
+  const blwD=STATE.auditBlw&&STATE.auditBlw.q===STATE.q?STATE.auditBlw.data:null;
+  if(!(STATE.auditBlw&&STATE.auditBlw.q===STATE.q)){ // one try per window
+    STATE.auditBlw={q:STATE.q,busy:true,data:null};
+    apiFetch("/api/metricool?view=blw&"+STATE.q).then(r=>r.ok?r.json():null).then(d=>{ STATE.auditBlw={q:STATE.q,busy:false,data:d}; renderAudit(); }).catch(()=>{ STATE.auditBlw={q:STATE.q,busy:false,data:null}; });
+  }
+  const page=((blwD&&blwD.dataAudit&&blwD.dataAudit.collab)||[]);
+  const all=[...team,...page].sort((a,b)=>b.overlap-a.overlap);
+  const applied=all.filter(f=>f.status==="applied").reduce((a,f)=>a+f.overlap,0);
+  const row=f=>`<div class="cvrow${f.status==="dismissed"?" off":""}"><div><b>${esc(f.name)}</b> Instagram<br>${esc(f.start)}${f.end!==f.start?" to "+esc(f.end):""}</div>
+    <div>${fmtFull(f.unexplained)} views its own posts don't explain (normal day: ${fmt(f.baseline)}). Matches <b>${esc(f.post.owner)}</b>'s ${f.post.link?`<a href="${esc(f.post.link)}" target="_blank" rel="noopener">"${esc((f.post.text||"post").slice(0,60))}"</a>`:`"${esc((f.post.text||"post").slice(0,60))}"`} (${fmtFull(f.post.views)} views, posted ${esc(f.post.day)}). ${f.status==="applied"?`<b>${fmtFull(f.overlap)}</b> moved to ${esc(f.post.owner)}.`:"Not adjusted."}</div>
+    <div><button class="btn" data-cflag="${esc(f.id)}" data-st="${f.status==="applied"?"dismissed":""}">${f.status==="applied"?"Not a collab":"Restore"}</button></div></div>`;
+  return `<div class="fc-note" style="margin:16px 0 6px"><b>Collab views credited to the original poster:</b> ${all.length?`${fmtFull(applied)} Instagram account views taken off collaborators this window.`:(blwD||!STATE.auditBlw||!STATE.auditBlw.busy?"none found this window.":"checking...")} Instagram adds a collab's views to every account on it; these jumps match a post from another BLW account, so they count only for the account that posted it.</div>${all.map(row).join("")}`;
 }
 
 (function(){
