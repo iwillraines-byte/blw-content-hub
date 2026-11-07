@@ -11,6 +11,7 @@
 //      the BLW teams or the BLW league page
 
 import { dedupeLists, ledgerPosts } from './_cc-ledger.js';
+import { detectCollabViews, igPostsFromLedger, adjustDaily, appliedOverlap } from './_cc-collab.js';
 import {
   TZ, TEAMS, BLW_BRAND, round, sum, sumVals, sumPairs, lastVal, nonEmpty,
   makeApi, dsum, diffs, mergeDicts, carrySum, slist, fmtPairs, loadProfiles,
@@ -158,6 +159,22 @@ async function buildBrandAccounts(win, token, userId, pickBrands, opts = {}) {
   }));
   accounts.sort((a, b) => b.followersNow - a.followersNow);
 
+  // Collab views go to the original poster: take views that came from another
+  // BLW account's collab post off this account's Instagram views.
+  let collab = null;
+  if (opts.ledger) {
+    const igAccts = accounts.filter(a => a.network === "instagram");
+    collab = detectCollabViews(igAccts.map(a => ({ blogId: a.blogId, name: opts.names && opts.names[a.blogId] || a.brandLabel, daily: a.series.views })),
+      igPostsFromLedger(opts.ledger), opts.flags || {}, opts.names || {});
+    for (const a of igAccts) {
+      const f = collab.filter(x => x.blogId === Number(a.blogId)); if (!f.length) continue;
+      a.collabIn = f;
+      const cut = appliedOverlap(f); if (!cut) continue;
+      a.viewsReported = a.views; a.views = Math.max(0, a.views - cut);
+      a.series.views = adjustDaily(a.series.views, f);
+    }
+  }
+
   const dict = (a, k) => Object.fromEntries(a.series[k].map(p => [p.d, p.v]));
   const fmtAll = {};
   for (const a of accounts) for (const [ty, f] of Object.entries(a.formats)) {
@@ -190,7 +207,7 @@ async function buildBrandAccounts(win, token, userId, pickBrands, opts = {}) {
       views: fmtPairs(mergeDicts(accounts.map(a => dict(a, "views")), "sum")),
     },
     leaderboard, formatBreakdown,
-    dataAudit: { metrics: Object.entries(mc.audit).map(([key, a]) => ({ key, calls: a.calls, withData: a.withData })).sort((a, b) => a.key.localeCompare(b.key)) },
+    dataAudit: { metrics: Object.entries(mc.audit).map(([key, a]) => ({ key, calls: a.calls, withData: a.withData })).sort((a, b) => a.key.localeCompare(b.key)), collab },
   };
 }
 

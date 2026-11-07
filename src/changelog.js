@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '5.14.0',
+    date: '2026-11-07',
+    kind: 'minor',
+    summary: 'v5.14.0 — Collab views stay with the account that posted the video',
+    items: [
+      'Instagram adds a collab post\'s views to every account on it, so account views across BLW were counting collab videos twice (for example, BLW\'s "That 3rd pitch" reel added about 3.9M to Las Vegas). The Command Center now finds those jumps (a day an account\'s Instagram views far exceed what its own posts explain, matched to another BLW account\'s post from the same days) and takes them off the collaborator, so each video\'s views count only for the account that posted it. Teams, BLW League Page and All BLW totals, charts and team pages all use the adjusted numbers.',
+      'The team and account pages say how much was moved and which post it came from. Data check lists every adjustment with a "Not a collab" button to undo one. Small wobbles under 100k views (or ten normal days) are left alone.',
+    ],
+  },
+  {
     version: '5.13.0',
     date: '2026-11-07',
     kind: 'minor',
