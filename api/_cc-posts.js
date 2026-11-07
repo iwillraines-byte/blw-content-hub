@@ -153,12 +153,13 @@ async function readTags(sb) {
     players: obj(v.players),          // post key -> [player names] (manual; [] = nobody)
     playerAliases: obj(v.playerAliases), // player name -> extra nicknames / @handles
     owners: obj(v.owners),              // shared post id -> blogId that counts it (collabs)
+    collabFlags: obj(v.collabFlags),    // collab-views finding id -> "dismissed"
   };
 }
 // For read-only callers (heat index, player pages): never throws.
 export async function readTagsSafe(sb) {
   try { if (sb) return await readTags(sb); } catch { /* fall through */ }
-  return { contractors: DEFAULT_CONTRACTORS, assign: {}, groups: {}, players: {}, playerAliases: {}, owners: {} };
+  return { contractors: DEFAULT_CONTRACTORS, assign: {}, groups: {}, players: {}, playerAliases: {}, owners: {}, collabFlags: {} };
 }
 
 const keysOf = b => (Array.isArray(b.postKeys) ? b.postKeys : []).map(String).filter(k => k.length < 400).slice(0, 200);
@@ -206,6 +207,11 @@ export async function postTagsHandler(req, res, ctx) {
       if (!name) { res.status(400).json({ error: 'name required' }); return; }
       const list = (Array.isArray(body.aliases) ? body.aliases : []).map(x => String(x).trim()).filter(x => x.length >= 2 && x.length <= 40).slice(0, 12);
       if (list.length) t.playerAliases[name] = list; else delete t.playerAliases[name];
+    } else if (op === 'collabflag') {
+      // Dismiss (or restore) an automatic "collab views" adjustment.
+      const id = String(body.id || '').slice(0, 200);
+      if (!id) { res.status(400).json({ error: 'id required' }); return; }
+      if (body.status === 'dismissed') t.collabFlags[id] = 'dismissed'; else delete t.collabFlags[id];
     } else if (op === 'owner') {
       // Which account a post shared by several accounts (a collab) counts under.
       const cid = String(body.cid || '').slice(0, 200);
