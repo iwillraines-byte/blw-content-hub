@@ -10,6 +10,7 @@
 //   2. otherwise any brand whose label contains "wiffle" that is not one of
 //      the BLW teams or the BLW league page
 
+import { dedupeLists, ledgerPosts } from './_cc-ledger.js';
 import {
   TZ, TEAMS, BLW_BRAND, round, sum, sumVals, sumPairs, lastVal, nonEmpty,
   makeApi, dsum, diffs, mergeDicts, carrySum, slist, fmtPairs, loadProfiles,
@@ -85,10 +86,10 @@ export function findBLWBrand(profiles) {
             : { id: BLW_BRAND.blogId, label: BLW_BRAND.name, picture: null, networks: {}, guessNetworks: true }];
 }
 
-export function buildWiffle(win, token, userId) { return buildBrandAccounts(win, token, userId, findWiffleBrands); }
-export function buildBLWPage(win, token, userId) { return buildBrandAccounts(win, token, userId, findBLWBrand); }
+export function buildWiffle(win, token, userId, opts) { return buildBrandAccounts(win, token, userId, findWiffleBrands, opts); }
+export function buildBLWPage(win, token, userId, opts) { return buildBrandAccounts(win, token, userId, findBLWBrand, opts); }
 
-async function buildBrandAccounts(win, token, userId, pickBrands) {
+async function buildBrandAccounts(win, token, userId, pickBrands, opts = {}) {
   const { from, to, label } = win;
   const mc = makeApi(token, userId);
   const profiles = await loadProfiles(mc.api);
@@ -99,13 +100,23 @@ async function buildBrandAccounts(win, token, userId, pickBrands) {
   }
 
   const accounts = [];
-  await Promise.all(brands.map(async br => {
+  // Posts first, for every brand, so a post shared by two of these brands
+  // (a collab) is counted once. The BLW page uses the shared BLW ledger, which
+  // also settles collabs with the team accounts.
+  const fetched = await Promise.all(brands.map(async br => {
     const nets = br.guessNetworks ? WIFFLE_NETS : WIFFLE_NETS.filter(n => br.networks && br.networks[n]);
+    const owned = ledgerPosts(opts.ledger, br.id);
     const [resp, ...series] = await Promise.all([
-      mc.api("/v2/analytics/brand-summary/posts", br.id, { from, to, timezone: TZ }),
+      owned ? { data: owned } : mc.api("/v2/analytics/brand-summary/posts", br.id, { from, to, timezone: TZ }),
       ...nets.map(n => accountSeries(mc, br.id, n, from, to)),
     ]);
-    const posts = (resp && Array.isArray(resp.data)) ? resp.data : [];
+    return { br, nets, posts: (resp && Array.isArray(resp.data)) ? resp.data : [], series, fromLedger: !!owned };
+  }));
+  if (fetched.length > 1) {
+    const { postsByBlog } = dedupeLists(Object.fromEntries(fetched.map(f => [f.br.id, f.posts])), { manual: opts.manual || {} });
+    fetched.forEach(f => { f.posts = postsByBlog[f.br.id] || postsByBlog[String(f.br.id)] || f.posts; });
+  }
+  await Promise.all(fetched.map(async ({ br, nets, posts, series }) => {
     const byNet = {};
     for (const p of posts) (byNet[normNet(p.network)] = byNet[normNet(p.network)] || []).push(p);
     nets.forEach((net, i) => {

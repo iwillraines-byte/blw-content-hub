@@ -439,6 +439,20 @@
   .pcand .pct{flex:1;min-width:0;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pcand .pcs{flex:none;font-size:11px;color:var(--pos)}
   .slinks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .ovt{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+  .ovt th{text-align:left;color:var(--ink-3);font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line)}
+  .ovt td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2);line-height:1.45}
+  .ovt td:first-child{color:var(--ink);font-weight:600;width:26%}
+  .ovt td.good{color:var(--pos)} .ovt td.bad{color:var(--warn)}
+  .ovrow{padding:10px 0;border-top:1px solid var(--line);font-size:12px}
+  .ovh{display:flex;gap:8px;align-items:center;min-width:0}
+  .ovh svg{width:13px;height:13px;flex:none}
+  .ovh .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .ovc{display:flex;gap:6px 14px;flex-wrap:wrap;margin-top:6px;color:var(--ink-3)}
+  .ovc .own{color:var(--ink)}
+  .ovo{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;color:var(--ink-2)}
+  .ovo .sel{margin-left:6px}
+  .ovmsg{color:var(--ink-3)}
   .lg.nat{background:rgba(255,255,255,.045);box-shadow:inset 2px 0 0 var(--ink-2)}
   .calfoot{font-size:11px;color:var(--ink-3);margin-top:8px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
   @media(max-width:860px){
@@ -814,7 +828,7 @@ const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;
    Info tips, short team names, the jump bar, collapsible sections and the
    loading states that replaced the full-page overlay. */
 const DEF={
-  acct:"Account views: every view the team accounts got in this window, including views on older posts. Reported by each platform at the account level.",
+  acct:"Account views: every view the accounts got in this window, including views on older posts. Reported by each platform as one total per account, so a collab can count on both accounts here. EMV uses post views instead, which count every post once.",
   post:"Post views: views on posts published in this window, counted post by post. This is the number EMV uses. Metricool calls it impressions.",
   watch:"Facebook is the only platform whose API reports watch time, so this is Facebook video only."
 };
@@ -2483,7 +2497,7 @@ function renderPostRows(){
     return `<div class="plrow${sel?" sel":""}" data-g="${esc(c.id)}">
       <input type="checkbox" data-ck="${esc(c.id)}"${sel?" checked":""} aria-label="Select">
       <div class="plth">${c.picture?`<img src="${esc(c.picture)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:esc(capw(c.types[0]||""))}</div>
-      <div style="min-width:0"><div class="plhead">${logoChip("clg",b.picture,b.name,b.accent)}<b>${esc(b.name)}</b><span>${esc(plDate(c.date))}</span><span class="ty">${c.types.map(capw).join(" / ")}</span>${c.manual?'<span class="man">Grouped by hand</span>':""}</div>
+      <div style="min-width:0"><div class="plhead">${logoChip("clg",b.picture,b.name,b.accent)}<b>${esc(b.name)}</b><span>${esc(plDate(c.date))}</span><span class="ty">${c.types.map(capw).join(" / ")}</span>${c.manual?'<span class="man">Grouped by hand</span>':""}${c.posts.some(p=>p.alsoOn&&p.alsoOn.length)?`<span class="man" title="Shared post: it also appears on ${esc([...new Set(c.posts.flatMap(p=>p.alsoOn||[]))].join(", "))}. Counted once, here.">Collab · also on ${esc([...new Set(c.posts.flatMap(p=>p.alsoOn||[]))].map(n=>shortTeam(n)).join(", "))}</span>`:""}</div>
         <div class="pltxt">${esc(c.text)||"<span style='color:var(--ink-3)'>(no caption)</span>"}</div><div class="plnets" aria-label="Views and interactions per platform">${nets}</div>
         ${c.players.length?`<div class="plpl">${c.players.map(n=>`<button class="pchipp${c.playersManual?"":" auto"}" data-pp="${esc(n)}" title="${c.playersManual?"Tagged by hand":"Detected from the caption"}. Open ${esc(n)}'s page"><i style="background:${playerAccent(n)}"></i>${esc(n)}</button>`).join("")}</div>`:""}</div>
       <div class="pltot"><div><b>${fmt(c.impressions)}</b>views</div><div><b>${fmt(c.interactions)}</b>int</div><div><b>${c.engagement.toFixed(1)}%</b>eng</div></div>
@@ -2749,7 +2763,34 @@ function renderAudit(){
       <b>Saves source</b> IG: ${tally(a.saves.ig)} · TikTok: ${tally(a.saves.tt)} · FB: ${tally(a.saves.fb)}. <b>Shares source</b> IG: ${tally(a.shares.ig)} · TikTok: ${tally(a.shares.tt)} · FB: ${tally(a.shares.fb)}.<br>
       <b>Per-post metric fields Metricool returned:</b> ${(a.postMetricKeys||[]).map(esc).join(", ")||"none"}.<br>
       A metric at 0 of ${n} usually means the metric name or subject is wrong for that network, not that the teams had no activity.</div>
-    </details></div>`;
+    </details></div>
+    ${overlapPanel(a)}`;
+  host.querySelectorAll("[data-owner]").forEach(sel=>sel.onchange=async()=>{
+    sel.disabled=true;
+    try{
+      const r=await apiFetch("/api/metricool?view=posttags",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({op:"owner",cid:sel.dataset.owner,blogId:sel.value||null})});
+      if(!r.ok) throw new Error("Server returned "+r.status);
+      STATE.acct={}; STATE.pl.data=null; loadCurrent(STATE.q,false);
+    }catch(e){ sel.disabled=false; const n=sel.closest(".ovrow").querySelector(".ovmsg"); if(n) n.textContent="Couldn't save: "+e.message; }
+  });
+}
+// How every number is kept from counting a post twice across accounts, and
+// the posts this window that showed up under more than one account.
+function overlapPanel(a){
+  const sh=a.shared; const list=(sh&&sh.list)||[];
+  const nameOf=id=>{ const t=(STATE.data.teams||[]).find(x=>String(x.blogId)===String(id)); return t?t.name:(String(id)==="6532945"?"BLW League Page":brandOf(id).name); };
+  const why={manual:"set by you",first:"posted first",tie:"same post on both: league page by default"};
+  const rows=list.map(x=>`<div class="ovrow"><div class="ovh">${glyph(x.network)}<span>${esc(plDate?plDate(x.date):x.date)}</span><span class="t">${esc(x.text)||"(no caption)"}</span>${x.link?`<a class="lnk" href="${esc(x.link)}" target="_blank" rel="noopener">open</a>`:""}</div>
+    <div class="ovc">${x.copies.map(c=>`<span class="${c.blogId===x.owner?"own":""}">${esc(nameOf(c.blogId))}: ${fmt(c.impressions)} views · ${fmt(c.interactions)} int${c.blogId===x.owner?" · counted here":" · not counted"}</span>`).join("")}</div>
+    <div class="ovo"><label>Count under <select class="sel" data-owner="${esc(x.cid)}">${x.copies.map(c=>`<option value="${c.blogId}"${c.blogId===x.owner?" selected":""}>${esc(nameOf(c.blogId))}</option>`).join("")}</select></label><span class="ovmsg">${esc(why[x.reason]||"")}</span>
+      ${x.diff&&x.diff.length?`<details><summary>Fields that differ between the copies</summary>${x.diff.map(d=>`<div><b>${esc(d.field)}</b>: ${d.values.map(esc).join(" / ")}</div>`).join("")}</details>`:""}</div></div>`).join("");
+  return `<div class="panel audit ovp" style="margin-top:12px"><div class="head"><div class="t">Double-count check</div><div class="meta">${sh?`${fmt(sh.checked)} posts across ${sh.accounts} BLW accounts`:"not available"}</div></div>
+    <table class="ovt"><tr><th>Number</th><th>Where it comes from</th><th>Can one post count twice?</th></tr>
+      <tr><td>Post views, interactions, EMV, top posts, formats, heat</td><td>Each post, from each account's post list</td><td class="good">No. A post found under two accounts (a collab) is counted once, under one owner.</td></tr>
+      <tr><td>Saves and shares</td><td>Each post where the platform reports it, otherwise the account's daily total (sources above)</td><td>Per-post: no. Account daily totals can include a collab on both accounts.</td></tr>
+      <tr><td>Account views</td><td>Each account's own total from the platform</td><td class="bad">Possibly. Instagram may count a collab's views on both accounts and doesn't split them by post. Not used for EMV.</td></tr>
+      <tr><td>Followers</td><td>Each account's follower count</td><td>A fan who follows two accounts is in both counts. That's audience overlap, not double-counted activity.</td></tr></table>
+    <div class="fc-note" style="margin:10px 0 6px"><b>Posts on more than one account this window:</b> ${list.length?list.length:"none. Every post was found under exactly one account."}</div>${rows}</div>`;
 }
 
 (function(){
