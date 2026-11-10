@@ -18,6 +18,17 @@
 
 export const RELEASES = [
   {
+    version: '5.15.0',
+    date: '2026-11-10',
+    kind: 'minor',
+    summary: 'v5.15.0 — BLW Facebook connected; every property shows all three platforms',
+    items: [
+      'The BLW League Page now includes its Facebook page alongside Instagram and TikTok: followers, account views, post views and interactions flow into the BLW League Page tab, All BLW, team credit, top posts, formats, the calendar and EMV. Facebook pages show the brand name instead of a numeric page ID.',
+      'Saves and shares for the BLW League Page and WIFFLE® now come from the same account timelines the team pages use. They had always read 0 because Metricool\'s per-post data for those accounts doesn\'t carry them.',
+      'All BLW has a new By platform section (one card each for Instagram, TikTok and Facebook, split teams vs league page), and Share by brand can be filtered to a single platform.',
+    ],
+  },
+  {
     version: '5.14.0',
     date: '2026-11-07',
     kind: 'minor',

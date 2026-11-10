@@ -39,6 +39,26 @@ export function findWiffleBrands(profiles) {
   return list.filter(b => !exclude.has(Number(b.id)) && /wiffle/i.test(b.label || "") && !teamWords.test(b.label || ""));
 }
 
+// Saves and shares from account timelines, the same sources the team pages
+// use. Metricool's per-post payload for these accounts carries neither, so
+// without this the BLW page and WIFFLE® always showed 0 saves + shares.
+async function accountSavesShares(mc, b, net, from, to) {
+  const { timeline: tl, firstTimeline: ft } = mc;
+  const tot = d => Object.values(d || {}).reduce((a, v) => a + (Number(v) || 0), 0);
+  try {
+    if (net === "instagram") {
+      const [sp, sr, hp, hr] = await Promise.all([
+        ft(b, net, [["saves", "posts"], ["saved", "posts"]], from, to), tl(b, net, "saved", from, to, "reels"),
+        tl(b, net, "shares", from, to, "posts"), tl(b, net, "shares", from, to, "reels"),
+      ]);
+      return { saves: tot(sp.data) + tot(sr), shares: tot(hp) + tot(hr) };
+    }
+    if (net === "tiktok") { const s = await ft(b, net, [["shares", "video"], ["shares", undefined]], from, to); return { saves: 0, shares: tot(s.data) }; }
+    if (net === "facebook") { const s = await tl(b, net, "shares", from, to, "posts"); return { saves: 0, shares: tot(s) }; }
+  } catch (e) { /* fall through */ }
+  return { saves: 0, shares: 0 };
+}
+
 async function accountSeries(mc, b, net, from, to) {
   const { timeline: tl, firstTimeline: ft, legacyTimeline: lt } = mc;
   switch (net) {
@@ -111,13 +131,14 @@ async function buildBrandAccounts(win, token, userId, pickBrands, opts = {}) {
       owned ? { data: owned } : mc.api("/v2/analytics/brand-summary/posts", br.id, { from, to, timezone: TZ }),
       ...nets.map(n => accountSeries(mc, br.id, n, from, to)),
     ]);
-    return { br, nets, posts: (resp && Array.isArray(resp.data)) ? resp.data : [], series, fromLedger: !!owned };
+    const ss = await Promise.all(nets.map(n => accountSavesShares(mc, br.id, n, from, to)));
+    return { br, nets, posts: (resp && Array.isArray(resp.data)) ? resp.data : [], series, ss, fromLedger: !!owned };
   }));
   if (fetched.length > 1) {
     const { postsByBlog } = dedupeLists(Object.fromEntries(fetched.map(f => [f.br.id, f.posts])), { manual: opts.manual || {} });
     fetched.forEach(f => { f.posts = postsByBlog[f.br.id] || postsByBlog[String(f.br.id)] || f.posts; });
   }
-  await Promise.all(fetched.map(async ({ br, nets, posts, series }) => {
+  await Promise.all(fetched.map(async ({ br, nets, posts, series, ss }) => {
     const byNet = {};
     for (const p of posts) (byNet[normNet(p.network)] = byNet[normNet(p.network)] || []).push(p);
     nets.forEach((net, i) => {
@@ -142,14 +163,20 @@ async function buildBrandAccounts(win, token, userId, pickBrands, opts = {}) {
       const netNewSeries = diffs(s.followers);
       const followersNow = Math.round(lastVal(s.followers));
       const netNew = Math.round(sumVals(netNewSeries));
-      const handle = br.networks && typeof br.networks[net] === "string" ? br.networks[net] : "";
+      // Facebook pages and YouTube channels come back as numeric / channel IDs,
+      // which mean nothing on screen; show the brand name for those instead.
+      let handle = br.networks && typeof br.networks[net] === "string" ? br.networks[net] : "";
+      if ((net === "facebook" && /^\d+$/.test(handle)) || (net === "youtube" && /^UC[\w-]{16,}$/.test(handle))) handle = "";
+      // Per-post saves/shares when the payload has them, else the account timeline.
+      const tlss = (ss && ss[i]) || { saves: 0, shares: 0 };
       accounts.push({
         key: `${br.id}:${net}`, blogId: br.id, brandLabel: br.label || "WIFFLE®", network: net,
         name: NET_LABEL[net] || net, handle, color: NET_COLOR[net] || "#C4C9D2", picture: br.picture || null,
         followersNow, netNew, mom: followersNow ? round(netNew / followersNow * 100, 1) : 0,
         views: Math.round(sumVals(s.views)), interactions: inter, impressions: imp,
         engagementRate: list.length ? round(engSum / list.length, 2) : 0,
-        saves: Math.round(saves), shares: Math.round(shares),
+        saves: Math.round(saves || tlss.saves), shares: Math.round(shares || tlss.shares),
+        ssSource: { saves: saves ? "per-post" : (tlss.saves ? "timeline" : "none"), shares: shares ? "per-post" : (tlss.shares ? "timeline" : "none") },
         contentCount: list.length,
         series: { followers: slist(s.followers), netNew: slist(netNewSeries), views: slist(s.views), interactions: slist(interDaily) },
         formats: fmt,

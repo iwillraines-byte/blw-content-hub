@@ -11,7 +11,19 @@ const dictOf = arr => Object.fromEntries((arr || []).map(p => [p.d, p.v]));
 
 export function buildAll(L, B) {
   const page = B && B.configured ? B : null;
+  // Per-platform numbers for every brand, so All BLW can show Instagram,
+  // TikTok and Facebook side by side.
+  const NETK = { instagram: "ig", tiktok: "tt", facebook: "fb" };
+  const teamPlat = t => Object.fromEntries(["ig", "tt", "fb"].map(k => [k, {
+    followers: (t.followersByNetwork || {})[k] || 0, views: ((t.byPlatform || {}).views || {})[k] || 0,
+    interactions: ((t.byPlatform || {}).interactions || {})[k] || 0, impressions: (t.impressionsByPlatform || {})[k] || 0,
+  }]));
+  const pagePlat = accts => { const o = { ig: null, tt: null, fb: null };
+    for (const a of accts || []) { const k = NETK[a.network]; if (!k) continue; o[k] = { followers: a.followersNow || 0, views: a.views || 0, interactions: a.interactions || 0, impressions: a.impressions || 0 }; }
+    for (const k of Object.keys(o)) if (!o[k]) o[k] = { followers: 0, views: 0, interactions: 0, impressions: 0, missing: true };
+    return o; };
   const teams = L.teams.map(t => ({
+    platforms: teamPlat(t),
     key: String(t.blogId), kind: "team", blogId: t.blogId, name: t.name, accent: t.accent, picture: t.picture || null,
     followers: t.followersNow || 0, netNew: t.netNew || 0, views: t.views || 0, interactions: t.interactions || 0,
     impressions: t.impressions || 0, saves: t.saves || 0, shares: t.shares || 0,
@@ -21,6 +33,7 @@ export function buildAll(L, B) {
   if (page) {
     const T = page.totals;
     brands.push({
+      platforms: pagePlat(page.accounts),
       key: "blw", kind: "league", blogId: (page.brands[0] || {}).blogId || null, name: "BLW League Page", accent: ALL_LEAGUE_COLOR,
       picture: (page.brands[0] || {}).picture || (L.blw && L.blw.picture) || null,
       followers: T.followers || 0, netNew: T.netNew || 0, views: T.views || 0, interactions: T.interactions || 0,
@@ -34,6 +47,8 @@ export function buildAll(L, B) {
     saves: sum(list.map(b => b.saves)), shares: sum(list.map(b => b.shares)),
   });
   const totals = tot(brands);
+  const platTot = list => Object.fromEntries(["ig", "tt", "fb"].map(k => [k, Object.fromEntries(["followers", "views", "interactions", "impressions"].map(m => [m, sum(list.map(b => b.platforms[k][m]))]))]));
+  const platforms = { all: platTot(brands), teams: platTot(teams), league: page ? platTot(brands.slice(teams.length)) : null };
   const split = { teams: tot(teams), league: page ? tot(brands.slice(teams.length)) : null };
 
   const sd = k => brands.map(b => dictOf(b.series[k]));
@@ -79,7 +94,7 @@ export function buildAll(L, B) {
   return {
     generatedAt: new Date().toISOString(), from: L.from, to: L.to, label: L.label, days: L.days, range: L.range,
     configured: true, leaguePage: !!page, leagueColor: ALL_LEAGUE_COLOR,
-    brands, totals, split, network, leaderboard, formatBreakdown, credit,
+    brands, totals, split, platforms, network, leaderboard, formatBreakdown, credit,
     leagueCredit: L.blw ? { unattributedPct: L.blw.unattributedPct || 0, impressions: L.blw.impressions || 0, interactions: L.blw.interactions || 0 } : null,
   };
 }
