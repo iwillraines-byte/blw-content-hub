@@ -618,6 +618,22 @@ export default async function handler(req, res) {
   const collabFlags = async () => (await readTagsSafe(ctx.sb)).collabFlags || {};
   const BLW_NAMES = { ...Object.fromEntries(TEAMS.map(t => [t.blogId, t.name])), [BLW_BRAND.blogId]: BLW_BRAND.name };
   try {
+    if (view === "fbprobe") {
+      // Master-only, read-only: what Metricool's per-network Facebook endpoints
+      // return, so Facebook views can be counted the way Facebook counts them.
+      if (!isMaster) { res.status(403).json({ error: "Forbidden" }); return; }
+      const mc = makeApi(token, userId);
+      const win = windowRange(30, null, null);
+      const b = Number(q.blogId || BLW_BRAND.blogId);
+      const trim = o => JSON.parse(JSON.stringify(o, (k, v) => typeof v === "string" && v.length > 120 ? v.slice(0, 120) : v));
+      const out = {};
+      for (const path of ["/v2/analytics/reels/facebook", "/v2/analytics/posts/facebook"]) {
+        try { const r = await mc.api(path, b, { from: win.from, to: win.to, timezone: TZ }); const list = (r && (r.data || r)) || []; out[path] = { n: Array.isArray(list) ? list.length : null, sample: trim(Array.isArray(list) ? list.slice(0, 3) : list) }; }
+        catch (e) { out[path] = { error: String(e.message || e) }; }
+      }
+      res.status(200).send(JSON.stringify(out));
+      return;
+    }
     if (view === "league") {
       const { rng, days, custom } = parseWindow(q);
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
