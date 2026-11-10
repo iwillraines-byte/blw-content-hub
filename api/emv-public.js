@@ -19,6 +19,7 @@
 //            EMV_CPM (optional, default 20), EMV_PER_INTERACTION (optional, default 0.25)
 
 import { dedupeLists } from './_cc-ledger.js';
+import { withFbPlays } from './_cc-fbplays.js';
 
 const BASE = "https://app.metricool.com/api";
 const TZ = "America/Chicago";
@@ -96,7 +97,10 @@ async function posts(blogId, from, to, token, userId) {
     });
     if (!r.ok) return [];
     const d = await r.json();
-    return Array.isArray(d?.data) ? d.data : [];
+    const list = Array.isArray(d?.data) ? d.data : [];
+    // Facebook reels counted as Facebook counts them (plays), like the Command Center.
+    const api = async (path, b, params) => { const qq = new URLSearchParams({ userId: String(userId), blogId: String(b), ...params }); const rr = await fetch(`${BASE}${path}?${qq}`, { headers: { "X-Mc-Auth": token, Accept: "application/json" } }); return rr.ok ? rr.json() : null; };
+    return await withFbPlays({ api }, blogId, list, from, to);
   } catch { return []; }
 }
 

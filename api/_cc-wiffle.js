@@ -10,6 +10,7 @@
 //   2. otherwise any brand whose label contains "wiffle" that is not one of
 //      the BLW teams or the BLW league page
 
+import { fetchPosts } from './_cc-fbplays.js';
 import { dedupeLists, ledgerPosts } from './_cc-ledger.js';
 import { detectCollabViews, igPostsFromLedger, adjustDaily, appliedOverlap } from './_cc-collab.js';
 import {
@@ -128,7 +129,7 @@ async function buildBrandAccounts(win, token, userId, pickBrands, opts = {}) {
     const nets = br.guessNetworks ? WIFFLE_NETS : WIFFLE_NETS.filter(n => br.networks && br.networks[n]);
     const owned = ledgerPosts(opts.ledger, br.id);
     const [resp, ...series] = await Promise.all([
-      owned ? { data: owned } : mc.api("/v2/analytics/brand-summary/posts", br.id, { from, to, timezone: TZ }),
+      owned ? { data: owned } : fetchPosts(mc, br.id, from, to),
       ...nets.map(n => accountSeries(mc, br.id, n, from, to)),
     ]);
     const ss = await Promise.all(nets.map(n => accountSavesShares(mc, br.id, n, from, to)));
