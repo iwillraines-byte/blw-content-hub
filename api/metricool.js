@@ -28,7 +28,6 @@
 // and query. Responses are private: they vary by role, so no shared CDN cache.
 // The dashboard's Refresh button sends fresh=1 to skip the cache.
 
-import { fetchPosts } from './_cc-fbplays.js';
 import { requireUser, requireRole } from './_supabase.js';
 import { checkRateLimit } from './_rate-limit.js';
 import {
@@ -96,7 +95,7 @@ function attributePost(text, dir, players) {
 async function buildBLW(from, to, profiles, api, pctx) {
   const b = BLW_BRAND.blogId;
   const owned = ledgerPosts(pctx.ledger, b);
-  const resp = owned ? { data: owned } : await fetchPosts({ api }, b, from, to);
+  const resp = owned ? { data: owned } : await api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ });
   const posts = (resp && Array.isArray(resp.data)) ? resp.data : [];
   const fmt = {}, agg = {};
   let imp = 0, inter = 0, engSum = 0;
@@ -177,7 +176,7 @@ async function buildTeam(t, from, to, profiles, mc, pctx) {
     tl(b, "facebook", "shares", from, to, "posts"),
     tl(b, "facebook", "post_video_avg_time_watched", from, to, undefined),
     tl(b, "facebook", "post_video_view_time", from, to, undefined),
-    ledgerPosts(pctx.ledger, b) ? { data: ledgerPosts(pctx.ledger, b) } : fetchPosts({ api }, b, from, to),
+    ledgerPosts(pctx.ledger, b) ? { data: ledgerPosts(pctx.ledger, b) } : api("/v2/analytics/brand-summary/posts", b, { from, to, timezone: TZ }),
   ]);
   const ig_saves_p_d = ig_saves_p.data;
   const ig_f = ig_fR.data, tt_views = tt_viewsR.data, tt_eng = tt_engR.data, fb_eng = fb_engR.data, tt_shares = tt_sharesR.data;
@@ -619,27 +618,6 @@ export default async function handler(req, res) {
   const collabFlags = async () => (await readTagsSafe(ctx.sb)).collabFlags || {};
   const BLW_NAMES = { ...Object.fromEntries(TEAMS.map(t => [t.blogId, t.name])), [BLW_BRAND.blogId]: BLW_BRAND.name };
   try {
-    if (view === "fbprobe") {
-      // Master-only, read-only check: Facebook reel views from the cross-network
-      // post list (3-second plays) next to Facebook's own play count.
-      if (!isMaster) { res.status(403).json({ error: "Forbidden" }); return; }
-      const mc = makeApi(token, userId);
-      const win = windowRange(Number(q.days) || 30, null, null);
-      const b = Number(q.blogId || BLW_BRAND.blogId);
-      const raw = await mc.api("/v2/analytics/brand-summary/posts", b, { from: win.from, to: win.to, timezone: TZ });
-      const fixed = await fetchPosts(mc, b, win.from, win.to);
-      const reels = await mc.api("/v2/analytics/reels/facebook", b, { from: win.from, to: win.to, timezone: TZ });
-      const rl = Array.isArray(reels) ? reels : (reels && reels.data) || [];
-      const fb = (fixed.data || []).filter(p => String(p.network).toLowerCase() === "facebook");
-      res.status(200).send(JSON.stringify({
-        reelsListed: rl.length, reelFields: rl[0] ? Object.keys(rl[0]) : [],
-        fbPosts: fb.length, swapped: fb.filter(p => p.metrics && p.metrics.FB_PLAYS != null).length,
-        sample: fb.filter(p => /reel/i.test(p.type || "") || /\/reels?\//.test(p.link || "")).slice(0, 8).map(p => ({ text: String(p.text || "").slice(0, 50), link: p.link, threeSec: p.metrics.IMPRESSIONS_3S ?? p.metrics.IMPRESSIONS, plays: p.metrics.FB_PLAYS ?? null })),
-        unmatchedReels: rl.slice(0, 3).map(x => ({ reelId: x.reelId, reelUrl: x.reelUrl, plays: x.blueReelsPlayCount })),
-        rawCount: (raw && raw.data || []).length,
-      }));
-      return;
-    }
     if (view === "league") {
       const { rng, days, custom } = parseWindow(q);
       if (rng === "custom" && !(custom.from && custom.to)) { res.status(400).json({ error: "custom range needs from and to as YYYY-MM-DD" }); return; }
