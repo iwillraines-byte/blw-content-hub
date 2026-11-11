@@ -456,6 +456,17 @@
   .cnote{margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(91,141,239,.08);border:1px solid rgba(91,141,239,.25);font-size:12px;line-height:1.5;color:var(--ink-2)}
   .cnote b{color:var(--ink)}
   .platgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .plcount{margin-bottom:12px}
+  .cctable{overflow-x:auto;margin-top:8px}
+  .cctable table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .cctable th{text-align:right;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .cctable th:first-child,.cctable td:first-child{text-align:left}
+  .cctable td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);color:var(--ink)}
+  .cctable td.z{color:var(--ink-3)}
+  .cctable td.tt,.cctable tfoot td{font-weight:700}
+  .cctable tfoot td{border-bottom:0;color:var(--ink)}
+  .ccb{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+  .ccb i{width:9px;height:9px;border-radius:3px}
   @media(max-width:980px){.platgrid{grid-template-columns:1fr}}
   .platcard{border-top:2px solid var(--pc)}
   .platcard .pdot{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--pc);margin-right:8px;vertical-align:1px}
@@ -790,6 +801,7 @@
 
   <div id="postLib" style="display:none">
     <div class="section-title"><span id="plTitle">Every post</span><span class="rule"></span></div>
+    <div class="panel plcount" id="plCount"></div>
     <div class="plbar" id="plBar"></div>
     <div class="plsum" id="plSum"></div>
     <div class="plsel" id="plSel" role="toolbar" aria-label="Selected posts"></div>
@@ -2483,8 +2495,31 @@ function plFiltered(skipWho){
   return list.sort(by);
 }
 function plDate(s,withTime){ if(!s) return ""; const d=new Date(s.length===19?s+"Z":s); return d.toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric"})+(withTime?" "+d.toLocaleTimeString("en-US",{timeZone:"UTC",hour:"numeric",minute:"2-digit"}):""); }
+// Master counter: unique creatives per brand per month. One creative is the
+// same post across every platform (grouped automatically or by hand), so a
+// video on Instagram, TikTok, Facebook, X and YouTube Shorts counts once.
+// Stories aren't creatives and aren't counted.
+function renderCreativeCount(){
+  const host=$("#plCount"), D=STATE.pl.data; if(!host||!D) return;
+  const list=plCreatives().filter(c=>!c.posts.every(p=>/STORY/i.test(p.type||"")));
+  const mon=d=>String(d||"").slice(0,7);
+  const months=[...new Set(list.map(c=>mon(c.date)).filter(Boolean))].sort();
+  const brands=D.brands.filter(b=>plKindOk(b.kind));
+  const cnt={}; list.forEach(c=>{ const k=String(c.brand.blogId)+"|"+mon(c.date); cnt[k]=(cnt[k]||0)+1; });
+  const n=(b,m)=>cnt[String(b.blogId)+"|"+m]||0;
+  const rows=brands.map(b=>({b,vals:months.map(m=>n(b,m)),tot:months.reduce((a,m)=>a+n(b,m),0)})).sort((x,y)=>y.tot-x.tot);
+  const mlabel=m=>new Date(m+"-15T12:00:00Z").toLocaleDateString("en-US",{month:"short",year:"2-digit",timeZone:"UTC"});
+  const stories=plCreatives().length-list.length;
+  const partial=m=>{ const a=String(D.from||"").slice(0,10), z=String(D.to||"").slice(0,10); return (a&&a.slice(0,7)===m&&a.slice(8,10)!=="01")||(z&&z.slice(0,7)===m&&new Date(z.slice(0,10)+"T12:00:00Z").getUTCDate()!==new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7),0)).getUTCDate()); };
+  host.innerHTML=`<div class="head"><div class="t">Creatives per month</div><div class="meta">${list.length} creatives · ${esc(D.label)}</div></div>
+    ${months.length?`<div class="cctable"><table><thead><tr><th>Brand</th>${months.map(m=>`<th title="${partial(m)?"Only part of this month is in the window":""}">${esc(mlabel(m))}${partial(m)?"*":""}</th>`).join("")}<th>Total</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td><span class="ccb"><i style="background:${r.b.accent||"#888"}"></i>${esc(r.b.name)}</span></td>${r.vals.map(v=>`<td class="${v?"":"z"}">${v}</td>`).join("")}<td class="tt">${r.tot}</td></tr>`).join("")}</tbody>
+    ${rows.length>1?`<tfoot><tr><td>All</td>${months.map((m,i)=>`<td>${rows.reduce((a,r)=>a+r.vals[i],0)}</td>`).join("")}<td class="tt">${list.length}</td></tr></tfoot>`:""}</table></div>`:`<div class="fc-note">No posts in this window.</div>`}
+    <div class="fc-note" style="margin-top:8px">One creative = the same post on every platform it went to, counted once (YouTube Shorts included). Stories aren't counted${stories?` (${stories} this window)`:""}.${months.some(partial)?" * only part of that month is in the window; pick Month to date, Last month or a custom range for whole months.":""}</div>`;
+}
 function renderPosts(){
   const D=STATE.pl.data, host=$("#plList"); if(!D||!host) return;
+  renderCreativeCount();
   const kind=PL_KIND[STATE.scope], f=STATE.pl.f, T=plTags();
   const scopeBrands=D.brands.filter(b=>plKindOk(b.kind));
   if(f.brand!=="all"&&!scopeBrands.some(b=>String(b.blogId)===f.brand)) f.brand="all";

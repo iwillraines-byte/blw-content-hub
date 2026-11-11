@@ -18,6 +18,16 @@
 
 export const RELEASES = [
   {
+    version: '5.17.0',
+    date: '2026-11-11',
+    kind: 'minor',
+    summary: 'v5.17.0 — Creatives per month counter in Every post',
+    items: [
+      'Every post (master admin) now opens with a Creatives per month table: one row per brand on the current tab, one column per month in the selected window, plus totals. A creative is the same post across every platform it went to, counted once. Stories are not counted.',
+      'Cross-posts are now grouped even when the caption was rewritten for one platform, as long as they went out within 10 minutes of each other. This fixes WIFFLE® YouTube Shorts, which carry their own title and used to count as a separate creative (October goes from 29 to 20 WIFFLE® creatives), and catches reworded TikTok and Instagram captions on BLW and team posts. Anything grouped wrongly can still be split with Ungroup.',
+    ],
+  },
+  {
     version: '5.16.1',
     date: '2026-11-11',
     kind: 'patch',
