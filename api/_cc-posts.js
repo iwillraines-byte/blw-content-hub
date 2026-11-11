@@ -63,10 +63,15 @@ export function autoGroup(posts) {
         let score;
         if (!toks.length || !g.toks.length) score = (!toks.length && !g.toks.length && Math.abs(p.ms - g.last) <= 30 * 60000) ? 0.6 : 0;
         else score = similar(toks, g.toks);
+        // Posted to another platform within 10 minutes of the group's first post:
+        // the same creative even if the caption was rewritten (YouTube Shorts get
+        // their own title, Instagram captions are often reworded). Stories don't
+        // count; they never belong to a feed creative.
+        if (score < 0.5 && !p._story && !g.story && Math.abs(p.ms - g.first) <= 10 * 60000) score = 0.5;
         if (score >= 0.5 && score > bestScore) { best = g; bestScore = score; }
       }
       if (best) { best.nets.add(p.network); best.last = p.ms; if (toks.length > best.toks.length) best.toks = toks; out[p.key] = best.key; }
-      else { const g = { key: p.key, nets: new Set([p.network]), first: p.ms, last: p.ms, toks }; groups.push(g); out[p.key] = g.key; }
+      else { const g = { key: p.key, nets: new Set([p.network]), first: p.ms, last: p.ms, toks, story: !!p._story }; groups.push(g); out[p.key] = g.key; }
     }
   }
   return out;
@@ -119,13 +124,13 @@ export async function buildPostLibrary(win, token, userId, opts = {}) {
         impressions: Math.round(m.IMPRESSIONS || 0), interactions: Math.round(m.INTERACTIONS || 0),
         engagement: round(Number(m.ENGAGEMENT) || 0, 2),
         saves: sv.has ? Math.round(sv.v) : null, shares: sh.has ? Math.round(sh.v) : null,
-        _toks: tokens(p.text),
+        _toks: tokens(p.text), _story: /STORY/i.test(String(p.type || '')),
         ...(alsoOn[platformPostId(p)] ? { alsoOn: alsoOn[platformPostId(p)] } : {}),
       });
     });
   });
   const groups = autoGroup(posts);
-  posts.forEach(p => { p.autoGroup = groups[p.key]; delete p._toks; delete p.ms; });
+  posts.forEach(p => { p.autoGroup = groups[p.key]; delete p._toks; delete p._story; delete p.ms; });
   posts.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   return { generatedAt: new Date().toISOString(), from, to, label, brands, posts, shared };
 }
