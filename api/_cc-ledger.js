@@ -17,7 +17,6 @@
 // Account-level numbers (followers, account views) come from each platform as
 // one total per account and cannot be split by post; they are never used for
 // EMV and are labeled as overlapping in combined views.
-import { fetchPosts } from './_cc-fbplays.js';
 import { TEAMS, BLW_BRAND, TZ, makeApi } from './_cc-core.js';
 
 const NET_ALIAS = { x: 'twitter', twitter: 'twitter', linkedincompany: 'linkedin', linkedin: 'linkedin', instagram: 'instagram', tiktok: 'tiktok', facebook: 'facebook', youtube: 'youtube', threads: 'threads' };
@@ -120,7 +119,7 @@ export async function getLedger(win, token, userId, { fresh = false, manual = {}
   const p = (async () => {
     const mc = makeApi(token, userId);
     const ids = [...TEAMS.map(t => t.blogId), BLW_BRAND.blogId];
-    const lists = await Promise.all(ids.map(b => fetchPosts(mc, b, win.from, win.to)));
+    const lists = await Promise.all(ids.map(b => mc.api('/v2/analytics/brand-summary/posts', b, { from: win.from, to: win.to, timezone: TZ })));
     const raw = {};
     ids.forEach((b, i) => { const r = lists[i]; raw[b] = r && Array.isArray(r.data) ? r.data : null; });
     const ok = Object.fromEntries(Object.entries(raw).filter(([, v]) => v));

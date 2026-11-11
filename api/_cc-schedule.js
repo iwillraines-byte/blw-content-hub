@@ -6,7 +6,6 @@
 // following Saturday, Central time), matching the two-week calendar on the
 // page. It rolls forward on its own; the page re-polls every few minutes.
 
-import { fetchPosts } from './_cc-fbplays.js';
 import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, makeApi, loadProfiles, tzDate, windowRange } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
 import { tokens, similar, postKeyOf } from './_cc-posts.js';
@@ -167,7 +166,7 @@ async function publishedPosts(mc, brands, fromDay, toDay, startMs, fresh) {
   await Promise.all(brands.map(async br => {
     // Analytics wants full datetimes with an offset, not bare days.
     const win = windowRange(null, "custom", { from: fromDay, to: toDay });
-    const resp = await fetchPosts(mc, br.blogId, win.from, win.to);
+    const resp = await mc.api("/v2/analytics/brand-summary/posts", br.blogId, { from: win.from, to: win.to, timezone: TZ });
     rawBy[br.blogId] = resp && Array.isArray(resp.data) ? resp.data : [];
   }));
   // A collab shows once, under the account that owns it.

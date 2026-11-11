@@ -18,7 +18,6 @@
 // Anything the rules get wrong can be fixed by hand on the page (group /
 // ungroup); those fixes are stored as overrides and win over the rules.
 
-import { fetchPosts } from './_cc-fbplays.js';
 import { TZ, TEAMS, BLW_BRAND, WIFFLE_ACCENT, round, makeApi, loadProfiles, pickMetric, SAVE_KEYS, SHARE_KEYS } from './_cc-core.js';
 import { findWiffleBrands } from './_cc-wiffle.js';
 import { dedupeLists, platformPostId } from './_cc-ledger.js';
@@ -94,7 +93,7 @@ export async function buildPostLibrary(win, token, userId, opts = {}) {
   const posts = [];
   const rawBy = {};
   await Promise.all(brands.map(async br => {
-    const resp = await fetchPosts(mc, br.blogId, from, to);
+    const resp = await mc.api('/v2/analytics/brand-summary/posts', br.blogId, { from, to, timezone: TZ });
     rawBy[br.blogId] = resp && Array.isArray(resp.data) ? resp.data : [];
   }));
   // A post that shows up under several accounts (a collab) is listed once,

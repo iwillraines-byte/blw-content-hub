@@ -18,12 +18,12 @@
 
 export const RELEASES = [
   {
-    version: '5.16.0',
-    date: '2026-11-10',
-    kind: 'minor',
-    summary: 'v5.16.0 — Facebook reels counted the way Facebook counts them',
+    version: '5.16.1',
+    date: '2026-11-11',
+    kind: 'patch',
+    summary: 'v5.16.1 — Facebook reel views back to Metricool\'s count (5.16.0 changed nothing)',
     items: [
-      'Facebook reel views now use Facebook\'s own play count (every play, as the Facebook app shows it) instead of Metricool\'s 3-second plays, which ran well below the app (for example about 451k vs 828k on the St. Louis sign-up reel). This applies everywhere post views are used: the BLW League Page, teams, WIFFLE®, All BLW, top posts, Every post, EMV and the calendar. Other Facebook posts are unchanged.',
+      'A live check after 5.16.0 showed Metricool\'s post list already uses Facebook\'s own reel play count, so the swap changed no numbers; it only added an extra request per brand. It\'s removed, along with the temporary Facebook check. The higher number in the Facebook app also counts replays, which Facebook\'s API doesn\'t provide to Metricool, so it can\'t be matched from here.',
     ],
   },
   {
